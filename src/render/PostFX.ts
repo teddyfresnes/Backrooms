@@ -49,7 +49,9 @@ export class PostFX {
         blendFunction: BlendFunction.MULTIPLY,
         samples: 13,
         rings: 7,
-        radius: 0.105,
+        // Restrict AO to the actual contact instead of painting a broad band
+        // across the ceiling and carpet along every wall.
+        radius: 0.028,
         intensity: 0.74,
         bias: 0.026,
         fade: 0.06,
