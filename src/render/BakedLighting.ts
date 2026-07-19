@@ -2,13 +2,12 @@ import * as THREE from 'three';
 import type { MaterialSet } from './MaterialLibrary';
 import type { Rect, WorldPlan } from '../world/types';
 
-const LIGHTMAP_RESOLUTION = 160;
+// The generator places its main partitions on a 0.5 m grid. Two texels per
+// metre keep those partitions between samples instead of turning one 0.7 m
+// texel into a dark stripe shared by both the floor and the ceiling.
+const LIGHTMAP_RESOLUTION = 224;
 const LIGHTMAP_UV_CHANNEL = 1;
 const NEIGHBOUR_LIGHT_REACH = 9.2;
-// Keep the baked contact term tight to the junction.  A metre-wide reach made
-// two perpendicular walls overlap into the broad black columns visible in
-// otherwise lit corners.
-const CONTACT_SHADOW_REACH = 0.62;
 const INDIRECT_LIGHT = [0.008, 0.008, 0.004] as const;
 const LIGHT_SAMPLES = [
   [0, 0],
@@ -100,32 +99,6 @@ const softVisibility = (
   return visible / LIGHT_SAMPLES.length;
 };
 
-const proximityOcclusion = (
-  pointX: number,
-  pointZ: number,
-  occluders: readonly Rect[],
-): number => {
-  let strongestShadow = 0;
-  let secondaryShadow = 0;
-  for (const occluder of occluders) {
-    const distance = pointDistanceToRect(pointX, pointZ, occluder);
-    if (distance >= CONTACT_SHADOW_REACH) continue;
-    const proximity = 1 - distance / CONTACT_SHADOW_REACH;
-    const shadow = proximity * proximity;
-    if (shadow > strongestShadow) {
-      secondaryShadow = strongestShadow;
-      strongestShadow = shadow;
-    } else if (shadow > secondaryShadow) {
-      secondaryShadow = shadow;
-    }
-  }
-  // Contact shadows must not multiply once per touching partition: doing so
-  // made a normal two-wall corner much darker than the rest of a lit room.
-  // A second wall may reinforce the contact shadow, but it must not turn an
-  // illuminated corner into a vertical black band.
-  return Math.max(0.84, 1 - strongestShadow * 0.12 - secondaryShadow * 0.03);
-};
-
 /**
  * Bakes diffuse fluorescent lighting into a tiny per-chunk light field. Each
  * texel traces to the room's fixtures against walls, columns and solid masses,
@@ -186,9 +159,6 @@ export const createBakedLightMap = (plan: WorldPlan): THREE.CanvasTexture => {
         };
       });
     if (lights.length === 0) continue;
-    const contactOccluders = occluders.filter((occluder) =>
-      rectsIntersect(room.bounds, occluder, CONTACT_SHADOW_REACH),
-    );
     const minX = Math.max(0, Math.floor((room.bounds.minX + half) * scale));
     const maxX = Math.min(LIGHTMAP_RESOLUTION - 1, Math.ceil((room.bounds.maxX + half) * scale) - 1);
     const minY = Math.max(0, Math.floor(LIGHTMAP_RESOLUTION - (room.bounds.maxZ + half) * scale));
@@ -227,10 +197,6 @@ export const createBakedLightMap = (plan: WorldPlan): THREE.CanvasTexture => {
           roomGreen += light.green * energy;
           roomBlue += light.blue * energy;
         }
-        const contactVisibility = proximityOcclusion(worldX, worldZ, contactOccluders);
-        roomRed = INDIRECT_LIGHT[0] + (roomRed - INDIRECT_LIGHT[0]) * contactVisibility;
-        roomGreen = INDIRECT_LIGHT[1] + (roomGreen - INDIRECT_LIGHT[1]) * contactVisibility;
-        roomBlue = INDIRECT_LIGHT[2] + (roomBlue - INDIRECT_LIGHT[2]) * contactVisibility;
         // Room rectangles deliberately overlap around connections. Merging the
         // fields by their maximum prevents the same fixture from being added a
         // second time and producing a bright oval in the doorway.
