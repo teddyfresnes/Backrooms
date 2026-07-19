@@ -247,42 +247,6 @@ export const createBakedLightMap = (plan: WorldPlan): THREE.CanvasTexture => {
   }
   context.putImageData(image, 0, 0);
 
-  // A broad, soft occlusion line grounds walls and columns without requiring
-  // hundreds of real-time shadow-casting lights.
-  context.save();
-  context.globalCompositeOperation = 'source-over';
-  context.strokeStyle = 'rgba(7, 7, 3, 0.14)';
-  context.lineCap = 'square';
-  context.lineWidth = Math.max(0.8, scale * 0.48);
-  context.shadowColor = 'rgba(2, 2, 1, 0.32)';
-  context.shadowBlur = Math.max(1.1, scale * 0.9);
-  for (const wall of plan.walls) {
-    if (wall.bottom < -1) continue;
-    const halfLength = wall.length * 0.5;
-    context.beginPath();
-    if (wall.orientation === 'x') {
-      context.moveTo((wall.x - halfLength + half) * scale, LIGHTMAP_RESOLUTION - (wall.z + half) * scale);
-      context.lineTo((wall.x + halfLength + half) * scale, LIGHTMAP_RESOLUTION - (wall.z + half) * scale);
-    } else {
-      context.moveTo((wall.x + half) * scale, LIGHTMAP_RESOLUTION - (wall.z - halfLength + half) * scale);
-      context.lineTo((wall.x + half) * scale, LIGHTMAP_RESOLUTION - (wall.z + halfLength + half) * scale);
-    }
-    context.stroke();
-  }
-  for (const column of plan.columns) {
-    const minX = column.x - column.width * 0.5;
-    const maxX = column.x + column.width * 0.5;
-    const minZ = column.z - column.depth * 0.5;
-    const maxZ = column.z + column.depth * 0.5;
-    context.strokeRect(
-      (minX + half) * scale,
-      LIGHTMAP_RESOLUTION - (maxZ + half) * scale,
-      (maxX - minX) * scale,
-      (maxZ - minZ) * scale,
-    );
-  }
-  context.restore();
-
   const texture = new THREE.CanvasTexture(canvas);
   texture.name = `baked-fluorescent-field-${plan.seed}`;
   texture.channel = LIGHTMAP_UV_CHANNEL;
