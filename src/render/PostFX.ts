@@ -49,13 +49,17 @@ export class PostFX {
         blendFunction: BlendFunction.MULTIPLY,
         samples: 13,
         rings: 7,
-        radius: 0.09,
-        intensity: 0.62,
-        bias: 0.032,
-        fade: 0.08,
-        luminanceInfluence: 0.8,
+        // Keep AO as a true contact shadow. The previous 0.09 radius sampled
+        // far enough across a room to paint broad bands on walls and ceilings.
+        radius: 0.018,
+        intensity: 0.46,
+        bias: 0.04,
+        fade: 0.14,
+        luminanceInfluence: 0.82,
+        worldProximityThreshold: 0.18,
+        worldProximityFalloff: 0.22,
         color: new THREE.Color(0x292916),
-        resolutionScale: 0.76,
+        resolutionScale: 0.82,
       });
       this.composer.addPass(new EffectPass(camera, ssao));
     }

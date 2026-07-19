@@ -283,6 +283,7 @@ const withLightMap = <T extends THREE.MeshStandardMaterial>(
 export interface BakedMaterialSet {
   materials: MaterialSet;
   ownedMaterials: THREE.MeshStandardMaterial[];
+  ownedTextures: THREE.Texture[];
 }
 
 export const createBakedMaterialSet = (
@@ -290,12 +291,21 @@ export const createBakedMaterialSet = (
   lightMap: THREE.Texture,
   worldSize: number,
 ): BakedMaterialSet => {
+  // Horizontal surfaces meet partition boundaries exactly. Give them a
+  // non-interpolating sampler so a bright room cannot bleed a half-texel strip
+  // into the dark room next door. Vertical faces retain the smooth sampler.
+  const horizontalLightMap = lightMap.clone();
+  horizontalLightMap.name = `${lightMap.name}-horizontal-hard-edge`;
+  horizontalLightMap.minFilter = THREE.NearestFilter;
+  horizontalLightMap.magFilter = THREE.NearestFilter;
+  horizontalLightMap.generateMipmaps = false;
+  horizontalLightMap.needsUpdate = true;
   const wall = withLightMap(source.wall, lightMap, worldSize, 0.9, 0.56, 0.7);
   const plaster = withLightMap(source.plaster, lightMap, worldSize, 0.84, 0.56, 0.7);
   // The carpet receives less direct energy than vertical surfaces. This keeps
   // it visibly light without bringing back the old glowing-floor look.
-  const floor = withLightMap(source.floor, lightMap, worldSize, 0.68, 0.54);
-  const ceiling = withLightMap(source.ceiling, lightMap, worldSize, 0.74, 0.56);
+  const floor = withLightMap(source.floor, horizontalLightMap, worldSize, 0.68, 0.54);
+  const ceiling = withLightMap(source.ceiling, horizontalLightMap, worldSize, 0.74, 0.56);
   const baseboard = withLightMap(source.baseboard, lightMap, worldSize, 0.64, 0.55, 0.62);
   const pitWall = withLightMap(source.pitWall, lightMap, worldSize, 0.48, 0.54, 0.66);
   const pitBottom = withLightMap(source.pitBottom, lightMap, worldSize, 0.12, 0.52);
@@ -326,6 +336,7 @@ export const createBakedMaterialSet = (
       fixtureFrame,
     },
     ownedMaterials,
+    ownedTextures: [horizontalLightMap],
   };
 };
 
