@@ -86,7 +86,7 @@ export class MaterialLibrary {
       // a second coat of saturated ochre.
       color: 0xf1efc9,
       emissive: 0x5c5826,
-      emissiveIntensity: 0.045,
+      emissiveIntensity: 0.032,
       normalScale: new THREE.Vector2(0.22, 0.22),
       roughness: 0.94,
       metalness: 0,
@@ -101,7 +101,7 @@ export class MaterialLibrary {
       roughnessMap: plasterArm,
       color: 0xeee8af,
       emissive: 0x5c5920,
-      emissiveIntensity: 0.035,
+      emissiveIntensity: 0.026,
       normalScale: new THREE.Vector2(0.36, 0.36),
       roughness: 0.96,
       metalness: 0,
@@ -120,7 +120,7 @@ export class MaterialLibrary {
       // the walls while preserving all of its woven detail.
       color: 0xfaf5cc,
       emissive: 0x5d592f,
-      emissiveIntensity: 0.035,
+      emissiveIntensity: 0.024,
       normalScale: new THREE.Vector2(0.34, 0.34),
       roughness: 0.98,
       metalness: 0,
@@ -138,7 +138,7 @@ export class MaterialLibrary {
       // yellowing has to come from the material itself.
       color: 0xddd080,
       emissive: 0x827a32,
-      emissiveIntensity: 0.04,
+      emissiveIntensity: 0.027,
       normalScale: new THREE.Vector2(0.42, 0.42),
       roughness: 0.97,
       side: THREE.FrontSide,
@@ -151,7 +151,7 @@ export class MaterialLibrary {
       // fluorescent fill. Use the carpet/wall midtone directly instead.
       color: 0xbeb574,
       emissive: 0x45411e,
-      emissiveIntensity: 0.025,
+      emissiveIntensity: 0.016,
       roughness: 0.9,
       metalness: 0,
       dithering: true,

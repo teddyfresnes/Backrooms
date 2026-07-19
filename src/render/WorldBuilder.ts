@@ -218,7 +218,7 @@ export class WorldView {
     for (const wall of this.plan.walls) {
       const geometry = createWallGeometry(wall);
       const wallMaterial = wall.kind === 'plaster' ? this.materials.plaster : this.materials.wall;
-      ensureBakedLightUv(geometry, wallMaterial, 0.42);
+      ensureBakedLightUv(geometry, wallMaterial, 0.56);
       (wall.kind === 'plaster' ? plasterGeometries : wallGeometries).push(geometry);
 
       if (wall.height > 1.3) {
@@ -229,7 +229,7 @@ export class WorldView {
           alongX ? wall.thickness + 0.055 : wall.length + 0.025,
         );
         trim.translate(wall.x, wall.bottom + 0.0575, wall.z);
-        ensureBakedLightUv(trim, this.materials.baseboard, 0.36);
+        ensureBakedLightUv(trim, this.materials.baseboard, 0.48);
         baseboardGeometries.push(trim);
       }
     }
@@ -244,11 +244,11 @@ export class WorldView {
         column.z,
         column.tint,
       );
-      ensureBakedLightUv(geometry, this.materials.wall, 0.32);
+      ensureBakedLightUv(geometry, this.materials.wall, 0.44);
       wallGeometries.push(geometry);
       const trim = new THREE.BoxGeometry(column.width + 0.055, 0.115, column.depth + 0.055);
       trim.translate(column.x, 0.0575, column.z);
-      ensureBakedLightUv(trim, this.materials.baseboard, 0.26);
+      ensureBakedLightUv(trim, this.materials.baseboard, 0.38);
       baseboardGeometries.push(trim);
     }
 
@@ -265,7 +265,7 @@ export class WorldView {
         center.z,
         mass.tint,
       );
-      ensureBakedLightUv(massGeometry, this.materials.wall, 0.36);
+      ensureBakedLightUv(massGeometry, this.materials.wall, 0.48);
       wallGeometries.push(massGeometry);
       const trimHeight = 0.115;
       const massTrims = [
@@ -290,7 +290,7 @@ export class WorldView {
           center.z,
         ),
       ];
-      for (const trim of massTrims) ensureBakedLightUv(trim, this.materials.baseboard, 0.28);
+      for (const trim of massTrims) ensureBakedLightUv(trim, this.materials.baseboard, 0.4);
       baseboardGeometries.push(...massTrims);
     }
 

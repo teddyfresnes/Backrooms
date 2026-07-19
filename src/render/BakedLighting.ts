@@ -2,17 +2,20 @@ import * as THREE from 'three';
 import type { MaterialSet } from './MaterialLibrary';
 import type { Rect, WorldPlan } from '../world/types';
 
-const LIGHTMAP_RESOLUTION = 160;
+const LIGHTMAP_RESOLUTION = 192;
 const LIGHTMAP_UV_CHANNEL = 1;
-const NEIGHBOUR_LIGHT_REACH = 9.2;
-const CONTACT_SHADOW_REACH = 1.35;
-const INDIRECT_LIGHT = [0.008, 0.008, 0.004] as const;
+const NEIGHBOUR_LIGHT_REACH = 10.5;
+const INDIRECT_LIGHT = [0.01, 0.009, 0.005] as const;
 const LIGHT_SAMPLES = [
   [0, 0],
-  [0.18, 0.09],
-  [-0.16, -0.11],
-  [0.07, -0.18],
-  [-0.09, 0.17],
+  [0.55, 0],
+  [-0.55, 0],
+  [0, 0.28],
+  [0, -0.28],
+  [0.42, 0.22],
+  [0.42, -0.22],
+  [-0.42, 0.22],
+  [-0.42, -0.22],
 ] as const;
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
@@ -79,17 +82,18 @@ const worldOccluders = (plan: WorldPlan): Rect[] => [
 ];
 
 const softVisibility = (
-  lightX: number,
-  lightZ: number,
+  light: { x: number; z: number; rotation: number },
   pointX: number,
   pointZ: number,
   occluders: readonly Rect[],
 ): number => {
   if (occluders.length === 0) return 1;
   let visible = 0;
-  for (const [offsetX, offsetZ] of LIGHT_SAMPLES) {
-    const sourceX = lightX + offsetX;
-    const sourceZ = lightZ + offsetZ;
+  const cosine = Math.cos(light.rotation);
+  const sine = Math.sin(light.rotation);
+  for (const [along, across] of LIGHT_SAMPLES) {
+    const sourceX = light.x + along * cosine - across * sine;
+    const sourceZ = light.z + along * sine + across * cosine;
     if (!occluders.some((occluder) => segmentHitsRect(sourceX, sourceZ, pointX, pointZ, occluder))) {
       visible += 1;
     }
@@ -97,45 +101,18 @@ const softVisibility = (
   return visible / LIGHT_SAMPLES.length;
 };
 
-const proximityOcclusion = (
-  pointX: number,
-  pointZ: number,
-  occluders: readonly Rect[],
-): number => {
-  let strongestShadow = 0;
-  let secondaryShadow = 0;
-  for (const occluder of occluders) {
-    const distance = pointDistanceToRect(pointX, pointZ, occluder);
-    if (distance >= CONTACT_SHADOW_REACH) continue;
-    const proximity = 1 - distance / CONTACT_SHADOW_REACH;
-    const shadow = proximity * proximity;
-    if (shadow > strongestShadow) {
-      secondaryShadow = strongestShadow;
-      strongestShadow = shadow;
-    } else if (shadow > secondaryShadow) {
-      secondaryShadow = shadow;
-    }
-  }
-  // Contact shadows must not multiply once per touching partition: doing so
-  // made a normal two-wall corner much darker than the rest of a lit room.
-  return Math.max(0.72, 1 - strongestShadow * 0.18 - secondaryShadow * 0.06);
-};
-
 /**
  * Bakes diffuse fluorescent lighting into a tiny per-chunk light field. Each
  * texel traces to the room's fixtures against walls, columns and solid masses,
  * giving the infinite world stable soft shadows without runtime light popping.
  */
-export const createBakedLightMap = (plan: WorldPlan): THREE.CanvasTexture => {
-  const canvas = document.createElement('canvas');
-  canvas.width = LIGHTMAP_RESOLUTION;
-  canvas.height = LIGHTMAP_RESOLUTION;
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('Canvas 2D is unavailable for baked lighting.');
-
-  const scale = LIGHTMAP_RESOLUTION / plan.size;
+export const buildBakedLightField = (
+  plan: WorldPlan,
+  resolution = LIGHTMAP_RESOLUTION,
+): Float32Array => {
+  const scale = resolution / plan.size;
   const half = plan.size * 0.5;
-  const pixels = new Float32Array(LIGHTMAP_RESOLUTION * LIGHTMAP_RESOLUTION * 3);
+  const pixels = new Float32Array(resolution * resolution * 3);
   for (let index = 0; index < pixels.length; index += 3) {
     pixels[index] = INDIRECT_LIGHT[0];
     pixels[index + 1] = INDIRECT_LIGHT[1];
@@ -173,7 +150,7 @@ export const createBakedLightMap = (plan: WorldPlan): THREE.CanvasTexture => {
           energy: THREE.MathUtils.clamp(light.intensity, 0.8, 1.55),
           crossRoom,
           roomContribution: crossRoom
-            ? 0.48 * Math.pow(1 - neighbourDistance / NEIGHBOUR_LIGHT_REACH, 1.1)
+            ? 0.38 * Math.pow(1 - neighbourDistance / NEIGHBOUR_LIGHT_REACH, 1.15)
             : 1,
           visibilityOccluders: occluders.filter((occluder) =>
             rectsIntersect(pathBounds, occluder, 0.35),
@@ -181,21 +158,19 @@ export const createBakedLightMap = (plan: WorldPlan): THREE.CanvasTexture => {
         };
       });
     if (lights.length === 0) continue;
-    const contactOccluders = occluders.filter((occluder) =>
-      rectsIntersect(room.bounds, occluder, CONTACT_SHADOW_REACH),
-    );
     const minX = Math.max(0, Math.floor((room.bounds.minX + half) * scale));
-    const maxX = Math.min(LIGHTMAP_RESOLUTION - 1, Math.ceil((room.bounds.maxX + half) * scale) - 1);
-    const minY = Math.max(0, Math.floor(LIGHTMAP_RESOLUTION - (room.bounds.maxZ + half) * scale));
-    const maxY = Math.min(LIGHTMAP_RESOLUTION - 1, Math.ceil(LIGHTMAP_RESOLUTION - (room.bounds.minZ + half) * scale) - 1);
-    const roomSpan = Math.max(room.bounds.maxX - room.bounds.minX, room.bounds.maxZ - room.bounds.minZ);
-    const radius = THREE.MathUtils.clamp(roomSpan * 0.52, 7.2, 11.8);
+    const maxX = Math.min(resolution - 1, Math.ceil((room.bounds.maxX + half) * scale) - 1);
+    const minY = Math.max(0, Math.floor(resolution - (room.bounds.maxZ + half) * scale));
+    const maxY = Math.min(resolution - 1, Math.ceil(resolution - (room.bounds.minZ + half) * scale) - 1);
+    const roomWidth = room.bounds.maxX - room.bounds.minX;
+    const roomDepth = room.bounds.maxZ - room.bounds.minZ;
+    const radius = THREE.MathUtils.clamp(Math.hypot(roomWidth, roomDepth) * 0.72, 8.6, 13.8);
 
     for (let y = minY; y <= maxY; y += 1) {
       const worldZ = half - (y + 0.5) / scale;
       for (let x = minX; x <= maxX; x += 1) {
         const worldX = -half + (x + 0.5) / scale;
-        const pixel = (y * LIGHTMAP_RESOLUTION + x) * 3;
+        const pixel = (y * resolution + x) * 3;
         let roomRed = INDIRECT_LIGHT[0];
         let roomGreen = INDIRECT_LIGHT[1];
         let roomBlue = INDIRECT_LIGHT[2];
@@ -204,28 +179,21 @@ export const createBakedLightMap = (plan: WorldPlan): THREE.CanvasTexture => {
           if (distance >= radius) continue;
           const falloff = 1 - distance / radius;
           const visibility = softVisibility(
-            light.x,
-            light.z,
+            light,
             worldX,
             worldZ,
             light.visibilityOccluders,
           );
-          const visibleEnergy = light.crossRoom ? visibility : 0.08 + visibility * 0.92;
           const energy =
             light.energy *
             light.roomContribution *
-            falloff *
-            falloff *
-            visibleEnergy *
-            0.62;
+            Math.pow(falloff, 1.45) *
+            visibility *
+            0.5;
           roomRed += light.red * energy;
           roomGreen += light.green * energy;
           roomBlue += light.blue * energy;
         }
-        const contactVisibility = proximityOcclusion(worldX, worldZ, contactOccluders);
-        roomRed = INDIRECT_LIGHT[0] + (roomRed - INDIRECT_LIGHT[0]) * contactVisibility;
-        roomGreen = INDIRECT_LIGHT[1] + (roomGreen - INDIRECT_LIGHT[1]) * contactVisibility;
-        roomBlue = INDIRECT_LIGHT[2] + (roomBlue - INDIRECT_LIGHT[2]) * contactVisibility;
         // Room rectangles deliberately overlap around connections. Merging the
         // fields by their maximum prevents the same fixture from being added a
         // second time and producing a bright oval in the doorway.
@@ -235,6 +203,17 @@ export const createBakedLightMap = (plan: WorldPlan): THREE.CanvasTexture => {
       }
     }
   }
+
+  return pixels;
+};
+
+export const createBakedLightMap = (plan: WorldPlan): THREE.CanvasTexture => {
+  const canvas = document.createElement('canvas');
+  canvas.width = LIGHTMAP_RESOLUTION;
+  canvas.height = LIGHTMAP_RESOLUTION;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Canvas 2D is unavailable for baked lighting.');
+  const pixels = buildBakedLightField(plan);
 
   const image = context.createImageData(LIGHTMAP_RESOLUTION, LIGHTMAP_RESOLUTION);
   for (let index = 0; index < LIGHTMAP_RESOLUTION * LIGHTMAP_RESOLUTION; index += 1) {
@@ -246,42 +225,6 @@ export const createBakedLightMap = (plan: WorldPlan): THREE.CanvasTexture => {
     image.data[target + 3] = 255;
   }
   context.putImageData(image, 0, 0);
-
-  // A broad, soft occlusion line grounds walls and columns without requiring
-  // hundreds of real-time shadow-casting lights.
-  context.save();
-  context.globalCompositeOperation = 'source-over';
-  context.strokeStyle = 'rgba(7, 7, 3, 0.14)';
-  context.lineCap = 'square';
-  context.lineWidth = Math.max(0.8, scale * 0.48);
-  context.shadowColor = 'rgba(2, 2, 1, 0.32)';
-  context.shadowBlur = Math.max(1.1, scale * 0.9);
-  for (const wall of plan.walls) {
-    if (wall.bottom < -1) continue;
-    const halfLength = wall.length * 0.5;
-    context.beginPath();
-    if (wall.orientation === 'x') {
-      context.moveTo((wall.x - halfLength + half) * scale, LIGHTMAP_RESOLUTION - (wall.z + half) * scale);
-      context.lineTo((wall.x + halfLength + half) * scale, LIGHTMAP_RESOLUTION - (wall.z + half) * scale);
-    } else {
-      context.moveTo((wall.x + half) * scale, LIGHTMAP_RESOLUTION - (wall.z - halfLength + half) * scale);
-      context.lineTo((wall.x + half) * scale, LIGHTMAP_RESOLUTION - (wall.z + halfLength + half) * scale);
-    }
-    context.stroke();
-  }
-  for (const column of plan.columns) {
-    const minX = column.x - column.width * 0.5;
-    const maxX = column.x + column.width * 0.5;
-    const minZ = column.z - column.depth * 0.5;
-    const maxZ = column.z + column.depth * 0.5;
-    context.strokeRect(
-      (minX + half) * scale,
-      LIGHTMAP_RESOLUTION - (maxZ + half) * scale,
-      (maxX - minX) * scale,
-      (maxZ - minZ) * scale,
-    );
-  }
-  context.restore();
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.name = `baked-fluorescent-field-${plan.seed}`;
@@ -326,13 +269,13 @@ const withLightMap = <T extends THREE.MeshStandardMaterial>(
         `#ifdef USE_LIGHTMAP
           vec3 bakedMaskTexel = texture2D( lightMap, vLightMapUv ).rgb;
           float bakedLightLevel = dot( bakedMaskTexel, vec3( 0.2126, 0.7152, 0.0722 ) );
-          float bakedSurfaceMask = mix( bakedShadowFloor, 1.0, smoothstep( 0.018, 0.34, bakedLightLevel ) );
+          float bakedSurfaceMask = mix( bakedShadowFloor, 1.0, smoothstep( 0.012, 0.28, bakedLightLevel ) );
           outgoingLight *= bakedSurfaceMask;
         #endif
         #include <opaque_fragment>`,
       );
   };
-  material.customProgramCacheKey = () => 'baked-light-surface-mask-v1';
+  material.customProgramCacheKey = () => 'baked-light-surface-mask-v2';
   material.needsUpdate = true;
   return material;
 };
@@ -347,17 +290,17 @@ export const createBakedMaterialSet = (
   lightMap: THREE.Texture,
   worldSize: number,
 ): BakedMaterialSet => {
-  const wall = withLightMap(source.wall, lightMap, worldSize, 0.9, 0.6, 0.48);
-  const plaster = withLightMap(source.plaster, lightMap, worldSize, 0.82, 0.6, 0.48);
+  const wall = withLightMap(source.wall, lightMap, worldSize, 0.9, 0.56, 0.7);
+  const plaster = withLightMap(source.plaster, lightMap, worldSize, 0.84, 0.56, 0.7);
   // The carpet receives less direct energy than vertical surfaces. This keeps
   // it visibly light without bringing back the old glowing-floor look.
-  const floor = withLightMap(source.floor, lightMap, worldSize, 0.7, 0.56);
-  const ceiling = withLightMap(source.ceiling, lightMap, worldSize, 0.78, 0.6);
-  const baseboard = withLightMap(source.baseboard, lightMap, worldSize, 0.68, 0.58, 0.32);
-  const pitWall = withLightMap(source.pitWall, lightMap, worldSize, 0.48, 0.58, 0.42);
-  const pitBottom = withLightMap(source.pitBottom, lightMap, worldSize, 0.12, 0.58);
-  const metal = withLightMap(source.metal, lightMap, worldSize, 0.38, 0.56);
-  const fixtureFrame = withLightMap(source.fixtureFrame, lightMap, worldSize, 0.72, 0.6);
+  const floor = withLightMap(source.floor, lightMap, worldSize, 0.68, 0.54);
+  const ceiling = withLightMap(source.ceiling, lightMap, worldSize, 0.74, 0.56);
+  const baseboard = withLightMap(source.baseboard, lightMap, worldSize, 0.64, 0.55, 0.62);
+  const pitWall = withLightMap(source.pitWall, lightMap, worldSize, 0.48, 0.54, 0.66);
+  const pitBottom = withLightMap(source.pitBottom, lightMap, worldSize, 0.12, 0.52);
+  const metal = withLightMap(source.metal, lightMap, worldSize, 0.36, 0.54);
+  const fixtureFrame = withLightMap(source.fixtureFrame, lightMap, worldSize, 0.68, 0.56);
   const ownedMaterials = [
     wall,
     plaster,

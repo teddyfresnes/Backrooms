@@ -37,10 +37,10 @@ export class PostFX {
     const vignette = new VignetteEffect({
       eskil: false,
       offset: 0.5,
-      darkness: 0.072,
+      darkness: 0.06,
     });
     const grading = new HueSaturationEffect({ hue: 0.005, saturation: -0.018 });
-    const contrast = new BrightnessContrastEffect({ brightness: -0.006, contrast: 0.058 });
+    const contrast = new BrightnessContrastEffect({ brightness: -0.004, contrast: 0.035 });
     const toneMapping = new ToneMappingEffect({
       mode: ToneMappingMode.AGX,
     });
@@ -49,11 +49,11 @@ export class PostFX {
         blendFunction: BlendFunction.MULTIPLY,
         samples: 13,
         rings: 7,
-        radius: 0.105,
-        intensity: 0.74,
-        bias: 0.026,
-        fade: 0.06,
-        luminanceInfluence: 0.72,
+        radius: 0.09,
+        intensity: 0.62,
+        bias: 0.032,
+        fade: 0.08,
+        luminanceInfluence: 0.8,
         color: new THREE.Color(0x292916),
         resolutionScale: 0.76,
       });
@@ -64,7 +64,7 @@ export class PostFX {
     if (supportsHdrTargets && !coarsePointer) {
       const bloom = new BloomEffect({
         blendFunction: BlendFunction.SCREEN,
-        intensity: 0.18,
+        intensity: 0.15,
         luminanceThreshold: 0.86,
         luminanceSmoothing: 0.18,
         mipmapBlur: true,

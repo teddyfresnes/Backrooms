@@ -165,16 +165,12 @@ export class Game {
     this.scene.fog = new THREE.FogExp2(0x77754b, 0.0042);
     // Only the low-frequency bounced light is global. Direct fluorescent
     // pools are baked per chunk so they remain spatially stable and cheap.
-    const hemisphere = new THREE.HemisphereLight(0xfff7d8, 0x282619, 0.17);
+    const hemisphere = new THREE.HemisphereLight(0xfff4d2, 0x36331f, 0.2);
     hemisphere.name = 'liminal-ambient-field';
     this.scene.add(hemisphere);
-    const fill = new THREE.AmbientLight(0xfff0c4, 0.018);
+    const fill = new THREE.AmbientLight(0xffefc5, 0.025);
     fill.name = 'indirect-carpet-bounce';
     this.scene.add(fill);
-    const directional = new THREE.DirectionalLight(0xfff5d8, 0.07);
-    directional.name = 'fluorescent-directional-fill';
-    directional.position.set(3.5, 8, 2.5);
-    this.scene.add(directional);
   }
 
   private async warmupPostFX(): Promise<void> {
