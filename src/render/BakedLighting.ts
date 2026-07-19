@@ -5,7 +5,10 @@ import type { Rect, WorldPlan } from '../world/types';
 const LIGHTMAP_RESOLUTION = 160;
 const LIGHTMAP_UV_CHANNEL = 1;
 const NEIGHBOUR_LIGHT_REACH = 9.2;
-const CONTACT_SHADOW_REACH = 1.35;
+// Keep the baked contact term tight to the junction.  A metre-wide reach made
+// two perpendicular walls overlap into the broad black columns visible in
+// otherwise lit corners.
+const CONTACT_SHADOW_REACH = 0.62;
 const INDIRECT_LIGHT = [0.008, 0.008, 0.004] as const;
 const LIGHT_SAMPLES = [
   [0, 0],
@@ -118,7 +121,9 @@ const proximityOcclusion = (
   }
   // Contact shadows must not multiply once per touching partition: doing so
   // made a normal two-wall corner much darker than the rest of a lit room.
-  return Math.max(0.72, 1 - strongestShadow * 0.18 - secondaryShadow * 0.06);
+  // A second wall may reinforce the contact shadow, but it must not turn an
+  // illuminated corner into a vertical black band.
+  return Math.max(0.84, 1 - strongestShadow * 0.12 - secondaryShadow * 0.03);
 };
 
 /**

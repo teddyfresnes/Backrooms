@@ -51,10 +51,10 @@ export class PostFX {
         rings: 7,
         // Restrict AO to the actual contact instead of painting a broad band
         // across the ceiling and carpet along every wall.
-        radius: 0.028,
-        intensity: 0.74,
+        radius: 0.016,
+        intensity: 0.58,
         bias: 0.026,
-        fade: 0.06,
+        fade: 0.09,
         luminanceInfluence: 0.72,
         color: new THREE.Color(0x292916),
         resolutionScale: 0.76,
