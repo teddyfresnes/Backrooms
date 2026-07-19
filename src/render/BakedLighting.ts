@@ -19,6 +19,21 @@ const LIGHT_SAMPLES = [
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
+export const bakedLightMapTexelSize = (worldSize: number): number =>
+  worldSize / LIGHTMAP_RESOLUTION;
+
+export const bakedLightMapJunctionNeedsRepair = (
+  fixedCoordinate: number,
+  thickness: number,
+  worldSize: number,
+): boolean => {
+  const texelSize = bakedLightMapTexelSize(worldSize);
+  const half = worldSize * 0.5;
+  const nearestIndex = Math.round((fixedCoordinate + half) / texelSize - 0.5);
+  const nearestSample = -half + (nearestIndex + 0.5) * texelSize;
+  return Math.abs(nearestSample - fixedCoordinate) <= thickness * 0.5 + 1e-5;
+};
+
 const rectsIntersect = (left: Rect, right: Rect, padding = 0): boolean =>
   left.minX - padding <= right.maxX &&
   left.maxX + padding >= right.minX &&

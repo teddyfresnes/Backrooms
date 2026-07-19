@@ -3,6 +3,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { MaterialSet } from './MaterialLibrary';
 import type { RuntimeLightSource } from './LocalLightRig';
 import {
+  bakedLightMapJunctionNeedsRepair,
+  bakedLightMapTexelSize,
   createBakedLightMap,
   createBakedMaterialSet,
   ensureBakedLightUv,
@@ -107,6 +109,130 @@ const createFloorGeometry = (rects: Rect[], y = 0): THREE.BufferGeometry => {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+};
+
+const intersectRects = (left: Rect, right: Rect): Rect | null => {
+  const intersection: Rect = {
+    minX: Math.max(left.minX, right.minX),
+    maxX: Math.min(left.maxX, right.maxX),
+    minZ: Math.max(left.minZ, right.minZ),
+    maxZ: Math.min(left.maxZ, right.maxZ),
+  };
+  return intersection.maxX - intersection.minX > 1e-4 && intersection.maxZ - intersection.minZ > 1e-4
+    ? intersection
+    : null;
+};
+
+/**
+ * Covers only the rare half-texel junctions where an off-grid partition makes
+ * the shared XZ lightmap sample the hidden space under the wall. The patch
+ * keeps the visible texture coordinates unchanged, but projects its lightmap
+ * lookup outward on each side so a bright room never borrows from a dark one.
+ */
+const createHorizontalJunctionRepairGeometry = (
+  walls: readonly WallSegment[],
+  clipRects: readonly Rect[],
+  worldSize: number,
+  wallHeight: number,
+  surface: 'floor' | 'ceiling',
+): THREE.BufferGeometry | null => {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const lightMapUvs: number[] = [];
+  const indices: number[] = [];
+  const halfWorld = worldSize * 0.5;
+  const texelSize = bakedLightMapTexelSize(worldSize);
+  const repairWidth = texelSize * 1.05;
+  const y = surface === 'floor' ? 0.002 : wallHeight - 0.002;
+  const normalY = surface === 'floor' ? 1 : -1;
+
+  const addPatch = (rect: Rect, wall: WallSegment, side: -1 | 1): void => {
+    const offset = positions.length / 3;
+    const corners = [
+      [rect.minX, rect.minZ],
+      [rect.maxX, rect.minZ],
+      [rect.maxX, rect.maxZ],
+      [rect.minX, rect.maxZ],
+    ] as const;
+    const halfLength = wall.length * 0.5;
+    const alongMin = (wall.orientation === 'x' ? wall.x : wall.z) - halfLength;
+    const alongMax = (wall.orientation === 'x' ? wall.x : wall.z) + halfLength;
+    const endInset = Math.min(texelSize * 0.5, wall.length * 0.5);
+    const fixed = wall.orientation === 'x' ? wall.z : wall.x;
+    const sampleFixed = fixed + side * (wall.thickness * 0.5 + repairWidth);
+
+    for (const [x, z] of corners) {
+      positions.push(x, y, z);
+      normals.push(0, normalY, 0);
+      if (surface === 'floor') {
+        uvs.push(x / 2.15, z / 2.15);
+      } else {
+        uvs.push((x + halfWorld) / 2.4, (z + halfWorld) / 2.4);
+      }
+      const along = THREE.MathUtils.clamp(
+        wall.orientation === 'x' ? x : z,
+        alongMin + endInset,
+        alongMax - endInset,
+      );
+      const sampleX = wall.orientation === 'x' ? along : sampleFixed;
+      const sampleZ = wall.orientation === 'x' ? sampleFixed : along;
+      lightMapUvs.push(
+        THREE.MathUtils.clamp((sampleX + halfWorld) / worldSize, 0, 1),
+        THREE.MathUtils.clamp((sampleZ + halfWorld) / worldSize, 0, 1),
+      );
+    }
+    if (surface === 'floor') {
+      indices.push(offset, offset + 2, offset + 1, offset, offset + 3, offset + 2);
+    } else {
+      indices.push(offset, offset + 1, offset + 2, offset, offset + 2, offset + 3);
+    }
+  };
+
+  for (const wall of walls) {
+    if (wall.bottom < -1 || wall.height <= 1.2) continue;
+    const touchesSurface = surface === 'floor'
+      ? wall.bottom <= 0.02
+      : wall.bottom + wall.height >= wallHeight - 0.02;
+    if (!touchesSurface) continue;
+    const fixed = wall.orientation === 'x' ? wall.z : wall.x;
+    if (!bakedLightMapJunctionNeedsRepair(fixed, wall.thickness, worldSize)) continue;
+
+    const halfLength = wall.length * 0.5;
+    const halfThickness = wall.thickness * 0.5;
+    for (const side of [-1, 1] as const) {
+      const inner = fixed + side * halfThickness;
+      const outer = inner + side * repairWidth;
+      const strip: Rect = wall.orientation === 'x'
+        ? {
+            minX: wall.x - halfLength,
+            maxX: wall.x + halfLength,
+            minZ: Math.min(inner, outer),
+            maxZ: Math.max(inner, outer),
+          }
+        : {
+            minX: Math.min(inner, outer),
+            maxX: Math.max(inner, outer),
+            minZ: wall.z - halfLength,
+            maxZ: wall.z + halfLength,
+          };
+      for (const clip of clipRects) {
+        const clipped = intersectRects(strip, clip);
+        if (clipped) addPatch(clipped, wall, side);
+      }
+    }
+  }
+
+  if (positions.length === 0) return null;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setAttribute('uv1', new THREE.Float32BufferAttribute(lightMapUvs, 2));
   geometry.setIndex(indices);
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
@@ -315,6 +441,37 @@ export class WorldView {
     ceiling.rotateX(Math.PI * 0.5);
     ceiling.translate(0, this.plan.wallHeight, 0);
     makeMesh(ceiling, this.materials.ceiling, 'office-drop-ceiling', this.group);
+
+    const worldBounds: Rect = {
+      minX: -this.plan.size * 0.5,
+      maxX: this.plan.size * 0.5,
+      minZ: -this.plan.size * 0.5,
+      maxZ: this.plan.size * 0.5,
+    };
+    makeMesh(
+      createHorizontalJunctionRepairGeometry(
+        this.plan.walls,
+        this.plan.floorRects,
+        this.plan.size,
+        this.plan.wallHeight,
+        'floor',
+      ),
+      this.materials.floor,
+      'floor-lightmap-junction-repairs',
+      this.group,
+    );
+    makeMesh(
+      createHorizontalJunctionRepairGeometry(
+        this.plan.walls,
+        [worldBounds],
+        this.plan.size,
+        this.plan.wallHeight,
+        'ceiling',
+      ),
+      this.materials.ceiling,
+      'ceiling-lightmap-junction-repairs',
+      this.group,
+    );
   }
 
   private buildFixtures(): THREE.InstancedMesh {
