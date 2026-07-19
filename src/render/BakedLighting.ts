@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { MaterialSet } from './MaterialLibrary';
 import type { Rect, WorldPlan } from '../world/types';
 
-const LIGHTMAP_RESOLUTION = 256;
+const LIGHTMAP_RESOLUTION = 192;
 const LIGHTMAP_UV_CHANNEL = 1;
 const NEIGHBOUR_LIGHT_REACH = 10.5;
 const INDIRECT_LIGHT = [0.01, 0.009, 0.005] as const;
@@ -232,11 +232,8 @@ export const createBakedLightMap = (plan: WorldPlan): THREE.CanvasTexture => {
   texture.colorSpace = THREE.NoColorSpace;
   texture.wrapS = THREE.ClampToEdgeWrapping;
   texture.wrapT = THREE.ClampToEdgeWrapping;
-  // The field already contains smooth analytic falloff. Nearest sampling is
-  // intentional here: bilinear filtering blends texels across a thin wall and
-  // creates bright/dark outlines on the ceiling and floor of the next room.
-  texture.minFilter = THREE.NearestFilter;
-  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   return texture;

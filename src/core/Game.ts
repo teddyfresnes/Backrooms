@@ -163,10 +163,12 @@ export class Game {
   private configureScene(): void {
     this.scene.background = new THREE.Color(0x45452d);
     this.scene.fog = new THREE.FogExp2(0x77754b, 0.0042);
-    // Keep only orientation-neutral bounce globally. A hemisphere made the
-    // thin top faces of walls and trims glow while their vertical faces stayed
-    // dark; all spatial fluorescent variation belongs to the baked field.
-    const fill = new THREE.AmbientLight(0xffefc5, 0.13);
+    // Only the low-frequency bounced light is global. Direct fluorescent
+    // pools are baked per chunk so they remain spatially stable and cheap.
+    const hemisphere = new THREE.HemisphereLight(0xfff4d2, 0x36331f, 0.2);
+    hemisphere.name = 'liminal-ambient-field';
+    this.scene.add(hemisphere);
+    const fill = new THREE.AmbientLight(0xffefc5, 0.025);
     fill.name = 'indirect-carpet-bounce';
     this.scene.add(fill);
   }
