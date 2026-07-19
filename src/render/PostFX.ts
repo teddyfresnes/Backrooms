@@ -37,10 +37,10 @@ export class PostFX {
     const vignette = new VignetteEffect({
       eskil: false,
       offset: 0.5,
-      darkness: 0.06,
+      darkness: 0.072,
     });
     const grading = new HueSaturationEffect({ hue: 0.005, saturation: -0.018 });
-    const contrast = new BrightnessContrastEffect({ brightness: -0.004, contrast: 0.035 });
+    const contrast = new BrightnessContrastEffect({ brightness: -0.006, contrast: 0.058 });
     const toneMapping = new ToneMappingEffect({
       mode: ToneMappingMode.AGX,
     });
@@ -49,17 +49,13 @@ export class PostFX {
         blendFunction: BlendFunction.MULTIPLY,
         samples: 13,
         rings: 7,
-        // Keep AO as a true contact shadow. The previous 0.09 radius sampled
-        // far enough across a room to paint broad bands on walls and ceilings.
-        radius: 0.018,
-        intensity: 0.46,
-        bias: 0.04,
-        fade: 0.14,
-        luminanceInfluence: 0.82,
-        worldProximityThreshold: 0.18,
-        worldProximityFalloff: 0.22,
+        radius: 0.105,
+        intensity: 0.74,
+        bias: 0.026,
+        fade: 0.06,
+        luminanceInfluence: 0.72,
         color: new THREE.Color(0x292916),
-        resolutionScale: 0.82,
+        resolutionScale: 0.76,
       });
       this.composer.addPass(new EffectPass(camera, ssao));
     }
@@ -68,7 +64,7 @@ export class PostFX {
     if (supportsHdrTargets && !coarsePointer) {
       const bloom = new BloomEffect({
         blendFunction: BlendFunction.SCREEN,
-        intensity: 0.15,
+        intensity: 0.18,
         luminanceThreshold: 0.86,
         luminanceSmoothing: 0.18,
         mipmapBlur: true,

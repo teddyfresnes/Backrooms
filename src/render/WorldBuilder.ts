@@ -34,10 +34,9 @@ const setGeometryTint = (geometry: THREE.BufferGeometry, tint: number): void => 
 
 const createWallGeometry = (wall: WallSegment): THREE.BoxGeometry => {
   const alongX = wall.orientation === 'x';
-  const hiddenCapOverlap = 0.035;
   const geometry = new THREE.BoxGeometry(
     alongX ? wall.length : wall.thickness,
-    wall.height + hiddenCapOverlap * 2,
+    wall.height,
     alongX ? wall.thickness : wall.length,
   );
   const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
@@ -191,7 +190,6 @@ export class WorldView {
   private readonly materials: MaterialSet;
   private readonly bakedLightMap: THREE.CanvasTexture;
   private readonly ownedMaterials: THREE.MeshStandardMaterial[];
-  private readonly ownedTextures: THREE.Texture[];
 
   constructor(
     readonly plan: WorldPlan,
@@ -203,7 +201,6 @@ export class WorldView {
     const baked = createBakedMaterialSet(sourceMaterials, this.bakedLightMap, plan.size);
     this.materials = baked.materials;
     this.ownedMaterials = baked.ownedMaterials;
-    this.ownedTextures = baked.ownedTextures;
     this.fixtureSlots = plan.lights;
     this.buildArchitecture();
     this.emitterMesh = this.buildFixtures();
@@ -221,18 +218,18 @@ export class WorldView {
     for (const wall of this.plan.walls) {
       const geometry = createWallGeometry(wall);
       const wallMaterial = wall.kind === 'plaster' ? this.materials.plaster : this.materials.wall;
-      ensureBakedLightUv(geometry, wallMaterial, 0.56);
+      ensureBakedLightUv(geometry, wallMaterial, 0.42);
       (wall.kind === 'plaster' ? plasterGeometries : wallGeometries).push(geometry);
 
       if (wall.height > 1.3) {
         const alongX = wall.orientation === 'x';
         const trim = new THREE.BoxGeometry(
-          alongX ? wall.length + 0.025 : wall.thickness + 0.018,
+          alongX ? wall.length + 0.025 : wall.thickness + 0.055,
           0.115,
-          alongX ? wall.thickness + 0.018 : wall.length + 0.025,
+          alongX ? wall.thickness + 0.055 : wall.length + 0.025,
         );
         trim.translate(wall.x, wall.bottom + 0.0575, wall.z);
-        ensureBakedLightUv(trim, this.materials.baseboard, 0.48);
+        ensureBakedLightUv(trim, this.materials.baseboard, 0.36);
         baseboardGeometries.push(trim);
       }
     }
@@ -247,11 +244,11 @@ export class WorldView {
         column.z,
         column.tint,
       );
-      ensureBakedLightUv(geometry, this.materials.wall, 0.44);
+      ensureBakedLightUv(geometry, this.materials.wall, 0.32);
       wallGeometries.push(geometry);
-      const trim = new THREE.BoxGeometry(column.width + 0.018, 0.115, column.depth + 0.018);
+      const trim = new THREE.BoxGeometry(column.width + 0.055, 0.115, column.depth + 0.055);
       trim.translate(column.x, 0.0575, column.z);
-      ensureBakedLightUv(trim, this.materials.baseboard, 0.38);
+      ensureBakedLightUv(trim, this.materials.baseboard, 0.26);
       baseboardGeometries.push(trim);
     }
 
@@ -268,7 +265,7 @@ export class WorldView {
         center.z,
         mass.tint,
       );
-      ensureBakedLightUv(massGeometry, this.materials.wall, 0.48);
+      ensureBakedLightUv(massGeometry, this.materials.wall, 0.36);
       wallGeometries.push(massGeometry);
       const trimHeight = 0.115;
       const massTrims = [
@@ -293,7 +290,7 @@ export class WorldView {
           center.z,
         ),
       ];
-      for (const trim of massTrims) ensureBakedLightUv(trim, this.materials.baseboard, 0.4);
+      for (const trim of massTrims) ensureBakedLightUv(trim, this.materials.baseboard, 0.28);
       baseboardGeometries.push(...massTrims);
     }
 
@@ -890,7 +887,6 @@ export class WorldView {
       if (object instanceof THREE.Mesh || object instanceof THREE.InstancedMesh) object.geometry.dispose();
     });
     this.ownedMaterials.forEach((material) => material.dispose());
-    this.ownedTextures.forEach((texture) => texture.dispose());
     this.bakedLightMap.dispose();
     this.group.removeFromParent();
   }
