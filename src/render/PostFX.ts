@@ -6,10 +6,8 @@ import {
   EffectComposer,
   EffectPass,
   HueSaturationEffect,
-  NormalPass,
   RenderPass,
   SMAAEffect,
-  SSAOEffect,
   ToneMappingEffect,
   ToneMappingMode,
   VignetteEffect,
@@ -27,12 +25,10 @@ export class PostFX {
       multisampling: 0,
       frameBufferType: supportsHdrTargets ? THREE.HalfFloatType : THREE.UnsignedByteType,
     });
-    let normalPass: NormalPass | undefined;
-    if (!coarsePointer) {
-      normalPass = new NormalPass(scene, camera, { resolutionScale: 0.6 });
-      this.composer.addPass(normalPass);
-    }
     this.composer.addPass(new RenderPass(scene, camera));
+    // Do not add screen-space ambient occlusion here. In these low-ceiling,
+    // wall-heavy rooms its depth halo becomes a thick stripe on ceilings and
+    // doubles the baked corner shadows instead of reading as contact shading.
 
     const vignette = new VignetteEffect({
       eskil: false,
@@ -44,21 +40,6 @@ export class PostFX {
     const toneMapping = new ToneMappingEffect({
       mode: ToneMappingMode.AGX,
     });
-    if (normalPass) {
-      const ssao = new SSAOEffect(camera, normalPass.texture, {
-        blendFunction: BlendFunction.MULTIPLY,
-        samples: 13,
-        rings: 7,
-        radius: 0.09,
-        intensity: 0.62,
-        bias: 0.032,
-        fade: 0.08,
-        luminanceInfluence: 0.8,
-        color: new THREE.Color(0x292916),
-        resolutionScale: 0.76,
-      });
-      this.composer.addPass(new EffectPass(camera, ssao));
-    }
     // Bloom is only worthwhile on an HDR target. Three mip levels retain a
     // soft fluorescent halo without paying for the former full five-level chain.
     if (supportsHdrTargets && !coarsePointer) {

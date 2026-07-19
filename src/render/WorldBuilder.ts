@@ -32,13 +32,28 @@ const setGeometryTint = (geometry: THREE.BufferGeometry, tint: number): void => 
   geometry.setAttribute('color', new THREE.BufferAttribute(values, 3));
 };
 
+const removeHorizontalFaces = <T extends THREE.BufferGeometry>(geometry: T): T => {
+  const index = geometry.getIndex();
+  const normal = geometry.getAttribute('normal');
+  if (!index || !normal) return geometry;
+  const retained: number[] = [];
+  for (let offset = 0; offset < index.count; offset += 3) {
+    const first = index.getX(offset);
+    if (Math.abs(normal.getY(first)) > 0.5) continue;
+    retained.push(first, index.getX(offset + 1), index.getX(offset + 2));
+  }
+  geometry.setIndex(retained);
+  geometry.clearGroups();
+  return geometry;
+};
+
 const createWallGeometry = (wall: WallSegment): THREE.BoxGeometry => {
   const alongX = wall.orientation === 'x';
-  const geometry = new THREE.BoxGeometry(
+  const geometry = removeHorizontalFaces(new THREE.BoxGeometry(
     alongX ? wall.length : wall.thickness,
     wall.height,
     alongX ? wall.thickness : wall.length,
-  );
+  ));
   const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
   const uScale = Math.max(0.24, wall.length / 2.05);
   const vScale = Math.max(0.2, wall.height / 2.45);
@@ -223,11 +238,11 @@ export class WorldView {
 
       if (wall.height > 1.3) {
         const alongX = wall.orientation === 'x';
-        const trim = new THREE.BoxGeometry(
+        const trim = removeHorizontalFaces(new THREE.BoxGeometry(
           alongX ? wall.length + 0.025 : wall.thickness + 0.055,
           0.115,
           alongX ? wall.thickness + 0.055 : wall.length + 0.025,
-        );
+        ));
         trim.translate(wall.x, wall.bottom + 0.0575, wall.z);
         ensureBakedLightUv(trim, this.materials.baseboard, 0.48);
         baseboardGeometries.push(trim);
@@ -244,9 +259,12 @@ export class WorldView {
         column.z,
         column.tint,
       );
+      removeHorizontalFaces(geometry);
       ensureBakedLightUv(geometry, this.materials.wall, 0.44);
       wallGeometries.push(geometry);
-      const trim = new THREE.BoxGeometry(column.width + 0.055, 0.115, column.depth + 0.055);
+      const trim = removeHorizontalFaces(
+        new THREE.BoxGeometry(column.width + 0.055, 0.115, column.depth + 0.055),
+      );
       trim.translate(column.x, 0.0575, column.z);
       ensureBakedLightUv(trim, this.materials.baseboard, 0.38);
       baseboardGeometries.push(trim);
@@ -265,26 +283,27 @@ export class WorldView {
         center.z,
         mass.tint,
       );
+      removeHorizontalFaces(massGeometry);
       ensureBakedLightUv(massGeometry, this.materials.wall, 0.48);
       wallGeometries.push(massGeometry);
       const trimHeight = 0.115;
       const massTrims = [
-        new THREE.BoxGeometry(width + 0.055, trimHeight, 0.09).translate(
+        removeHorizontalFaces(new THREE.BoxGeometry(width + 0.055, trimHeight, 0.09)).translate(
           center.x,
           trimHeight * 0.5,
           mass.bounds.minZ,
         ),
-        new THREE.BoxGeometry(width + 0.055, trimHeight, 0.09).translate(
+        removeHorizontalFaces(new THREE.BoxGeometry(width + 0.055, trimHeight, 0.09)).translate(
           center.x,
           trimHeight * 0.5,
           mass.bounds.maxZ,
         ),
-        new THREE.BoxGeometry(0.09, trimHeight, depth).translate(
+        removeHorizontalFaces(new THREE.BoxGeometry(0.09, trimHeight, depth)).translate(
           mass.bounds.minX,
           trimHeight * 0.5,
           center.z,
         ),
-        new THREE.BoxGeometry(0.09, trimHeight, depth).translate(
+        removeHorizontalFaces(new THREE.BoxGeometry(0.09, trimHeight, depth)).translate(
           mass.bounds.maxX,
           trimHeight * 0.5,
           center.z,
