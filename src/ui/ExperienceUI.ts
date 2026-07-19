@@ -6,21 +6,32 @@ interface UIActions {
   regenerate(): void;
   toggleFullscreen(): void;
   submitConsole(value: string, mode: ConsoleMode): ConsoleSubmitResult;
-  completeConsole(value: string, cycleIndex: number, mode: ConsoleMode): ConsoleCompletion | null;
+  completeConsole(value: string, mode: ConsoleMode): ConsoleCompletion | null;
   consoleVisibility(open: boolean): void;
 }
 
 export type ConsoleMode = 'command' | 'chat';
 
 export interface ConsoleCompletion {
-  value: string;
   hint: string;
-  count: number;
+  suggestions: ConsoleSuggestion[];
+}
+
+export interface ConsoleSuggestion {
+  value: string;
+  label: string;
+  detail: string;
+}
+
+export interface ConsoleMessage {
+  kind: 'chat' | 'command' | 'system' | 'error';
+  text: string;
 }
 
 export interface ConsoleSubmitResult {
   close: boolean;
   feedback: string;
+  messages: ConsoleMessage[];
 }
 
 const roomLabels: Record<RoomKind, string> = {
@@ -46,6 +57,9 @@ export class ExperienceUI {
   private readonly fallFlash: HTMLElement;
   private readonly interactionPrompt: HTMLElement;
   private readonly consolePanel: HTMLElement;
+  private readonly consoleHistory: HTMLElement;
+  private readonly consoleMessages: HTMLElement;
+  private readonly consoleSuggestions: HTMLElement;
   private readonly consoleInput: HTMLInputElement;
   private readonly consoleHint: HTMLElement;
   private readonly consoleModeLabel: HTMLElement;
@@ -55,7 +69,12 @@ export class ExperienceUI {
   private interactionLabel: string | null = null;
   private consoleMode: ConsoleMode = 'command';
   private completionSource = '';
-  private completionIndex = 0;
+  private completionIndex = -1;
+  private completionSuggestions: ConsoleSuggestion[] = [];
+  private readonly submittedInputs: string[] = [];
+  private historyIndex = 0;
+  private historyDraft = '';
+  private chatFadeTimer?: number;
 
   constructor(container: HTMLElement, plan: WorldPlan, actions: UIActions, displaySeed = plan.seed) {
     this.actions = actions;
@@ -128,8 +147,14 @@ export class ExperienceUI {
         <div class="interaction-prompt" data-ui="interaction" aria-hidden="true"><kbd>E</kbd><span></span></div>
         <section class="command-console" data-ui="console" aria-hidden="true">
           <div class="console-shell">
-            <span data-ui="console-mode">COMMAND</span>
-            <input data-ui="console-input" type="text" spellcheck="false" autocomplete="off" aria-label="Console" />
+            <div class="chat-history" data-ui="chat-history" aria-live="polite">
+              <div class="chat-messages" data-ui="chat-messages"></div>
+            </div>
+            <div class="console-suggestions" data-ui="console-suggestions" aria-label="Suggestions de commandes"></div>
+            <div class="console-input-row">
+              <span data-ui="console-mode">/</span>
+              <input data-ui="console-input" type="text" spellcheck="false" autocomplete="off" maxlength="180" aria-label="Chat et commandes" />
+            </div>
             <small data-ui="console-hint"></small>
           </div>
         </section>
@@ -154,6 +179,9 @@ export class ExperienceUI {
     this.fallFlash = this.query('[data-ui="fall"]');
     this.interactionPrompt = this.query('[data-ui="interaction"]');
     this.consolePanel = this.query('[data-ui="console"]');
+    this.consoleHistory = this.query('[data-ui="chat-history"]');
+    this.consoleMessages = this.query('[data-ui="chat-messages"]');
+    this.consoleSuggestions = this.query('[data-ui="console-suggestions"]');
     this.consoleInput = this.query<HTMLInputElement>('[data-ui="console-input"]');
     this.consoleHint = this.query('[data-ui="console-hint"]');
     this.consoleModeLabel = this.query('[data-ui="console-mode"]');
@@ -161,7 +189,7 @@ export class ExperienceUI {
     this.query('[data-ui="regenerate"]').addEventListener('click', actions.regenerate);
     this.query('[data-ui="fullscreen"]').addEventListener('click', actions.toggleFullscreen);
     this.consoleInput.addEventListener('keydown', this.onConsoleKeyDown);
-    this.consoleInput.addEventListener('input', this.resetCompletion);
+    this.consoleInput.addEventListener('input', this.onConsoleInput);
   }
 
   setLoading(progress: number, label: string): void {
@@ -178,6 +206,7 @@ export class ExperienceUI {
   }
 
   setLocked(locked: boolean): void {
+    if (!locked) this.closeConsole();
     if (locked) this.enteredOnce = true;
     this.root.classList.toggle('is-playing', locked);
     this.overlay.setAttribute('aria-hidden', String(locked));
@@ -209,19 +238,24 @@ export class ExperienceUI {
 
   openConsole(mode: ConsoleMode): void {
     this.consoleMode = mode;
-    this.consoleModeLabel.textContent = mode === 'command' ? 'COMMAND' : 'CHAT';
+    this.consolePanel.dataset.mode = mode;
+    this.consoleModeLabel.textContent = mode === 'command' ? '/' : 'me:';
     this.consoleInput.value = mode === 'command' ? '/' : '';
     this.consoleHint.textContent = mode === 'command'
-      ? 'TAB complete /locate, ENTREE execute'
-      : 'ENTREE envoie, /locate marche aussi ici';
+      ? 'ÉCRIS /HELP OU /LOCATE · TAB COMPLÈTE · ↑↓ HISTORIQUE'
+      : 'ENTRÉE ENVOIE · / EXÉCUTE AUSSI UNE COMMANDE';
     this.resetCompletion();
+    this.historyIndex = this.submittedInputs.length;
+    this.historyDraft = '';
     this.root.classList.add('is-console-open');
     this.consolePanel.setAttribute('aria-hidden', 'false');
     this.actions.consoleVisibility(true);
+    this.updateSuggestions();
     requestAnimationFrame(() => {
       this.consoleInput.focus();
       const end = this.consoleInput.value.length;
       this.consoleInput.setSelectionRange(end, end);
+      this.consoleHistory.scrollTop = this.consoleHistory.scrollHeight;
     });
   }
 
@@ -230,8 +264,82 @@ export class ExperienceUI {
     this.root.classList.remove('is-console-open');
     this.consolePanel.setAttribute('aria-hidden', 'true');
     this.consoleInput.blur();
+    this.consoleInput.value = '';
+    this.consoleSuggestions.replaceChildren();
     this.actions.consoleVisibility(false);
     this.resetCompletion();
+    if (this.root.classList.contains('has-chat-message')) {
+      if (this.chatFadeTimer !== undefined) window.clearTimeout(this.chatFadeTimer);
+      this.chatFadeTimer = window.setTimeout(() => {
+        this.chatFadeTimer = undefined;
+        this.root.classList.remove('has-chat-message');
+      }, 6500);
+    }
+  }
+
+  private appendMessages(messages: readonly ConsoleMessage[]): void {
+    if (messages.length === 0) return;
+    for (const message of messages) {
+      const line = document.createElement('p');
+      line.className = `chat-message ${message.kind}`;
+      line.textContent = message.text;
+      this.consoleMessages.append(line);
+    }
+    while (this.consoleMessages.childElementCount > 80) {
+      this.consoleMessages.firstElementChild?.remove();
+    }
+    this.consoleHistory.scrollTop = this.consoleHistory.scrollHeight;
+    this.root.classList.add('has-chat-message');
+    if (this.chatFadeTimer !== undefined) window.clearTimeout(this.chatFadeTimer);
+    this.chatFadeTimer = window.setTimeout(() => {
+      this.chatFadeTimer = undefined;
+      if (!this.isConsoleOpen) this.root.classList.remove('has-chat-message');
+    }, 6500);
+  }
+
+  private renderSuggestions(selectedIndex = -1): void {
+    this.consoleSuggestions.replaceChildren();
+    for (const [index, suggestion] of this.completionSuggestions.entries()) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'console-suggestion';
+      row.classList.toggle('selected', index === selectedIndex);
+      const command = document.createElement('code');
+      command.textContent = suggestion.label;
+      const detail = document.createElement('span');
+      detail.textContent = suggestion.detail;
+      row.append(command, detail);
+      row.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        this.consoleInput.value = suggestion.value;
+        this.completionIndex = index;
+        if (suggestion.value.endsWith(' ')) this.updateSuggestions();
+        else {
+          this.renderSuggestions(index);
+          this.consoleHint.textContent = suggestion.detail;
+        }
+        this.consoleInput.focus();
+        this.consoleInput.setSelectionRange(suggestion.value.length, suggestion.value.length);
+      });
+      this.consoleSuggestions.append(row);
+    }
+    this.consoleSuggestions.classList.toggle('visible', this.completionSuggestions.length > 0);
+  }
+
+  private updateSuggestions(): void {
+    this.completionSource = this.consoleInput.value;
+    this.completionIndex = -1;
+    const completion = this.actions.completeConsole(this.completionSource, this.consoleMode);
+    this.completionSuggestions = completion?.suggestions ?? [];
+    if (completion) this.consoleHint.textContent = completion.hint;
+    else if (this.completionSource.trimStart().startsWith('/')) {
+      this.consoleHint.textContent = 'AUCUNE COMMANDE OU CIBLE NE CORRESPOND';
+    } else {
+      this.consoleHint.textContent = this.consoleMode === 'chat'
+        ? 'ENTRÉE ENVOIE LE MESSAGE SOUS LA FORME me: message'
+        : 'UNE COMMANDE DOIT COMMENCER PAR /';
+    }
+    this.renderSuggestions();
   }
 
   showFall(): void {
@@ -254,8 +362,32 @@ export class ExperienceUI {
 
   private readonly resetCompletion = (): void => {
     this.completionSource = '';
-    this.completionIndex = 0;
+    this.completionIndex = -1;
+    this.completionSuggestions = [];
   };
+
+  private readonly onConsoleInput = (): void => {
+    this.historyIndex = this.submittedInputs.length;
+    this.historyDraft = this.consoleInput.value;
+    this.updateSuggestions();
+  };
+
+  private navigateInputHistory(direction: -1 | 1): void {
+    if (this.submittedInputs.length === 0) return;
+    if (this.historyIndex === this.submittedInputs.length) {
+      this.historyDraft = this.consoleInput.value;
+    }
+    this.historyIndex = Math.min(
+      this.submittedInputs.length,
+      Math.max(0, this.historyIndex + direction),
+    );
+    this.consoleInput.value = this.historyIndex === this.submittedInputs.length
+      ? this.historyDraft
+      : this.submittedInputs[this.historyIndex]!;
+    this.updateSuggestions();
+    const end = this.consoleInput.value.length;
+    this.consoleInput.setSelectionRange(end, end);
+  }
 
   private readonly onConsoleKeyDown = (event: KeyboardEvent): void => {
     if (event.code === 'Escape') {
@@ -264,24 +396,28 @@ export class ExperienceUI {
       return;
     }
 
+    if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
+      event.preventDefault();
+      this.navigateInputHistory(event.code === 'ArrowUp' ? -1 : 1);
+      return;
+    }
+
     if (event.code === 'Tab') {
       event.preventDefault();
-      if (this.completionSource === this.consoleInput.value) this.completionIndex += 1;
-      else {
-        this.completionSource = this.consoleInput.value;
-        this.completionIndex = 0;
-      }
-      const completion = this.actions.completeConsole(
-        this.completionSource,
-        this.completionIndex,
-        this.consoleMode,
-      );
-      if (!completion) {
-        this.consoleHint.textContent = 'AUCUNE CIBLE /LOCATE DANS LES CHUNKS ACTIFS';
+      if (this.completionSuggestions.length === 0) this.updateSuggestions();
+      if (this.completionSuggestions.length === 0) {
+        this.consoleHint.textContent = 'AUCUNE SUGGESTION POUR CETTE SAISIE';
         return;
       }
-      this.consoleInput.value = completion.value;
-      this.consoleHint.textContent = `${completion.hint} [${(this.completionIndex % completion.count) + 1}/${completion.count}]`;
+      this.completionIndex = (this.completionIndex + 1) % this.completionSuggestions.length;
+      const suggestion = this.completionSuggestions[this.completionIndex]!;
+      this.consoleInput.value = suggestion.value;
+      if (suggestion.value.endsWith(' ')) {
+        this.updateSuggestions();
+      } else {
+        this.consoleHint.textContent = `${suggestion.detail} [${this.completionIndex + 1}/${this.completionSuggestions.length}]`;
+        this.renderSuggestions(this.completionIndex);
+      }
       const end = this.consoleInput.value.length;
       this.consoleInput.setSelectionRange(end, end);
       return;
@@ -294,8 +430,19 @@ export class ExperienceUI {
       this.closeConsole();
       return;
     }
+    this.submittedInputs.push(value);
+    if (this.submittedInputs.length > 60) this.submittedInputs.shift();
+    this.historyIndex = this.submittedInputs.length;
     const result = this.actions.submitConsole(value, this.consoleMode);
+    this.appendMessages(result.messages);
     this.consoleHint.textContent = result.feedback;
-    if (result.close) this.closeConsole();
+    if (result.close) {
+      this.closeConsole();
+    } else {
+      this.consoleInput.focus();
+      this.consoleInput.select();
+      this.updateSuggestions();
+      this.consoleHint.textContent = result.feedback;
+    }
   };
 }

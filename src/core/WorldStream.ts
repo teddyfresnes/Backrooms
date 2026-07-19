@@ -226,7 +226,6 @@ export class WorldStream {
       this.localPlayer.copy(playerPosition).sub(runtime.offset);
       runtime.view.update(time, this.localPlayer, delta);
     }
-
   }
 
   getInteraction(
@@ -366,6 +365,29 @@ export class WorldStream {
 
       for (const room of runtime.plan.rooms) {
         const center = rectCenter(room.bounds);
+        const roomLights = runtime.plan.lights.filter(
+          (light) => light.level >= 0 && light.roomId === room.id,
+        );
+        const missingLights = roomLights.filter((light) => light.dead);
+        if (roomLights.length > 0 && missingLights.length === roomLights.length) {
+          const fixture = missingLights[0]!;
+          addTarget(
+            runtime,
+            'dark-room',
+            'piece plongee dans le noir',
+            ['dark', 'dark-room', 'blackout', 'noir', 'piece-noire', 'sans-lumiere'],
+            { x: fixture.x, y: 0.865, z: fixture.z },
+          );
+        } else if (missingLights.length > 0) {
+          const fixture = missingLights[0]!;
+          addTarget(
+            runtime,
+            'missing-lights',
+            'salle aux lampes manquantes',
+            ['missing-light', 'missing-lights', 'lampes', 'panne', 'partial-blackout'],
+            { x: fixture.x, y: 0.865, z: fixture.z },
+          );
+        }
         if (room.kind === 'open-hall') {
           const hasColumns = runtime.plan.columns.some((column) =>
             column.x >= room.bounds.minX &&
@@ -488,7 +510,9 @@ export class WorldStream {
 
   private refreshLightSources(): void {
     let count = 0;
-    for (const runtime of this.chunks.values()) count += runtime.plan.lights.filter((light) => !light.dead).length;
+    for (const runtime of this.chunks.values()) {
+      count += runtime.plan.lights.filter((light) => !light.dead).length;
+    }
     this.sourceCount = count;
   }
 

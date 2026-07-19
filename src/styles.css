@@ -586,66 +586,165 @@ kbd {
 
 .command-console {
   position: absolute;
-  right: 28px;
-  bottom: 54px;
-  left: 28px;
+  bottom: 50px;
+  left: 22px;
   z-index: 18;
-  display: flex;
-  justify-content: center;
+  width: min(760px, calc(100% - 44px));
   opacity: 0;
   pointer-events: none;
-  transform: translateY(8px);
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  transform: translateY(6px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
 }
 
-.experience-ui.is-console-open .command-console {
+.experience-ui.is-console-open .command-console,
+.experience-ui.has-chat-message .command-console {
   opacity: 1;
-  pointer-events: auto;
   transform: translateY(0);
 }
 
+.experience-ui.is-console-open .command-console { pointer-events: auto; }
+
 .console-shell {
-  display: grid;
-  grid-template-columns: auto minmax(180px, 1fr);
-  gap: 7px 13px;
-  width: min(720px, 100%);
-  padding: 12px 14px 10px;
-  border: 1px solid rgba(239, 228, 165, 0.26);
-  background: rgba(16, 15, 7, 0.78);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid rgba(239, 228, 165, 0.2);
+  background: linear-gradient(180deg, rgba(11, 11, 6, 0.64), rgba(9, 9, 4, 0.88));
   box-shadow:
-    0 20px 50px rgba(0, 0, 0, 0.28),
-    inset 0 0 32px rgba(194, 172, 76, 0.035);
-  backdrop-filter: blur(8px) saturate(0.8);
+    0 18px 48px rgba(0, 0, 0, 0.3),
+    inset 0 0 28px rgba(194, 172, 76, 0.025);
+  backdrop-filter: blur(6px) saturate(0.75);
 }
 
-.console-shell span,
-.console-shell input,
-.console-shell small {
+.chat-history {
+  max-height: min(34vh, 300px);
+  overflow: hidden auto;
+  scrollbar-color: rgba(213, 205, 141, 0.25) transparent;
+  scrollbar-width: thin;
+}
+
+.chat-messages {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.chat-message {
+  max-width: 100%;
+  margin: 0;
+  padding: 4px 7px;
+  overflow-wrap: anywhere;
+  background: rgba(5, 5, 2, 0.58);
+  color: rgba(238, 232, 193, 0.88);
+  font: 11px/1.35 'JetBrains Mono Variable', monospace;
+  text-shadow: 0 1px 1px #000;
+  user-select: text;
+}
+
+.chat-message.chat { color: rgba(245, 239, 205, 0.94); }
+.chat-message.command { color: rgba(183, 190, 102, 0.72); }
+.chat-message.system { color: rgba(211, 218, 126, 0.94); }
+.chat-message.error { color: rgba(232, 154, 117, 0.96); }
+
+.experience-ui:not(.is-console-open) .console-shell {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.experience-ui:not(.is-console-open) .chat-message:not(:nth-last-child(-n+4)),
+.experience-ui:not(.is-console-open) .console-suggestions,
+.experience-ui:not(.is-console-open) .console-input-row,
+.experience-ui:not(.is-console-open) .console-shell > small {
+  display: none;
+}
+
+.console-suggestions {
+  display: none;
+  max-height: min(32vh, 270px);
+  overflow: hidden auto;
+  border-left: 2px solid rgba(199, 207, 101, 0.38);
+  background: rgba(7, 7, 3, 0.76);
+}
+
+.console-suggestions.visible { display: flex; flex-direction: column; }
+
+.console-suggestion {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.42fr) minmax(180px, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 27px;
+  padding: 5px 9px;
+  border: 0;
+  background: transparent;
+  color: rgba(229, 222, 174, 0.76);
+  text-align: left;
+  cursor: pointer;
+}
+
+.console-suggestion:hover,
+.console-suggestion.selected {
+  background: rgba(199, 207, 101, 0.13);
+  color: #f4edbe;
+}
+
+.console-suggestion code {
+  color: rgba(215, 222, 126, 0.96);
+  font-size: 11px;
+}
+
+.console-suggestion span {
+  overflow: hidden;
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-input-row {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-height: 32px;
+  padding: 4px 9px;
+  background: rgba(3, 3, 1, 0.74);
+  box-shadow: inset 0 0 0 1px rgba(239, 228, 165, 0.18);
+}
+
+.console-input-row span,
+.console-input-row input,
+.console-shell > small {
   font-family: 'JetBrains Mono Variable', monospace;
   letter-spacing: 0.08em;
 }
 
-.console-shell span {
-  align-self: center;
+.console-input-row span {
   color: rgba(199, 207, 101, 0.62);
-  font-size: 8px;
+  font-size: 10px;
 }
 
-.console-shell input {
+.console-input-row input {
   min-width: 0;
   border: 0;
   outline: 0;
   background: transparent;
   color: rgba(255, 250, 220, 0.94);
-  font-size: 13px;
+  font-size: 12px;
   user-select: text;
 }
 
-.console-shell small {
-  grid-column: 2;
+.console-shell > small {
   min-height: 13px;
+  padding: 0 9px;
   color: rgba(227, 217, 156, 0.42);
-  font-size: 8px;
+  font-size: 7px;
   text-transform: uppercase;
 }
 

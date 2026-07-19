@@ -27,9 +27,13 @@ npm run validate
 - `Maj` : accélérer
 - `Ctrl` : s’accroupir
 - `E` : traverser les passages exigus interactifs
-- `C` : ouvrir le chat
+- `C` : ouvrir le chat local et envoyer un message sous la forme `me: message`
 - `H` : ouvrir la console avec `/` déjà prêt
-- `/locate` puis `Tab` : autocompléter une anomalie chargée, puis `Entrée` pour s'y téléporter
+- `↑` / `↓` : parcourir l'historique des messages et commandes
+- `/help` : afficher l'aide des commandes
+- `/locate` puis `Tab` : afficher toutes les cibles chargées et compléter la sélection
+- `/locate dark-room` : rejoindre la pièce hors tension la plus proche
+- `/locate missing-lights` : rejoindre une salle où quelques panneaux ont disparu
 - souris : regarder
 - `Échap` : libérer la souris / pause
 
@@ -46,11 +50,11 @@ Le seed se trouve dans l’URL : `?seed=AMBER-HALL-0417`. Un même seed et une m
 - moquette, plâtre et faux plafond en PBR (albedo, normal, roughness/AO packés) ;
 - lampes sous forme de dalles lumineuses intégrées au faux plafond, snapées sur la grille et filtrées pour ne jamais croiser murs, colonnes, masses ou trous ;
 - éclairage fluorescent pré-calculé par chunk, stable pendant le déplacement, avec occlusion murale et SSAO de contact sans halo attaché au joueur ;
-- températures propres à chaque luminaire ; les états de panne/scintillement sont prêts dans le plan mais désactivés pour cette version sans monstre ;
+- températures propres à chaque luminaire, avec de rares panneaux manquants et une pièce hors tension par chunk ;
 - déplacement interpolé entre les pas physiques, sprint perceptible et rig caméra avec head bob, roulis et inertie de souris ;
 - bloom discret, SMAA, tone mapping AgX et vignette légère, sans passe chromatique plein écran ;
 - bourdonnement et ventilation CC0 superposés à un lit électrique synthétique, avec mix différent selon la salle ;
-- résolution interne adaptative selon les performances.
+- résolution interne fixée au démarrage pour éviter les flashs lors des réallocations du post-traitement.
 
 ## Architecture
 

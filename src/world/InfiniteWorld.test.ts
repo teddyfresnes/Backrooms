@@ -138,6 +138,11 @@ describe('InfiniteWorld chunk contracts', () => {
     expect(plan.colliders.every((collider) => collider.id.startsWith(idPrefix))).toBe(true);
     expect(isInfiniteChunkPlan(plan)).toBe(true);
     expect(getInfiniteChunkMetadata(plan)?.key).toBe(key);
+    const blackedOutRooms = plan.rooms.filter((room) => {
+      const lights = plan.lights.filter((light) => light.level >= 0 && light.roomId === room.id);
+      return lights.length > 0 && lights.every((light) => light.dead);
+    });
+    expect(blackedOutRooms).toHaveLength(1);
   });
 
   it('prefixes IDs so neighboring plans do not collide', () => {

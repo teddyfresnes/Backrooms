@@ -1265,7 +1265,7 @@ const addLowerLevel = (world: WorldPlan, feature: GridPitFeature, rootRng: Seede
   }
 };
 
-const temperatureColors = [0xfff0bd, 0xfff6d5, 0xf2f2ca, 0xffe7ae, 0xeeecc5] as const;
+const temperatureColors = [0xfffbd5, 0xffffe4, 0xf8f8d0, 0xfff4c4, 0xf4f5d7] as const;
 const CEILING_TILE_SIZE = 2.4;
 
 const snapToCeilingTileCenter = (value: number, worldSize: number): number => {
@@ -1428,6 +1428,56 @@ const populateLightsAndDetails = (world: WorldPlan, rootRng: SeededRandom): void
         tags: [room.kind, rng.pick(['dry', 'damp', 'quiet', 'exposed', 'liminal'])],
       });
     }
+  }
+};
+
+const applyLightingFailures = (world: WorldPlan, rootRng: SeededRandom): void => {
+  const rng = rootRng.fork('lighting-failures');
+  const lightsForRoom = (roomId: string): LightSlot[] =>
+    world.lights.filter((light) => light.level >= 0 && light.roomId === roomId);
+  const isSpawnRoom = (room: RoomRecord): boolean =>
+    pointInRect(world.spawn.x, world.spawn.z, room.bounds);
+  const canBlackOut = (room: RoomRecord): boolean =>
+    !isSpawnRoom(room) &&
+    room.kind !== 'open-hall' &&
+    room.kind !== 'pit-gallery' &&
+    lightsForRoom(room.id).length > 0;
+
+  // Exactly one ordinary room per 112 m chunk loses its entire circuit. At
+  // this density the player encounters blackouts rarely, while /locate can
+  // always expose a representative room for visual testing.
+  const distantCandidates = world.rooms.filter((room) => {
+    if (!canBlackOut(room)) return false;
+    const center = rectCenter(room.bounds);
+    return Math.hypot(center.x - world.spawn.x, center.z - world.spawn.z) >= 18;
+  });
+  const fallbackCandidates = world.rooms.filter(canBlackOut);
+  const blackoutPool = distantCandidates.length > 0 ? distantCandidates : fallbackCandidates;
+  const blackoutRoom = blackoutPool.length > 0 ? rng.pick(blackoutPool) : undefined;
+  if (blackoutRoom) {
+    for (const light of lightsForRoom(blackoutRoom.id)) light.dead = true;
+  }
+
+  // A couple of other rooms retain power but have isolated missing panels.
+  // Always leave at least one live fixture so these remain distinct from the
+  // complete blackout above.
+  const partialCandidates = rng.shuffle(
+    world.rooms.filter((room) => {
+      if (room.id === blackoutRoom?.id || isSpawnRoom(room)) return false;
+      return lightsForRoom(room.id).length >= 3;
+    }),
+  );
+  const partialRoomCount = Math.min(
+    partialCandidates.length,
+    Math.max(1, Math.floor(world.rooms.length / 48)),
+  );
+  for (const room of partialCandidates.slice(0, partialRoomCount)) {
+    const installed = lightsForRoom(room.id);
+    const failedCount = Math.min(
+      installed.length - 1,
+      Math.max(1, Math.round(installed.length * rng.float(0.22, 0.42))),
+    );
+    for (const light of rng.shuffle(installed).slice(0, failedCount)) light.dead = true;
   }
 };
 
@@ -1600,6 +1650,7 @@ export const generateWorld = (seed: string): WorldPlan => {
   world.colliders = mutable.colliders;
   addSolidMasses(world, reservedRoomIds, rootRng);
   populateLightsAndDetails(world, rootRng);
+  applyLightingFailures(world, rootRng);
   populateVistaLights(world, vista, rootRng);
 
   const holes = pit?.holes ?? [];

@@ -12,7 +12,6 @@ export interface MaterialSet {
   fixtureFrame: THREE.MeshStandardMaterial;
   fixtureGlow: THREE.MeshBasicMaterial;
   void: THREE.MeshBasicMaterial;
-  stain: THREE.MeshBasicMaterial;
 }
 
 const configureTexture = (
@@ -24,48 +23,6 @@ const configureTexture = (
   texture.wrapT = THREE.RepeatWrapping;
   texture.anisotropy = anisotropy;
   if (color) texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-};
-
-const makeStainAlpha = (): THREE.CanvasTexture => {
-  const size = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const context = canvas.getContext('2d', { willReadFrequently: true });
-  if (!context) throw new Error('Canvas 2D is unavailable.');
-  const image = context.createImageData(size, size);
-  let state = 0x9e3779b9;
-  const random = (): number => {
-    state ^= state << 13;
-    state ^= state >>> 17;
-    state ^= state << 5;
-    return (state >>> 0) / 4294967296;
-  };
-
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const nx = (x / size - 0.5) * 2;
-      const ny = (y / size - 0.5) * 2;
-      const angle = Math.atan2(ny, nx);
-      const radius = Math.hypot(nx * 0.82, ny * 1.12);
-      const irregular =
-        Math.sin(angle * 3 + 1.2) * 0.08 +
-        Math.sin(angle * 7 - 0.7) * 0.045 +
-        Math.sin(angle * 13 + 2.5) * 0.025;
-      const edge = THREE.MathUtils.smoothstep(1 - radius + irregular, -0.08, 0.36);
-      const mottling = 0.68 + random() * 0.32;
-      const index = (y * size + x) * 4;
-      image.data[index] = 255;
-      image.data[index + 1] = 255;
-      image.data[index + 2] = 255;
-      image.data[index + 3] = Math.floor(255 * edge * mottling);
-    }
-  }
-  context.putImageData(image, 0, 0);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.NoColorSpace;
-  texture.needsUpdate = true;
   return texture;
 };
 
@@ -124,11 +81,17 @@ export class MaterialLibrary {
       map: wallpaper,
       normalMap: plasterNormal,
       roughnessMap: plasterArm,
-      color: 0xffefb0,
+      // The wallpaper albedo already carries most of the yellow. Keep the
+      // material tint close to neutral so it reads as faded paper instead of
+      // a second coat of saturated ochre.
+      color: 0xf1efc9,
+      emissive: 0x5c5826,
+      emissiveIntensity: 0.045,
       normalScale: new THREE.Vector2(0.22, 0.22),
       roughness: 0.94,
       metalness: 0,
       vertexColors: true,
+      dithering: true,
     });
 
     const plaster = new THREE.MeshStandardMaterial({
@@ -136,11 +99,14 @@ export class MaterialLibrary {
       map: plasterColor,
       normalMap: plasterNormal,
       roughnessMap: plasterArm,
-      color: 0xebd693,
+      color: 0xeee8af,
+      emissive: 0x5c5920,
+      emissiveIntensity: 0.035,
       normalScale: new THREE.Vector2(0.36, 0.36),
       roughness: 0.96,
       metalness: 0,
       vertexColors: true,
+      dithering: true,
     });
 
     const floor = new THREE.MeshStandardMaterial({
@@ -150,10 +116,15 @@ export class MaterialLibrary {
       roughnessMap: carpetArm,
       aoMap: carpetArm,
       aoMapIntensity: 0.14,
-      color: 0xf7e9bd,
+      // Lift the brown carpet albedo toward the same pale yellow family as
+      // the walls while preserving all of its woven detail.
+      color: 0xfaf5cc,
+      emissive: 0x5d592f,
+      emissiveIntensity: 0.035,
       normalScale: new THREE.Vector2(0.34, 0.34),
       roughness: 0.98,
       metalness: 0,
+      dithering: true,
     });
 
     const ceiling = new THREE.MeshStandardMaterial({
@@ -162,18 +133,28 @@ export class MaterialLibrary {
       normalMap: ceilingNormal,
       roughnessMap: ceilingArm,
       aoMap: ceilingArm,
-      aoMapIntensity: 0.28,
-      color: 0xf0dda4,
-      normalScale: new THREE.Vector2(0.28, 0.28),
+      aoMapIntensity: 0.46,
+      // Unlike the wallpaper, the ceiling albedo is almost white, so its
+      // yellowing has to come from the material itself.
+      color: 0xddd080,
+      emissive: 0x827a32,
+      emissiveIntensity: 0.04,
+      normalScale: new THREE.Vector2(0.42, 0.42),
       roughness: 0.97,
       side: THREE.FrontSide,
+      dithering: true,
     });
 
     const baseboard = new THREE.MeshStandardMaterial({
       name: 'yellowed-baseboard',
-      color: 0xc8b36f,
+      // With no albedo texture, a pale tint is washed almost white by the
+      // fluorescent fill. Use the carpet/wall midtone directly instead.
+      color: 0xbeb574,
+      emissive: 0x45411e,
+      emissiveIntensity: 0.025,
       roughness: 0.9,
       metalness: 0,
+      dithering: true,
     });
     const pitWall = new THREE.MeshStandardMaterial({
       name: 'pit-plaster',
@@ -207,25 +188,11 @@ export class MaterialLibrary {
       color: 0xfffee6,
       toneMapped: false,
       fog: false,
-      depthWrite: false,
+      depthTest: true,
+      depthWrite: true,
       side: THREE.DoubleSide,
-      polygonOffset: true,
-      polygonOffsetFactor: -8,
-      polygonOffsetUnits: -8,
     });
     const voidMaterial = new THREE.MeshBasicMaterial({ color: 0x020201, toneMapped: false });
-    const stainTexture = makeStainAlpha();
-    const stain = new THREE.MeshBasicMaterial({
-      name: 'damp-carpet-stain',
-      color: 0x2d2813,
-      alphaMap: stainTexture,
-      transparent: true,
-      opacity: 0.42,
-      depthWrite: false,
-      polygonOffset: true,
-      polygonOffsetFactor: -2,
-      side: THREE.DoubleSide,
-    });
 
     return new MaterialLibrary(
       {
@@ -240,7 +207,6 @@ export class MaterialLibrary {
         fixtureFrame,
         fixtureGlow,
         void: voidMaterial,
-        stain,
       },
       [
         wallpaper,
@@ -253,7 +219,6 @@ export class MaterialLibrary {
         ceilingColor,
         ceilingNormal,
         ceilingArm,
-        stainTexture,
       ],
     );
   }

@@ -29,33 +29,33 @@ export class PostFX {
     });
     let normalPass: NormalPass | undefined;
     if (!coarsePointer) {
-      normalPass = new NormalPass(scene, camera, { resolutionScale: 0.5 });
+      normalPass = new NormalPass(scene, camera, { resolutionScale: 0.6 });
       this.composer.addPass(normalPass);
     }
     this.composer.addPass(new RenderPass(scene, camera));
 
     const vignette = new VignetteEffect({
       eskil: false,
-      offset: 0.48,
-      darkness: 0.085,
+      offset: 0.5,
+      darkness: 0.072,
     });
-    const grading = new HueSaturationEffect({ hue: -0.015, saturation: 0.038 });
-    const contrast = new BrightnessContrastEffect({ brightness: -0.008, contrast: 0.075 });
+    const grading = new HueSaturationEffect({ hue: 0.005, saturation: -0.018 });
+    const contrast = new BrightnessContrastEffect({ brightness: -0.006, contrast: 0.058 });
     const toneMapping = new ToneMappingEffect({
       mode: ToneMappingMode.AGX,
     });
     if (normalPass) {
       const ssao = new SSAOEffect(camera, normalPass.texture, {
         blendFunction: BlendFunction.MULTIPLY,
-        samples: 9,
-        rings: 6,
-        radius: 0.095,
-        intensity: 0.78,
-        bias: 0.035,
-        fade: 0.045,
-        luminanceInfluence: 0.56,
-        color: new THREE.Color(0x4a3d21),
-        resolutionScale: 0.66,
+        samples: 13,
+        rings: 7,
+        radius: 0.105,
+        intensity: 0.74,
+        bias: 0.026,
+        fade: 0.06,
+        luminanceInfluence: 0.72,
+        color: new THREE.Color(0x292916),
+        resolutionScale: 0.76,
       });
       this.composer.addPass(new EffectPass(camera, ssao));
     }
@@ -64,9 +64,9 @@ export class PostFX {
     if (supportsHdrTargets && !coarsePointer) {
       const bloom = new BloomEffect({
         blendFunction: BlendFunction.SCREEN,
-        intensity: 0.12,
-        luminanceThreshold: 0.84,
-        luminanceSmoothing: 0.16,
+        intensity: 0.18,
+        luminanceThreshold: 0.86,
+        luminanceSmoothing: 0.18,
         mipmapBlur: true,
         radius: 0.52,
         levels: 3,

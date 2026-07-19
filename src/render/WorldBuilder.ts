@@ -207,7 +207,6 @@ export class WorldView {
     this.buildPitFeatures();
     this.buildStairs();
     this.buildCeilingDamage();
-    this.buildFloorDetails();
     this.buildImpossibleVista();
     void options;
   }
@@ -218,6 +217,8 @@ export class WorldView {
     const baseboardGeometries: THREE.BufferGeometry[] = [];
     for (const wall of this.plan.walls) {
       const geometry = createWallGeometry(wall);
+      const wallMaterial = wall.kind === 'plaster' ? this.materials.plaster : this.materials.wall;
+      ensureBakedLightUv(geometry, wallMaterial, 0.42);
       (wall.kind === 'plaster' ? plasterGeometries : wallGeometries).push(geometry);
 
       if (wall.height > 1.3) {
@@ -228,6 +229,7 @@ export class WorldView {
           alongX ? wall.thickness + 0.055 : wall.length + 0.025,
         );
         trim.translate(wall.x, wall.bottom + 0.0575, wall.z);
+        ensureBakedLightUv(trim, this.materials.baseboard, 0.36);
         baseboardGeometries.push(trim);
       }
     }
@@ -242,9 +244,11 @@ export class WorldView {
         column.z,
         column.tint,
       );
+      ensureBakedLightUv(geometry, this.materials.wall, 0.32);
       wallGeometries.push(geometry);
       const trim = new THREE.BoxGeometry(column.width + 0.055, 0.115, column.depth + 0.055);
       trim.translate(column.x, 0.0575, column.z);
+      ensureBakedLightUv(trim, this.materials.baseboard, 0.26);
       baseboardGeometries.push(trim);
     }
 
@@ -252,11 +256,19 @@ export class WorldView {
       const width = rectWidth(mass.bounds);
       const depth = rectDepth(mass.bounds);
       const center = rectCenter(mass.bounds);
-      wallGeometries.push(
-        createTexturedBoxGeometry(width, mass.height, depth, center.x, 0, center.z, mass.tint),
+      const massGeometry = createTexturedBoxGeometry(
+        width,
+        mass.height,
+        depth,
+        center.x,
+        0,
+        center.z,
+        mass.tint,
       );
+      ensureBakedLightUv(massGeometry, this.materials.wall, 0.36);
+      wallGeometries.push(massGeometry);
       const trimHeight = 0.115;
-      baseboardGeometries.push(
+      const massTrims = [
         new THREE.BoxGeometry(width + 0.055, trimHeight, 0.09).translate(
           center.x,
           trimHeight * 0.5,
@@ -277,7 +289,9 @@ export class WorldView {
           trimHeight * 0.5,
           center.z,
         ),
-      );
+      ];
+      for (const trim of massTrims) ensureBakedLightUv(trim, this.materials.baseboard, 0.28);
+      baseboardGeometries.push(...massTrims);
     }
 
     makeMesh(mergeOrSingle(wallGeometries), this.materials.wall, 'merged-wallpaper-walls', this.group);
@@ -319,7 +333,13 @@ export class WorldView {
     this.fixtureSlots.forEach((slot, index) => {
       quaternion.setFromAxisAngle(axis, slot.rotation);
       position.set(slot.x, slot.ceilingY - 0.036, slot.z);
-      scale.set(slot.width / 2.24, 1, slot.width > 1.65 ? 1.08 : 0.86);
+      // A dead slot represents a missing fluorescent panel, not a bright
+      // white rectangle that merely stopped contributing to the lightmap.
+      scale.set(
+        slot.dead ? 0 : slot.width / 2.24,
+        slot.dead ? 0 : 1,
+        slot.dead ? 0 : slot.width > 1.65 ? 1.08 : 0.86,
+      );
       matrix.compose(position, quaternion, scale);
       emitters.setMatrixAt(index, matrix);
     });
@@ -528,32 +548,6 @@ export class WorldView {
     holes.computeBoundingSphere();
     this.group.add(holes);
     makeMesh(mergeOrSingle(hangingPanels), this.materials.ceiling, 'hanging-ceiling-panels', this.group);
-  }
-
-  private buildFloorDetails(): void {
-    const sockets = this.plan.detailSockets.filter((socket) => socket.kind === 'decal').slice(0, 36);
-    if (sockets.length === 0) return;
-    const geometry = new THREE.PlaneGeometry(1, 1);
-    geometry.rotateX(-Math.PI * 0.5);
-    const stains = new THREE.InstancedMesh(geometry, this.materials.stain, sockets.length);
-    stains.name = 'instanced-damp-carpet-stains';
-    const matrix = new THREE.Matrix4();
-    const quaternion = new THREE.Quaternion();
-    const axis = new THREE.Vector3(0, 1, 0);
-    sockets.forEach((socket, index) => {
-      const angle = ((index * 2.3999632297) % (Math.PI * 2));
-      quaternion.setFromAxisAngle(axis, angle);
-      const scale = 0.85 + ((index * 37) % 100) / 48;
-      matrix.compose(
-        new THREE.Vector3(socket.position.x, 0.009, socket.position.z),
-        quaternion,
-        new THREE.Vector3(scale * 1.45, scale, 1),
-      );
-      stains.setMatrixAt(index, matrix);
-    });
-    stains.instanceMatrix.needsUpdate = true;
-    stains.computeBoundingSphere();
-    this.group.add(stains);
   }
 
   private buildImpossibleVista(): void {

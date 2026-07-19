@@ -137,7 +137,23 @@ describe('Level 0 procedural generator', () => {
     expect(world.walls.some((wall) => wall.thickness >= 0.7)).toBe(true);
     expect(world.solidMasses.length).toBeGreaterThanOrEqual(3);
     expect(world.missingCeilingTiles).toHaveLength(0);
-    expect(world.lights.every((light) => !light.dead && !light.unstable)).toBe(true);
+    const roomLighting = world.rooms.map((room) => ({
+      room,
+      lights: world.lights.filter((light) => light.level >= 0 && light.roomId === room.id),
+    }));
+    const blackouts = roomLighting.filter(
+      ({ lights }) => lights.length > 0 && lights.every((light) => light.dead),
+    );
+    const partialFailures = roomLighting.filter(
+      ({ lights }) => lights.some((light) => light.dead) && lights.some((light) => !light.dead),
+    );
+    expect(blackouts).toHaveLength(1);
+    expect(partialFailures.length).toBeGreaterThanOrEqual(1);
+    expect(world.lights.every((light) => !light.unstable)).toBe(true);
+    const spawnLighting = roomLighting.find(({ room }) =>
+      pointInRect(world.spawn.x, world.spawn.z, room.bounds),
+    );
+    expect(spawnLighting?.lights.some((light) => !light.dead)).toBe(true);
     expect(world.features.some((feature) => feature.kind === 'impossible-vista')).toBe(true);
   });
 

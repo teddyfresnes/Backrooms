@@ -68,8 +68,9 @@ export class Game {
   private fps = 60;
   private frameCounter = 0;
   private metricsTimer = 0;
-  private qualityTimer = 0;
-  private pixelRatio = 1;
+  // Pick the final render resolution up front. Repeatedly resizing the HDR
+  // composer after entry can briefly expose cleared (black) render targets.
+  private pixelRatio = Math.min(window.devicePixelRatio, 1.1);
   private disposed = false;
 
   constructor(private readonly container: HTMLElement) {
@@ -103,7 +104,7 @@ export class Game {
       regenerate: () => this.regenerate(),
       toggleFullscreen: () => void this.toggleFullscreen(),
       submitConsole: (value, mode) => this.submitConsole(value, mode),
-      completeConsole: (value, cycleIndex, mode) => this.completeConsole(value, cycleIndex, mode),
+      completeConsole: (value, mode) => this.completeConsole(value, mode),
       consoleVisibility: (open) => this.setConsoleVisibility(open),
     }, this.seed);
     this.configureScene();
@@ -148,9 +149,11 @@ export class Game {
     this.postFX = new PostFX(this.renderer, this.scene, this.camera);
     this.resize();
     await this.renderer.compileAsync(this.scene, this.camera);
-    // Compile the composer passes while the loading layer is still covering
-    // the canvas, avoiding a hitch on the first interactive frame.
-    this.postFX.render(0);
+    // Warm every composer target behind the opaque loading overlay. The
+    // post-processing pipeline has its own shader/target allocation that
+    // renderer.compileAsync cannot cover; priming several presented frames
+    // prevents black frames when the player first dismisses the overlay.
+    await this.warmupPostFX();
     this.ui.setLoading(0.98, 'STABILISATION DU SIGNAL');
     this.updateDebugState(true);
     this.ui.setReady();
@@ -158,20 +161,29 @@ export class Game {
   }
 
   private configureScene(): void {
-    this.scene.background = new THREE.Color(0x786b3d);
-    this.scene.fog = new THREE.FogExp2(0x9b8a4f, 0.0049);
+    this.scene.background = new THREE.Color(0x45452d);
+    this.scene.fog = new THREE.FogExp2(0x77754b, 0.0042);
     // Only the low-frequency bounced light is global. Direct fluorescent
     // pools are baked per chunk so they remain spatially stable and cheap.
-    const hemisphere = new THREE.HemisphereLight(0xffe9ad, 0x4e4023, 0.4);
+    const hemisphere = new THREE.HemisphereLight(0xfff7d8, 0x282619, 0.17);
     hemisphere.name = 'liminal-ambient-field';
     this.scene.add(hemisphere);
-    const fill = new THREE.AmbientLight(0xffdda0, 0.065);
+    const fill = new THREE.AmbientLight(0xfff0c4, 0.018);
     fill.name = 'indirect-carpet-bounce';
     this.scene.add(fill);
-    const directional = new THREE.DirectionalLight(0xffedbd, 0.18);
+    const directional = new THREE.DirectionalLight(0xfff5d8, 0.07);
     directional.name = 'fluorescent-directional-fill';
     directional.position.set(3.5, 8, 2.5);
     this.scene.add(directional);
+  }
+
+  private async warmupPostFX(): Promise<void> {
+    if (!this.postFX) return;
+    for (let frame = 0; frame < 3; frame += 1) {
+      this.postFX.render(1 / 60);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+    this.previousTime = performance.now();
   }
 
   private enter(): void {
@@ -211,59 +223,101 @@ export class Game {
 
   private completeConsole(
     value: string,
-    cycleIndex: number,
     _mode: ConsoleMode,
   ): ConsoleCompletion | null {
     const trimmed = value.trimStart();
-    if (trimmed === '/') {
-      return { value: '/locate ', hint: 'COMMANDE LOCATE', count: 1 };
+    if (!trimmed.startsWith('/')) return null;
+    const commandSuggestions = [
+      { value: '/help', label: '/help', detail: 'AFFICHE LES COMMANDES DISPONIBLES' },
+      { value: '/locate ', label: '/locate <cible>', detail: 'TÉLÉPORTE VERS UNE CIBLE CHARGÉE' },
+    ];
+    if (!trimmed.includes(' ')) {
+      const normalized = trimmed.toLowerCase();
+      const suggestions = commandSuggestions.filter((suggestion) =>
+        suggestion.value.trim().startsWith(normalized),
+      );
+      return suggestions.length > 0
+        ? { hint: `${suggestions.length} COMMANDE(S) DISPONIBLE(S)`, suggestions }
+        : null;
     }
-    if (!trimmed.toLowerCase().startsWith('/locate')) return null;
+    if (!/^\/locate(?:\s|$)/i.test(trimmed)) return null;
     const query = this.locateQueryFromInput(trimmed);
     const matches = this.locateMatches(query);
     if (matches.length === 0) return null;
-    const target = matches[((cycleIndex % matches.length) + matches.length) % matches.length]!;
     return {
-      value: `/locate ${target.command}`,
-      hint: `${target.label.toUpperCase()} - ${Math.round(target.distance)}M`,
-      count: matches.length,
+      hint: `${matches.length} CIBLE(S) CHARGÉE(S) · TAB POUR PARCOURIR`,
+      suggestions: matches.map((target) => ({
+        value: `/locate ${target.command}`,
+        label: target.command,
+        detail: `${target.label.toUpperCase()} · ${Math.round(target.distance)} M`,
+      })),
     };
   }
 
   private submitConsole(value: string, mode: ConsoleMode): ConsoleSubmitResult {
     const trimmed = value.trim();
     if (trimmed.startsWith('/')) return this.executeCommand(trimmed);
+    if (mode === 'command') {
+      const feedback = 'UNE COMMANDE DOIT COMMENCER PAR /';
+      return {
+        close: false,
+        feedback,
+        messages: [{ kind: 'error', text: feedback }],
+      };
+    }
     return {
       close: true,
-      feedback: mode === 'chat' ? 'MESSAGE LOCAL ENREGISTRE' : 'ENTREE IGNORER',
+      feedback: 'MESSAGE ENVOYÉ',
+      messages: [{ kind: 'chat', text: `me: ${trimmed}` }],
     };
   }
 
   private executeCommand(input: string): ConsoleSubmitResult {
     const [command = '', ...args] = input.slice(1).trim().split(/\s+/);
-    if (command.toLowerCase() !== 'locate') {
-      return { close: false, feedback: `COMMANDE INCONNUE: /${command || '?'}` };
+    const echo = { kind: 'command' as const, text: `> ${input}` };
+    const normalizedCommand = command.toLowerCase();
+    if (normalizedCommand === 'help') {
+      if (args.length > 0) {
+        const feedback = 'SYNTAXE: /help';
+        return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
+      }
+      const feedback = '/locate <cible> — téléportation · C — chat local · H — commandes';
+      return { close: false, feedback, messages: [echo, { kind: 'system', text: feedback }] };
+    }
+    if (normalizedCommand !== 'locate') {
+      const feedback = command
+        ? `COMMANDE INCONNUE: /${command}. UTILISE /help.`
+        : 'COMMANDE INCOMPLÈTE. UTILISE /help.';
+      return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
     }
 
     const query = args.join(' ').toLowerCase();
     if (!query) {
       const commands = this.locateMatches('').map((target) => target.command).join(', ');
+      const feedback = commands
+        ? `ARGUMENT MANQUANT. SYNTAXE: /locate <cible>. CIBLES: ${commands}`
+        : 'AUCUNE CIBLE N’EST CHARGÉE';
       return {
         close: false,
-        feedback: commands ? `TAB POUR CHOISIR: ${commands}` : 'AUCUNE CIBLE CHARGEE',
+        feedback,
+        messages: [echo, { kind: 'error', text: feedback }],
       };
     }
 
-    const matches = this.locateMatches(query);
-    if (matches.length === 0) {
-      return { close: false, feedback: `AUCUNE CIBLE POUR: ${query}` };
-    }
-    const exact = matches.find((target) =>
-      [target.command, ...target.aliases].some((alias) => alias.toLowerCase() === query),
+    const targets = this.locateMatches('');
+    const target = targets.find((candidate) =>
+      [candidate.command, ...candidate.aliases].some((alias) => alias.toLowerCase() === query),
     );
-    const target = exact ?? matches[0]!;
+    if (!target) {
+      const suggestions = this.locateMatches(query).slice(0, 5).map((candidate) => candidate.command);
+      const feedback = suggestions.length > 0
+        ? `CIBLE INVALIDE: ${query}. VOULAIS-TU DIRE: ${suggestions.join(', ')} ?`
+        : `CIBLE INCONNUE: ${query}. UTILISE TAB APRÈS /locate.`;
+      return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
+    }
     this.teleportToLocateTarget(target);
-    return { close: true, feedback: `TP: ${target.label.toUpperCase()}` };
+    const feedback = `TÉLÉPORTATION: ${target.label.toUpperCase()} · ${Math.round(target.distance)} M`;
+    return { close: true, feedback, messages: [echo, { kind: 'system', text: feedback }] };
   }
 
   private locateQueryFromInput(value: string): string {
@@ -306,6 +360,7 @@ export class Game {
   private readonly onConsoleHotkey = (event: KeyboardEvent): void => {
     if (event.repeat || this.disposed || !this.player || Game.isEditableTarget(event.target)) return;
     if (event.code !== 'KeyH' && event.code !== 'KeyC') return;
+    if (!this.player.isLocked) return;
     event.preventDefault();
     if (this.ui.isConsoleOpen) {
       this.ui.closeConsole();
@@ -351,33 +406,16 @@ export class Game {
     this.fps = THREE.MathUtils.lerp(this.fps, instantaneousFps, 0.055);
     this.frameCounter += 1;
     this.metricsTimer += rawDelta;
-    this.qualityTimer += rawDelta;
     if (this.metricsTimer >= 0.35) {
       this.metricsTimer = 0;
       this.ui.update(room, this.fps);
       this.updateDebugState(true);
     }
-    if (this.qualityTimer >= 2) {
-      this.qualityTimer = 0;
-      this.adaptQuality();
-    }
   };
-
-  private adaptQuality(): void {
-    const maxRatio = Math.min(window.devicePixelRatio, 1.1);
-    let next = this.pixelRatio;
-    if (this.fps < 57) next = Math.max(0.7, this.pixelRatio - 0.08);
-    else if (this.fps > 59.5) next = Math.min(maxRatio, this.pixelRatio + 0.025);
-    if (Math.abs(next - this.pixelRatio) >= 0.024) {
-      this.pixelRatio = next;
-      this.resize();
-    }
-  }
 
   private readonly resize = (): void => {
     const width = window.innerWidth;
     const height = window.innerHeight;
-    this.pixelRatio = this.pixelRatio || Math.min(window.devicePixelRatio, 1.25);
     this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / Math.max(1, height);
