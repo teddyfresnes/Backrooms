@@ -1,0 +1,79 @@
+{
+  "materials": [
+    {
+      "name": "Carpet 011",
+      "author": "ambientCG",
+      "source": "https://ambientcg.com/view?id=Carpet011",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://docs.ambientcg.com/license/",
+      "files": [
+        "textures/carpet/carpet-color.webp",
+        "textures/carpet/carpet-normal-gl.webp",
+        "textures/carpet/carpet-arm.webp"
+      ],
+      "changes": "Maps 1K recompressed as WebP; AO and roughness packed into R/G channels."
+    },
+    {
+      "name": "Backrooms office carpet albedo",
+      "author": "Generated specifically for Threshold Zero with OpenAI image generation",
+      "source": "Project-local generated asset",
+      "license": "Project asset",
+      "files": ["textures/carpet/carpet-color-v2.webp"],
+      "changes": "Generated as a flat tileable albedo and encoded as quality-82 WebP. It reuses the CC0 Carpet 011 normal and ARM maps.",
+      "generationMode": "OpenAI built-in imagegen",
+      "generationPrompt": "Use case: precise-object-edit\nAsset type: seamless PBR game texture, carpet albedo only\nPrimary request: transform the supplied carpet color texture into a realistic old commercial office carpet suitable for Backrooms Level 0. Keep the fine dense loop-pile textile weave but remove the harsh gold-and-white speckling and reduce visual noise.\nComposition: perfectly flat orthographic surface texture, uniform coverage edge to edge, seamless/tileable on all four edges, no perspective and no directional lighting baked into the texture.\nColor palette: warm faded beige with a restrained sickly yellow/olive cast, approximately light tan rather than brown or saturated gold. Subtle irregular aging and extremely faint damp tonal variation only.\nConstraints: preserve believable high-frequency fibers; albedo/color texture only; no shadows, highlights, ambient occlusion, normal-map appearance, objects, seams, borders, text, watermark, or vignette. The output must tile without obvious repetition."
+    },
+    {
+      "name": "Painted Plaster 017",
+      "author": "ambientCG",
+      "source": "https://ambientcg.com/view?id=PaintedPlaster017",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://docs.ambientcg.com/license/",
+      "files": [
+        "textures/plaster/plaster-color.webp",
+        "textures/plaster/plaster-normal-gl.webp",
+        "textures/plaster/plaster-arm.webp"
+      ],
+      "changes": "Maps 1K recompressed as WebP; roughness packed into the G channel."
+    },
+    {
+      "name": "Office Ceiling 001",
+      "author": "ambientCG",
+      "source": "https://ambientcg.com/view?id=OfficeCeiling001",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://docs.ambientcg.com/license/",
+      "files": [
+        "textures/ceiling/ceiling-color.webp",
+        "textures/ceiling/ceiling-normal-gl.webp",
+        "textures/ceiling/ceiling-arm.webp"
+      ],
+      "changes": "Maps 1K recompressed as WebP; AO and roughness packed into R/G channels."
+    },
+    {
+      "name": "Backrooms wallpaper pattern",
+      "author": "Generated specifically for Threshold Zero with OpenAI image generation",
+      "source": "Project-local generated asset",
+      "license": "Project asset",
+      "files": ["textures/wallpaper/backrooms-wallpaper-generated.webp"],
+      "changes": "Downscaled to 1024 px and encoded as WebP.",
+      "generationMode": "OpenAI built-in imagegen",
+      "generationPrompt": "Use case: stylized-concept\nAsset type: tileable game texture for a professional WebGL liminal-horror environment\nPrimary request: seamless vintage mono-yellow office wallpaper from the late 1980s, subtle repeating vertical fleur-and-chevron pattern, faded nicotine-yellow and muted olive tones, realistic woven paper fibers, gentle age variation and extremely subtle water discoloration\nStyle/medium: orthographic flat diffuse/albedo texture scan, photorealistic material reference, evenly lit\nComposition/framing: perfectly front-facing square texture, pattern aligned vertically, edge-to-edge\nLighting/mood: neutral flat diffuse lighting with no directional shadows or highlights\nConstraints: must tile seamlessly on all four edges; uniform texel scale; no perspective; no wall edges; no baseboard; no room; no holes; no objects; no text; no logos; no watermark; no strong focal stain; avoid baked shadows and avoid high contrast"
+    }
+  ],
+  "audio": [
+    {
+      "name": "Fluorescent lightbulb hum buzz (Extended)",
+      "author": "Developer_Jake",
+      "source": "https://freesound.org/people/Developer_Jake/sounds/638895/",
+      "license": "CC0 1.0",
+      "file": "audio/fluorescent-hum-cc0.mp3"
+    },
+    {
+      "name": "Air conditioner / ventilation ambience",
+      "author": "kentspublicdomain",
+      "source": "https://freesound.org/people/kentspublicdomain/sounds/328175/",
+      "license": "CC0 1.0",
+      "file": "audio/ventilation-cc0.mp3"
+    }
+  ]
+}
