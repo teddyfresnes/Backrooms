@@ -79,8 +79,6 @@ export class ExperienceUI {
   constructor(container: HTMLElement, plan: WorldPlan, actions: UIActions, displaySeed = plan.seed) {
     this.actions = actions;
     const fingerprint = fingerprintWorld(plan);
-    const liveLights = plan.lights.filter((light) => !light.dead).length;
-    const anomalies = plan.features.length;
     this.root = document.createElement('div');
     this.root.className = 'experience-ui';
     this.root.innerHTML = `
@@ -103,10 +101,10 @@ export class ExperienceUI {
           </div>
           <p class="manifesto">Un espace de bureaux qui ne se souvient plus de son plan. Aucun objectif. Aucun témoin. Seulement la lumière et la moquette humide.</p>
 
-          <div class="world-metrics" aria-label="Informations de génération">
-            <div><span>${plan.rooms.length.toString().padStart(2, '0')}</span><small>secteurs</small></div>
-            <div><span>${liveLights.toString().padStart(3, '0')}</span><small>néons actifs</small></div>
-            <div><span>${anomalies.toString().padStart(2, '0')}</span><small>anomalies</small></div>
+          <div class="world-metrics" aria-label="Propriétés du monde infini">
+            <div><span>∞</span><small>étendue explorable</small></div>
+            <div><span>SEED</span><small>topologie persistante</small></div>
+            <div><span>LIVE</span><small>génération continue</small></div>
           </div>
 
           <div class="loading-block" data-ui="loading">

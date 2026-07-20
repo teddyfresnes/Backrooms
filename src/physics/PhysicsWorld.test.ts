@@ -100,6 +100,21 @@ describe('PhysicsWorld chunk ownership', () => {
     expect(physics.world.colliders.len()).toBe(initialColliderCount);
   });
 
+  it('synchronizes a batch of stream mutations with a single Rapier step', async () => {
+    const physics = await createPhysics();
+    const step = vi.spyOn(physics.world, 'step');
+
+    physics.batchChunkChanges(() => {
+      physics.addChunk('batch-a', [floorCollider('batch-floor-a', -4)], { x: 0, y: 0, z: 0 });
+      physics.addChunk('batch-b', [floorCollider('batch-floor-b', 4)], { x: 0, y: 0, z: 0 });
+      physics.removeChunk('origin');
+    });
+
+    expect(step).toHaveBeenCalledTimes(1);
+    expect(castDown(physics, -4, 2)).not.toBeNull();
+    expect(castDown(physics, 4, 2)).not.toBeNull();
+  });
+
   it('treats collider centers as local coordinates when setting a chunk offset', async () => {
     const physics = await createPhysics();
     physics.addChunk('offset-floor', [floorCollider('local-floor')], { x: 4, y: -3, z: 0 });

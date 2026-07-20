@@ -12,12 +12,39 @@ import {
   getInfiniteChunkCeilingOpenings,
   getInfiniteChunkMetadata,
   getNeighborChunkKey,
+  inheritedShaftOpeningsForChunk,
   isInfiniteChunkPlan,
   parseChunkKey,
+  verticalReservationsForChunk,
   type ChunkCoord,
   type ChunkEdge,
   type InfiniteBiome,
 } from './InfiniteWorld';
+import type { Rect } from './types';
+
+const sameRect = (left: Rect, right: Rect): boolean =>
+  Math.abs(left.minX - right.minX) < 0.02 &&
+  Math.abs(left.minZ - right.minZ) < 0.02 &&
+  Math.abs(left.maxX - right.maxX) < 0.02 &&
+  Math.abs(left.maxZ - right.maxZ) < 0.02;
+
+const overlaps = (left: Rect, right: Rect): boolean =>
+  left.minX < right.maxX && left.maxX > right.minX &&
+  left.minZ < right.maxZ && left.maxZ > right.minZ;
+
+const wallsAround = (
+  walls: ReturnType<typeof generateInfiniteChunk>['walls'],
+  opening: Rect,
+  marker: string,
+) => walls.filter((wall) => {
+  if (!wall.id.includes(marker)) return false;
+  if (wall.orientation === 'x') {
+    return Math.abs(wall.length - (opening.maxX - opening.minX)) < 0.03 &&
+      (Math.abs(wall.z - opening.minZ) < 0.03 || Math.abs(wall.z - opening.maxZ) < 0.03);
+  }
+  return Math.abs(wall.length - (opening.maxZ - opening.minZ)) < 0.03 &&
+    (Math.abs(wall.x - opening.minX) < 0.03 || Math.abs(wall.x - opening.maxX) < 0.03);
+});
 
 const seed = 'INFINITE-CONTRACT-AUDIT';
 const sampleCoords: ChunkCoord[] = [
@@ -120,18 +147,29 @@ describe('InfiniteWorld chunk contracts', () => {
     }
   });
 
-  it.each(sampleCoords)('strips finite vistas but preserves the complete lower story for $x:$z:$story', (coord) => {
+  it.each(sampleCoords)('strips finite vistas but keeps only a bounded lower preview for $x:$z:$story', (coord) => {
     const key = createChunkKey(coord);
     const plan = generateInfiniteChunk(seed, key);
     const idPrefix = `chunk-${key}/`;
+    const pit = plan.features.find((feature) => feature.kind === 'grid-pit');
 
     expect(plan.features.some((feature) => feature.kind === 'impossible-vista')).toBe(false);
+    expect(pit?.kind).toBe('grid-pit');
+    if (pit?.kind !== 'grid-pit') throw new Error('Expected the chunk to retain its grid pit');
+    expect((pit.lowerBounds.maxX - pit.lowerBounds.minX) * (pit.lowerBounds.maxZ - pit.lowerBounds.minZ))
+      .toBeLessThan(plan.size * plan.size * 0.35);
+    expect(pit.lowerBounds.minX).toBeLessThanOrEqual(pit.bounds.minX);
+    expect(pit.lowerBounds.maxX).toBeGreaterThanOrEqual(pit.bounds.maxX);
+    expect(pit.lowerBounds.minZ).toBeLessThanOrEqual(pit.bounds.minZ);
+    expect(pit.lowerBounds.maxZ).toBeGreaterThanOrEqual(pit.bounds.maxZ);
     expect(plan.lights.every((light) => !light.id.includes('vista-light-'))).toBe(true);
     expect(plan.lights.some((light) => light.level === -1)).toBe(true);
     expect(plan.walls.some((wall) => wall.id.includes('/lower-wall-') && wall.bottom < 0)).toBe(true);
     expect(plan.colliders.some((collider) => collider.id.includes('/shaft-'))).toBe(true);
     expect(plan.colliders.some((collider) => collider.id.includes('/lower-level-floor'))).toBe(true);
     expect(plan.colliders.some((collider) => collider.id.includes('/collider-lower-wall-'))).toBe(true);
+    expect(plan.walls.some((wall) => wall.id.includes('/infinite-boundary-') && wall.id.includes('-lower-')))
+      .toBe(false);
     expect(plan.colliders.some((collider) => collider.id.includes('vista-'))).toBe(false);
     expect(plan.rooms.every((room) => room.id.startsWith(idPrefix))).toBe(true);
     expect(plan.walls.every((wall) => wall.id.startsWith(idPrefix))).toBe(true);
@@ -177,6 +215,117 @@ describe('InfiniteWorld chunk contracts', () => {
     expect(getInfiniteChunkCeilingOpenings(plan)).toEqual(expected);
   });
 
+  it('keeps active vertical atriums inset, fully shelled and reserved above', () => {
+    const atriumSeed = 'ATRIUM-AUDIT';
+    const sourceCoord = { x: 0, z: -12, story: -10 } as const;
+    const source = generateInfiniteChunk(atriumSeed, sourceCoord);
+    const tallRoom = source.rooms.find(
+      (room) => room.ceilingHeight > source.wallHeight + 0.1,
+    );
+    expect(tallRoom).toBeDefined();
+    if (!tallRoom) return;
+
+    const half = source.size * 0.5;
+    expect(tallRoom.bounds.minX).toBeGreaterThan(-half + 0.8);
+    expect(tallRoom.bounds.minZ).toBeGreaterThan(-half + 0.8);
+    expect(tallRoom.bounds.maxX).toBeLessThan(half - 0.8);
+    expect(tallRoom.bounds.maxZ).toBeLessThan(half - 0.8);
+    expect(source.walls.filter((wall) => wall.id.includes('/vertical-atrium-'))).toHaveLength(4);
+
+    const span = Math.round(
+      (tallRoom.ceilingHeight - source.wallHeight) / INFINITE_STORY_PITCH,
+    );
+    for (let distance = 1; distance <= span; distance += 1) {
+      const upperCoord = { ...sourceCoord, story: sourceCoord.story + distance };
+      const upper = generateInfiniteChunk(atriumSeed, upperCoord);
+      expect(getFloorOpenings(upper).some((opening) => sameRect(opening, tallRoom.bounds))).toBe(true);
+      expect(verticalReservationsForChunk(atriumSeed, upperCoord)
+        .some((reservation) => sameRect(reservation.bounds, tallRoom.bounds))).toBe(true);
+    }
+    expect(verticalReservationsForChunk(atriumSeed, {
+      ...sourceCoord,
+      story: sourceCoord.story + span + 1,
+    }).some((reservation) => sameRect(reservation.bounds, tallRoom.bounds))).toBe(false);
+  });
+
+  it('suppresses an atrium candidate that overlaps a lower vertical claim', () => {
+    const coord = { x: 0, z: 0, story: -9998 } as const;
+    const reservations = verticalReservationsForChunk('CHAIN-AUDIT', coord);
+    const plan = generateInfiniteChunk('CHAIN-AUDIT', coord);
+    const tallRooms = plan.rooms.filter(
+      (room) => room.ceilingHeight > plan.wallHeight + 0.1,
+    );
+
+    expect(reservations.length).toBeGreaterThan(0);
+    expect(tallRooms.every((room) =>
+      reservations.every((reservation) => !overlaps(room.bounds, reservation.bounds))
+    )).toBe(true);
+  });
+
+  it('does not inherit a deep shaft from a pit removed by an atrium claim', () => {
+    const inherited = inheritedShaftOpeningsForChunk('PHANTOM-AUDIT', {
+      x: 0,
+      z: 0,
+      story: -11978,
+    });
+    expect(inherited.some((opening) => opening.sourceStory === -11977)).toBe(false);
+  });
+
+  it('propagates a deep shaft through intermediate floors and closes its terminal landing', () => {
+    const shaftSeed = 'SHAFT-AUDIT';
+    const sourceCoord = { x: 0, z: 0, story: -91 } as const;
+    const source = generateInfiniteChunk(shaftSeed, sourceCoord);
+    const pit = source.features.find((feature) => feature.kind === 'grid-pit');
+    const shaft = pit?.kind === 'grid-pit'
+      ? pit.holes.find((hole) => hole.kind === 'void')
+      : undefined;
+    expect(shaft?.stories).toBe(7);
+    if (!shaft?.stories) return;
+    const center = {
+      x: (shaft.minX + shaft.maxX) * 0.5,
+      z: (shaft.minZ + shaft.maxZ) * 0.5,
+    };
+
+    for (let distance = 1; distance < shaft.stories; distance += 1) {
+      const coord = { ...sourceCoord, story: sourceCoord.story - distance };
+      const plan = generateInfiniteChunk(shaftSeed, coord);
+      expect(getFloorOpenings(plan).some((opening) => sameRect(opening, shaft))).toBe(true);
+      expect(plan.floorRects.some((floor) =>
+        center.x >= floor.minX && center.x <= floor.maxX &&
+        center.z >= floor.minZ && center.z <= floor.maxZ
+      )).toBe(false);
+      const shells = wallsAround(plan.walls, shaft, '/inherited-shaft-');
+      expect(shells).toHaveLength(4);
+      expect(shells.every((wall) =>
+        Math.abs(wall.bottom - (plan.wallHeight - INFINITE_STORY_PITCH)) < 0.01 &&
+        Math.abs(wall.bottom + wall.height - INFINITE_STORY_PITCH) < 0.01
+      )).toBe(true);
+      expect(getInfiniteChunkCeilingOpenings(plan)).toEqual(
+        getFloorOpenings(generateInfiniteChunk(shaftSeed, {
+          ...coord,
+          story: coord.story + 1,
+        })),
+      );
+    }
+
+    const terminalCoord = {
+      ...sourceCoord,
+      story: sourceCoord.story - shaft.stories,
+    };
+    const terminal = generateInfiniteChunk(shaftSeed, terminalCoord);
+    expect(getFloorOpenings(terminal).some((opening) => sameRect(opening, shaft))).toBe(false);
+    expect(terminal.floorRects.some((floor) =>
+      center.x >= floor.minX && center.x <= floor.maxX &&
+      center.z >= floor.minZ && center.z <= floor.maxZ
+    )).toBe(true);
+    const collars = wallsAround(terminal.walls, shaft, '/ceiling-shaft-collar-');
+    expect(collars).toHaveLength(4);
+    expect(collars.every((wall) =>
+      Math.abs(wall.bottom - terminal.wallHeight) < 0.01 &&
+      Math.abs(wall.bottom + wall.height - INFINITE_STORY_PITCH) < 0.01
+    )).toBe(true);
+  });
+
   it('physically leaves every canonical boundary gate open', () => {
     const plan = generateInfiniteChunk(seed, createChunkKey({ x: 2, z: 5, story: 1 }));
     const metadata = getInfiniteChunkMetadata(plan)!;
@@ -188,23 +337,23 @@ describe('InfiniteWorld chunk contracts', () => {
       // North and west own their shared seam. East/south are emitted by the
       // neighboring chunk, preventing coplanar duplicate walls and colliders.
       if (edge === 'east' || edge === 'south') continue;
-      for (const level of ['upper', 'lower'] as const) {
-        const boundaryWalls = plan.walls.filter((wall) => {
-          if (!wall.id.includes(`/infinite-boundary-${edge}-${level}-`)) return false;
-          return edge === 'north'
-            ? Math.abs(Math.abs(wall.z) - half) < 0.01
-            : Math.abs(Math.abs(wall.x) - half) < 0.01;
+      const boundaryWalls = plan.walls.filter((wall) => {
+        if (!wall.id.includes(`/infinite-boundary-${edge}-upper-`)) return false;
+        return edge === 'north'
+          ? Math.abs(Math.abs(wall.z) - half) < 0.01
+          : Math.abs(Math.abs(wall.x) - half) < 0.01;
+      });
+      expect(boundaryWalls.length).toBeGreaterThan(0);
+      expect(boundaryWalls.every((wall) => wall.bottom === 0)).toBe(true);
+      for (const gate of gates) {
+        const covered = boundaryWalls.some((wall) => {
+          const along = wall.orientation === 'x' ? wall.x : wall.z;
+          return Math.abs(along - gate.offset) < wall.length * 0.5;
         });
-        expect(boundaryWalls.length).toBeGreaterThan(0);
-        expect(boundaryWalls.every((wall) => wall.bottom === (level === 'upper' ? 0 : -INFINITE_STORY_PITCH))).toBe(true);
-        for (const gate of gates) {
-          const covered = boundaryWalls.some((wall) => {
-            const along = wall.orientation === 'x' ? wall.x : wall.z;
-            return Math.abs(along - gate.offset) < wall.length * 0.5;
-          });
-          expect(covered).toBe(false);
-        }
+        expect(covered).toBe(false);
       }
     }
+    expect(plan.walls.some((wall) => wall.id.includes('/infinite-boundary-') && wall.id.includes('-lower-')))
+      .toBe(false);
   });
 });

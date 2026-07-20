@@ -16,7 +16,7 @@ npm run dev
 Puis ouvrir `http://127.0.0.1:4173/`.
 
 ```powershell
-npm test        # 158 assertions génératives/physiques
+npm test        # suite générative, verticale, physique et rendu
 npm run build   # type-check + build production
 npm run validate
 ```
@@ -37,24 +37,26 @@ npm run validate
 - souris : regarder
 - `Échap` : libérer la souris / pause
 
-Le seed se trouve dans l’URL : `?seed=AMBER-HALL-0417`. Un même seed et une même version de générateur produisent exactement le même plan.
+Le seed courant est affiché dans le HUD. Une partie lancée sans paramètre reçoit toujours une nouvelle topologie, y compris après rafraîchissement ; pour rejouer un monde précis, utiliser explicitement `?seed=AMBER-HALL-0417`.
 
 ## Ce qui est déjà présent
 
 - labyrinthe BSP dense d’environ une centaine de cellules connectées, avec une forte proportion de couloirs, des cloisons d’épaisseurs variables et des volumes volontairement condamnés ;
 - salles typées : bureaux, corridors, véritables grands halls de 450 m² ou plus, salles imbriquées, zones silencieuses et galeries de seuils ;
 - retours de murs, cloisons coupées, colonnes irrégulières et masses architecturales épaisses qui cassent la sensation d’espace entièrement optimisé ;
-- fosses en trois silhouettes : petits trous, grille mixte et grande ouverture rare ; la chute est continue vers un sous-niveau éclairé et explorable, sans recalage visible ;
+- fosses rares en six familles : trou unique, petites/grandes grilles, grilles denses, mixtes et clusters monumentaux ; un aperçu inférieur compact reste actif jusqu’au chargement asynchrone de l’étage canonique ;
+- étages infinis streamés verticalement, puits profonds cohérents sur plusieurs niveaux et grands atriums qui réservent réellement les volumes des étages supérieurs ;
+- halls à piliers agrandis, galeries symétriques à sorties parallèles et brèches monumentales ouvrant sur de longs couloirs ;
 - escalier généré et franchissable grâce à l’autostep Rapier ;
 - minuscule ouverture traversable avec `E`, donnant sur un hall de 58 mètres à plafond gigantesque, texturé, éclairé et explorable ;
 - moquette, plâtre et faux plafond en PBR (albedo, normal, roughness/AO packés) ;
 - lampes sous forme de dalles lumineuses intégrées au faux plafond, snapées sur la grille et filtrées pour ne jamais croiser murs, colonnes, masses ou trous ;
-- éclairage fluorescent pré-calculé par chunk, stable pendant le déplacement, avec occlusion murale et SSAO de contact sans halo attaché au joueur ;
+- éclairage fluorescent pré-calculé par chunk, stable pendant le déplacement, avec champ de plafond sensible à la hauteur réelle des cloisons et SSAO de contact sans halo attaché au joueur ;
 - températures propres à chaque luminaire, avec de rares panneaux manquants et une pièce hors tension par chunk ;
 - déplacement interpolé entre les pas physiques, sprint perceptible et rig caméra avec head bob, roulis et inertie de souris ;
 - bloom discret, SMAA, tone mapping AgX et vignette légère, sans passe chromatique plein écran ;
 - bourdonnement et ventilation CC0 superposés à un lit électrique synthétique, avec mix différent selon la salle ;
-- résolution interne fixée au démarrage pour éviter les flashs lors des réallocations du post-traitement.
+- résolution interne adaptative avec hystérésis pour viser 60 FPS, budget initial sur les grands écrans et remplissage immédiat des cibles HDR après une rare réallocation.
 
 ## Architecture
 
@@ -70,7 +72,7 @@ src/
   world/       seed, plan pur, BSP, registre de features et tests
 ```
 
-La génération produit uniquement un `WorldPlan` sérialisable. Le rendu et la physique le consomment séparément : les futurs workers, chunks ou exports serveur n’ont donc pas besoin d’importer Three.js.
+La génération produit un `WorldPlan` sérialisable. Les chunks et leurs deux champs d’éclairage sont préparés dans des workers ; le thread principal ne conserve que le montage progressif du rendu et de la physique.
 
 Les éléments répétés sont instanciés ; les murs et plinthes sont fusionnés par matériau. Les données de gameplay (colliders, sockets d’objets, salles et features) restent accessibles dans le plan.
 
@@ -89,4 +91,4 @@ Les ressources livrées sont locales et le jeu ne hotlinke aucun CDN. Les source
 
 ## Prochaine étape logique
 
-Le monde est maintenant streamé par chunks autour du joueur via worker. Les prochaines grosses couches logiques sont les étages verticaux pleinement streamés, les items utiles et les entités/monstres avec extinction locale de lampes.
+Le monde est maintenant streamé horizontalement et verticalement autour du joueur. Les prochaines grosses couches logiques sont les items utiles et les entités/monstres avec extinction locale de lampes.

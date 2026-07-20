@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { AudioSystem } from '../audio/AudioSystem';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { PlayerController } from '../player/PlayerController';
+import { AdaptiveRenderScale, renderScaleLimits } from '../render/AdaptiveQuality';
 import { MaterialLibrary } from '../render/MaterialLibrary';
 import { PostFX } from '../render/PostFX';
 import { ExperienceUI } from '../ui/ExperienceUI';
@@ -38,13 +39,15 @@ declare global {
 const resolveSeed = (): string => {
   const url = new URL(window.location.href);
   const supplied = url.searchParams.get('seed')?.trim();
-  if (supplied) return supplied.slice(0, 64).replace(/[^a-zA-Z0-9_-]/g, '-');
-  const stored = sessionStorage.getItem('threshold-zero-seed');
-  const seed = stored || createReadableSeed();
-  sessionStorage.setItem('threshold-zero-seed', seed);
-  url.searchParams.set('seed', seed);
-  history.replaceState(null, '', url);
-  return seed;
+  if (supplied) {
+    return supplied.slice(0, 64).replace(/[^a-zA-Z0-9_-]/g, '-');
+  }
+  sessionStorage.removeItem('threshold-zero-seed');
+  sessionStorage.removeItem('threshold-zero-auto-seed');
+  // Automatic sessions deliberately leave the URL untouched: refreshing or
+  // reopening the game produces a new world. A manually supplied ?seed=...
+  // remains the explicit reproducibility path.
+  return createReadableSeed();
 };
 
 export class Game {
@@ -68,15 +71,22 @@ export class Game {
   private fps = 60;
   private frameCounter = 0;
   private metricsTimer = 0;
-  // Pick the final render resolution up front. Repeatedly resizing the HDR
-  // composer after entry can briefly expose cleared (black) render targets.
-  private pixelRatio = Math.min(window.devicePixelRatio, 1.1);
+  private pixelRatio: number;
+  private readonly adaptiveRenderScale: AdaptiveRenderScale;
   private disposed = false;
 
   constructor(private readonly container: HTMLElement) {
     if (!document.createElement('canvas').getContext('webgl2')) {
       throw new Error('WebGL 2 est requis pour explorer cette archive.');
     }
+    const renderScale = renderScaleLimits(
+      window.innerWidth,
+      window.innerHeight,
+      window.devicePixelRatio,
+      matchMedia('(pointer: coarse)').matches,
+    );
+    this.adaptiveRenderScale = new AdaptiveRenderScale(renderScale);
+    this.pixelRatio = this.adaptiveRenderScale.value;
     this.seed = resolveSeed();
     this.plan = generateInfiniteChunk(this.seed, { x: 0, z: 0, story: 0 });
     const issues = validateWorldPlan(this.plan);
@@ -97,6 +107,9 @@ export class Game {
     this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = false;
     this.renderer.debug.checkShaderErrors = true;
+    // The composer performs several renderer calls. Reset once per presented
+    // frame so debug draw/triangle counts cover the whole pipeline.
+    this.renderer.info.autoReset = false;
     this.root.append(this.renderer.domElement);
 
     this.ui = new ExperienceUI(this.root, this.plan, {
@@ -129,7 +142,7 @@ export class Game {
       this.materials.materials,
       this.physics,
     );
-    this.worldStream.initialize();
+    await this.worldStream.initialize();
     this.camera.rotation.set(0, -Math.PI * 0.22, 0, 'YXZ');
     this.player = new PlayerController(this.camera, this.renderer.domElement, this.physics, {
       onLockChange: (locked) => this.ui.setLocked(locked),
@@ -205,9 +218,9 @@ export class Game {
 
   private regenerate(): void {
     const url = new URL(window.location.href);
-    const seed = createReadableSeed();
-    sessionStorage.setItem('threshold-zero-seed', seed);
-    url.searchParams.set('seed', seed);
+    sessionStorage.removeItem('threshold-zero-auto-seed');
+    sessionStorage.removeItem('threshold-zero-seed');
+    url.searchParams.delete('seed');
     window.location.assign(url.toString());
   }
 
@@ -377,7 +390,8 @@ export class Game {
 
   private readonly frame = (now: number): void => {
     if (this.disposed || !this.player || !this.worldStream || !this.postFX) return;
-    const rawDelta = Math.min(0.05, Math.max(0, (now - this.previousTime) / 1000));
+    const measuredDelta = Math.max(0, (now - this.previousTime) / 1000);
+    const rawDelta = Math.min(0.05, measuredDelta);
     this.previousTime = now;
     this.elapsed += rawDelta;
     this.accumulator = Math.min(this.accumulator + rawDelta, 0.12);
@@ -400,10 +414,20 @@ export class Game {
       this.player.position.z,
     );
     this.audio.update(room);
-    this.postFX.render(rawDelta);
 
-    const instantaneousFps = rawDelta > 0 ? 1 / rawDelta : 60;
+    // Keep simulation deltas bounded, but measure the real wall-clock frame.
+    // Generation stalls must remain visible to both the HUD and quality loop.
+    const instantaneousFps = measuredDelta > 0 ? 1 / measuredDelta : 60;
     this.fps = THREE.MathUtils.lerp(this.fps, instantaneousFps, 0.055);
+    const nextPixelRatio = this.adaptiveRenderScale.update(this.fps, measuredDelta);
+    if (nextPixelRatio !== null && nextPixelRatio !== this.pixelRatio) {
+      this.pixelRatio = nextPixelRatio;
+      this.resize();
+    }
+    // Resize, when required, happens before the normal presentation so a
+    // quality step still fills fresh HDR targets with a single rendered frame.
+    this.renderer.info.reset();
+    this.postFX.render(rawDelta);
     this.frameCounter += 1;
     this.metricsTimer += rawDelta;
     if (this.metricsTimer >= 0.35) {

@@ -61,7 +61,9 @@ const lightOverlapsWall = (light: LightSlot, wall: WallSegment): boolean => {
 
 const reachableRoomIds = (seed: string): Set<string> => {
   const world = generateWorld(seed);
-  const step = 0.5;
+  // Dense pit bridges can be only 0.70 m wide. Sampling at 0.25 m keeps the
+  // capsule-clearance audit from aliasing a valid narrow bridge out of existence.
+  const step = 0.25;
   const half = world.size * 0.5;
   const count = Math.floor(world.size / step);
   const toIndex = (x: number, z: number): number => z * count + x;
@@ -89,11 +91,6 @@ const reachableRoomIds = (seed: string): Set<string> => {
 
   for (let cursor = 0; cursor < queue.length; cursor += 1) {
     const [gridX, gridZ] = queue[cursor]!;
-    const worldX = coordinate(gridX);
-    const worldZ = coordinate(gridZ);
-    for (const room of world.rooms) {
-      if (pointInRect(worldX, worldZ, room.bounds, 0.35)) reached.add(room.id);
-    }
     for (const [offsetX, offsetZ] of [
       [1, 0],
       [-1, 0],
@@ -107,6 +104,23 @@ const reachableRoomIds = (seed: string): Set<string> => {
       if (visited[index] || blocked(coordinate(nextX), coordinate(nextZ))) continue;
       visited[index] = 1;
       queue.push([nextX, nextZ]);
+    }
+  }
+
+  // Rooms partition almost all of the plan, so scanning each room once is far
+  // cheaper than testing every reached cell against every room during the BFS.
+  for (const room of world.rooms) {
+    const minX = Math.max(0, Math.ceil((room.bounds.minX + 0.35 + half) / step - 0.5));
+    const maxX = Math.min(count - 1, Math.floor((room.bounds.maxX - 0.35 + half) / step - 0.5));
+    const minZ = Math.max(0, Math.ceil((room.bounds.minZ + 0.35 + half) / step - 0.5));
+    const maxZ = Math.min(count - 1, Math.floor((room.bounds.maxZ - 0.35 + half) / step - 0.5));
+    roomScan:
+    for (let gridZ = minZ; gridZ <= maxZ; gridZ += 1) {
+      for (let gridX = minX; gridX <= maxX; gridX += 1) {
+        if (!visited[toIndex(gridX, gridZ)]) continue;
+        reached.add(room.id);
+        break roomScan;
+      }
     }
   }
   return reached;
@@ -184,16 +198,31 @@ describe('Level 0 procedural generator', () => {
     expect(fingerprints.size).toBe(seeds.length);
   });
 
-  it('varies pit silhouettes while keeping both compact and large openings', () => {
+  it('varies pit silhouettes across single holes, grids and mixed clusters', () => {
     const pits = seeds
       .map((seed) => generateWorld(seed).features.find((feature) => feature.kind === 'grid-pit'))
       .filter((feature): feature is GridPitFeature => feature?.kind === 'grid-pit');
-    expect(new Set(pits.map((pit) => pit.pattern)).size).toBe(3);
+    expect(new Set(pits.map((pit) => pit.pattern))).toEqual(new Set([
+      'single',
+      'small-grid',
+      'large-grid',
+      'dense-grid',
+      'mixed-grid',
+      'large-cluster',
+    ]));
+    expect(pits.some((pit) => pit.holes.length === 1)).toBe(true);
+    expect(pits.some((pit) => pit.holes.length >= 12)).toBe(true);
     expect(pits.some((pit) => pit.holes.some((hole) => Math.max(rectWidth(hole), rectDepth(hole)) >= 3.2)))
       .toBe(true);
-    expect(pits.every((pit) => pit.holes.some((hole) => Math.max(rectWidth(hole), rectDepth(hole)) <= 1.7)))
+    expect(pits.some((pit) => pit.holes.some((hole) => Math.max(rectWidth(hole), rectDepth(hole)) <= 1.7)))
       .toBe(true);
     for (const pit of pits) {
+      expect(rectWidth(pit.lowerBounds) * rectDepth(pit.lowerBounds))
+        .toBeLessThan(112 ** 2 * 0.35);
+      expect(pit.lowerBounds.minX).toBeLessThanOrEqual(pit.bounds.minX);
+      expect(pit.lowerBounds.maxX).toBeGreaterThanOrEqual(pit.bounds.maxX);
+      expect(pit.lowerBounds.minZ).toBeLessThanOrEqual(pit.bounds.minZ);
+      expect(pit.lowerBounds.maxZ).toBeGreaterThanOrEqual(pit.bounds.maxZ);
       for (let left = 0; left < pit.holes.length; left += 1) {
         for (let right = left + 1; right < pit.holes.length; right += 1) {
           const a = pit.holes[left]!;
@@ -283,7 +312,7 @@ describe('Level 0 procedural generator', () => {
     expect(voidWorldCount / hazardSeeds.length).toBeLessThan(0.15);
   });
 
-  it('keeps squeeze-view apertures narrower than the player capsule diameter', () => {
+  it('mixes narrow peeks with walkable monumental breaches', () => {
     // PhysicsWorld uses a capsule radius of 0.32 m.
     const playerDiameter = 0.64;
     const squeezes = seeds.flatMap((seed) =>
@@ -291,6 +320,16 @@ describe('Level 0 procedural generator', () => {
     );
 
     expect(squeezes.length).toBeGreaterThan(0);
-    expect(squeezes.every((feature) => feature.apertureWidth < playerDiameter)).toBe(true);
+    const narrowPeeks = squeezes.filter((feature) => feature.apertureWidth < playerDiameter);
+    const broadBreaches = squeezes.filter((feature) => feature.apertureWidth > playerDiameter);
+    expect(narrowPeeks.length).toBeGreaterThan(0);
+    expect(broadBreaches.length).toBeGreaterThan(0);
+    expect(narrowPeeks.every((feature) => feature.apertureWidth >= 0.38 && feature.apertureWidth <= 0.48))
+      .toBe(true);
+    expect(broadBreaches.every((feature) => feature.apertureWidth >= 1.35 && feature.apertureWidth <= 3.6))
+      .toBe(true);
+    expect(broadBreaches.some((feature) =>
+      (feature.axis === 'x' ? rectWidth(feature.bounds) : rectDepth(feature.bounds)) >= 16,
+    )).toBe(true);
   });
 });

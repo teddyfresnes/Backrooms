@@ -23,6 +23,7 @@ interface TraversalState {
 }
 
 const FIXED_Z_AXIS = new THREE.Vector3(0, 0, 1);
+const MAX_UNBROKEN_FALL = 48;
 
 export class PlayerController {
   readonly controls: PointerLockControls;
@@ -37,6 +38,7 @@ export class PlayerController {
   private readonly velocity = new THREE.Vector3();
   private readonly previousPosition = new THREE.Vector3();
   private readonly renderedPosition = new THREE.Vector3();
+  private readonly lastSafePosition = new THREE.Vector3();
   private readonly rollQuaternion = new THREE.Quaternion();
   private readonly pointerDocument: Document;
   private grounded = true;
@@ -76,6 +78,7 @@ export class PlayerController {
     this.physics.getPosition(this.position);
     this.previousPosition.copy(this.position);
     this.renderedPosition.copy(this.position);
+    this.lastSafePosition.copy(this.position);
     this.renderUpdate(0, 1);
     this.controls.addEventListener('lock', () => this.callbacks.onLockChange(true));
     this.controls.addEventListener('unlock', () => this.callbacks.onLockChange(false));
@@ -122,6 +125,7 @@ export class PlayerController {
     this.physics.getPosition(this.position);
     this.previousPosition.copy(this.position);
     this.renderedPosition.copy(this.position);
+    this.lastSafePosition.copy(this.position);
     this.renderUpdate(0, 1);
   }
 
@@ -250,6 +254,7 @@ export class PlayerController {
       this.callbacks.onLand(strength);
     }
     if (this.grounded && this.verticalVelocity < 0) this.verticalVelocity = -0.9;
+    if (this.grounded) this.lastSafePosition.copy(this.position);
 
     const horizontalDistance = Math.hypot(result.moved.x, result.moved.z);
     this.moving = horizontalDistance > 0.00015 && this.grounded;
@@ -270,10 +275,11 @@ export class PlayerController {
       }
     }
 
-    // Normal drops land at -5.4 m and stay fully explorable. Only the rare
-    // multi-storey voids cross this watchdog plane and trigger a death reset.
-    if (this.position.y < -44) {
-      this.physics.reset();
+    // The world has no absolute bottom. The watchdog is therefore relative to
+    // the last grounded point and only catches an uninterrupted abyss deeper
+    // than every supported multi-storey shaft.
+    if (this.position.y < this.lastSafePosition.y - MAX_UNBROKEN_FALL) {
+      this.physics.teleport(this.lastSafePosition);
       this.physics.getPosition(this.position);
       this.previousPosition.copy(this.position);
       this.velocity.set(0, 0, 0);

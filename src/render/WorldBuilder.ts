@@ -5,10 +5,11 @@ import type { RuntimeLightSource } from './LocalLightRig';
 import {
   bakedLightMapJunctionNeedsRepair,
   bakedLightMapTexelSize,
-  createBakedLightMap,
+  createBakedLightMaps,
   createBakedMaterialSet,
   ensureBakedLightUv,
 } from './BakedLighting';
+import type { BakedLightMapData, BakedLightMaps } from './BakedLighting';
 import type {
   GridPitFeature,
   LightSlot,
@@ -20,6 +21,7 @@ import type {
   WorldPlan,
   RoomKind,
 } from '../world/types';
+import { INFINITE_STORY_PITCH, getInfiniteChunkCeilingOpenings } from '../world/InfiniteWorld';
 import { pointInRect, rectCenter, rectDepth, rectWidth } from '../world/types';
 
 const setGeometryTint = (geometry: THREE.BufferGeometry, tint: number): void => {
@@ -300,6 +302,7 @@ const makeMesh = (
 
 export interface WorldViewOptions {
   createLightRig?: boolean;
+  bakedLightMaps?: BakedLightMapData;
 }
 
 export interface WorldInteraction {
@@ -314,7 +317,7 @@ export class WorldView {
   private readonly emitterMesh: THREE.InstancedMesh;
   private readonly fixtureSlots: LightSlot[];
   private readonly materials: MaterialSet;
-  private readonly bakedLightMap: THREE.CanvasTexture;
+  private readonly bakedLightMaps: BakedLightMaps;
   private readonly ownedMaterials: THREE.MeshStandardMaterial[];
 
   constructor(
@@ -323,8 +326,8 @@ export class WorldView {
     options: WorldViewOptions = {},
   ) {
     this.group.name = `world-${plan.seed}`;
-    this.bakedLightMap = createBakedLightMap(plan);
-    const baked = createBakedMaterialSet(sourceMaterials, this.bakedLightMap, plan.size);
+    this.bakedLightMaps = createBakedLightMaps(plan, options.bakedLightMaps);
+    const baked = createBakedMaterialSet(sourceMaterials, this.bakedLightMaps, plan.size);
     this.materials = baked.materials;
     this.ownedMaterials = baked.ownedMaterials;
     this.fixtureSlots = plan.lights;
@@ -347,7 +350,10 @@ export class WorldView {
       ensureBakedLightUv(geometry, wallMaterial, 0.42);
       (wall.kind === 'plaster' ? plasterGeometries : wallGeometries).push(geometry);
 
-      if (wall.height > 1.3) {
+      const restsOnWalkableFloor =
+        Math.abs(wall.bottom) < 0.12 ||
+        Math.abs(wall.bottom + INFINITE_STORY_PITCH) < 0.12;
+      if (wall.height > 1.3 && restsOnWalkableFloor) {
         const alongX = wall.orientation === 'x';
         const trim = new THREE.BoxGeometry(
           alongX ? wall.length + 0.025 : wall.thickness + 0.055,
@@ -432,22 +438,36 @@ export class WorldView {
     floor.updateMatrix();
     this.group.add(floor);
 
-    const ceiling = new THREE.PlaneGeometry(this.plan.size, this.plan.size, 1, 1);
-    const uv = ceiling.getAttribute('uv') as THREE.BufferAttribute;
-    const repeat = this.plan.size / 2.4;
-    for (let index = 0; index < uv.count; index += 1) {
-      uv.setXY(index, uv.getX(index) * repeat, uv.getY(index) * repeat);
-    }
-    ceiling.rotateX(Math.PI * 0.5);
-    ceiling.translate(0, this.plan.wallHeight, 0);
-    makeMesh(ceiling, this.materials.ceiling, 'office-drop-ceiling', this.group);
-
     const worldBounds: Rect = {
       minX: -this.plan.size * 0.5,
       maxX: this.plan.size * 0.5,
       minZ: -this.plan.size * 0.5,
       maxZ: this.plan.size * 0.5,
     };
+    const tallRooms = this.plan.rooms.filter(
+      (room) => room.level >= 0 && room.ceilingHeight > this.plan.wallHeight + 0.1,
+    );
+    const ceilingOpenings = [
+      ...getInfiniteChunkCeilingOpenings(this.plan),
+      ...tallRooms.map((room) => room.bounds),
+    ];
+    const ceilingRects = ceilingOpenings.length > 0
+      ? cellsAroundHoles(worldBounds, ceilingOpenings)
+      : [worldBounds];
+    makeMesh(
+      mergeOrSingle(ceilingRects.map((rect) => createCeilingGeometry(rect, this.plan.wallHeight))),
+      this.materials.ceiling,
+      'office-drop-ceiling',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(
+        tallRooms.map((room) => createCeilingGeometry(room.bounds, room.ceilingHeight)),
+      ),
+      this.materials.ceiling,
+      'elevated-atrium-ceilings',
+      this.group,
+    );
     makeMesh(
       createHorizontalJunctionRepairGeometry(
         this.plan.walls,
@@ -481,7 +501,9 @@ export class WorldView {
     emitters.name = 'instanced-luminous-ceiling-tiles';
     emitters.instanceMatrix.setUsage(THREE.StaticDrawUsage);
     emitters.renderOrder = 12;
-    emitters.frustumCulled = false;
+    // The instance bounds are static and valid; allowing chunk-level frustum
+    // culling avoids submitting every fluorescent panel in the 3x3 stream.
+    emitters.frustumCulled = true;
     const matrix = new THREE.Matrix4();
     const quaternion = new THREE.Quaternion();
     const scale = new THREE.Vector3();
@@ -1044,7 +1066,8 @@ export class WorldView {
       if (object instanceof THREE.Mesh || object instanceof THREE.InstancedMesh) object.geometry.dispose();
     });
     this.ownedMaterials.forEach((material) => material.dispose());
-    this.bakedLightMap.dispose();
+    this.bakedLightMaps.general.dispose();
+    this.bakedLightMaps.ceiling.dispose();
     this.group.removeFromParent();
   }
 }

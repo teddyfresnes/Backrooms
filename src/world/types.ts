@@ -105,7 +105,13 @@ export interface GridPitFeature {
   bounds: Rect;
   holes: PitHole[];
   depth: number;
-  pattern: 'small-grid' | 'mixed-grid' | 'large-cluster';
+  pattern:
+    | 'single'
+    | 'small-grid'
+    | 'large-grid'
+    | 'dense-grid'
+    | 'mixed-grid'
+    | 'large-cluster';
   lowerBounds: Rect;
   lowerFloorY: number;
   lowerCeilingY: number;
@@ -170,6 +176,10 @@ export interface WorldPlan {
   detailSockets: DetailSocket[];
   colliders: StaticCollider[];
   floorRects: Rect[];
+  /** Canonical apertures cut from this story's walkable floor. */
+  floorOpenings?: Rect[];
+  /** Serialized so worker-generated chunks do not recompute vertical topology on mount. */
+  ceilingOpenings?: Rect[];
   spawn: Vec3Data;
 }
 

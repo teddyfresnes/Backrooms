@@ -33,6 +33,8 @@ export class PhysicsWorld {
   private readonly spawn = new THREE.Vector3();
   private readonly position = new THREE.Vector3();
   private readonly movement = new THREE.Vector3();
+  private chunkMutationDepth = 0;
+  private chunkSynchronizationPending = false;
 
   private constructor(plan: WorldPlan) {
     this.world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
@@ -82,7 +84,7 @@ export class PhysicsWorld {
     try {
       colliders.forEach((collider) => addStaticCollider(this.world, body, collider));
       this.chunkBodies.set(key, body);
-      this.synchronizeChunkChanges();
+      this.requestChunkSynchronization();
     } catch (error) {
       this.world.removeRigidBody(body);
       throw error;
@@ -94,7 +96,7 @@ export class PhysicsWorld {
     if (!body) return false;
     this.world.removeRigidBody(body);
     this.chunkBodies.delete(key);
-    this.synchronizeChunkChanges();
+    this.requestChunkSynchronization();
     return true;
   }
 
@@ -104,7 +106,7 @@ export class PhysicsWorld {
     this.assertFiniteVector(offset, `offset for chunk ${key}`);
     body.setTranslation(offset, true);
     this.world.propagateModifiedBodyPositionsToColliders();
-    this.synchronizeChunkChanges();
+    this.requestChunkSynchronization();
     return true;
   }
 
@@ -126,7 +128,24 @@ export class PhysicsWorld {
       );
     }
     this.world.propagateModifiedBodyPositionsToColliders();
-    this.synchronizeChunkChanges();
+    this.requestChunkSynchronization();
+  }
+
+  /**
+   * Groups several stream mutations behind one Rapier broad-phase refresh.
+   * This is especially important when all nine chunks change story at once.
+   */
+  batchChunkChanges<T>(operation: () => T): T {
+    this.chunkMutationDepth += 1;
+    try {
+      return operation();
+    } finally {
+      this.chunkMutationDepth -= 1;
+      if (this.chunkMutationDepth === 0 && this.chunkSynchronizationPending) {
+        this.chunkSynchronizationPending = false;
+        this.synchronizeChunkChanges();
+      }
+    }
   }
 
   move(desiredDelta: Vec3Data): CharacterMotionResult {
@@ -182,6 +201,14 @@ export class PhysicsWorld {
     // this synchronization, a character query immediately following a chunk
     // load or rebase still sees the previous collider positions for one tick.
     this.world.step();
+  }
+
+  private requestChunkSynchronization(): void {
+    if (this.chunkMutationDepth > 0) {
+      this.chunkSynchronizationPending = true;
+      return;
+    }
+    this.synchronizeChunkChanges();
   }
 
   dispose(): void {

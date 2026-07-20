@@ -5,6 +5,7 @@ import {
   BrightnessContrastEffect,
   EffectComposer,
   EffectPass,
+  type Effect,
   HueSaturationEffect,
   NormalPass,
   RenderPass,
@@ -29,7 +30,7 @@ export class PostFX {
     });
     let normalPass: NormalPass | undefined;
     if (!coarsePointer) {
-      normalPass = new NormalPass(scene, camera, { resolutionScale: 0.6 });
+      normalPass = new NormalPass(scene, camera, { resolutionScale: 0.5 });
       this.composer.addPass(normalPass);
     }
     this.composer.addPass(new RenderPass(scene, camera));
@@ -44,22 +45,24 @@ export class PostFX {
     const toneMapping = new ToneMappingEffect({
       mode: ToneMappingMode.AGX,
     });
+    const effects: Effect[] = [];
     if (normalPass) {
       const ssao = new SSAOEffect(camera, normalPass.texture, {
         blendFunction: BlendFunction.MULTIPLY,
-        samples: 13,
-        rings: 7,
-        // Restrict AO to the actual contact instead of painting a broad band
-        // across the ceiling and carpet along every wall.
-        radius: 0.016,
-        intensity: 0.58,
-        bias: 0.026,
-        fade: 0.09,
-        luminanceInfluence: 0.72,
-        color: new THREE.Color(0x292916),
-        resolutionScale: 0.76,
+        samples: 7,
+        rings: 5,
+        // The bake already carries the broad fluorescent penumbra. SSAO only
+        // restores tight geometric contact, avoiding a second dark band along
+        // every wall while costing substantially fewer texture samples.
+        radius: 0.01,
+        intensity: 0.34,
+        bias: 0.034,
+        fade: 0.15,
+        luminanceInfluence: 0.82,
+        color: new THREE.Color(0x494632),
+        resolutionScale: 0.58,
       });
-      this.composer.addPass(new EffectPass(camera, ssao));
+      effects.push(ssao);
     }
     // Bloom is only worthwhile on an HDR target. Three mip levels retain a
     // soft fluorescent halo without paying for the former full five-level chain.
@@ -73,18 +76,14 @@ export class PostFX {
         radius: 0.52,
         levels: 3,
       });
-      this.composer.addPass(new EffectPass(camera, bloom));
+      effects.push(bloom);
     }
-    this.composer.addPass(
-      new EffectPass(
-        camera,
-        toneMapping,
-        grading,
-        contrast,
-        vignette,
-      ),
-    );
-    if (!coarsePointer) this.composer.addPass(new EffectPass(camera, new SMAAEffect()));
+    effects.push(toneMapping, grading, contrast, vignette);
+    if (!coarsePointer) effects.push(new SMAAEffect());
+    // postprocessing fuses compatible effects into one shader. SSAO and bloom
+    // keep their reduced-resolution internal buffers, while their composites,
+    // grading and SMAA now share one full-resolution draw and buffer swap.
+    this.composer.addPass(new EffectPass(camera, ...effects));
   }
 
   setSize(width: number, height: number): void {

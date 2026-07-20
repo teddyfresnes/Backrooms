@@ -42,6 +42,11 @@ const quantize = (value: number, step = 0.25): number => Math.round(value / step
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
+export const worldHasDeepShaft = (seed: string): boolean =>
+  new SeededRandom(`${seed}:v${GENERATOR_VERSION}`)
+    .fork('feature:grid-pit:void')
+    .chance(0.055);
+
 const addColliderForWall = (
   colliders: StaticCollider[],
   wall: WallSegment,
@@ -339,8 +344,9 @@ const splitWorldWithGrandHall = (
   const verticalStrip = rng.chance(0.5);
   const nearMinimum = rng.chance(0.5);
   const hallAtMinimum = rng.chance(0.5);
-  const stripWidth = quantize(rng.float(22, 27), 0.5);
-  const hallDepth = quantize(rng.float(21, 27), 0.5);
+  const monumental = rng.chance(0.22);
+  const stripWidth = quantize(rng.float(monumental ? 30 : 22, monumental ? 43 : 27), 0.5);
+  const hallDepth = quantize(rng.float(monumental ? 29 : 21, monumental ? 42 : 27), 0.5);
 
   let hall: Rect;
   let stripRemainder: Rect;
@@ -408,27 +414,72 @@ const splitWorldWithGrandHall = (
   splitPartitions(stripRemainder, 2, 'S', rootRng, plan);
 };
 
-const buildGridPit = (room: RoomRecord, rng: SeededRandom, lowerBounds: Rect): GridPitFeature => {
+const buildGridPit = (
+  room: RoomRecord,
+  rng: SeededRandom,
+  lowerBounds: Rect,
+  deepVoidRng?: SeededRandom,
+): GridPitFeature => {
   const center = rectCenter(room.bounds);
+  const roomArea = rectArea(room.bounds);
+  const monumental = roomArea >= 430;
   const pattern = rng.weighted([
-    { value: 'small-grid' as const, weight: 0.42 },
-    { value: 'mixed-grid' as const, weight: 0.4 },
-    { value: 'large-cluster' as const, weight: 0.18 },
+    { value: 'single' as const, weight: 0.12 },
+    { value: 'small-grid' as const, weight: 0.29 },
+    { value: 'large-grid' as const, weight: monumental ? 0.22 : 0.15 },
+    { value: 'dense-grid' as const, weight: monumental ? 0.23 : 0.07 },
+    { value: 'mixed-grid' as const, weight: 0.11 },
+    { value: 'large-cluster' as const, weight: 0.1 },
   ]);
   const holes: PitHole[] = [];
   let footprintWidth: number;
   let footprintDepth: number;
   const dropDepth = 5.4;
 
-  if (pattern === 'small-grid') {
+  if (pattern === 'single') {
+    const width = rng.float(monumental ? 4.8 : 2.2, monumental ? 9.5 : 6.2);
+    const depth = rng.float(monumental ? 4.4 : 2.1, monumental ? 8.8 : 5.9);
+    footprintWidth = width;
+    footprintDepth = depth;
+    holes.push({
+      minX: center.x - width * 0.5,
+      maxX: center.x + width * 0.5,
+      minZ: center.z - depth * 0.5,
+      maxZ: center.z + depth * 0.5,
+      depth: dropDepth,
+    });
+  } else if (pattern === 'small-grid') {
     const size = rng.float(1.16, 1.52);
-    const bridge = rng.float(0.82, 1.28);
-    const columns = rng.int(2, 5);
-    const rows = rng.int(2, 4);
+    const bridge = rng.float(0.74, 1.3);
+    const columns = rng.int(2, monumental ? 7 : 5);
+    const rows = rng.int(2, monumental ? 6 : 4);
     footprintWidth = size * columns + bridge * (columns - 1);
     footprintDepth = size * rows + bridge * (rows - 1);
     for (let xIndex = 0; xIndex < columns; xIndex += 1) {
       for (let zIndex = 0; zIndex < rows; zIndex += 1) {
+        const minX = center.x - footprintWidth * 0.5 + xIndex * (size + bridge);
+        const minZ = center.z - footprintDepth * 0.5 + zIndex * (size + bridge);
+        holes.push({ minX, maxX: minX + size, minZ, maxZ: minZ + size, depth: dropDepth });
+      }
+    }
+  } else if (pattern === 'large-grid' || pattern === 'dense-grid') {
+    const size = pattern === 'dense-grid'
+      ? rng.float(3.4, 5.4)
+      : rng.float(2.8, 4.8);
+    const bridge = pattern === 'dense-grid'
+      ? rng.float(0.7, 0.94)
+      : rng.float(1.05, 1.8);
+    const maxColumns = monumental ? 6 : 4;
+    const maxRows = monumental ? 6 : 4;
+    const columns = rng.int(2, maxColumns);
+    const rows = rng.int(2, maxRows);
+    footprintWidth = size * columns + bridge * (columns - 1);
+    footprintDepth = size * rows + bridge * (rows - 1);
+    for (let xIndex = 0; xIndex < columns; xIndex += 1) {
+      for (let zIndex = 0; zIndex < rows; zIndex += 1) {
+        // A few deliberate solid islands stop the largest grids reading like
+        // a perfectly repeated texture while preserving the dominant rhythm.
+        if (columns * rows >= 16 && rng.chance(0.08)) continue;
         const minX = center.x - footprintWidth * 0.5 + xIndex * (size + bridge);
         const minZ = center.z - footprintDepth * 0.5 + zIndex * (size + bridge);
         holes.push({ minX, maxX: minX + size, minZ, maxZ: minZ + size, depth: dropDepth });
@@ -484,11 +535,11 @@ const buildGridPit = (room: RoomRecord, rng: SeededRandom, lowerBounds: Rect): G
     hole.kind = 'drop';
     hole.stories = 1;
   }
-  if (pattern === 'large-cluster' && rng.chance(0.3)) {
+  if (deepVoidRng) {
     const abyss = [...holes].sort((a, b) => rectWidth(b) * rectDepth(b) - rectWidth(a) * rectDepth(a))[0];
     if (abyss) {
       abyss.kind = 'void';
-      abyss.stories = rng.int(4, 7);
+      abyss.stories = deepVoidRng.int(4, 7);
       abyss.depth = abyss.stories * dropDepth;
     }
   }
@@ -559,6 +610,17 @@ const buildGridPit = (room: RoomRecord, rng: SeededRandom, lowerBounds: Rect): G
     minZ: quantize(minHoleZ - 0.72, 0.05),
     maxZ: quantize(maxHoleZ + 0.72, 0.05),
   };
+  const previewPadding = clamp(
+    Math.max(rectWidth(bounds), rectDepth(bounds)) * 0.2 + 3.2,
+    4.5,
+    8.5,
+  );
+  const previewBounds: Rect = {
+    minX: Math.max(lowerBounds.minX, bounds.minX - previewPadding),
+    maxX: Math.min(lowerBounds.maxX, bounds.maxX + previewPadding),
+    minZ: Math.max(lowerBounds.minZ, bounds.minZ - previewPadding),
+    maxZ: Math.min(lowerBounds.maxZ, bounds.maxZ + previewPadding),
+  };
   return {
     kind: 'grid-pit',
     id: `grid-pit-${room.id}`,
@@ -567,7 +629,7 @@ const buildGridPit = (room: RoomRecord, rng: SeededRandom, lowerBounds: Rect): G
     holes,
     depth: dropDepth,
     pattern,
-    lowerBounds: { ...lowerBounds },
+    lowerBounds: previewBounds,
     lowerFloorY: -5.4,
     lowerCeilingY: -2.66,
   };
@@ -894,7 +956,7 @@ const addSqueezeViews = (
   const rng = rootRng.fork('feature:squeeze-views');
   const candidates = rng.shuffle(
     world.rooms.filter((room) => {
-      if (reservedRoomIds.has(room.id) || room.kind === 'corridor' || room.kind === 'open-hall') return false;
+      if (reservedRoomIds.has(room.id) || room.kind === 'corridor') return false;
       const long = Math.max(rectWidth(room.bounds), rectDepth(room.bounds));
       const short = Math.min(rectWidth(room.bounds), rectDepth(room.bounds));
       return long >= 14 && short >= 7.5;
@@ -906,9 +968,12 @@ const addSqueezeViews = (
     const roomRng = rng.fork(room.id);
     const alongX = rectWidth(room.bounds) >= rectDepth(room.bounds);
     const longSpan = alongX ? rectWidth(room.bounds) : rectDepth(room.bounds);
-    const length = Math.min(longSpan - 4.2, roomRng.float(8.5, 18));
-    const corridorWidth = roomRng.float(2.15, 2.85);
-    const apertureWidth = roomRng.float(0.38, 0.48);
+    const monumental = room.kind === 'open-hall' || (longSpan >= 20 && roomRng.chance(0.34));
+    const length = monumental
+      ? Math.min(longSpan - 2.8, roomRng.float(16, 38))
+      : Math.min(longSpan - 4.2, roomRng.float(8.5, 18));
+    const corridorWidth = monumental ? roomRng.float(4.2, 7) : roomRng.float(2.15, 2.85);
+    const apertureWidth = monumental ? roomRng.float(1.35, 3.6) : roomRng.float(0.38, 0.48);
     const roomCenter = rectCenter(room.bounds);
     const crossOffset = roomRng.float(-0.45, 0.45);
     const bounds: Rect = alongX
@@ -998,39 +1063,6 @@ const addLowerWall = (
   addColliderForWall(world.colliders, wall, `collider-${wall.id}`);
 };
 
-const addLowerWallAroundGap = (
-  world: WorldPlan,
-  feature: GridPitFeature,
-  orientation: 'x' | 'z',
-  fixed: number,
-  spanMin: number,
-  spanMax: number,
-  gapCenter: number,
-  gapWidth: number,
-  thickness: number,
-): void => {
-  const before = gapCenter - gapWidth * 0.5 - spanMin;
-  const after = spanMax - (gapCenter + gapWidth * 0.5);
-  if (before > 0.3) {
-    addLowerWall(world, feature, {
-      x: orientation === 'x' ? spanMin + before * 0.5 : fixed,
-      z: orientation === 'z' ? spanMin + before * 0.5 : fixed,
-      length: before,
-      orientation,
-      thickness,
-    });
-  }
-  if (after > 0.3) {
-    addLowerWall(world, feature, {
-      x: orientation === 'x' ? gapCenter + gapWidth * 0.5 + after * 0.5 : fixed,
-      z: orientation === 'z' ? gapCenter + gapWidth * 0.5 + after * 0.5 : fixed,
-      length: after,
-      orientation,
-      thickness,
-    });
-  }
-};
-
 const addLowerLevel = (world: WorldPlan, feature: GridPitFeature, rootRng: SeededRandom): void => {
   const rng = rootRng.fork('lower-level');
   const bounds = feature.lowerBounds;
@@ -1041,116 +1073,10 @@ const addLowerLevel = (world: WorldPlan, feature: GridPitFeature, rootRng: Seede
   addLowerWall(world, feature, { x: bounds.minX, z: center.z, length: rectDepth(bounds), orientation: 'z', thickness: 0.42 });
   addLowerWall(world, feature, { x: bounds.maxX, z: center.z, length: rectDepth(bounds), orientation: 'z', thickness: 0.42 });
 
-  // A seeded connected cell graph replaces the old fixed cross. Every cell is
-  // reached by the spanning tree, while extra loops prevent frustrating dead
-  // ends and make each lower floor read as a continued Backrooms level.
-  const columns = rng.int(7, 10);
-  const rows = rng.int(6, 9);
-  const cellWidth = rectWidth(bounds) / columns;
-  const cellDepth = rectDepth(bounds) / rows;
-  const cellIndex = (x: number, z: number): number => z * columns + x;
-  const edgeKey = (a: number, b: number): string => (a < b ? `${a}:${b}` : `${b}:${a}`);
-  const openEdges = new Set<string>();
-  const visited = new Set<number>();
-  const startX = Math.max(0, Math.min(columns - 1, Math.floor((rectCenter(feature.bounds).x - bounds.minX) / cellWidth)));
-  const startZ = Math.max(0, Math.min(rows - 1, Math.floor((rectCenter(feature.bounds).z - bounds.minZ) / cellDepth)));
-  const stack = [cellIndex(startX, startZ)];
-  visited.add(stack[0]!);
-  while (stack.length > 0) {
-    const current = stack[stack.length - 1]!;
-    const x = current % columns;
-    const z = Math.floor(current / columns);
-    const neighbours = rng.shuffle([
-      x > 0 ? cellIndex(x - 1, z) : -1,
-      x < columns - 1 ? cellIndex(x + 1, z) : -1,
-      z > 0 ? cellIndex(x, z - 1) : -1,
-      z < rows - 1 ? cellIndex(x, z + 1) : -1,
-    ].filter((value) => value >= 0 && !visited.has(value)));
-    const next = neighbours[0];
-    if (next === undefined) {
-      stack.pop();
-      continue;
-    }
-    openEdges.add(edgeKey(current, next));
-    visited.add(next);
-    stack.push(next);
-  }
-  for (let z = 0; z < rows; z += 1) {
-    for (let x = 0; x < columns; x += 1) {
-      const current = cellIndex(x, z);
-      if (x < columns - 1 && rng.chance(0.42)) openEdges.add(edgeKey(current, cellIndex(x + 1, z)));
-      if (z < rows - 1 && rng.chance(0.42)) openEdges.add(edgeKey(current, cellIndex(x, z + 1)));
-    }
-  }
-
-  const thicknessFor = (): number => rng.weighted([
-    { value: 0.24, weight: 0.58 },
-    { value: 0.46, weight: 0.27 },
-    { value: 0.76, weight: 0.12 },
-    { value: 1.08, weight: 0.03 },
-  ]);
-  for (let boundaryX = 1; boundaryX < columns; boundaryX += 1) {
-    const fixedX = bounds.minX + boundaryX * cellWidth;
-    for (let z = 0; z < rows; z += 1) {
-      const spanMin = bounds.minZ + z * cellDepth;
-      const spanMax = spanMin + cellDepth;
-      if (
-        fixedX >= feature.bounds.minX - 0.8 &&
-        fixedX <= feature.bounds.maxX + 0.8 &&
-        spanMax >= feature.bounds.minZ - 0.8 &&
-        spanMin <= feature.bounds.maxZ + 0.8
-      ) continue;
-      const left = cellIndex(boundaryX - 1, z);
-      const right = cellIndex(boundaryX, z);
-      const thickness = thicknessFor();
-      if (openEdges.has(edgeKey(left, right))) {
-        addLowerWallAroundGap(
-          world,
-          feature,
-          'z',
-          fixedX,
-          spanMin,
-          spanMax,
-          rng.float(spanMin + cellDepth * 0.32, spanMax - cellDepth * 0.32),
-          rng.float(2.25, 3.45),
-          thickness,
-        );
-      } else {
-        addLowerWall(world, feature, { x: fixedX, z: (spanMin + spanMax) * 0.5, length: cellDepth, orientation: 'z', thickness });
-      }
-    }
-  }
-  for (let boundaryZ = 1; boundaryZ < rows; boundaryZ += 1) {
-    const fixedZ = bounds.minZ + boundaryZ * cellDepth;
-    for (let x = 0; x < columns; x += 1) {
-      const spanMin = bounds.minX + x * cellWidth;
-      const spanMax = spanMin + cellWidth;
-      if (
-        fixedZ >= feature.bounds.minZ - 0.8 &&
-        fixedZ <= feature.bounds.maxZ + 0.8 &&
-        spanMax >= feature.bounds.minX - 0.8 &&
-        spanMin <= feature.bounds.maxX + 0.8
-      ) continue;
-      const north = cellIndex(x, boundaryZ - 1);
-      const south = cellIndex(x, boundaryZ);
-      const thickness = thicknessFor();
-      if (openEdges.has(edgeKey(north, south))) {
-        addLowerWallAroundGap(
-          world,
-          feature,
-          'x',
-          fixedZ,
-          spanMin,
-          spanMax,
-          rng.float(spanMin + cellWidth * 0.32, spanMax - cellWidth * 0.32),
-          rng.float(2.25, 3.45),
-          thickness,
-        );
-      } else {
-        addLowerWall(world, feature, { x: (spanMin + spanMax) * 0.5, z: fixedZ, length: cellWidth, orientation: 'x', thickness });
-      }
-    }
-  }
+  // This geometry is only the glimpse visible from the story above. Keep it
+  // deliberately neutral: a lit landing shell, floor and shaft walls. The
+  // canonical maze for the destination seed replaces it at the midpoint, so
+  // omitting a second random maze prevents obvious walls from popping shape.
 
   const voidHoles = feature.holes.filter((hole) => hole.kind === 'void');
   for (const [index, floor] of floorCellsAroundHoles(bounds, voidHoles).entries()) {
@@ -1233,8 +1159,8 @@ const addLowerLevel = (world: WorldPlan, feature: GridPitFeature, rootRng: Seede
   }
 
   const lowerWalls = world.walls.filter((wall) => wall.bottom === feature.lowerFloorY);
-  const lightColumns = Math.max(4, Math.floor(rectWidth(bounds) / rng.float(5.8, 7.2)));
-  const lightRows = Math.max(4, Math.floor(rectDepth(bounds) / rng.float(5.8, 7.2)));
+  const lightColumns = Math.max(2, Math.floor(rectWidth(bounds) / rng.float(5.8, 7.2)));
+  const lightRows = Math.max(2, Math.floor(rectDepth(bounds) / rng.float(5.8, 7.2)));
   for (let xIndex = 0; xIndex < lightColumns; xIndex += 1) {
     for (let zIndex = 0; zIndex < lightRows; zIndex += 1) {
       const x = bounds.minX + ((xIndex + 0.5) / lightColumns) * rectWidth(bounds) + rng.float(-0.32, 0.32);
@@ -1591,7 +1517,7 @@ export const generateWorld = (seed: string): WorldPlan => {
   };
 
   const reservedRoomIds = new Set<string>([spawnRoom.id]);
-  const pitRoom = [...world.rooms]
+  const regularPitRooms = [...world.rooms]
     .filter(
       (room) =>
         room.id !== spawnRoom.id &&
@@ -1600,12 +1526,30 @@ export const generateWorld = (seed: string): WorldPlan => {
         rectDepth(room.bounds) >= 10.5 &&
         Math.hypot(rectCenter(room.bounds).x - world.spawn.x, rectCenter(room.bounds).z - world.spawn.z) > 16,
     )
+    .sort((a, b) => rectArea(b.bounds) - rectArea(a.bounds));
+  const monumentalPitRoom = [...world.rooms]
+    .filter(
+      (room) =>
+        room.id !== spawnRoom.id &&
+        room.kind === 'open-hall' &&
+        rectWidth(room.bounds) >= 20 &&
+        rectDepth(room.bounds) >= 20,
+    )
     .sort((a, b) => rectArea(b.bounds) - rectArea(a.bounds))[0];
+  const pitRoom = monumentalPitRoom && rootRng.fork('feature:grid-pit:scale').chance(0.18)
+    ? monumentalPitRoom
+    : regularPitRooms[0];
 
   let pit: GridPitFeature | undefined;
   if (pitRoom) {
-    pit = buildGridPit(pitRoom, rootRng.fork('feature:grid-pit'), worldBounds);
-    pitRoom.kind = 'pit-gallery';
+    const deepVoidRng = rootRng.fork('feature:grid-pit:void');
+    pit = buildGridPit(
+      pitRoom,
+      rootRng.fork('feature:grid-pit'),
+      worldBounds,
+      deepVoidRng.chance(0.055) ? deepVoidRng : undefined,
+    );
+    if (pitRoom.kind !== 'open-hall') pitRoom.kind = 'pit-gallery';
     reservedRoomIds.add(pitRoom.id);
     world.features.push(pit);
   }
@@ -1654,6 +1598,12 @@ export const generateWorld = (seed: string): WorldPlan => {
   populateVistaLights(world, vista, rootRng);
 
   const holes = pit?.holes ?? [];
+  world.floorOpenings = holes.map((hole) => ({
+    minX: hole.minX,
+    minZ: hole.minZ,
+    maxX: hole.maxX,
+    maxZ: hole.maxZ,
+  }));
   world.floorRects = floorCellsAroundHoles(worldBounds, holes);
   world.floorRects.forEach((floor, index) => {
     world.colliders.push({
