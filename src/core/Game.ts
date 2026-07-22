@@ -28,6 +28,7 @@ export interface DebugExperience {
   triangles: number;
   chunks: number;
   pendingChunks: number;
+  noclip: boolean;
 }
 
 declare global {
@@ -205,7 +206,7 @@ export class Game {
   }
 
   private tryInteract(): void {
-    if (!this.player || !this.worldStream || this.player.isTraversing) return;
+    if (!this.player || !this.worldStream || this.player.isTraversing || this.player.isNoclipEnabled) return;
     this.player.getViewDirection(this.lookDirection);
     const interaction = this.worldStream.getInteraction(this.player.position, this.lookDirection);
     if (!interaction) return;
@@ -242,6 +243,7 @@ export class Game {
     if (!trimmed.startsWith('/')) return null;
     const commandSuggestions = [
       { value: '/help', label: '/help', detail: 'AFFICHE LES COMMANDES DISPONIBLES' },
+      { value: '/noclip', label: '/noclip', detail: 'ACTIVE OU DESACTIVE LE VOL LIBRE' },
       { value: '/locate ', label: '/locate <cible>', detail: 'TÉLÉPORTE VERS UNE CIBLE CHARGÉE' },
     ];
     if (!trimmed.includes(' ')) {
@@ -294,8 +296,30 @@ export class Game {
         const feedback = 'SYNTAXE: /help';
         return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
       }
-      const feedback = '/locate <cible> — téléportation · C — chat local · H — commandes';
+      const feedback = '/locate <cible> - teleportation · /noclip [on|off] - vol libre · C - chat local · H - commandes';
       return { close: false, feedback, messages: [echo, { kind: 'system', text: feedback }] };
+    }
+    if (normalizedCommand === 'noclip') {
+      if (!this.player) {
+        const feedback = 'JOUEUR NON PRET';
+        return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
+      }
+      const mode = args[0]?.toLowerCase();
+      const enabled = args.length === 0 || mode === 'toggle'
+        ? this.player.toggleNoclip()
+        : ['on', '1', 'true', 'yes', 'oui'].includes(mode ?? '')
+          ? this.player.setNoclipEnabled(true)
+          : ['off', '0', 'false', 'no', 'non'].includes(mode ?? '')
+            ? this.player.setNoclipEnabled(false)
+            : null;
+      if (args.length > 1 || enabled === null) {
+        const feedback = 'SYNTAXE: /noclip [on|off]';
+        return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
+      }
+      const feedback = enabled
+        ? 'NOCLIP ACTIVE: ZQSD/WASD + ESPACE/CTRL, SHIFT POUR ALLER PLUS VITE'
+        : 'NOCLIP DESACTIVE';
+      return { close: true, feedback, messages: [echo, { kind: 'system', text: feedback }] };
     }
     if (normalizedCommand !== 'locate') {
       const feedback = command
@@ -404,7 +428,7 @@ export class Game {
 
     this.worldStream.update(this.elapsed, rawDelta, this.player.position);
     this.player.getViewDirection(this.lookDirection);
-    const interaction = this.player.isTraversing
+    const interaction = this.player.isTraversing || this.player.isNoclipEnabled
       ? null
       : this.worldStream.getInteraction(this.player.position, this.lookDirection);
     this.ui.setInteraction(this.player.isLocked ? interaction?.label ?? null : null);
@@ -470,6 +494,7 @@ export class Game {
       triangles: this.renderer.info.render.triangles,
       chunks: stream?.chunks ?? 1,
       pendingChunks: stream?.pendingChunks ?? 0,
+      noclip: this.player?.isNoclipEnabled ?? false,
     };
   }
 

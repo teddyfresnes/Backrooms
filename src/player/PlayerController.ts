@@ -23,7 +23,10 @@ interface TraversalState {
 }
 
 const FIXED_Z_AXIS = new THREE.Vector3(0, 0, 1);
+const FIXED_Y_AXIS = new THREE.Vector3(0, 1, 0);
 const MAX_UNBROKEN_FALL = 48;
+const NOCLIP_SPEED = 8.5;
+const NOCLIP_SPRINT_SPEED = 22;
 
 export class PlayerController {
   readonly controls: PointerLockControls;
@@ -59,6 +62,7 @@ export class PlayerController {
   private traversalProgress = 0;
   private previousTraversalProgress = 0;
   private landingKick = 0;
+  private noclipEnabled = false;
   private readonly baseFov: number;
 
   constructor(
@@ -93,6 +97,10 @@ export class PlayerController {
     return this.traversal !== undefined;
   }
 
+  get isNoclipEnabled(): boolean {
+    return this.noclipEnabled;
+  }
+
   lock(): void {
     this.controls.lock();
   }
@@ -106,6 +114,32 @@ export class PlayerController {
       this.crouching = false;
       this.targetStrafeLean = 0;
     }
+  }
+
+  setNoclipEnabled(enabled: boolean): boolean {
+    if (this.noclipEnabled === enabled) return this.noclipEnabled;
+    this.noclipEnabled = enabled;
+    this.traversal = undefined;
+    this.traversalProgress = 0;
+    this.previousTraversalProgress = 0;
+    this.velocity.set(0, 0, 0);
+    this.verticalVelocity = -0.5;
+    this.grounded = true;
+    this.moving = false;
+    this.sprinting = false;
+    this.crouching = false;
+    this.targetStrafeLean = 0;
+    this.lastSafePosition.copy(this.position);
+    this.physics.teleport(this.position);
+    this.physics.getPosition(this.position);
+    this.previousPosition.copy(this.position);
+    this.renderedPosition.copy(this.position);
+    this.renderUpdate(0, 1);
+    return this.noclipEnabled;
+  }
+
+  toggleNoclip(): boolean {
+    return this.setNoclipEnabled(!this.noclipEnabled);
   }
 
   getViewDirection(target = new THREE.Vector3()): THREE.Vector3 {
@@ -179,6 +213,12 @@ export class PlayerController {
       this.sprinting = false;
       this.crouching = false;
       this.targetStrafeLean = 0;
+      return;
+    }
+
+    if (this.noclipEnabled) {
+      this.input.consumePress('KeyE');
+      this.updateNoclip(delta);
       return;
     }
 
@@ -287,6 +327,40 @@ export class PlayerController {
       this.moving = false;
       this.callbacks.onFallReset();
     }
+  }
+
+  private updateNoclip(delta: number): void {
+    const axes = this.input.axes;
+    this.controls.getDirection(this.forward);
+    this.forward.normalize();
+    this.right.set(1, 0, 0).applyQuaternion(this.lookCamera.quaternion);
+    this.right.y = 0;
+    if (this.right.lengthSq() < 1e-6) this.right.set(1, 0, 0);
+    else this.right.normalize();
+
+    this.desired
+      .set(0, 0, 0)
+      .addScaledVector(this.forward, axes.forward)
+      .addScaledVector(this.right, axes.right)
+      .addScaledVector(FIXED_Y_AXIS, axes.vertical);
+
+    const moving = this.desired.lengthSq() > 1e-6;
+    if (moving) {
+      this.desired
+        .normalize()
+        .multiplyScalar((axes.sprint ? NOCLIP_SPRINT_SPEED : NOCLIP_SPEED) * delta);
+      this.position.add(this.desired);
+    }
+
+    this.physics.teleport(this.position);
+    this.physics.getPosition(this.position);
+    this.grounded = true;
+    this.verticalVelocity = -0.5;
+    this.lastSafePosition.copy(this.position);
+    this.moving = false;
+    this.sprinting = false;
+    this.crouching = false;
+    this.targetStrafeLean = 0;
   }
 
   renderUpdate(delta: number, interpolationAlpha: number): void {

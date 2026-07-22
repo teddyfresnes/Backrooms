@@ -31,9 +31,11 @@ npm run validate
 - `H` : ouvrir la console avec `/` déjà prêt
 - `↑` / `↓` : parcourir l'historique des messages et commandes
 - `/help` : afficher l'aide des commandes
+- `/noclip` : basculer le vol libre sans collision (`Espace` monte, `Ctrl` descend)
 - `/locate` puis `Tab` : afficher toutes les cibles chargées et compléter la sélection
 - `/locate dark-room` : rejoindre la pièce hors tension la plus proche
 - `/locate missing-lights` : rejoindre une salle où quelques panneaux ont disparu
+- `/locate hidden-hall` : rejoindre une entrée de hall caché quand elle est chargée
 - souris : regarder
 - `Échap` : libérer la souris / pause
 

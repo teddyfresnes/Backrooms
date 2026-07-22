@@ -1,6 +1,7 @@
 export interface MoveAxes {
   forward: number;
   right: number;
+  vertical: number;
   sprint: boolean;
   crouch: boolean;
 }
@@ -18,15 +19,18 @@ export class InputManager {
 
   get axes(): MoveAxes {
     if (!this.enabled) {
-      return { forward: 0, right: 0, sprint: false, crouch: false };
+      return { forward: 0, right: 0, vertical: 0, sprint: false, crouch: false };
     }
     const forward = Number(this.has('KeyW', 'KeyZ', 'ArrowUp')) - Number(this.has('KeyS', 'ArrowDown'));
     const right = Number(this.has('KeyD', 'ArrowRight')) - Number(this.has('KeyA', 'KeyQ', 'ArrowLeft'));
+    const crouch = this.has('ControlLeft', 'ControlRight');
+    const vertical = Number(this.has('Space', 'PageUp')) - Number(crouch || this.has('PageDown'));
     return {
       forward,
       right,
+      vertical,
       sprint: this.has('ShiftLeft', 'ShiftRight'),
-      crouch: this.has('ControlLeft', 'ControlRight'),
+      crouch,
     };
   }
 

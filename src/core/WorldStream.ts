@@ -481,6 +481,9 @@ export class WorldStream {
         } else if (feature.kind === 'squeeze-view') {
           const center = rectCenter(feature.bounds);
           const narrow = feature.apertureWidth < 0.8;
+          const entrance = feature.axis === 'x'
+            ? { x: feature.bounds.minX - 1.05, y: 0.865, z: center.z }
+            : { x: center.x, y: 0.865, z: feature.bounds.minZ - 1.05 };
           addTarget(
             runtime,
             narrow ? 'squeeze' : 'breach',
@@ -488,9 +491,24 @@ export class WorldStream {
             narrow
               ? ['squeeze', 'crawl', 'faufiler', 'trou-mur', 'passage-etroit', 'petite-breche']
               : ['breche', 'breach', 'fissure', 'grand-couloir', 'trou-mural'],
-            feature.axis === 'x'
-              ? { x: feature.bounds.minX - 1.05, y: 0.865, z: center.z }
-              : { x: center.x, y: 0.865, z: feature.bounds.minZ - 1.05 },
+            entrance,
+          );
+          addTarget(
+            runtime,
+            'hidden-hall',
+            narrow ? 'petit trou vers hall cache' : 'breche vers hall cache',
+            [
+              'hidden-hall',
+              'crawl-hall',
+              'giant-room',
+              'small-hole',
+              'grosse-salle',
+              'grande-salle',
+              'salle-cachee',
+              'petit-trou',
+              'trou-e',
+            ],
+            entrance,
           );
         } else if (feature.kind === 'stair-socket') {
           const center = rectCenter(feature.bounds);
@@ -506,7 +524,18 @@ export class WorldStream {
             runtime,
             'vista',
             'hall impossible',
-            ['vista', 'grand-hall', 'hall-geant', 'petite-entree'],
+            [
+              'vista',
+              'grand-hall',
+              'hall-geant',
+              'petite-entree',
+              'giant-room',
+              'grosse-salle',
+              'grande-salle',
+              'small-hole',
+              'petit-trou',
+              'trou-e',
+            ],
             feature.destination,
           );
         }
