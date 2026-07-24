@@ -10,6 +10,7 @@ import {
   ensureBakedLightUv,
 } from './BakedLighting';
 import type { BakedLightMapData, BakedLightMaps } from './BakedLighting';
+import { createGraffitiMesh, selectWallGraffiti } from './WallGraffiti';
 import type {
   GridPitFeature,
   LightSlot,
@@ -516,6 +517,8 @@ export class WorldView {
   private readonly materials: MaterialSet;
   private readonly bakedLightMaps: BakedLightMaps;
   private readonly ownedMaterials: THREE.MeshStandardMaterial[];
+  private readonly graffitiTextures: THREE.CanvasTexture[] = [];
+  private readonly graffitiMaterials: THREE.MeshBasicMaterial[] = [];
   private readonly surfaceStyle: SurfaceStyle;
 
   constructor(
@@ -574,6 +577,7 @@ export class WorldView {
     this.ownedMaterials.push(...Object.values(this.previewMaterials));
     this.fixtureSlots = plan.lights;
     this.buildArchitecture();
+    this.buildWallGraffiti();
     this.buildRaisedZones();
     this.buildLowPassages();
     this.emitterMesh = this.buildFixtures();
@@ -582,6 +586,21 @@ export class WorldView {
     this.buildCeilingDamage();
     this.buildImpossibleVista();
     void options;
+  }
+
+  private buildWallGraffiti(): void {
+    const placements = selectWallGraffiti(this.plan);
+    if (placements.length === 0 || typeof document === 'undefined') return;
+    const group = new THREE.Group();
+    group.name = 'procedural-handwritten-wall-graffiti';
+    for (const placement of placements) {
+      const created = createGraffitiMesh(placement);
+      if (!created) continue;
+      group.add(created.mesh);
+      this.graffitiTextures.push(created.texture);
+      this.graffitiMaterials.push(created.mesh.material);
+    }
+    if (group.children.length > 0) this.group.add(group);
   }
 
   private buildArchitecture(): void {
@@ -1634,6 +1653,8 @@ export class WorldView {
       if (object instanceof THREE.Mesh || object instanceof THREE.InstancedMesh) object.geometry.dispose();
     });
     this.ownedMaterials.forEach((material) => material.dispose());
+    this.graffitiMaterials.forEach((material) => material.dispose());
+    this.graffitiTextures.forEach((texture) => texture.dispose());
     this.bakedLightMaps.general.dispose();
     this.bakedLightMaps.ceiling.dispose();
     this.group.removeFromParent();
