@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { VisualBiome } from '../world/types';
 
 export interface MaterialSet {
   wall: THREE.MeshStandardMaterial;
@@ -14,6 +15,8 @@ export interface MaterialSet {
   void: THREE.MeshBasicMaterial;
 }
 
+export type BiomeMaterialSets = Record<VisualBiome, MaterialSet>;
+
 const configureTexture = (
   texture: THREE.Texture,
   anisotropy: number,
@@ -27,7 +30,15 @@ const configureTexture = (
 };
 
 export class MaterialLibrary {
-  private constructor(readonly materials: MaterialSet, readonly textures: THREE.Texture[]) {}
+  private constructor(
+    readonly materialSets: BiomeMaterialSets,
+    readonly textures: THREE.Texture[],
+  ) {}
+
+  /** Compatibility alias for code that explicitly needs the original palette. */
+  get materials(): MaterialSet {
+    return this.materialSets.yellow;
+  }
 
   static async load(
     renderer: THREE.WebGLRenderer,
@@ -50,6 +61,12 @@ export class MaterialLibrary {
       ceilingColor: `${base}/ceiling/ceiling-color.webp`,
       ceilingNormal: `${base}/ceiling/ceiling-normal-gl.webp`,
       ceilingArm: `${base}/ceiling/ceiling-arm.webp`,
+      whiteWallColor: `${base}/white-biome/wall/white-wall-color.jpg`,
+      whiteWallNormal: `${base}/white-biome/wall/white-wall-normal-gl.jpg`,
+      whiteWallRoughness: `${base}/white-biome/wall/white-wall-roughness.jpg`,
+      whiteFloorColor: `${base}/white-biome/floor/white-carpet-color.jpg`,
+      whiteFloorNormal: `${base}/white-biome/floor/white-carpet-normal-gl.jpg`,
+      whiteFloorRoughness: `${base}/white-biome/floor/white-carpet-roughness.jpg`,
     };
 
     const [
@@ -63,6 +80,12 @@ export class MaterialLibrary {
       ceilingColor,
       ceilingNormal,
       ceilingArm,
+      whiteWallColor,
+      whiteWallNormal,
+      whiteWallRoughness,
+      whiteFloorColor,
+      whiteFloorNormal,
+      whiteFloorRoughness,
     ] = await Promise.all(
       Object.entries(paths).map(async ([key, path]) =>
         configureTexture(
@@ -194,19 +217,104 @@ export class MaterialLibrary {
     });
     const voidMaterial = new THREE.MeshBasicMaterial({ color: 0x020201, toneMapped: false });
 
+    const yellowMaterials: MaterialSet = {
+      wall,
+      plaster,
+      floor,
+      ceiling,
+      baseboard,
+      pitWall,
+      pitBottom,
+      metal,
+      fixtureFrame,
+      fixtureGlow,
+      void: voidMaterial,
+    };
+
+    const redFixtureFrame = fixtureFrame.clone();
+    redFixtureFrame.name = 'red-biome-fluorescent-frame';
+    redFixtureFrame.color.setHex(0x8f554c);
+    const redFixtureGlow = fixtureGlow.clone();
+    redFixtureGlow.name = 'red-biome-fluorescent-diffuser';
+    redFixtureGlow.color.setHex(0xff1a0d);
+    const redMaterials: MaterialSet = {
+      ...yellowMaterials,
+      fixtureFrame: redFixtureFrame,
+      fixtureGlow: redFixtureGlow,
+    };
+
+    const whiteWall = new THREE.MeshStandardMaterial({
+      name: 'white-biome-painted-wall',
+      map: whiteWallColor,
+      normalMap: whiteWallNormal,
+      roughnessMap: whiteWallRoughness,
+      color: 0xf4f5f2,
+      emissive: 0x3b4142,
+      emissiveIntensity: 0.025,
+      normalScale: new THREE.Vector2(0.34, 0.34),
+      roughness: 0.96,
+      metalness: 0,
+      vertexColors: true,
+      dithering: true,
+    });
+    const whitePlaster = whiteWall.clone();
+    whitePlaster.name = 'white-biome-rough-plaster';
+    whitePlaster.color.setHex(0xe8ebea);
+    whitePlaster.normalScale.set(0.5, 0.5);
+    const whiteFloor = new THREE.MeshStandardMaterial({
+      name: 'white-biome-grey-carpet',
+      map: whiteFloorColor,
+      normalMap: whiteFloorNormal,
+      roughnessMap: whiteFloorRoughness,
+      color: 0xe5e8e7,
+      emissive: 0x303637,
+      emissiveIntensity: 0.022,
+      normalScale: new THREE.Vector2(0.42, 0.42),
+      roughness: 0.98,
+      metalness: 0,
+      dithering: true,
+    });
+    const whiteCeiling = ceiling.clone();
+    whiteCeiling.name = 'white-biome-drop-ceiling';
+    whiteCeiling.color.setHex(0xf1f3ef);
+    whiteCeiling.emissive.setHex(0x404748);
+    whiteCeiling.emissiveIntensity = 0.025;
+    const whiteBaseboard = baseboard.clone();
+    whiteBaseboard.name = 'white-biome-baseboard';
+    whiteBaseboard.color.setHex(0xc8ccca);
+    whiteBaseboard.emissive.setHex(0x303536);
+    const whitePitWall = whiteWall.clone();
+    whitePitWall.name = 'white-biome-pit-wall';
+    whitePitWall.color.setHex(0xbfc5c3);
+    whitePitWall.vertexColors = false;
+    const whiteMetal = metal.clone();
+    whiteMetal.name = 'white-biome-metal-trim';
+    whiteMetal.color.setHex(0x737b7c);
+    const whiteFixtureFrame = fixtureFrame.clone();
+    whiteFixtureFrame.name = 'white-biome-fluorescent-frame';
+    whiteFixtureFrame.color.setHex(0xe5e9e7);
+    const whiteFixtureGlow = fixtureGlow.clone();
+    whiteFixtureGlow.name = 'white-biome-fluorescent-diffuser';
+    whiteFixtureGlow.color.setHex(0xf5fbff);
+    const whiteMaterials: MaterialSet = {
+      wall: whiteWall,
+      plaster: whitePlaster,
+      floor: whiteFloor,
+      ceiling: whiteCeiling,
+      baseboard: whiteBaseboard,
+      pitWall: whitePitWall,
+      pitBottom,
+      metal: whiteMetal,
+      fixtureFrame: whiteFixtureFrame,
+      fixtureGlow: whiteFixtureGlow,
+      void: voidMaterial,
+    };
+
     return new MaterialLibrary(
       {
-        wall,
-        plaster,
-        floor,
-        ceiling,
-        baseboard,
-        pitWall,
-        pitBottom,
-        metal,
-        fixtureFrame,
-        fixtureGlow,
-        void: voidMaterial,
+        yellow: yellowMaterials,
+        red: redMaterials,
+        white: whiteMaterials,
       },
       [
         wallpaper,
@@ -219,12 +327,22 @@ export class MaterialLibrary {
         ceilingColor,
         ceilingNormal,
         ceilingArm,
+        whiteWallColor,
+        whiteWallNormal,
+        whiteWallRoughness,
+        whiteFloorColor,
+        whiteFloorNormal,
+        whiteFloorRoughness,
       ],
     );
   }
 
   dispose(): void {
     this.textures.forEach((texture) => texture.dispose());
-    Object.values(this.materials).forEach((material) => material.dispose());
+    const materials = new Set<THREE.Material>();
+    for (const materialSet of Object.values(this.materialSets)) {
+      Object.values(materialSet).forEach((material) => materials.add(material));
+    }
+    materials.forEach((material) => material.dispose());
   }
 }

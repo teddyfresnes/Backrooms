@@ -10,7 +10,7 @@ import type { ConsoleCompletion, ConsoleMode, ConsoleSubmitResult } from '../ui/
 import { createReadableSeed } from '../world/SeededRandom';
 import { fingerprintWorld, validateWorldPlan } from '../world/generateWorld';
 import { generateInfiniteChunk } from '../world/InfiniteWorld';
-import type { WorldPlan } from '../world/types';
+import type { VisualBiome, WorldPlan } from '../world/types';
 import { WorldStream } from './WorldStream';
 import type { LocateTarget } from './WorldStream';
 
@@ -51,6 +51,40 @@ const resolveSeed = (): string => {
   return createReadableSeed();
 };
 
+const ATMOSPHERE: Record<VisualBiome, {
+  background: number;
+  fog: number;
+  hemisphereSky: number;
+  hemisphereGround: number;
+  ambient: number;
+  directional: number;
+}> = {
+  yellow: {
+    background: 0x45452d,
+    fog: 0x77754b,
+    hemisphereSky: 0xfff7d8,
+    hemisphereGround: 0x282619,
+    ambient: 0xfff0c4,
+    directional: 0xfff5d8,
+  },
+  red: {
+    background: 0x270503,
+    fog: 0x5c0906,
+    hemisphereSky: 0xff2114,
+    hemisphereGround: 0x190201,
+    ambient: 0xff160d,
+    directional: 0xff301d,
+  },
+  white: {
+    background: 0x62696a,
+    fog: 0xaeb6b6,
+    hemisphereSky: 0xf7fbff,
+    hemisphereGround: 0x303738,
+    ambient: 0xeaf3ff,
+    directional: 0xf5fbff,
+  },
+};
+
 export class Game {
   readonly plan: WorldPlan;
   private readonly seed: string;
@@ -58,6 +92,19 @@ export class Game {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(72, 1, 0.04, 150);
+  private readonly backgroundColor = new THREE.Color(ATMOSPHERE.yellow.background);
+  private readonly fog = new THREE.FogExp2(ATMOSPHERE.yellow.fog, 0.0042);
+  private readonly hemisphere = new THREE.HemisphereLight(
+    ATMOSPHERE.yellow.hemisphereSky,
+    ATMOSPHERE.yellow.hemisphereGround,
+    0.17,
+  );
+  private readonly ambientFill = new THREE.AmbientLight(ATMOSPHERE.yellow.ambient, 0.018);
+  private readonly directionalFill = new THREE.DirectionalLight(
+    ATMOSPHERE.yellow.directional,
+    0.07,
+  );
+  private readonly atmosphereTargetColor = new THREE.Color();
   private readonly ui: ExperienceUI;
   private readonly audio = new AudioSystem();
   private readonly lookDirection = new THREE.Vector3();
@@ -140,7 +187,7 @@ export class Game {
       this.seed,
       this.plan,
       this.scene,
-      this.materials.materials,
+      this.materials.materialSets,
       this.physics,
     );
     await this.worldStream.initialize();
@@ -175,20 +222,35 @@ export class Game {
   }
 
   private configureScene(): void {
-    this.scene.background = new THREE.Color(0x45452d);
-    this.scene.fog = new THREE.FogExp2(0x77754b, 0.0042);
+    this.scene.background = this.backgroundColor;
+    this.scene.fog = this.fog;
     // Only the low-frequency bounced light is global. Direct fluorescent
     // pools are baked per chunk so they remain spatially stable and cheap.
-    const hemisphere = new THREE.HemisphereLight(0xfff7d8, 0x282619, 0.17);
-    hemisphere.name = 'liminal-ambient-field';
-    this.scene.add(hemisphere);
-    const fill = new THREE.AmbientLight(0xfff0c4, 0.018);
-    fill.name = 'indirect-carpet-bounce';
-    this.scene.add(fill);
-    const directional = new THREE.DirectionalLight(0xfff5d8, 0.07);
-    directional.name = 'fluorescent-directional-fill';
-    directional.position.set(3.5, 8, 2.5);
-    this.scene.add(directional);
+    this.hemisphere.name = 'liminal-ambient-field';
+    this.scene.add(this.hemisphere);
+    this.ambientFill.name = 'indirect-carpet-bounce';
+    this.scene.add(this.ambientFill);
+    this.directionalFill.name = 'fluorescent-directional-fill';
+    this.directionalFill.position.set(3.5, 8, 2.5);
+    this.scene.add(this.directionalFill);
+  }
+
+  private updateAtmosphere(delta: number): void {
+    if (!this.worldStream || !this.player) return;
+    const target = ATMOSPHERE[this.worldStream.getVisualBiome(this.player.position)];
+    const blend = 1 - Math.exp(-Math.max(0, delta) * 2.8);
+    this.backgroundColor.lerp(this.atmosphereTargetColor.setHex(target.background), blend);
+    this.fog.color.lerp(this.atmosphereTargetColor.setHex(target.fog), blend);
+    this.hemisphere.color.lerp(this.atmosphereTargetColor.setHex(target.hemisphereSky), blend);
+    this.hemisphere.groundColor.lerp(
+      this.atmosphereTargetColor.setHex(target.hemisphereGround),
+      blend,
+    );
+    this.ambientFill.color.lerp(this.atmosphereTargetColor.setHex(target.ambient), blend);
+    this.directionalFill.color.lerp(
+      this.atmosphereTargetColor.setHex(target.directional),
+      blend,
+    );
   }
 
   private async warmupPostFX(): Promise<void> {
@@ -427,6 +489,7 @@ export class Game {
     this.player.renderUpdate(rawDelta, this.accumulator / fixedDelta);
 
     this.worldStream.update(this.elapsed, rawDelta, this.player.position);
+    this.updateAtmosphere(rawDelta);
     this.player.getViewDirection(this.lookDirection);
     const interaction = this.player.isTraversing || this.player.isNoclipEnabled
       ? null

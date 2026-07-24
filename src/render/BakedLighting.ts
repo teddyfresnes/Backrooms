@@ -10,6 +10,8 @@ const LIGHTMAP_UV_CHANNEL = 1;
 const NEIGHBOUR_LIGHT_REACH = 12.5;
 const LIGHT_RADIUS = 12.5;
 const INDIRECT_LIGHT = [0.012, 0.011, 0.006] as const;
+const BRIGHT_ROOM_BOUNCE = [0.052, 0.049, 0.029] as const;
+const UNLIT_ROOM_BOUNCE = [0.0035, 0.003, 0.0015] as const;
 const EMITTER_SAMPLE_PATTERN = [
   [0, 0],
   [-0.82, -0.72],
@@ -61,6 +63,15 @@ export const bakedOccluderReachesCeiling = (
   height: number,
   ceilingY: number,
 ): boolean => bottom <= ceilingY + 0.02 && bottom + height >= ceilingY - 0.04;
+
+export const bakedOccluderIntersectsLitStory = (
+  bottom: number,
+  height: number,
+  ceilingY: number,
+): boolean =>
+  bottom >= -1 &&
+  bottom < ceilingY - 0.05 &&
+  height > 1.2;
 
 const rectsIntersect = (left: Rect, right: Rect, padding = 0): boolean =>
   left.minX - padding <= right.maxX &&
@@ -132,7 +143,9 @@ const segmentHitsRect = (
 
 const worldOccluders = (plan: WorldPlan): BakedOccluder[] => [
   ...plan.walls
-    .filter((wall) => wall.bottom >= -1 && wall.height > 1.2)
+    .filter((wall) =>
+      bakedOccluderIntersectsLitStory(wall.bottom, wall.height, plan.wallHeight)
+    )
     .map((wall) => {
       const halfLength = wall.length * 0.5;
       const halfThickness = wall.thickness * 0.5;
@@ -284,6 +297,7 @@ export const bakeLightMapData = (plan: WorldPlan): BakedLightMapData => {
     bakedOccluderReachesCeiling(occluder.bottom, occluder.top - occluder.bottom, plan.wallHeight),
   );
   const activeUpperLights = plan.lights.filter((light) => !light.dead && light.level >= 0);
+  const unlitZones = plan.unlitZones ?? [];
   for (const room of plan.rooms) {
     if (room.level < 0) continue;
     const directLights = activeUpperLights.filter((light) => light.roomId === room.id);
@@ -320,7 +334,8 @@ export const bakeLightMapData = (plan: WorldPlan): BakedLightMapData => {
           ),
         };
       });
-    if (lights.length === 0) continue;
+    const roomTouchesUnlitZone = unlitZones.some((zone) => rectsIntersect(room.bounds, zone));
+    if (lights.length === 0 && !roomTouchesUnlitZone) continue;
     const minX = Math.max(0, Math.floor((room.bounds.minX + half) * scale));
     const maxX = Math.min(LIGHTMAP_RESOLUTION - 1, Math.ceil((room.bounds.maxX + half) * scale) - 1);
     const minY = Math.max(0, Math.floor(LIGHTMAP_RESOLUTION - (room.bounds.maxZ + half) * scale));
@@ -330,12 +345,27 @@ export const bakeLightMapData = (plan: WorldPlan): BakedLightMapData => {
       for (let x = minX; x <= maxX; x += 1) {
         const worldX = -half + (x + 0.5) / scale;
         const pixel = (y * LIGHTMAP_RESOLUTION + x) * 3;
-        let roomRed = INDIRECT_LIGHT[0];
-        let roomGreen = INDIRECT_LIGHT[1];
-        let roomBlue = INDIRECT_LIGHT[2];
-        let ceilingRed = INDIRECT_LIGHT[0];
-        let ceilingGreen = INDIRECT_LIGHT[1];
-        let ceilingBlue = INDIRECT_LIGHT[2];
+        if (unlitZones.some((zone) =>
+          worldX >= zone.minX &&
+          worldX <= zone.maxX &&
+          worldZ >= zone.minZ &&
+          worldZ <= zone.maxZ
+        )) {
+          pixels[pixel] = UNLIT_ROOM_BOUNCE[0];
+          pixels[pixel + 1] = UNLIT_ROOM_BOUNCE[1];
+          pixels[pixel + 2] = UNLIT_ROOM_BOUNCE[2];
+          ceilingPixels[pixel] = UNLIT_ROOM_BOUNCE[0];
+          ceilingPixels[pixel + 1] = UNLIT_ROOM_BOUNCE[1];
+          ceilingPixels[pixel + 2] = UNLIT_ROOM_BOUNCE[2];
+          continue;
+        }
+        const baseBounce = directLights.length > 0 ? BRIGHT_ROOM_BOUNCE : INDIRECT_LIGHT;
+        let roomRed = baseBounce[0];
+        let roomGreen = baseBounce[1];
+        let roomBlue = baseBounce[2];
+        let ceilingRed = baseBounce[0];
+        let ceilingGreen = baseBounce[1];
+        let ceilingBlue = baseBounce[2];
         for (const light of lights) {
           const distance = Math.hypot(worldX - light.x, worldZ - light.z);
           if (distance >= LIGHT_RADIUS) continue;
@@ -349,10 +379,10 @@ export const bakeLightMapData = (plan: WorldPlan): BakedLightMapData => {
           );
           const visibleEnergy = light.crossRoom
             ? visibility.general
-            : 0.08 + visibility.general * 0.92;
+            : 0.3 + visibility.general * 0.7;
           const ceilingVisibleEnergy = light.crossRoom
             ? visibility.ceiling
-            : 0.08 + visibility.ceiling * 0.92;
+            : 0.26 + visibility.ceiling * 0.74;
           const roomContribution = light.crossRoom
             ? bakedCrossRoomTransmission(light.x, light.z, worldX, worldZ, room.bounds)
             : 1;
@@ -461,13 +491,13 @@ export const createBakedMaterialSet = (
   lightMaps: BakedLightMaps,
   worldSize: number,
 ): BakedMaterialSet => {
-  const wall = withLightMap(source.wall, lightMaps.general, worldSize, 0.9, 0.7, 0.48);
-  const plaster = withLightMap(source.plaster, lightMaps.general, worldSize, 0.82, 0.7, 0.48);
+  const wall = withLightMap(source.wall, lightMaps.general, worldSize, 0.9, 0.82, 0.48);
+  const plaster = withLightMap(source.plaster, lightMaps.general, worldSize, 0.82, 0.82, 0.48);
   // The carpet receives less direct energy than vertical surfaces. This keeps
   // it visibly light without bringing back the old glowing-floor look.
-  const floor = withLightMap(source.floor, lightMaps.general, worldSize, 0.7, 0.68);
-  const ceiling = withLightMap(source.ceiling, lightMaps.ceiling, worldSize, 0.78, 0.72);
-  const baseboard = withLightMap(source.baseboard, lightMaps.general, worldSize, 0.68, 0.66, 0.32);
+  const floor = withLightMap(source.floor, lightMaps.general, worldSize, 0.7, 0.78);
+  const ceiling = withLightMap(source.ceiling, lightMaps.ceiling, worldSize, 0.78, 0.8);
+  const baseboard = withLightMap(source.baseboard, lightMaps.general, worldSize, 0.68, 0.76, 0.32);
   const pitWall = withLightMap(source.pitWall, lightMaps.general, worldSize, 0.48, 0.66, 0.42);
   const pitBottom = withLightMap(source.pitBottom, lightMaps.general, worldSize, 0.12, 0.64);
   const metal = withLightMap(source.metal, lightMaps.general, worldSize, 0.38, 0.64);

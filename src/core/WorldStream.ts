@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
-import type { MaterialSet } from '../render/MaterialLibrary';
+import type { BiomeMaterialSets } from '../render/MaterialLibrary';
 import { bakeLightMapData } from '../render/BakedLighting';
 import type { BakedLightMapData } from '../render/BakedLighting';
 import { WorldView } from '../render/WorldBuilder';
@@ -18,8 +18,15 @@ import type {
   ChunkCoord,
   ChunkKey,
 } from '../world/InfiniteWorld';
-import type { Rect, RoomKind, Vec3Data, WorldPlan } from '../world/types';
-import { rectArea, rectCenter, rectDepth, rectWidth } from '../world/types';
+import type {
+  RaisedZoneFeature,
+  Rect,
+  RoomKind,
+  Vec3Data,
+  VisualBiome,
+  WorldPlan,
+} from '../world/types';
+import { pointInRect, rectArea, rectCenter, rectDepth, rectWidth } from '../world/types';
 
 const ACTIVE_RADIUS = 1;
 const HALF_CHUNK_SIZE = INFINITE_CHUNK_SIZE * 0.5;
@@ -177,7 +184,7 @@ export class WorldStream {
     private readonly seed: string,
     private readonly originPlan: WorldPlan,
     private readonly scene: THREE.Scene,
-    private readonly materials: MaterialSet,
+    private readonly materials: BiomeMaterialSets,
     private readonly physics: PhysicsWorld,
   ) {
     if (typeof Worker !== 'undefined') {
@@ -321,7 +328,7 @@ export class WorldStream {
     }
     this.pendingChunks = missing.length + (this.pendingStoryKey ? 1 : 0);
     // Prepare the ordinary destination as soon as the current neighbourhood
-    // is stable. Near a known deep void, queue its complete vertical chain in
+    // is stable. Near a known multi-storey shaft, queue its complete vertical chain in
     // advance so consecutive midpoints never wait behind horizontal jobs.
     const localStoryY = playerPosition.y - this.centerCoord.story * INFINITE_STORY_PITCH;
     if (this.worker && missing.length === 0 && localStoryY < 1.1) {
@@ -336,17 +343,28 @@ export class WorldStream {
       const localX = playerPosition.x - activeRuntime.offset.x;
       const localZ = playerPosition.z - activeRuntime.offset.z;
       for (const feature of activeRuntime.plan.features) {
-        if (feature.kind !== 'grid-pit') continue;
-        for (const hole of feature.holes) {
-          if (distanceToRect(localX, localZ, hole) > 16) continue;
-          const stories = Math.max(1, hole.stories ?? 1);
-          for (let distance = 1; distance <= stories; distance += 1) {
-            this.enqueueVerticalPrefetch({
-              x: activeRuntime.coord.x,
-              z: activeRuntime.coord.z,
-              story: activeRuntime.coord.story - distance,
-            });
+        if (feature.kind === 'grid-pit') {
+          for (const hole of feature.holes) {
+            if (distanceToRect(localX, localZ, hole) > 16) continue;
+            const stories = Math.max(1, hole.stories ?? 1);
+            for (let distance = 1; distance <= stories; distance += 1) {
+              this.enqueueVerticalPrefetch({
+                x: activeRuntime.coord.x,
+                z: activeRuntime.coord.z,
+                story: activeRuntime.coord.story - distance,
+              });
+            }
           }
+        } else if (
+          feature.kind === 'stair-socket' &&
+          !feature.inherited &&
+          distanceToRect(localX, localZ, feature.bounds) <= 18
+        ) {
+          this.enqueueVerticalPrefetch({
+            x: activeRuntime.coord.x,
+            z: activeRuntime.coord.z,
+            story: activeRuntime.coord.story + 1,
+          });
         }
       }
     }
@@ -407,6 +425,10 @@ export class WorldStream {
     );
   }
 
+  getVisualBiome(playerPosition: THREE.Vector3): VisualBiome {
+    return this.runtimeAt(playerPosition)?.plan.visualBiome ?? 'yellow';
+  }
+
   getLocateTargets(playerPosition: THREE.Vector3): LocateTarget[] {
     if (!this.initialized || this.disposed) return [];
     const bestByCommand = new Map<string, LocateTarget>();
@@ -457,10 +479,13 @@ export class WorldStream {
           }
           for (const hole of feature.holes) {
             const command = hole.kind === 'void' ? 'void' : 'hole';
+            const stories = Math.max(1, hole.stories ?? 1);
             addTarget(
               runtime,
               command,
-              hole.kind === 'void' ? 'trou profond mortel' : 'trou simple',
+              hole.kind === 'void'
+                ? 'trou profond mortel'
+                : `puits de ${stories} etage${stories > 1 ? 's' : ''}`,
               hole.kind === 'void'
                 ? ['void', 'abyss', 'abysse', 'deep-hole', 'trou-profond']
                 : ['hole', 'holes', 'trou', 'trous', 'pit'],
@@ -470,33 +495,47 @@ export class WorldStream {
           const drop = feature.holes.find((hole) => hole.kind !== 'void');
           if (drop) {
             const center = rectCenter(drop);
+            const stories = Math.max(1, drop.stories ?? 1);
             addTarget(
               runtime,
               'lower-maze',
-              'sous-niveau infini',
+              `palier inferieur (${stories} etage${stories > 1 ? 's' : ''})`,
               ['lower', 'lower-maze', 'bas', 'sous-niveau', 'niveau-bas'],
-              { x: center.x, y: feature.lowerFloorY + 0.865, z: center.z },
+              {
+                x: center.x,
+                y: feature.lowerFloorY - (stories - 1) * INFINITE_STORY_PITCH + 0.865,
+                z: center.z,
+              },
             );
           }
         } else if (feature.kind === 'squeeze-view') {
           const center = rectCenter(feature.bounds);
-          const narrow = feature.apertureWidth < 0.8;
+          const crouchOnly = (feature.clearanceHeight ?? this.originPlan.wallHeight) < 1.6;
           const entrance = feature.axis === 'x'
             ? { x: feature.bounds.minX - 1.05, y: 0.865, z: center.z }
             : { x: center.x, y: 0.865, z: feature.bounds.minZ - 1.05 };
           addTarget(
             runtime,
-            narrow ? 'squeeze' : 'breach',
-            narrow ? 'trou mural ou se faufiler' : 'breche monumentale et grand couloir',
-            narrow
-              ? ['squeeze', 'crawl', 'faufiler', 'trou-mur', 'passage-etroit', 'petite-breche']
+            crouchOnly ? 'crawl-passage' : 'breach',
+            crouchOnly
+              ? `passage bas ${feature.layout ?? 'through'}`
+              : 'breche monumentale et grand couloir',
+            crouchOnly
+              ? [
+                  'crawl',
+                  'crawl-passage',
+                  'accroupi',
+                  'faufiler',
+                  'passage-bas',
+                  'passage-etroit',
+                ]
               : ['breche', 'breach', 'fissure', 'grand-couloir', 'trou-mural'],
             entrance,
           );
           addTarget(
             runtime,
             'hidden-hall',
-            narrow ? 'petit trou vers hall cache' : 'breche vers hall cache',
+            crouchOnly ? 'passage bas vers reseau cache' : 'breche vers hall cache',
             [
               'hidden-hall',
               'crawl-hall',
@@ -556,7 +595,17 @@ export class WorldStream {
           .filter((floor): floor is Rect => floor !== null)
           .sort((left, right) => rectArea(right) - rectArea(left))[0];
         const safeCenter = safeFloor ? rectCenter(safeFloor) : center;
-        const safePosition = { x: safeCenter.x, y: 0.865, z: safeCenter.z };
+        const raisedZone = runtime.plan.features.find(
+          (feature): feature is RaisedZoneFeature =>
+            feature.kind === 'raised-zone' &&
+            feature.roomId === room.id &&
+            pointInRect(safeCenter.x, safeCenter.z, feature.platformBounds),
+        );
+        const safePosition = {
+          x: safeCenter.x,
+          y: 0.865 + (raisedZone?.elevation ?? 0),
+          z: safeCenter.z,
+        };
         const roomLights = runtime.plan.lights.filter(
           (light) => light.level >= 0 && light.roomId === room.id,
         );
@@ -585,7 +634,7 @@ export class WorldStream {
             runtime,
             'high-ceiling',
             'atrium a plafond monumental',
-            ['high-ceiling', 'grand-plafond', 'plafond-haut', 'atrium', 'vertical-atrium'],
+            ['high-ceiling', 'grand-plafond', 'plafond-haut', 'atrium'],
             safePosition,
           );
         }
@@ -697,7 +746,7 @@ export class WorldStream {
 
     const worldOffset = getChunkWorldOffset(coord);
     const offset = new THREE.Vector3(worldOffset.x, worldOffset.y, worldOffset.z);
-    const view = new WorldView(plan, this.materials, {
+    const view = new WorldView(plan, this.materials[plan.visualBiome ?? 'yellow'], {
       createLightRig: false,
       bakedLightMaps,
     });

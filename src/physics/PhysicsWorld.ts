@@ -2,6 +2,12 @@ import RAPIER from '@dimforge/rapier3d';
 import * as THREE from 'three';
 import type { StaticCollider, Vec3Data, WorldPlan } from '../world/types';
 
+const PLAYER_RADIUS = 0.32;
+const STANDING_HALF_HEIGHT = 0.52;
+const CROUCHED_HALF_HEIGHT = 0.22;
+const CROUCH_CENTER_DROP = STANDING_HALF_HEIGHT - CROUCHED_HALF_HEIGHT;
+const IDENTITY_ROTATION = { x: 0, y: 0, z: 0, w: 1 };
+
 const addStaticCollider = (
   world: RAPIER.World,
   body: RAPIER.RigidBody,
@@ -15,6 +21,7 @@ const addStaticCollider = (
     .setTranslation(source.center.x, source.center.y, source.center.z)
     .setFriction(source.kind === 'floor' || source.kind === 'step' ? 0.82 : 0.45)
     .setRestitution(0);
+  if (source.rotation) description.setRotation(source.rotation);
   return world.createCollider(description, body);
 };
 
@@ -33,6 +40,7 @@ export class PhysicsWorld {
   private readonly spawn = new THREE.Vector3();
   private readonly position = new THREE.Vector3();
   private readonly movement = new THREE.Vector3();
+  private crouched = false;
   private chunkMutationDepth = 0;
   private chunkSynchronizationPending = false;
 
@@ -49,7 +57,7 @@ export class PhysicsWorld {
         .lockRotations(),
     );
     this.playerCollider = this.world.createCollider(
-      RAPIER.ColliderDesc.capsule(0.52, 0.32)
+      RAPIER.ColliderDesc.capsule(STANDING_HALF_HEIGHT, PLAYER_RADIUS)
         .setFriction(0)
         .setRestitution(0)
         .setCollisionGroups(0x00010001),
@@ -165,6 +173,53 @@ export class PhysicsWorld {
       grounded: this.controller.computedGrounded(),
       moved: this.movement,
     };
+  }
+
+  /**
+   * Changes the physical capsule while keeping the player's feet at the same
+   * height. Standing up is refused until the complete standing capsule fits.
+   */
+  setCrouched(requested: boolean): boolean {
+    if (requested === this.crouched) return this.crouched;
+    const current = this.playerBody.translation();
+    if (!requested) {
+      const standingCenter = {
+        x: current.x,
+        y: current.y + CROUCH_CENTER_DROP,
+        z: current.z,
+      };
+      const obstruction = this.world.intersectionWithShape(
+        standingCenter,
+        IDENTITY_ROTATION,
+        new RAPIER.Capsule(STANDING_HALF_HEIGHT, PLAYER_RADIUS),
+        undefined,
+        0x00010001,
+        this.playerCollider,
+        this.playerBody,
+      );
+      if (obstruction) return true;
+      this.playerCollider.setShape(new RAPIER.Capsule(STANDING_HALF_HEIGHT, PLAYER_RADIUS));
+      this.playerBody.setTranslation(standingCenter, true);
+      this.playerBody.setNextKinematicTranslation(standingCenter);
+      this.crouched = false;
+    } else {
+      const crouchedCenter = {
+        x: current.x,
+        y: current.y - CROUCH_CENTER_DROP,
+        z: current.z,
+      };
+      this.playerCollider.setShape(new RAPIER.Capsule(CROUCHED_HALF_HEIGHT, PLAYER_RADIUS));
+      this.playerBody.setTranslation(crouchedCenter, true);
+      this.playerBody.setNextKinematicTranslation(crouchedCenter);
+      this.crouched = true;
+    }
+    this.world.propagateModifiedBodyPositionsToColliders();
+    this.syncPosition();
+    return this.crouched;
+  }
+
+  get isCrouched(): boolean {
+    return this.crouched;
   }
 
   reset(): void {

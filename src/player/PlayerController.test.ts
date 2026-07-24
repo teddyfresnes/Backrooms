@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const inputState = vi.hoisted(() => ({
+  axes: { forward: 0, right: 0, vertical: 0, sprint: false, crouch: false },
+  presses: new Set<string>(),
+}));
+
 vi.mock('three/addons/controls/PointerLockControls.js', async () => {
   const THREE = await import('three');
 
@@ -25,8 +30,12 @@ vi.mock('three/addons/controls/PointerLockControls.js', async () => {
 
 vi.mock('../input/InputManager', () => ({
   InputManager: class {
-    readonly axes = { forward: 0, right: 0, sprint: false, crouch: false };
-    consumePress(): boolean { return false; }
+    get axes() { return inputState.axes; }
+    consumePress(code: string): boolean {
+      const pressed = inputState.presses.has(code);
+      inputState.presses.delete(code);
+      return pressed;
+    }
     setEnabled(): void {}
     dispose(): void {}
   },
@@ -41,6 +50,10 @@ class FakePhysics {
   readonly position = new THREE.Vector3();
   readonly queuedMoves: CharacterMotionResult[] = [];
   readonly teleports: Vec3Data[] = [];
+  readonly moveDeltas: Vec3Data[] = [];
+  readonly crouchRequests: boolean[] = [];
+  crouched = false;
+  blockStanding = false;
 
   constructor(position: Vec3Data) {
     this.position.set(position.x, position.y, position.z);
@@ -59,6 +72,7 @@ class FakePhysics {
   }
 
   move(delta: Vec3Data): CharacterMotionResult {
+    this.moveDeltas.push({ ...delta });
     const queued = this.queuedMoves.shift();
     if (queued) {
       this.position.copy(queued.position);
@@ -79,6 +93,13 @@ class FakePhysics {
   teleport(position: Vec3Data): void {
     this.position.set(position.x, position.y, position.z);
     this.teleports.push({ ...position });
+  }
+
+  setCrouched(requested: boolean): boolean {
+    this.crouchRequests.push(requested);
+    if (!requested && this.blockStanding) return true;
+    this.crouched = requested;
+    return this.crouched;
   }
 }
 
@@ -103,6 +124,61 @@ const createController = (physics: FakePhysics) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  inputState.axes.forward = 0;
+  inputState.axes.right = 0;
+  inputState.axes.vertical = 0;
+  inputState.axes.sprint = false;
+  inputState.axes.crouch = false;
+  inputState.presses.clear();
+});
+
+describe('PlayerController locomotion', () => {
+  it('jumps from the ground when Space is pressed', () => {
+    const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });
+    const { controller } = createController(physics);
+
+    inputState.presses.add('Space');
+    controller.fixedUpdate(1 / 60);
+
+    expect(physics.moveDeltas.at(-1)!.y).toBeGreaterThan(0.08);
+    expect(controller.position.y).toBeGreaterThan(0.865);
+    controller.dispose();
+  });
+
+  it('does not buffer an airborne jump until the next landing', () => {
+    const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });
+    const { controller } = createController(physics);
+
+    controller.fixedUpdate(1 / 60);
+    inputState.presses.add('Space');
+    physics.queueMove({ x: 0, y: 0.8, z: 0 }, true);
+    controller.fixedUpdate(1 / 60);
+    controller.fixedUpdate(1 / 60);
+
+    expect(physics.moveDeltas.at(-1)!.y).toBeLessThan(0);
+    controller.dispose();
+  });
+
+  it('toggles crouch and waits for head clearance before standing', () => {
+    const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });
+    const { controller } = createController(physics);
+
+    inputState.presses.add('ControlLeft');
+    controller.fixedUpdate(1 / 60);
+    expect(physics.crouched).toBe(true);
+
+    physics.blockStanding = true;
+    inputState.presses.add('ControlLeft');
+    controller.fixedUpdate(1 / 60);
+    expect(physics.crouched).toBe(true);
+
+    physics.blockStanding = false;
+    controller.fixedUpdate(1 / 60);
+    expect(physics.crouched).toBe(false);
+    expect(physics.crouchRequests).toContain(true);
+    expect(physics.crouchRequests.at(-1)).toBe(false);
+    controller.dispose();
+  });
 });
 
 describe('PlayerController infinite vertical recovery', () => {

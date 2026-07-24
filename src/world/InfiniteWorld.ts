@@ -1,15 +1,24 @@
-import { generateWorld, worldHasDeepShaft } from './generateWorld';
+import {
+  addStepColliders,
+  generateWorld,
+  lightPanelOverlapsRect,
+  MAX_PIT_STORIES,
+  worldMaxPitStories,
+} from './generateWorld';
 import { SeededRandom } from './SeededRandom';
 import type {
   GridPitFeature,
   Rect,
   StaticCollider,
+  StairSocketFeature,
   Vec3Data,
   WallSegment,
   WorldFeature,
   WorldPlan,
+  VisualBiome,
 } from './types';
 import { pointInRect, rectArea, rectCenter, rectDepth, rectWidth } from './types';
+import { getStairFloorOpening, getStairLandingClearance } from './StairLayout';
 
 export const INFINITE_CHUNK_SIZE = 112;
 export const INFINITE_STORY_PITCH = 5.4;
@@ -31,8 +40,7 @@ export type InfiniteBiome =
   | 'pillar-hall'
   | 'tight-threshold'
   | 'quiet-expanse'
-  | 'symmetric-gallery'
-  | 'vertical-atrium';
+  | 'symmetric-gallery';
 
 export interface EdgeGate {
   /** Position along the edge in chunk-local coordinates. */
@@ -49,6 +57,7 @@ export interface InfiniteChunkMetadata {
   readonly worldOffset: Readonly<Vec3Data>;
   readonly edgeGates: InfiniteEdgeGates;
   readonly biome: InfiniteBiome;
+  readonly visualBiome: VisualBiome;
   /** Holes cut in this story's ceiling by the chunk directly above it. */
   readonly ceilingOpenings: readonly Readonly<Rect>[];
   readonly wrapperVersion: number;
@@ -192,7 +201,7 @@ export const getInfiniteEdgeGates = (
   });
 };
 
-const derivedChunkSeed = (seed: string, key: ChunkKey): string =>
+export const derivedChunkSeed = (seed: string, key: ChunkKey): string =>
   `${seed}::infinite-chunk:v${WRAPPER_VERSION}:${key}`;
 
 export const getInfiniteBiome = (seed: string, key: ChunkKey | ChunkCoord): InfiniteBiome => {
@@ -204,10 +213,48 @@ export const getInfiniteBiome = (seed: string, key: ChunkKey | ChunkCoord): Infi
     { value: 'classic-maze' as const, weight: 0.44 },
     { value: 'tight-threshold' as const, weight: 0.17 },
     { value: 'pillar-hall' as const, weight: 0.14 },
-    { value: 'quiet-expanse' as const, weight: 0.08 },
-    { value: 'symmetric-gallery' as const, weight: 0.11 },
-    { value: 'vertical-atrium' as const, weight: 0.06 },
+    { value: 'quiet-expanse' as const, weight: 0.1 },
+    { value: 'symmetric-gallery' as const, weight: 0.15 },
   ]);
+};
+
+/**
+ * Visual palettes occupy 2x2 chunk regions so a biome reads as a place rather
+ * than flickering at every doorway. The topology biome remains independent.
+ */
+export const getInfiniteVisualBiome = (
+  seed: string,
+  key: ChunkKey | ChunkCoord,
+): VisualBiome => {
+  const coord = resolveCoord(key);
+  const macroX = Math.floor(coord.x / 2);
+  const macroZ = Math.floor(coord.z / 2);
+  if (macroX === 0 && macroZ === 0 && coord.story === 0) return 'yellow';
+  const roll = new SeededRandom(
+    `${seed}::infinite-visual-biome:v${WRAPPER_VERSION}:${macroX}:${macroZ}:${coord.story}`,
+  ).float(0, 1);
+  if (roll < 0.8) return 'yellow';
+  return roll < 0.9 ? 'red' : 'white';
+};
+
+const applyVisualBiome = (
+  plan: WorldPlan,
+  visualBiome: VisualBiome,
+  seed: string,
+): void => {
+  plan.visualBiome = visualBiome;
+  if (visualBiome === 'yellow') return;
+
+  const palette = visualBiome === 'red'
+    ? [0xff160d, 0xe30b08, 0xff3218, 0xc60808]
+    : [0xf7fbff, 0xeaf3ff, 0xffffff, 0xdfeeff];
+  const rng = new SeededRandom(`${seed}::visual-light-palette:${visualBiome}`);
+  for (const light of plan.lights) {
+    light.color = rng.pick(palette);
+    light.intensity *= visualBiome === 'red'
+      ? rng.float(0.88, 1.04)
+      : rng.float(1.02, 1.16);
+  }
 };
 
 const clearColumnsIn = (plan: WorldPlan, bounds: Rect): void => {
@@ -231,26 +278,31 @@ const clearInteriorWallsIn = (plan: WorldPlan, bounds: Rect): void => {
   );
 };
 
-const addSymmetricGallery = (plan: WorldPlan, hall: WorldPlan['rooms'][number]): void => {
+const addSymmetricGallery = (
+  plan: WorldPlan,
+  hall: WorldPlan['rooms'][number],
+  seed: string,
+): void => {
   clearInteriorWallsIn(plan, hall.bounds);
   clearColumnsIn(plan, hall.bounds);
   plan.features = plan.features.filter(
     (feature) => feature.kind !== 'squeeze-view' || feature.roomId !== hall.id,
   );
+  const rng = new SeededRandom(`${seed}::symmetric-gallery`);
   const center = rectCenter(hall.bounds);
   const alongX = rectWidth(hall.bounds) >= rectDepth(hall.bounds);
   const spanMin = (alongX ? hall.bounds.minX : hall.bounds.minZ) + 1.4;
   const spanMax = (alongX ? hall.bounds.maxX : hall.bounds.maxZ) - 1.4;
   const span = spanMax - spanMin;
-  const exitCount = Math.max(4, Math.min(7, Math.floor(span / 5.2)));
-  const gapWidth = Math.min(3.4, span / (exitCount + 1) * 0.48);
+  const exitCount = Math.max(3, Math.min(9, Math.floor(span / rng.float(4.6, 7.2))));
+  const gapWidth = Math.min(rng.float(2.2, 4), span / (exitCount + 1) * 0.56);
   const gapCenters = Array.from(
     { length: exitCount },
     (_, index) => spanMin + ((index + 1) / (exitCount + 1)) * span,
   );
-  const corridorHalfWidth = Math.min(3.1, Math.max(2.2, (alongX
+  const corridorHalfWidth = Math.min(rng.float(3.1, 5.2), Math.max(2.2, (alongX
     ? rectDepth(hall.bounds)
-    : rectWidth(hall.bounds)) * 0.12));
+    : rectWidth(hall.bounds)) * rng.float(0.1, 0.19)));
 
   for (const side of [-1, 1] as const) {
     let cursor = spanMin;
@@ -278,6 +330,39 @@ const addSymmetricGallery = (plan: WorldPlan, hall: WorldPlan['rooms'][number]):
     }
   }
 
+  // Mirrored return walls turn the side strips into paired bays and rooms
+  // without ever closing the long central route.
+  const crossSpan = alongX ? rectDepth(hall.bounds) : rectWidth(hall.bounds);
+  const sideBandDepth = Math.max(0, crossSpan * 0.5 - corridorHalfWidth - 0.8);
+  const bayPairs = sideBandDepth >= 2.4
+    ? Math.max(1, Math.min(4, Math.floor(span / rng.float(14, 24))))
+    : 0;
+  for (let pairIndex = 0; pairIndex < bayPairs; pairIndex += 1) {
+    const distance = span * ((pairIndex + 1) / (bayPairs + 1)) * 0.43;
+    for (const alongSide of [-1, 1] as const) {
+      const fixed = (alongX ? center.x : center.z) + alongSide * distance;
+      for (const crossSide of [-1, 1] as const) {
+        const crossCenter = (alongX ? center.z : center.x) +
+          crossSide * (corridorHalfWidth + sideBandDepth * 0.46);
+        const wall: WallSegment = {
+          id: `symmetric-gallery-bay-${pairIndex}-${alongSide}-${crossSide}`,
+          x: alongX ? fixed : crossCenter,
+          z: alongX ? crossCenter : fixed,
+          length: sideBandDepth * rng.float(0.62, 0.94),
+          orientation: alongX ? 'z' : 'x',
+          bottom: 0,
+          height: plan.wallHeight,
+          thickness: rng.chance(0.24) ? 0.42 : 0.24,
+          tint: rng.float(0.91, 1.03),
+          collision: true,
+          kind: 'wallpaper',
+        };
+        plan.walls.push(wall);
+        plan.colliders.push(colliderForWall(wall));
+      }
+    }
+  }
+
   plan.lights = plan.lights.filter((light) => light.roomId !== hall.id);
   const lightCount = Math.max(4, Math.floor(span / 5.8));
   for (let index = 0; index < lightCount; index += 1) {
@@ -300,99 +385,89 @@ const addSymmetricGallery = (plan: WorldPlan, hall: WorldPlan['rooms'][number]):
   }
 };
 
-const addVerticalAtrium = (
+const addTightThresholds = (
   plan: WorldPlan,
   hall: WorldPlan['rooms'][number],
   seed: string,
 ): void => {
-  // The canonical grand hall can touch two chunk seams. Pull only the elevated
-  // volume inward so its upper shell is never mistaken for a finite outer
-  // boundary and the reserved floor above cannot collide with edge gates.
-  const half = plan.size * 0.5;
-  const seamInset = 1.15;
-  hall.bounds = {
-    minX: Math.max(hall.bounds.minX, -half + seamInset),
-    minZ: Math.max(hall.bounds.minZ, -half + seamInset),
-    maxX: Math.min(hall.bounds.maxX, half - seamInset),
-    maxZ: Math.min(hall.bounds.maxZ, half - seamInset),
-  };
   clearInteriorWallsIn(plan, hall.bounds);
   clearColumnsIn(plan, hall.bounds);
   plan.features = plan.features.filter(
     (feature) => feature.kind !== 'squeeze-view' || feature.roomId !== hall.id,
   );
-  const rng = new SeededRandom(`${seed}::vertical-atrium`);
-  const storySpan = rng.chance(0.78) ? 1 : 2;
-  const ceilingY = plan.wallHeight + storySpan * INFINITE_STORY_PITCH;
-  hall.ceilingHeight = ceilingY;
+  plan.lights = plan.lights.filter((light) => light.roomId !== hall.id);
+
+  const rng = new SeededRandom(`${seed}::tight-thresholds`);
   const center = rectCenter(hall.bounds);
-  const upperHeight = ceilingY - plan.wallHeight;
-  const upperBottom = plan.wallHeight;
-  const shell = [
-    {
-      id: 'vertical-atrium-north',
-      x: center.x,
-      z: hall.bounds.minZ,
-      length: rectWidth(hall.bounds),
-      orientation: 'x' as const,
-    },
-    {
-      id: 'vertical-atrium-south',
-      x: center.x,
-      z: hall.bounds.maxZ,
-      length: rectWidth(hall.bounds),
-      orientation: 'x' as const,
-    },
-    {
-      id: 'vertical-atrium-west',
-      x: hall.bounds.minX,
-      z: center.z,
-      length: rectDepth(hall.bounds),
-      orientation: 'z' as const,
-    },
-    {
-      id: 'vertical-atrium-east',
-      x: hall.bounds.maxX,
-      z: center.z,
-      length: rectDepth(hall.bounds),
-      orientation: 'z' as const,
-    },
-  ];
-  for (const side of shell) {
+  const alongX = rectWidth(hall.bounds) >= rectDepth(hall.bounds);
+  const longMin = (alongX ? hall.bounds.minX : hall.bounds.minZ) + 3.2;
+  const longMax = (alongX ? hall.bounds.maxX : hall.bounds.maxZ) - 3.2;
+  const shortMin = (alongX ? hall.bounds.minZ : hall.bounds.minX) + 0.55;
+  const shortMax = (alongX ? hall.bounds.maxZ : hall.bounds.maxX) - 0.55;
+  const longSpan = longMax - longMin;
+  const shortSpan = shortMax - shortMin;
+  if (longSpan < 8 || shortSpan < 6) return;
+
+  const layerCount = Math.max(3, Math.min(9, Math.floor(longSpan / rng.float(6.5, 10.5))));
+  const addSegment = (layer: number, segment: number, fixed: number, min: number, max: number): void => {
+    if (max - min < 0.2) return;
     const wall: WallSegment = {
-      ...side,
-      bottom: upperBottom,
-      height: upperHeight,
-      thickness: 0.28,
-      tint: 0.94,
+      id: `tight-threshold-${layer}-${segment}`,
+      x: alongX ? fixed : (min + max) * 0.5,
+      z: alongX ? (min + max) * 0.5 : fixed,
+      length: max - min,
+      orientation: alongX ? 'z' : 'x',
+      bottom: 0,
+      height: hall.ceilingHeight,
+      thickness: rng.chance(0.18) ? 0.42 : 0.24,
+      tint: rng.float(0.88, 1.03),
       collision: true,
       kind: 'wallpaper',
+      detail: 'threshold',
     };
     plan.walls.push(wall);
     plan.colliders.push(colliderForWall(wall));
+  };
+
+  for (let layer = 0; layer < layerCount; layer += 1) {
+    const fixed = longMin + ((layer + 0.5) / layerCount) * longSpan;
+    const doubleGap = shortSpan >= 14 && (layer % 3 === 1 || rng.chance(0.16));
+    const gapWidth = rng.float(1.85, Math.min(3.6, shortSpan * 0.24));
+    const offset = doubleGap
+      ? shortSpan * rng.float(0.18, 0.29)
+      : (layer % 2 === 0 ? -1 : 1) * shortSpan * rng.float(0.12, 0.28);
+    const gapCenters = doubleGap
+      ? [shortMin + shortSpan * 0.5 - offset, shortMin + shortSpan * 0.5 + offset]
+      : [shortMin + shortSpan * 0.5 + offset];
+    const gaps = gapCenters
+      .map((gapCenter) => ({ min: gapCenter - gapWidth * 0.5, max: gapCenter + gapWidth * 0.5 }))
+      .sort((left, right) => left.min - right.min);
+    let cursor = shortMin;
+    for (const [gapIndex, gap] of gaps.entries()) {
+      addSegment(layer, gapIndex, fixed, cursor, gap.min);
+      cursor = gap.max;
+    }
+    addSegment(layer, gaps.length, fixed, cursor, shortMax);
   }
 
-  plan.lights = plan.lights.filter((light) => light.roomId !== hall.id);
-  const columns = Math.max(2, Math.floor(rectWidth(hall.bounds) / 8));
-  const rows = Math.max(2, Math.floor(rectDepth(hall.bounds) / 8));
-  for (let xIndex = 0; xIndex < columns; xIndex += 1) {
-    for (let zIndex = 0; zIndex < rows; zIndex += 1) {
-      plan.lights.push({
-        id: `vertical-atrium-light-${xIndex}-${zIndex}`,
-        x: hall.bounds.minX + ((xIndex + 0.5) / columns) * rectWidth(hall.bounds),
-        z: hall.bounds.minZ + ((zIndex + 0.5) / rows) * rectDepth(hall.bounds),
-        ceilingY,
-        rotation: (xIndex + zIndex) % 2 === 0 ? 0 : Math.PI * 0.5,
-        width: 2.2,
-        intensity: 1.18,
-        color: 0xfff7cf,
-        dead: false,
-        unstable: false,
-        phase: (xIndex * 3 + zIndex) * 0.61,
-        roomId: hall.id,
-        level: 0,
-      });
-    }
+  const chamberCount = layerCount + 1;
+  for (let index = 0; index < chamberCount; index += 1) {
+    const along = longMin + (index / Math.max(1, chamberCount - 1)) * longSpan;
+    plan.lights.push({
+      id: `tight-threshold-light-${index}`,
+      x: alongX ? along : center.x,
+      z: alongX ? center.z : along,
+      ceilingY: hall.ceilingHeight,
+      rotation: alongX ? 0 : Math.PI * 0.5,
+      width: 1.7,
+      intensity: rng.float(0.92, 1.08),
+      color: 0xfff8ce,
+      dead: false,
+      unstable: index % 4 === 3 && rng.chance(0.3),
+      phase: index * 0.79,
+      roomId: hall.id,
+      level: 0,
+    });
   }
 };
 
@@ -401,41 +476,86 @@ const applyBiome = (plan: WorldPlan, biome: InfiniteBiome, seed: string): void =
     .filter((room) => room.kind === 'open-hall')
     .sort((a, b) => rectArea(b.bounds) - rectArea(a.bounds))[0];
   if (!hall) return;
+  const hallPit = plan.features.find(
+    (feature): feature is GridPitFeature =>
+      feature.kind === 'grid-pit' && feature.roomId === hall.id,
+  );
 
   if (biome === 'quiet-expanse') {
-    clearColumnsIn(plan, hall.bounds);
+    clearInteriorWallsIn(plan, hall.bounds);
+    plan.columns = [];
+    plan.colliders = plan.colliders.filter((collider) => collider.kind !== 'column');
+    plan.features = plan.features.filter(
+      (feature) => feature.kind !== 'squeeze-view' || feature.roomId !== hall.id,
+    );
     return;
   }
 
   if (biome === 'symmetric-gallery') {
-    addSymmetricGallery(plan, hall);
+    if (hallPit) return;
+    addSymmetricGallery(plan, hall, seed);
     return;
   }
 
-  if (biome === 'vertical-atrium') {
-    addVerticalAtrium(plan, hall, seed);
+  if (biome === 'tight-threshold') {
+    if (hallPit) return;
+    addTightThresholds(plan, hall, seed);
     return;
   }
 
   if (biome === 'pillar-hall') {
     const rng = new SeededRandom(`${seed}::pillar-hall`);
     const center = rectCenter(hall.bounds);
+    clearInteriorWallsIn(plan, hall.bounds);
     clearColumnsIn(plan, hall.bounds);
-    const columnsX = Math.max(3, Math.min(9, Math.floor((rectWidth(hall.bounds) - 5) / 5.4)));
-    const columnsZ = Math.max(3, Math.min(9, Math.floor((rectDepth(hall.bounds) - 5) / 5.4)));
+    plan.features = plan.features.filter(
+      (feature) => feature.kind !== 'squeeze-view' || feature.roomId !== hall.id,
+    );
+    const profile = rng.weighted([
+      { value: 'regular' as const, weight: 0.32 },
+      { value: 'dense' as const, weight: 0.43 },
+      { value: 'clustered' as const, weight: 0.25 },
+    ]);
+    const baseSpacingX = rng.float(
+      profile === 'dense' ? 3.1 : profile === 'clustered' ? 4.2 : 5.4,
+      profile === 'dense' ? 4.8 : profile === 'clustered' ? 7.4 : 8.2,
+    );
+    const baseSpacingZ = rng.float(
+      profile === 'dense' ? 3.1 : profile === 'clustered' ? 4.2 : 5.4,
+      profile === 'dense' ? 4.8 : profile === 'clustered' ? 7.4 : 8.2,
+    );
+    const columnsX = Math.max(2, Math.min(28, Math.floor((rectWidth(hall.bounds) - 3) / baseSpacingX)));
+    const columnsZ = Math.max(2, Math.min(28, Math.floor((rectDepth(hall.bounds) - 3) / baseSpacingZ)));
     const added: typeof plan.columns = [];
     for (let xIndex = 0; xIndex < columnsX; xIndex += 1) {
       for (let zIndex = 0; zIndex < columnsZ; zIndex += 1) {
-        const x = hall.bounds.minX + ((xIndex + 0.5) / columnsX) * rectWidth(hall.bounds);
-        const z = hall.bounds.minZ + ((zIndex + 0.5) / columnsZ) * rectDepth(hall.bounds);
-        if (Math.abs(x - center.x) < 1.65 || Math.abs(z - center.z) < 1.65) continue;
+        if (added.length >= 360) break;
+        const rowOffset = profile === 'clustered' && zIndex % 2 === 1 ? baseSpacingX * 0.34 : 0;
+        const x = hall.bounds.minX +
+          ((xIndex + 0.5) / columnsX) * rectWidth(hall.bounds) +
+          rowOffset +
+          rng.float(profile === 'clustered' ? -0.9 : -0.35, profile === 'clustered' ? 0.9 : 0.35);
+        const z = hall.bounds.minZ +
+          ((zIndex + 0.5) / columnsZ) * rectDepth(hall.bounds) +
+          rng.float(profile === 'clustered' ? -0.9 : -0.35, profile === 'clustered' ? 0.9 : 0.35);
+        if (!pointInRect(x, z, hall.bounds, 1.05)) continue;
+        if (Math.abs(x - center.x) < 2.15 || Math.abs(z - center.z) < 2.15) continue;
+        if (hallPit?.holes.some((hole) => pointInRect(x, z, hole, -1.25))) continue;
+        if (profile === 'clustered' && rng.chance(0.2)) continue;
+        const maximumScale = Math.min(
+          profile === 'clustered' ? 2.8 : profile === 'dense' ? 1.8 : 2.25,
+          0.9 + Math.min(rectWidth(hall.bounds), rectDepth(hall.bounds)) / 65,
+        );
+        const width = rng.float(profile === 'dense' ? 0.38 : 0.52, maximumScale);
+        const depth = rng.float(profile === 'dense' ? 0.34 : 0.48, maximumScale * 1.12);
         added.push({
           x: quantize(x, 0.05),
           z: quantize(z, 0.05),
-          width: 1.08,
-          depth: 1.08,
-          height: plan.wallHeight,
+          width,
+          depth,
+          height: hall.ceilingHeight,
           tint: rng.float(0.88, 1.02),
+          kind: 'column',
         });
       }
     }
@@ -454,108 +574,58 @@ const applyBiome = (plan: WorldPlan, biome: InfiniteBiome, seed: string): void =
   }
 };
 
-export interface VerticalReservation {
-  readonly bounds: Readonly<Rect>;
-  readonly sourceStory: number;
-  readonly remainingStories: number;
-  readonly kind: 'tall-room';
-}
-
 const rectsOverlap = (left: Rect, right: Rect, padding = 0): boolean =>
   left.minX < right.maxX + padding &&
   left.maxX > right.minX - padding &&
   left.minZ < right.maxZ + padding &&
   left.maxZ > right.minZ - padding;
 
-interface AtriumClaim {
-  readonly bounds: Readonly<Rect>;
-  readonly stories: number;
-}
-
-const rawAtriumClaimsCache = new Map<string, readonly AtriumClaim[]>();
-const atriumClaimsCache = new Map<string, readonly AtriumClaim[]>();
-
-const trimOldestCacheEntry = <T>(cache: Map<string, T>, maximum: number): void => {
-  if (cache.size <= maximum) return;
-  const oldest = cache.keys().next().value;
-  if (oldest !== undefined) cache.delete(oldest);
-};
-
-const rawAtriumClaims = (
-  seed: string,
-  coord: Readonly<ChunkCoord>,
-): readonly AtriumClaim[] => {
-  const key = `${seed}::${createChunkKey(coord)}`;
-  const cached = rawAtriumClaimsCache.get(key);
-  if (cached) return cached;
-  if (getInfiniteBiome(seed, coord) !== 'vertical-atrium') {
-    const empty = Object.freeze([]) as readonly AtriumClaim[];
-    rawAtriumClaimsCache.set(key, empty);
-    trimOldestCacheEntry(rawAtriumClaimsCache, 192);
-    return empty;
-  }
-  const chunkSeed = derivedChunkSeed(seed, createChunkKey(coord));
-  const plan = generateWorld(chunkSeed);
-  applyBiome(plan, 'vertical-atrium', chunkSeed);
-  const claims = Object.freeze(
+/**
+ * A vertical opening always wins over a locally raised ceiling. Keeping only
+ * part of an upper shell made whole wall sections disappear; normalising the
+ * complete room before any clipping preserves a continuous, textured shell.
+ */
+const demoteTallRoomsIntersecting = (
+  plan: WorldPlan,
+  openings: readonly Readonly<Rect>[],
+): void => {
+  if (openings.length === 0) return;
+  const roomIds = new Set(
     plan.rooms
-      .filter((room) => room.ceilingHeight > plan.wallHeight + 0.1)
-      .map((room) => Object.freeze({
-        bounds: Object.freeze(cloneRect(room.bounds)),
-        stories: Math.max(
-          1,
-          Math.round((room.ceilingHeight - plan.wallHeight) / INFINITE_STORY_PITCH),
-        ),
-      })),
+      .filter(
+        (room) =>
+          room.ceilingHeight > plan.wallHeight + 0.1 &&
+          openings.some((opening) => rectsOverlap(room.bounds, opening, 0.08)),
+      )
+      .map((room) => room.id),
   );
-  rawAtriumClaimsCache.set(key, claims);
-  trimOldestCacheEntry(rawAtriumClaimsCache, 192);
-  return claims;
-};
+  if (roomIds.size === 0) return;
 
-const canonicalAtriumClaims = (
-  seed: string,
-  coord: Readonly<ChunkCoord>,
-): readonly AtriumClaim[] => {
-  const key = `${seed}::${createChunkKey(coord)}`;
-  const cached = atriumClaimsCache.get(key);
-  if (cached) return cached;
-  // Lower candidates always win. Looking only at raw candidates in the two
-  // stories they can span gives a local, deterministic rule with no recursive
-  // chain and prevents two elevated volumes from carving each other apart.
-  const blockers = [1, 2].flatMap((distance) =>
-    rawAtriumClaims(seed, { ...coord, story: coord.story - distance })
-      .filter((claim) => claim.stories >= distance),
-  );
-  const claims = Object.freeze(
-    rawAtriumClaims(seed, coord).filter(
-      (claim) => !blockers.some((blocker) => rectsOverlap(claim.bounds, blocker.bounds, 0.8)),
-    ),
-  );
-  atriumClaimsCache.set(key, claims);
-  trimOldestCacheEntry(atriumClaimsCache, 192);
-  return claims;
-};
-
-export const verticalReservationsForChunk = (
-  seed: string,
-  key: ChunkKey | ChunkCoord,
-): readonly VerticalReservation[] => {
-  const coord = resolveCoord(key);
-  const reservations: VerticalReservation[] = [];
-  for (let distance = 1; distance <= 2; distance += 1) {
-    const sourceCoord = { ...coord, story: coord.story - distance };
-    for (const claim of canonicalAtriumClaims(seed, sourceCoord)) {
-      if (claim.stories < distance) continue;
-      reservations.push(Object.freeze({
-        bounds: claim.bounds,
-        sourceStory: sourceCoord.story,
-        remainingStories: claim.stories - distance + 1,
-        kind: 'tall-room' as const,
-      }));
-    }
+  for (const room of plan.rooms) {
+    if (roomIds.has(room.id)) room.ceilingHeight = plan.wallHeight;
   }
-  return Object.freeze(reservations);
+  const removedWallIds = new Set(
+    plan.walls
+      .filter((wall) => wall.detail === 'upper-shell' && wall.roomId && roomIds.has(wall.roomId))
+      .map((wall) => wall.id),
+  );
+  plan.walls = plan.walls.filter((wall) => !removedWallIds.has(wall.id));
+  plan.lights = plan.lights.map((light) =>
+    roomIds.has(light.roomId) ? { ...light, ceilingY: plan.wallHeight } : light
+  );
+  plan.features = plan.features.filter(
+    (feature) => feature.kind !== 'raised-zone' || !roomIds.has(feature.roomId),
+  );
+  plan.colliders = plan.colliders.filter((collider) => {
+    if (removedWallIds.has(collider.id.replace(/^collider-/, ''))) return false;
+    for (const roomId of roomIds) {
+      if (
+        collider.id === `raised-platform-${roomId}` ||
+        collider.id === `raised-ramp-${roomId}`
+      ) return false;
+    }
+    return true;
+  });
 };
 
 const floorCellsOutsideOpenings = (worldSize: number, openings: readonly Rect[]): Rect[] => {
@@ -589,134 +659,37 @@ const floorCellsOutsideOpenings = (worldSize: number, openings: readonly Rect[])
   return cells;
 };
 
-const applyVerticalReservations = (
-  plan: WorldPlan,
-  reservations: readonly VerticalReservation[],
-): void => {
-  if (reservations.length === 0) return;
-  const openings = reservations.map((reservation) => reservation.bounds);
-  const intersectsReservation = (rect: Rect, padding = 0): boolean =>
-    openings.some((opening) => rectsOverlap(rect, opening, padding));
-  const wallBounds = (wall: WallSegment): Rect => {
-    const halfLength = wall.length * 0.5;
-    const halfThickness = wall.thickness * 0.5;
-    return wall.orientation === 'x'
-      ? {
-          minX: wall.x - halfLength,
-          maxX: wall.x + halfLength,
-          minZ: wall.z - halfThickness,
-          maxZ: wall.z + halfThickness,
-        }
-      : {
-          minX: wall.x - halfThickness,
-          maxX: wall.x + halfThickness,
-          minZ: wall.z - halfLength,
-          maxZ: wall.z + halfLength,
-        };
-  };
-
-  const pitConflicted = plan.features.some(
-    (feature) => feature.kind === 'grid-pit' && intersectsReservation(feature.bounds, 0.8),
-  );
-  if (pitConflicted) {
-    plan.features = plan.features.filter((feature) => feature.kind !== 'grid-pit');
-    plan.walls = plan.walls.filter((wall) => wall.bottom >= -1);
-    plan.lights = plan.lights.filter((light) => light.level >= 0);
-    plan.colliders = plan.colliders.filter(
-      (collider) =>
-        !collider.id.startsWith('lower-level-floor-') &&
-        !collider.id.startsWith('shaft-') &&
-        !collider.id.startsWith('abyss-') &&
-        !collider.id.startsWith('collider-lower-wall-'),
-    );
-  }
-
-  const removedWallIds = new Set<string>();
-  plan.walls = plan.walls.filter((wall) => {
-    const remove = wall.bottom >= -1 && intersectsReservation(wallBounds(wall), 0.08);
-    if (remove) removedWallIds.add(wall.id);
-    return !remove;
-  });
-  plan.columns = plan.columns.filter((column) => !intersectsReservation({
-    minX: column.x - column.width * 0.5,
-    maxX: column.x + column.width * 0.5,
-    minZ: column.z - column.depth * 0.5,
-    maxZ: column.z + column.depth * 0.5,
-  }));
-  plan.solidMasses = plan.solidMasses.filter((mass) => !intersectsReservation(mass.bounds));
-  plan.lights = plan.lights.filter(
-    (light) => light.level < 0 || !openings.some((opening) => pointInRect(light.x, light.z, opening, -0.8)),
-  );
-  plan.detailSockets = plan.detailSockets.filter(
-    (socket) => !openings.some((opening) => pointInRect(socket.position.x, socket.position.z, opening, -0.6)),
-  );
-  plan.features = plan.features.filter(
-    (feature) => feature.kind === 'impossible-vista' || !intersectsReservation(feature.bounds, 0.4),
-  );
-  plan.colliders = plan.colliders.filter((collider) => {
-    if (collider.id.startsWith('floor-')) return false;
-    if (removedWallIds.has(collider.id.replace(/^collider-/, ''))) return false;
-    if (collider.center.y < -0.5) return true;
-    const bounds: Rect = {
-      minX: collider.center.x - collider.halfExtents.x,
-      maxX: collider.center.x + collider.halfExtents.x,
-      minZ: collider.center.z - collider.halfExtents.z,
-      maxZ: collider.center.z + collider.halfExtents.z,
-    };
-    return !intersectsReservation(bounds);
-  });
-
-  const ownOpenings = plan.features.flatMap((feature): Rect[] =>
-    feature.kind === 'grid-pit' ? feature.holes.map(cloneRect) : [],
-  );
-  plan.floorOpenings = [...ownOpenings, ...openings].map(cloneRect);
-  plan.floorRects = floorCellsOutsideOpenings(plan.size, plan.floorOpenings);
-  for (const [index, floor] of plan.floorRects.entries()) {
-    plan.colliders.push({
-      id: `floor-${index}`,
-      center: {
-        x: (floor.minX + floor.maxX) * 0.5,
-        y: -0.12,
-        z: (floor.minZ + floor.maxZ) * 0.5,
-      },
-      halfExtents: { x: rectWidth(floor) * 0.5, y: 0.12, z: rectDepth(floor) * 0.5 },
-      kind: 'floor',
-    });
-  }
-
-  for (const [reservationIndex, reservation] of reservations.entries()) {
-    const bounds = reservation.bounds;
-    const center = rectCenter(bounds);
-    const sides = [
-      { suffix: 'north', x: center.x, z: bounds.minZ, length: rectWidth(bounds), orientation: 'x' as const },
-      { suffix: 'south', x: center.x, z: bounds.maxZ, length: rectWidth(bounds), orientation: 'x' as const },
-      { suffix: 'west', x: bounds.minX, z: center.z, length: rectDepth(bounds), orientation: 'z' as const },
-      { suffix: 'east', x: bounds.maxX, z: center.z, length: rectDepth(bounds), orientation: 'z' as const },
-    ];
-    for (const side of sides) {
-      const wall: WallSegment = {
-        id: `vertical-reservation-${reservationIndex}-${side.suffix}`,
-        x: side.x,
-        z: side.z,
-        length: side.length,
-        orientation: side.orientation,
-        bottom: 0,
-        height: plan.wallHeight,
-        thickness: 0.34,
-        tint: 0.9,
-        collision: true,
-        kind: 'plaster',
-      };
-      plan.walls.push(wall);
-      plan.colliders.push(colliderForWall(wall));
-    }
-  }
-};
-
 export interface InheritedShaftOpening extends Rect {
   readonly sourceStory: number;
   readonly remainingStories: number;
 }
+
+const coalesceInheritedShaftOpenings = (
+  claims: readonly InheritedShaftOpening[],
+): InheritedShaftOpening[] => {
+  const merged: InheritedShaftOpening[] = [];
+  for (const claim of claims) {
+    let candidate: InheritedShaftOpening = { ...claim };
+    for (let index = merged.length - 1; index >= 0; index -= 1) {
+      const existing = merged[index]!;
+      if (!rectsOverlap(candidate, existing, 0.06)) continue;
+      candidate = {
+        minX: Math.min(candidate.minX, existing.minX),
+        minZ: Math.min(candidate.minZ, existing.minZ),
+        maxX: Math.max(candidate.maxX, existing.maxX),
+        maxZ: Math.max(candidate.maxZ, existing.maxZ),
+        sourceStory: Math.max(candidate.sourceStory, existing.sourceStory),
+        remainingStories: Math.max(candidate.remainingStories, existing.remainingStories),
+      };
+      merged.splice(index, 1);
+      // The union may now touch a claim visited earlier. Restarting makes the
+      // result independent from the source order.
+      index = merged.length;
+    }
+    merged.push(candidate);
+  }
+  return merged;
+};
 
 export const inheritedShaftOpeningsForChunk = (
   seed: string,
@@ -724,18 +697,14 @@ export const inheritedShaftOpeningsForChunk = (
 ): readonly InheritedShaftOpening[] => {
   const coord = resolveCoord(key);
   const openings: InheritedShaftOpening[] = [];
-  for (let distance = 1; distance <= 6; distance += 1) {
+  for (let distance = 1; distance < MAX_PIT_STORIES; distance += 1) {
     const sourceCoord = { ...coord, story: coord.story + distance };
     const sourceKey = createChunkKey(sourceCoord);
     const sourceSeed = derivedChunkSeed(seed, sourceKey);
-    if (!worldHasDeepShaft(sourceSeed)) continue;
+    if (worldMaxPitStories(sourceSeed) <= distance) continue;
     const sourcePlan = generateWorld(sourceSeed);
-    const sourceReservations = verticalReservationsForChunk(seed, sourceCoord);
     for (const feature of sourcePlan.features) {
       if (feature.kind !== 'grid-pit') continue;
-      if (sourceReservations.some((reservation) =>
-        rectsOverlap(feature.bounds, reservation.bounds, 0.8)
-      )) continue;
       for (const hole of feature.holes) {
         const stories = hole.stories ?? 1;
         if (stories <= distance) continue;
@@ -747,7 +716,9 @@ export const inheritedShaftOpeningsForChunk = (
       }
     }
   }
-  return Object.freeze(openings);
+  return Object.freeze(
+    coalesceInheritedShaftOpenings(openings).map((opening) => Object.freeze(opening)),
+  );
 };
 
 const applyInheritedShaftOpenings = (
@@ -755,7 +726,32 @@ const applyInheritedShaftOpenings = (
   inherited: readonly InheritedShaftOpening[],
 ): void => {
   if (inherited.length === 0) return;
-  const openings = inherited.map(cloneRect);
+  const localPits = plan.features.filter(
+    (feature): feature is GridPitFeature => feature.kind === 'grid-pit',
+  );
+  const pitConflicted = localPits.some((feature) =>
+    feature.holes.some((hole) =>
+      inherited.some((opening) => rectsOverlap(hole, opening, 0.08))
+    )
+  );
+  const combinedClaims = pitConflicted
+    ? [
+        ...inherited,
+        ...localPits.flatMap((feature) =>
+          feature.holes.map((hole): InheritedShaftOpening => ({
+            ...cloneRect(hole),
+            sourceStory: inherited[0]?.sourceStory ?? 0,
+            remainingStories: hole.stories ?? 1,
+          }))
+        ),
+      ]
+    : [...inherited];
+  const canonicalInherited = coalesceInheritedShaftOpenings(combinedClaims);
+  const openings = canonicalInherited.map(cloneRect);
+  demoteTallRoomsIntersecting(plan, openings);
+  const continuingOpenings = canonicalInherited
+    .filter((opening) => opening.remainingStories > 1)
+    .map(cloneRect);
   const intersectsOpening = (rect: Rect, padding = 0): boolean =>
     openings.some((opening) => rectsOverlap(rect, opening, padding));
   const wallBounds = (wall: WallSegment): Rect => {
@@ -776,8 +772,20 @@ const applyInheritedShaftOpenings = (
         };
   };
   const removedWallIds = new Set<string>();
+  if (pitConflicted) {
+    plan.features = plan.features.filter((feature) => feature.kind !== 'grid-pit');
+    plan.walls = plan.walls.filter((wall) => wall.bottom >= -1);
+    plan.lights = plan.lights.filter((light) => light.level >= 0);
+    plan.colliders = plan.colliders.filter(
+      (collider) =>
+        !collider.id.startsWith('lower-level-floor-') &&
+        !collider.id.startsWith('shaft-') &&
+        !collider.id.startsWith('abyss-') &&
+        !collider.id.startsWith('collider-lower-wall-'),
+    );
+  }
   plan.walls = plan.walls.filter((wall) => {
-    const remove = wall.bottom >= -1 && intersectsOpening(wallBounds(wall), 0.06);
+    const remove = intersectsOpening(wallBounds(wall), 0.06);
     if (remove) removedWallIds.add(wall.id);
     return !remove;
   });
@@ -789,24 +797,38 @@ const applyInheritedShaftOpenings = (
   }, 0.15));
   plan.solidMasses = plan.solidMasses.filter((mass) => !intersectsOpening(mass.bounds, 0.15));
   plan.lights = plan.lights.filter(
-    (light) => light.level < 0 || !openings.some((opening) => pointInRect(light.x, light.z, opening, -0.8)),
+    (light) => !openings.some((opening) => lightPanelOverlapsRect(light, opening)),
   );
   plan.detailSockets = plan.detailSockets.filter(
     (socket) => !openings.some((opening) => pointInRect(socket.position.x, socket.position.z, opening, -0.6)),
   );
+  plan.features = plan.features.filter(
+    (feature) => feature.kind === 'impossible-vista' || !intersectsOpening(feature.bounds, 0.4),
+  );
   plan.colliders = plan.colliders.filter((collider) => {
     if (collider.id.startsWith('floor-')) return false;
     if (removedWallIds.has(collider.id.replace(/^collider-/, ''))) return false;
-    if (collider.center.y < -0.5) return true;
-    return !intersectsOpening({
+    const bounds = {
       minX: collider.center.x - collider.halfExtents.x,
       maxX: collider.center.x + collider.halfExtents.x,
       minZ: collider.center.z - collider.halfExtents.z,
       maxZ: collider.center.z + collider.halfExtents.z,
-    });
+    };
+    if (collider.kind === 'floor' && collider.center.y < -0.5) {
+      return !continuingOpenings.some((opening) => rectsOverlap(bounds, opening));
+    }
+    return !intersectsOpening(bounds);
   });
 
-  plan.floorOpenings = [...(plan.floorOpenings ?? []), ...openings].map(cloneRect);
+  plan.floorOpenings = (
+    pitConflicted
+      ? openings
+      : [...(plan.floorOpenings ?? []), ...openings]
+  ).map(cloneRect);
+  plan.lowerPreviewOpenings = [
+    ...(plan.lowerPreviewOpenings ?? []),
+    ...continuingOpenings,
+  ].map(cloneRect);
   plan.floorRects = floorCellsOutsideOpenings(plan.size, plan.floorOpenings);
   for (const [index, floor] of plan.floorRects.entries()) {
     plan.colliders.push({
@@ -823,11 +845,12 @@ const applyInheritedShaftOpenings = (
 
   for (const [openingIndex, opening] of openings.entries()) {
     const center = rectCenter(opening);
+    const thickness = 0.12;
     const sides = [
-      { suffix: 'north', x: center.x, z: opening.minZ, length: rectWidth(opening), orientation: 'x' as const },
-      { suffix: 'south', x: center.x, z: opening.maxZ, length: rectWidth(opening), orientation: 'x' as const },
-      { suffix: 'west', x: opening.minX, z: center.z, length: rectDepth(opening), orientation: 'z' as const },
-      { suffix: 'east', x: opening.maxX, z: center.z, length: rectDepth(opening), orientation: 'z' as const },
+      { suffix: 'north', x: center.x, z: opening.minZ - thickness * 0.5, length: rectWidth(opening), orientation: 'x' as const },
+      { suffix: 'south', x: center.x, z: opening.maxZ + thickness * 0.5, length: rectWidth(opening), orientation: 'x' as const },
+      { suffix: 'west', x: opening.minX - thickness * 0.5, z: center.z, length: rectDepth(opening), orientation: 'z' as const },
+      { suffix: 'east', x: opening.maxX + thickness * 0.5, z: center.z, length: rectDepth(opening), orientation: 'z' as const },
     ];
     for (const side of sides) {
       const wall: WallSegment = {
@@ -841,10 +864,10 @@ const applyInheritedShaftOpenings = (
         // shell prevents a visible seam while crossing either midpoint.
         bottom: plan.wallHeight - INFINITE_STORY_PITCH,
         height: INFINITE_STORY_PITCH * 2 - plan.wallHeight,
-        thickness: 0.12,
-        tint: 0.84,
+        thickness,
+        tint: 0.96,
         collision: true,
-        kind: 'plaster',
+        kind: 'wallpaper',
       };
       plan.walls.push(wall);
       plan.colliders.push(colliderForWall(wall));
@@ -861,8 +884,8 @@ const floorOpeningsCache = new Map<string, readonly Readonly<Rect>[]>();
 
 /**
  * Resolves the floor contract without recursively building the chunk above.
- * Only the raw pit, lower-atrium reservations and inherited deep shafts can
- * change a story's floor, so this stays deterministic and cheap to cache.
+ * Only the raw pit and inherited multi-storey shafts can change a story's
+ * floor, so this stays deterministic and cheap to cache.
  */
 const canonicalFloorOpeningsForChunk = (
   seed: string,
@@ -875,16 +898,24 @@ const canonicalFloorOpeningsForChunk = (
   if (cached) return cached;
 
   const plan = generateWorld(derivedChunkSeed(seed, normalizedKey));
-  const reservations = verticalReservationsForChunk(seed, coord);
-  const pitConflicted = plan.features.some(
-    (feature) =>
-      feature.kind === 'grid-pit' &&
-      reservations.some((reservation) => rectsOverlap(feature.bounds, reservation.bounds, 0.8)),
+  const inherited = inheritedShaftOpeningsForChunk(seed, coord);
+  const localOpenings = extractPitHoles(plan);
+  const pitConflicted = localOpenings.some((hole) =>
+    inherited.some((opening) => rectsOverlap(hole, opening, 0.08))
   );
+  const floorClaims = coalesceInheritedShaftOpenings([
+    ...inherited,
+    ...(pitConflicted
+      ? localOpenings.map((opening): InheritedShaftOpening => ({
+          ...opening,
+          sourceStory: coord.story,
+          remainingStories: 1,
+        }))
+      : []),
+  ]);
   const openings = freezeRects([
-    ...(pitConflicted ? [] : extractPitHoles(plan)),
-    ...reservations.map((reservation) => cloneRect(reservation.bounds)),
-    ...inheritedShaftOpeningsForChunk(seed, coord).map(cloneRect),
+    ...(pitConflicted ? [] : localOpenings),
+    ...floorClaims.map(cloneRect),
   ]);
   floorOpeningsCache.set(cacheKey, openings);
   if (floorOpeningsCache.size > 192) {
@@ -909,6 +940,7 @@ const applyCeilingLandingClearance = (
   plan: WorldPlan,
   ceilingOpenings: readonly Readonly<Rect>[],
 ): void => {
+  demoteTallRoomsIntersecting(plan, ceilingOpenings);
   const structuralVoids: Rect[] = [
     ...(plan.floorOpenings ?? []).map(cloneRect),
     ...plan.rooms
@@ -942,10 +974,7 @@ const applyCeilingLandingClearance = (
 
   const removedWallIds = new Set<string>();
   plan.walls = plan.walls.filter((wall) => {
-    const protectedWall =
-      wall.id.startsWith('vertical-reservation-') ||
-      wall.id.startsWith('inherited-shaft-') ||
-      wall.id.startsWith('vertical-atrium-');
+    const protectedWall = wall.id.startsWith('inherited-shaft-');
     const remove =
       !protectedWall &&
       wall.bottom >= -1 &&
@@ -966,7 +995,7 @@ const applyCeilingLandingClearance = (
   plan.lights = plan.lights.filter(
     (light) =>
       light.level < 0 ||
-      !landings.some((landing) => pointInRect(light.x, light.z, landing, 0.55)),
+      !landings.some((landing) => lightPanelOverlapsRect(light, landing)),
   );
   plan.detailSockets = plan.detailSockets.filter(
     (socket) =>
@@ -974,15 +1003,16 @@ const applyCeilingLandingClearance = (
   );
   plan.features = plan.features.filter(
     (feature) =>
-      (feature.kind !== 'stair-socket' && feature.kind !== 'squeeze-view') ||
+      (
+        feature.kind !== 'stair-socket' &&
+        feature.kind !== 'squeeze-view' &&
+        feature.kind !== 'raised-zone'
+      ) ||
       !intersectsLanding(feature.bounds, 0.48),
   );
   plan.colliders = plan.colliders.filter((collider) => {
     if (collider.kind === 'floor' || collider.center.y < -0.5) return true;
-    const protectedCollider =
-      collider.id.startsWith('collider-vertical-reservation-') ||
-      collider.id.startsWith('collider-inherited-shaft-') ||
-      collider.id.startsWith('collider-vertical-atrium-');
+    const protectedCollider = collider.id.startsWith('collider-inherited-shaft-');
     if (protectedCollider) return true;
     if (removedWallIds.has(collider.id.replace(/^collider-/, ''))) return false;
     return !intersectsLanding({
@@ -1016,9 +1046,20 @@ const applyCeilingLandingClearance = (
         thickness: 0.1,
         tint: 0.84,
         collision: false,
-        kind: 'plaster',
+        kind: 'wallpaper',
       });
     }
+  }
+};
+
+const enforceUnlitZones = (plan: WorldPlan): void => {
+  const zones = plan.unlitZones ?? [];
+  if (zones.length === 0) return;
+  for (const light of plan.lights) {
+    if (
+      light.level >= 0 &&
+      zones.some((zone) => pointInRect(light.x, light.z, zone))
+    ) light.dead = true;
   }
 };
 
@@ -1033,6 +1074,203 @@ export const ceilingOpeningsForChunk = (
   const coord = resolveCoord(key);
   const aboveKey = createChunkKey({ ...coord, story: coord.story + 1 });
   return canonicalFloorOpeningsForChunk(seed, aboveKey);
+};
+
+const inheritedStairCache = new Map<string, StairSocketFeature | null>();
+const rawLocalFloorOpeningsCache = new Map<string, readonly Readonly<Rect>[]>();
+
+const rawLocalFloorOpeningsForChunk = (
+  seed: string,
+  key: ChunkKey | ChunkCoord,
+): readonly Readonly<Rect>[] => {
+  const coord = resolveCoord(key);
+  const normalizedKey = createChunkKey(coord);
+  const cacheKey = `${seed}::raw-local-floor-openings::${normalizedKey}`;
+  const cached = rawLocalFloorOpeningsCache.get(cacheKey);
+  if (cached) return cached;
+  const plan = generateWorld(derivedChunkSeed(seed, normalizedKey));
+  const openings = freezeRects(plan.floorOpenings ?? []);
+  rawLocalFloorOpeningsCache.set(cacheKey, openings);
+  if (rawLocalFloorOpeningsCache.size > 192) {
+    const oldest = rawLocalFloorOpeningsCache.keys().next().value;
+    if (oldest !== undefined) rawLocalFloorOpeningsCache.delete(oldest);
+  }
+  return openings;
+};
+
+export const inheritedStairForChunk = (
+  seed: string,
+  key: ChunkKey | ChunkCoord,
+): StairSocketFeature | undefined => {
+  const coord = resolveCoord(key);
+  const normalizedKey = createChunkKey(coord);
+  const cacheKey = `${seed}::inherited-stair::${normalizedKey}`;
+  const cached = inheritedStairCache.get(cacheKey);
+  if (cached !== undefined) return cached ?? undefined;
+
+  const sourceCoord = { ...coord, story: coord.story - 1 };
+  const sourceKey = createChunkKey(sourceCoord);
+  const sourcePlan = generateWorld(derivedChunkSeed(seed, sourceKey));
+  const sourceStair = sourcePlan.features.find(
+    (feature): feature is StairSocketFeature =>
+      feature.kind === 'stair-socket' && (feature.baseY ?? 0) === 0,
+  );
+  let inherited: StairSocketFeature | null = null;
+  if (sourceStair) {
+    const opening = getStairFloorOpening(sourceStair);
+    const sourceOpenings = [
+      ...canonicalFloorOpeningsForChunk(seed, sourceCoord),
+      ...(sourcePlan.floorOpenings ?? []),
+    ];
+    const destinationOpenings = [
+      ...canonicalFloorOpeningsForChunk(seed, coord),
+      ...rawLocalFloorOpeningsForChunk(seed, coord),
+    ];
+    if (
+      !sourceOpenings.some((candidate) => rectsOverlap(sourceStair.bounds, candidate, 0.45)) &&
+      !destinationOpenings.some((candidate) =>
+        rectsOverlap(opening, candidate, 0.12) && !rectsEquivalent(opening, candidate)
+      )
+    ) {
+      inherited = {
+        ...sourceStair,
+        id: `inherited-${sourceKey}-${sourceStair.id}`,
+        bounds: cloneRect(sourceStair.bounds),
+        baseY: -INFINITE_STORY_PITCH,
+        inherited: true,
+      };
+    }
+  }
+  inheritedStairCache.set(cacheKey, inherited);
+  if (inheritedStairCache.size > 192) {
+    const oldest = inheritedStairCache.keys().next().value;
+    if (oldest !== undefined) inheritedStairCache.delete(oldest);
+  }
+  return inherited ?? undefined;
+};
+
+const removeLocalStairsBlockedAbove = (
+  seed: string,
+  coord: Readonly<ChunkCoord>,
+  plan: WorldPlan,
+): void => {
+  const destinationCoord = { ...coord, story: coord.story + 1 };
+  const destinationKey = createChunkKey(destinationCoord);
+  const destinationOpenings = [
+    ...canonicalFloorOpeningsForChunk(seed, destinationCoord),
+    ...rawLocalFloorOpeningsForChunk(seed, destinationKey),
+  ];
+  const removedIds = new Set(
+    plan.features
+      .filter(
+        (feature): feature is StairSocketFeature =>
+          feature.kind === 'stair-socket' &&
+          !feature.inherited &&
+          destinationOpenings.some((opening) =>
+            rectsOverlap(getStairFloorOpening(feature), opening, 0.12) &&
+            !rectsEquivalent(getStairFloorOpening(feature), opening)
+          ),
+      )
+      .map((feature) => feature.id),
+  );
+  if (removedIds.size === 0) return;
+  plan.features = plan.features.filter(
+    (feature) => feature.kind !== 'stair-socket' || !removedIds.has(feature.id),
+  );
+  plan.colliders = plan.colliders.filter(
+    (collider) => ![...removedIds].some((id) => collider.id.startsWith(`${id}-`)),
+  );
+};
+
+const applyInheritedStair = (
+  plan: WorldPlan,
+  stairs: StairSocketFeature | undefined,
+): void => {
+  if (!stairs) return;
+  const opening = getStairFloorOpening(stairs);
+  if ((plan.floorOpenings ?? []).some((candidate) => rectsOverlap(candidate, opening, 0.12))) {
+    return;
+  }
+  const clearance = getStairLandingClearance(stairs);
+  demoteTallRoomsIntersecting(plan, [clearance]);
+  const intersectsClearance = (rect: Rect, padding = 0): boolean =>
+    rectsOverlap(rect, clearance, padding);
+  const wallBounds = (wall: WallSegment): Rect => {
+    const halfLength = wall.length * 0.5;
+    const halfThickness = wall.thickness * 0.5;
+    return wall.orientation === 'x'
+      ? {
+          minX: wall.x - halfLength,
+          maxX: wall.x + halfLength,
+          minZ: wall.z - halfThickness,
+          maxZ: wall.z + halfThickness,
+        }
+      : {
+          minX: wall.x - halfThickness,
+          maxX: wall.x + halfThickness,
+          minZ: wall.z - halfLength,
+          maxZ: wall.z + halfLength,
+        };
+  };
+  const removedWallIds = new Set<string>();
+  plan.walls = plan.walls.filter((wall) => {
+    const remove = wall.bottom >= -0.2 && intersectsClearance(wallBounds(wall), 0.18);
+    if (remove) removedWallIds.add(wall.id);
+    return !remove;
+  });
+  plan.columns = plan.columns.filter((column) => !intersectsClearance({
+    minX: column.x - column.width * 0.5,
+    maxX: column.x + column.width * 0.5,
+    minZ: column.z - column.depth * 0.5,
+    maxZ: column.z + column.depth * 0.5,
+  }, 0.2));
+  plan.solidMasses = plan.solidMasses.filter(
+    (mass) => !intersectsClearance(mass.bounds, 0.2),
+  );
+  plan.features = plan.features.filter(
+    (feature) =>
+      feature.kind === 'grid-pit' ||
+      feature.kind === 'impossible-vista' ||
+      !intersectsClearance(feature.bounds, 0.2),
+  );
+  plan.lights = plan.lights.filter(
+    (light) => !lightPanelOverlapsRect(light, clearance),
+  );
+  plan.detailSockets = plan.detailSockets.filter(
+    (socket) => !pointInRect(socket.position.x, socket.position.z, clearance, -0.45),
+  );
+  plan.colliders = plan.colliders.filter((collider) => {
+    if (collider.id.startsWith('floor-')) return false;
+    if (removedWallIds.has(collider.id.replace(/^collider-/, ''))) return false;
+    if (collider.center.y < -0.45) return true;
+    return !intersectsClearance({
+      minX: collider.center.x - collider.halfExtents.x,
+      maxX: collider.center.x + collider.halfExtents.x,
+      minZ: collider.center.z - collider.halfExtents.z,
+      maxZ: collider.center.z + collider.halfExtents.z,
+    }, 0.12);
+  });
+
+  plan.floorOpenings = [...(plan.floorOpenings ?? []), opening].map(cloneRect);
+  plan.floorRects = floorCellsOutsideOpenings(plan.size, plan.floorOpenings);
+  for (const [index, floor] of plan.floorRects.entries()) {
+    plan.colliders.push({
+      id: `floor-${index}`,
+      center: {
+        x: (floor.minX + floor.maxX) * 0.5,
+        y: -0.12,
+        z: (floor.minZ + floor.maxZ) * 0.5,
+      },
+      halfExtents: {
+        x: rectWidth(floor) * 0.5,
+        y: 0.12,
+        z: rectDepth(floor) * 0.5,
+      },
+      kind: 'floor',
+    });
+  }
+  plan.features.push(stairs);
+  addStepColliders(plan, stairs);
 };
 
 const isBoundaryWall = (wall: WallSegment): boolean => {
@@ -1053,7 +1291,7 @@ const boundaryWallStyle = (
   return {
     thickness: thicknessRoll < 0.08 ? 0.72 : thicknessRoll < 0.3 ? 0.42 : 0.22,
     tint: rng.float(0.84, 1.06),
-    kind: rng.chance(0.14) ? 'plaster' : 'wallpaper',
+    kind: 'wallpaper',
   };
 };
 
@@ -1126,7 +1364,11 @@ const prefixFeature = (feature: WorldFeature, prefix: string): WorldFeature => {
   if (feature.kind === 'grid-pit') {
     return { ...feature, id: `${prefix}${feature.id}`, roomId: `${prefix}${feature.roomId}` };
   }
-  if (feature.kind === 'stair-socket' || feature.kind === 'squeeze-view') {
+  if (
+    feature.kind === 'stair-socket' ||
+    feature.kind === 'squeeze-view' ||
+    feature.kind === 'raised-zone'
+  ) {
     return { ...feature, id: `${prefix}${feature.id}`, roomId: `${prefix}${feature.roomId}` };
   }
   return { ...feature, id: `${prefix}${feature.id}` };
@@ -1135,7 +1377,11 @@ const prefixFeature = (feature: WorldFeature, prefix: string): WorldFeature => {
 const prefixPlanIds = (plan: WorldPlan, key: ChunkKey): void => {
   const prefix = `chunk-${key}/`;
   plan.rooms = plan.rooms.map((room) => ({ ...room, id: `${prefix}${room.id}` }));
-  plan.walls = plan.walls.map((wall) => ({ ...wall, id: `${prefix}${wall.id}` }));
+  plan.walls = plan.walls.map((wall) => ({
+    ...wall,
+    id: `${prefix}${wall.id}`,
+    roomId: wall.roomId ? `${prefix}${wall.roomId}` : undefined,
+  }));
   plan.solidMasses = plan.solidMasses.map((mass) => ({ ...mass, id: `${prefix}${mass.id}` }));
   plan.lights = plan.lights.map((light) => ({
     ...light,
@@ -1195,15 +1441,21 @@ export const generateInfiniteChunk = (
   }
 
   const biome = getInfiniteBiome(seed, coord);
-  const activeBiome = biome === 'vertical-atrium' && canonicalAtriumClaims(seed, coord).length === 0
-    ? 'classic-maze'
-    : biome;
-  applyBiome(plan, activeBiome, derivedChunkSeed(seed, normalizedKey));
-  const verticalReservations = verticalReservationsForChunk(seed, coord);
-  applyVerticalReservations(plan, verticalReservations);
+  const visualBiome = getInfiniteVisualBiome(seed, coord);
+  applyBiome(plan, biome, derivedChunkSeed(seed, normalizedKey));
+  applyVisualBiome(plan, visualBiome, derivedChunkSeed(seed, normalizedKey));
   applyInheritedShaftOpenings(plan, inheritedShaftOpeningsForChunk(seed, coord));
+  removeLocalStairsBlockedAbove(seed, coord, plan);
   const ceilingOpenings = ceilingOpeningsForChunk(seed, coord);
   applyCeilingLandingClearance(plan, ceilingOpenings);
+  applyInheritedStair(plan, inheritedStairForChunk(seed, coord));
+  plan.stairCeilingOpenings = plan.features
+    .filter(
+      (feature): feature is StairSocketFeature =>
+        feature.kind === 'stair-socket' && !feature.inherited && (feature.baseY ?? 0) === 0,
+    )
+    .map((feature) => cloneRect(feature.bounds));
+  enforceUnlitZones(plan);
   // WeakMap metadata is runtime-only and is lost through a worker's structured
   // clone. Keeping this tiny contract in the plan prevents main-thread world
   // regeneration when WorldView asks which ceiling cells to remove.
@@ -1216,7 +1468,7 @@ export const generateInfiniteChunk = (
   emitBoundary(plan, seed, coord, 'west', edgeGates.west, 'upper');
   prefixPlanIds(plan, normalizedKey);
 
-  attachInfiniteChunkMetadata(seed, plan, coord, biome, edgeGates);
+  attachInfiniteChunkMetadata(seed, plan, coord, biome, edgeGates, visualBiome);
   return plan;
 };
 
@@ -1226,6 +1478,7 @@ export const attachInfiniteChunkMetadata = (
   coordInput: ChunkCoord,
   knownBiome?: InfiniteBiome,
   knownEdgeGates?: InfiniteEdgeGates,
+  knownVisualBiome?: VisualBiome,
 ): InfiniteChunkMetadata => {
   const coord = resolveCoord(coordInput);
   const normalizedKey = createChunkKey(coord);
@@ -1238,6 +1491,7 @@ export const attachInfiniteChunkMetadata = (
     worldOffset: getChunkWorldOffset(coord),
     edgeGates: knownEdgeGates ?? getInfiniteEdgeGates(seed, coord),
     biome: knownBiome ?? getInfiniteBiome(seed, coord),
+    visualBiome: knownVisualBiome ?? plan.visualBiome ?? getInfiniteVisualBiome(seed, coord),
     get ceilingOpenings(): readonly Readonly<Rect>[] {
       cachedCeilingOpenings ??= ceilingOpeningsForChunk(seed, coord);
       return cachedCeilingOpenings;

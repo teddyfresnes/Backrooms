@@ -115,7 +115,8 @@ export class ExperienceUI {
           <div class="controls-strip" aria-label="Commandes">
             <span><kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> marcher</span>
             <span><kbd>⇧</kbd> accélérer</span>
-            <span><kbd>CTRL</kbd> s'accroupir</span>
+            <span><kbd>ESPACE</kbd> sauter</span>
+            <span><kbd>CTRL</kbd> accroupi/debout</span>
             <span><kbd>E</kbd> interagir</span>
             <span><kbd>C</kbd> chat</span>
             <span><kbd>H</kbd> console</span>

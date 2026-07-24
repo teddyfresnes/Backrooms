@@ -53,8 +53,10 @@ export const createDefaultFeatureRegistry = (): FeatureRegistry => {
       if (candidates.length === 0) return null;
       const room = rng.pick(candidates);
       const center = rectCenter(room.bounds);
-      const width = Math.min(8, rectWidth(room.bounds) - 4);
-      const depth = Math.min(5, rectDepth(room.bounds) - 4);
+      const heading = rng.pick(['x+', 'x-', 'z+', 'z-'] as const);
+      const alongX = heading.startsWith('x');
+      const width = Math.min(alongX ? 8 : 5, rectWidth(room.bounds) - 4);
+      const depth = Math.min(alongX ? 5 : 8, rectDepth(room.bounds) - 4);
       return {
         kind: 'stair-socket',
         id: `stair-socket-${room.id}`,
@@ -65,7 +67,8 @@ export const createDefaultFeatureRegistry = (): FeatureRegistry => {
           minZ: center.z - depth * 0.5,
           maxZ: center.z + depth * 0.5,
         },
-        heading: rng.pick(['x+', 'x-', 'z+', 'z-'] as const),
+        heading,
+        baseY: 0,
       };
     },
   });

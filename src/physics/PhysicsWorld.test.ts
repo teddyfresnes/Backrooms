@@ -5,7 +5,8 @@ vi.mock('@dimforge/rapier3d', async () =>
 );
 
 import { PhysicsWorld } from './PhysicsWorld';
-import type { StaticCollider, WorldPlan } from '../world/types';
+import { getStairCollisionShapes } from '../world/StairLayout';
+import type { StairSocketFeature, StaticCollider, WorldPlan } from '../world/types';
 
 const activeWorlds: PhysicsWorld[] = [];
 
@@ -45,18 +46,25 @@ const createPhysics = async (colliders: StaticCollider[] = []): Promise<PhysicsW
   return physics;
 };
 
+const castDownAt = (
+  physics: PhysicsWorld,
+  x: number,
+  originY: number,
+  z = 0,
+) => {
+  const ray = {
+    origin: { x, y: originY, z },
+    dir: { x: 0, y: -1, z: 0 },
+    pointAt: (time: number) => ({ x, y: originY - time, z }),
+  };
+  return physics.world.castRay(ray, 100, true);
+};
+
 const castDown = (
   physics: PhysicsWorld,
   x: number,
   originY: number,
-) => {
-  const ray = {
-    origin: { x, y: originY, z: 0 },
-    dir: { x: 0, y: -1, z: 0 },
-    pointAt: (time: number) => ({ x, y: originY - time, z: 0 }),
-  };
-  return physics.world.castRay(ray, 100, true);
-};
+) => castDownAt(physics, x, originY);
 
 afterEach(() => {
   activeWorlds.splice(0).forEach((physics) => physics.dispose());
@@ -73,6 +81,72 @@ describe('PhysicsWorld chunk ownership', () => {
     const result = physics.move({ x: 0, y: -0.1, z: 0 });
     expect(result.grounded).toBe(true);
     expect(result.position.y).toBeCloseTo(0.865, 3);
+  });
+
+  it('uses a short capsule while crouched and refuses to stand into a low ceiling', async () => {
+    const lowCeiling: StaticCollider = {
+      id: 'low-ceiling',
+      center: { x: 50, y: 1.5, z: 0 },
+      halfExtents: { x: 1.5, y: 0.1, z: 2 },
+      kind: 'barrier',
+    };
+    const physics = await createPhysics([floorCollider('origin-floor', 50), lowCeiling]);
+
+    expect(physics.setCrouched(true)).toBe(true);
+    expect(physics.isCrouched).toBe(true);
+    expect(physics.getPosition().y).toBeCloseTo(0.565, 3);
+    expect(physics.setCrouched(false)).toBe(true);
+    expect(physics.getPosition().y).toBeCloseTo(0.565, 3);
+
+    physics.move({ x: 2.3, y: 0, z: 0 });
+    expect(physics.setCrouched(false)).toBe(false);
+    expect(physics.isCrouched).toBe(false);
+    expect(physics.getPosition().y).toBeCloseTo(0.865, 3);
+  });
+
+  it('walks both flights of an inter-storey stair up to the next story', async () => {
+    const stairs: StairSocketFeature = {
+      kind: 'stair-socket',
+      id: 'walkable-stairs',
+      roomId: 'test-room',
+      bounds: { minX: 0, maxX: 8, minZ: -2.5, maxZ: 2.5 },
+      heading: 'x+',
+      baseY: 0,
+    };
+    const colliders: StaticCollider[] = [
+      {
+        id: 'approach-floor',
+        center: { x: 0.45, y: -0.12, z: -1.32 },
+        halfExtents: { x: 0.6, y: 0.12, z: 1 },
+        kind: 'floor',
+      },
+      ...getStairCollisionShapes(stairs).map((shape, index): StaticCollider => ({
+        id: `walkable-stairs-${shape.kind}-${index}`,
+        center: shape.center,
+        halfExtents: shape.halfExtents,
+        rotation: shape.rotation,
+        kind: 'step',
+      })),
+    ];
+    const plan = makePlan(colliders);
+    plan.spawn = { x: 0.45, y: 0.865, z: -1.32 };
+    const physics = await PhysicsWorld.create(plan);
+    activeWorlds.push(physics);
+
+    for (let index = 0; index < 220 && physics.getPosition().x < 7.45; index += 1) {
+      physics.move({ x: 0.065, y: -0.015, z: 0 });
+    }
+    expect(physics.getPosition().y).toBeGreaterThan(3.45);
+
+    for (let index = 0; index < 80 && physics.getPosition().z < 1.32; index += 1) {
+      physics.move({ x: 0, y: -0.015, z: 0.065 });
+    }
+    expect(physics.getPosition().z).toBeGreaterThan(1.1);
+    for (let index = 0; index < 220 && physics.getPosition().x > 0.6; index += 1) {
+      physics.move({ x: -0.065, y: -0.015, z: 0 });
+    }
+
+    expect(physics.getPosition().y).toBeCloseTo(6.265, 1);
   });
 
   it('adds and removes a chunk together with all its attached colliders', async () => {
@@ -162,5 +236,51 @@ describe('PhysicsWorld chunk ownership', () => {
     const afterRemoval = physics.move({ x: 0, y: -0.3, z: 0 });
     expect(afterRemoval.grounded).toBe(false);
     expect(afterRemoval.position.y).toBeLessThan(-2.25);
+  });
+
+  it('applies rotated ramp colliders in both axes and rise directions', async () => {
+    const angle = Math.PI / 9;
+    const halfAngle = angle * 0.5;
+    const colliders: StaticCollider[] = [
+      {
+        id: 'ramp-x-positive',
+        center: { x: -6, y: 0.7, z: 0 },
+        halfExtents: { x: 2, y: 0.08, z: 0.8 },
+        rotation: { x: 0, y: 0, z: Math.sin(halfAngle), w: Math.cos(halfAngle) },
+        kind: 'floor',
+      },
+      {
+        id: 'ramp-x-negative',
+        center: { x: 0, y: 0.7, z: 0 },
+        halfExtents: { x: 2, y: 0.08, z: 0.8 },
+        rotation: { x: 0, y: 0, z: -Math.sin(halfAngle), w: Math.cos(halfAngle) },
+        kind: 'floor',
+      },
+      {
+        id: 'ramp-z-positive',
+        center: { x: 6, y: 0.7, z: -3 },
+        halfExtents: { x: 0.8, y: 0.08, z: 2 },
+        rotation: { x: -Math.sin(halfAngle), y: 0, z: 0, w: Math.cos(halfAngle) },
+        kind: 'floor',
+      },
+      {
+        id: 'ramp-z-negative',
+        center: { x: 6, y: 0.7, z: 3 },
+        halfExtents: { x: 0.8, y: 0.08, z: 2 },
+        rotation: { x: Math.sin(halfAngle), y: 0, z: 0, w: Math.cos(halfAngle) },
+        kind: 'floor',
+      },
+    ];
+    const physics = await createPhysics(colliders);
+    const surfaceY = (x: number, z = 0): number => {
+      const hit = castDownAt(physics, x, 3, z);
+      expect(hit).not.toBeNull();
+      return 3 - hit!.timeOfImpact;
+    };
+
+    expect(surfaceY(-4.6)).toBeGreaterThan(surfaceY(-7.4));
+    expect(surfaceY(-1.4)).toBeGreaterThan(surfaceY(1.4));
+    expect(surfaceY(6, -1.6)).toBeGreaterThan(surfaceY(6, -4.4));
+    expect(surfaceY(6, 1.6)).toBeGreaterThan(surfaceY(6, 4.4));
   });
 });

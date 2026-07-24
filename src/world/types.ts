@@ -22,8 +22,14 @@ export interface Vec3Data {
   z: number;
 }
 
+export interface QuaternionData extends Vec3Data {
+  w: number;
+}
+
 export interface WallSegment {
   id: string;
+  /** Owning room for generated architectural continuations such as a raised ceiling shell. */
+  roomId?: string;
   x: number;
   z: number;
   length: number;
@@ -34,6 +40,7 @@ export interface WallSegment {
   tint: number;
   collision: boolean;
   kind: 'wallpaper' | 'plaster' | 'vista-frame';
+  detail?: 'recess' | 'ceiling-drop' | 'upper-shell' | 'threshold';
 }
 
 export interface StaticCollider {
@@ -41,6 +48,7 @@ export interface StaticCollider {
   center: Vec3Data;
   halfExtents: Vec3Data;
   kind: 'wall' | 'column' | 'floor' | 'step' | 'barrier';
+  rotation?: QuaternionData;
 }
 
 export interface RoomRecord {
@@ -59,6 +67,7 @@ export interface ColumnSlot {
   depth: number;
   height: number;
   tint: number;
+  kind?: 'column' | 'pilaster';
 }
 
 export interface SolidMass {
@@ -139,6 +148,27 @@ export interface StairSocketFeature {
   roomId: string;
   bounds: Rect;
   heading: 'x+' | 'x-' | 'z+' | 'z-';
+  /** Local height of the first tread; inherited stairs start one story below. */
+  baseY?: number;
+  inherited?: boolean;
+}
+
+export type SqueezeLayout =
+  | 'through'
+  | 'side-exits'
+  | 'chambers'
+  | 'dead-end'
+  | 'loop'
+  | 'multi-exit';
+
+export interface PassageHump {
+  platformBounds: Rect;
+  elevation: number;
+  ramps: [RampSurface, RampSurface];
+}
+
+export interface PassageHole extends Rect {
+  depth: number;
 }
 
 export interface SqueezeViewFeature {
@@ -148,9 +178,35 @@ export interface SqueezeViewFeature {
   bounds: Rect;
   axis: 'x' | 'z';
   apertureWidth: number;
+  layout?: SqueezeLayout;
+  exitCount?: number;
+  clearanceHeight?: number;
+  hump?: PassageHump;
+  holes?: PassageHole[];
 }
 
-export type WorldFeature = GridPitFeature | VistaFeature | StairSocketFeature | SqueezeViewFeature;
+export interface RampSurface {
+  bounds: Rect;
+  axis: 'x' | 'z';
+  riseDirection: 1 | -1;
+}
+
+export interface RaisedZoneFeature {
+  kind: 'raised-zone';
+  id: string;
+  roomId: string;
+  bounds: Rect;
+  platformBounds: Rect;
+  elevation: number;
+  ramp: RampSurface;
+}
+
+export type WorldFeature =
+  | GridPitFeature
+  | VistaFeature
+  | StairSocketFeature
+  | SqueezeViewFeature
+  | RaisedZoneFeature;
 
 export interface DetailSocket {
   id: string;
@@ -159,6 +215,23 @@ export interface DetailSocket {
   position: Vec3Data;
   clearance: number;
   tags: string[];
+}
+
+export type VisualBiome = 'yellow' | 'red' | 'white';
+
+/**
+ * Chunk-wide material variation. These values only affect the appearance of
+ * repeated surfaces; topology, collision and light-map coordinates stay
+ * unchanged.
+ */
+export interface SurfaceStyle {
+  wallTint: number;
+  floorTint: number;
+  ceilingTint: number;
+  wallPatternScale: number;
+  floorPatternScale: number;
+  ceilingPatternScale: number;
+  floorQuarterTurn: boolean;
 }
 
 export interface WorldPlan {
@@ -180,6 +253,16 @@ export interface WorldPlan {
   floorOpenings?: Rect[];
   /** Serialized so worker-generated chunks do not recompute vertical topology on mount. */
   ceilingOpenings?: Rect[];
+  /** Openings that continue through the compact lower-story preview. */
+  lowerPreviewOpenings?: Rect[];
+  /** Local stair cages that must pierce this story's drop ceiling. */
+  stairCeilingOpenings?: Rect[];
+  /** Rare contiguous room bounds whose ceiling circuit is intentionally absent. */
+  unlitZones?: Rect[];
+  /** Large-scale visual palette selected independently from room topology. */
+  visualBiome?: VisualBiome;
+  /** Deterministic per-chunk variation of the principal repeated surfaces. */
+  surfaceStyle?: SurfaceStyle;
   spawn: Vec3Data;
 }
 

@@ -27,6 +27,8 @@ const FIXED_Y_AXIS = new THREE.Vector3(0, 1, 0);
 const MAX_UNBROKEN_FALL = 48;
 const NOCLIP_SPEED = 8.5;
 const NOCLIP_SPRINT_SPEED = 22;
+const STANDING_JUMP_SPEED = 5.45;
+const CROUCHED_JUMP_SPEED = 4.25;
 
 export class PlayerController {
   readonly controls: PointerLockControls;
@@ -52,6 +54,7 @@ export class PlayerController {
   private moving = false;
   private sprinting = false;
   private crouching = false;
+  private crouchRequested = false;
   private targetStrafeLean = 0;
   private motionBlend = 0;
   private crouchBlend = 0;
@@ -111,7 +114,6 @@ export class PlayerController {
       this.velocity.set(0, 0, 0);
       this.moving = false;
       this.sprinting = false;
-      this.crouching = false;
       this.targetStrafeLean = 0;
     }
   }
@@ -127,6 +129,7 @@ export class PlayerController {
     this.grounded = true;
     this.moving = false;
     this.sprinting = false;
+    this.crouchRequested = false;
     this.crouching = false;
     this.targetStrafeLean = 0;
     this.lastSafePosition.copy(this.position);
@@ -208,16 +211,21 @@ export class PlayerController {
 
     if (!this.controls.isLocked) {
       this.input.consumePress('KeyE');
+      this.input.consumePress('Space');
+      this.input.consumePress('ControlLeft');
+      this.input.consumePress('ControlRight');
       this.velocity.multiplyScalar(0.82);
       this.moving = false;
       this.sprinting = false;
-      this.crouching = false;
       this.targetStrafeLean = 0;
       return;
     }
 
     if (this.noclipEnabled) {
       this.input.consumePress('KeyE');
+      this.input.consumePress('Space');
+      this.input.consumePress('ControlLeft');
+      this.input.consumePress('ControlRight');
       this.updateNoclip(delta);
       return;
     }
@@ -256,13 +264,18 @@ export class PlayerController {
     }
 
     const axes = this.input.axes;
+    const leftCrouchToggle = this.input.consumePress('ControlLeft');
+    const rightCrouchToggle = this.input.consumePress('ControlRight');
+    const crouchToggle = leftCrouchToggle || rightCrouchToggle;
+    if (crouchToggle) this.crouchRequested = !this.crouchRequested;
+    this.crouching = this.physics.setCrouched(this.crouchRequested);
     this.controls.getDirection(this.forward);
     this.forward.y = 0;
     this.forward.normalize();
     this.right.crossVectors(this.forward, this.lookCamera.up).normalize();
 
     const magnitude = Math.hypot(axes.forward, axes.right) || 1;
-    const targetSpeed = axes.crouch ? 1.55 : axes.sprint ? 6.05 : 3;
+    const targetSpeed = this.crouching ? 1.55 : axes.sprint ? 6.05 : 3;
     this.desired
       .copy(this.forward)
       .multiplyScalar((axes.forward / magnitude) * targetSpeed)
@@ -277,6 +290,11 @@ export class PlayerController {
       this.velocity.z *= friction;
     }
 
+    const jumpRequested = this.input.consumePress('Space');
+    if (this.grounded && jumpRequested) {
+      this.verticalVelocity = this.crouching ? CROUCHED_JUMP_SPEED : STANDING_JUMP_SPEED;
+      this.grounded = false;
+    }
     this.verticalVelocity -= 18.5 * delta;
     this.verticalVelocity = Math.max(this.verticalVelocity, -18);
     const impactVelocity = this.verticalVelocity;
@@ -298,20 +316,19 @@ export class PlayerController {
 
     const horizontalDistance = Math.hypot(result.moved.x, result.moved.z);
     this.moving = horizontalDistance > 0.00015 && this.grounded;
-    this.sprinting = axes.sprint && !axes.crouch && this.moving;
-    this.crouching = axes.crouch;
+    this.sprinting = axes.sprint && !this.crouching && this.moving;
     this.targetStrafeLean = this.moving
       ? THREE.MathUtils.clamp(this.velocity.dot(this.right) / Math.max(1, targetSpeed), -1, 1)
       : 0;
 
     if (this.moving) {
-      const stepLength = this.sprinting ? 1.2 : axes.crouch ? 0.72 : 0.94;
+      const stepLength = this.sprinting ? 1.2 : this.crouching ? 0.72 : 0.94;
       this.stepDistance += horizontalDistance;
       // PI per footfall: a full 2PI gait cycle contains a left and a right step.
       this.gaitPhase += (horizontalDistance / stepLength) * Math.PI;
       while (this.stepDistance >= stepLength) {
         this.stepDistance -= stepLength;
-        this.callbacks.onFootstep(this.sprinting ? 1 : axes.crouch ? 0.45 : 0.72);
+        this.callbacks.onFootstep(this.sprinting ? 1 : this.crouching ? 0.45 : 0.72);
       }
     }
 

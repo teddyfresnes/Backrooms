@@ -1,0 +1,15 @@
+White biome PBR textures
+
+Wall:
+  ambientCG PaintedPlaster017
+  https://ambientcg.com/view?id=PaintedPlaster017
+
+Floor:
+  ambientCG Carpet001
+  https://ambientcg.com/view?id=Carpet001
+
+License:
+  Creative Commons CC0 1.0 Universal / Public Domain
+  https://docs.ambientcg.com/license/
+
+Downloaded as the 1K JPG packages on 2026-07-25.
