@@ -217,6 +217,25 @@ export interface DetailSocket {
   tags: string[];
 }
 
+export type PropPlacementKind = 'wall' | 'room' | 'scene';
+
+/**
+ * A deterministic reference to a lazily loaded decorative model. The compact
+ * footprint is also used by generation audits and by the optional physics box.
+ */
+export interface PropPlacement {
+  id: string;
+  assetId: string;
+  roomId: string;
+  position: Vec3Data;
+  rotationY: number;
+  scale: number;
+  bounds: Rect;
+  kind: PropPlacementKind;
+  sceneId?: string;
+  tone: number;
+}
+
 export type VisualBiome = 'yellow' | 'red' | 'white';
 
 /**
@@ -247,6 +266,8 @@ export interface WorldPlan {
   missingCeilingTiles: MissingCeilingTile[];
   features: WorldFeature[];
   detailSockets: DetailSocket[];
+  /** Rare isolated objects and small multi-object tableaux. */
+  propPlacements?: PropPlacement[];
   colliders: StaticCollider[];
   floorRects: Rect[];
   /** Canonical apertures cut from this story's walkable floor. */

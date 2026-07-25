@@ -20,6 +20,7 @@ export interface DebugExperience {
   fingerprint: string;
   rooms: number;
   lights: number;
+  props: number;
   features: string[];
   player: { x: number; y: number; z: number };
   fps: number;
@@ -191,6 +192,8 @@ export class Game {
       this.physics,
     );
     await this.worldStream.initialize();
+    this.ui.setLoading(0.79, 'DISPOSITION DES OBJETS ABANDONNÃ‰S');
+    await this.worldStream.waitForVisualAssets();
     this.camera.rotation.set(0, -Math.PI * 0.22, 0, 'YXZ');
     this.player = new PlayerController(this.camera, this.renderer.domElement, this.physics, {
       onLockChange: (locked) => this.ui.setLocked(locked),
@@ -549,6 +552,7 @@ export class Game {
       fingerprint: fingerprintWorld(this.plan),
       rooms: stream?.rooms ?? this.plan.rooms.length,
       lights: stream?.lights ?? this.plan.lights.length,
+      props: stream?.props ?? this.plan.propPlacements?.length ?? 0,
       features: this.plan.features.map((feature) => feature.kind),
       player: { x: player.x, y: player.y, z: player.z },
       fps: this.fps,

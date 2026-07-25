@@ -11,6 +11,7 @@ import {
 } from './BakedLighting';
 import type { BakedLightMapData, BakedLightMaps } from './BakedLighting';
 import { createGraffitiMesh, selectWallGraffiti } from './WallGraffiti';
+import { WorldPropLayer } from './WorldProps';
 import type {
   GridPitFeature,
   LightSlot,
@@ -508,6 +509,7 @@ const DEFAULT_SURFACE_STYLE: SurfaceStyle = {
 
 export class WorldView {
   readonly group = new THREE.Group();
+  readonly ready: Promise<void>;
   private readonly emitterMesh: THREE.InstancedMesh;
   private readonly fixtureSlots: LightSlot[];
   private readonly previewMaterials: Pick<
@@ -520,6 +522,7 @@ export class WorldView {
   private readonly graffitiTextures: THREE.CanvasTexture[] = [];
   private readonly graffitiMaterials: THREE.MeshBasicMaterial[] = [];
   private readonly surfaceStyle: SurfaceStyle;
+  private readonly propLayer: WorldPropLayer;
 
   constructor(
     readonly plan: WorldPlan,
@@ -585,6 +588,9 @@ export class WorldView {
     this.buildStairs();
     this.buildCeilingDamage();
     this.buildImpossibleVista();
+    this.propLayer = new WorldPropLayer(plan);
+    this.group.add(this.propLayer.group);
+    this.ready = this.propLayer.ready;
     void options;
   }
 
@@ -1649,6 +1655,7 @@ export class WorldView {
   }
 
   dispose(): void {
+    this.propLayer.dispose();
     this.group.traverse((object) => {
       if (object instanceof THREE.Mesh || object instanceof THREE.InstancedMesh) object.geometry.dispose();
     });

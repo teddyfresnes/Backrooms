@@ -5,6 +5,7 @@ import {
   MAX_PIT_STORIES,
   worldMaxPitStories,
 } from './generateWorld';
+import { populateRareProps } from './PropPlacement';
 import { SeededRandom } from './SeededRandom';
 import type {
   GridPitFeature,
@@ -1394,6 +1395,11 @@ const prefixPlanIds = (plan: WorldPlan, key: ChunkKey): void => {
     id: `${prefix}${socket.id}`,
     roomId: `${prefix}${socket.roomId}`,
   }));
+  plan.propPlacements = plan.propPlacements?.map((placement) => ({
+    ...placement,
+    id: `${prefix}${placement.id}`,
+    roomId: `${prefix}${placement.roomId}`,
+  }));
   plan.colliders = plan.colliders.map((collider) => ({
     ...collider,
     id: `${prefix}${collider.id}`,
@@ -1466,6 +1472,7 @@ export const generateInfiniteChunk = (
   // is only a local preview and must never receive a second 112 m boundary.
   emitBoundary(plan, seed, coord, 'north', edgeGates.north, 'upper');
   emitBoundary(plan, seed, coord, 'west', edgeGates.west, 'upper');
+  populateRareProps(plan, `${seed}:${normalizedKey}:rare-props`);
   prefixPlanIds(plan, normalizedKey);
 
   attachInfiniteChunkMetadata(seed, plan, coord, biome, edgeGates, visualBiome);

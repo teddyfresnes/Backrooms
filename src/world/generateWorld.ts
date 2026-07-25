@@ -2787,6 +2787,11 @@ export const fingerprintWorld = (world: WorldPlan): string => {
       .join('|'),
     world.features.map((feature) => feature.id).join('|'),
     world.lights.map((light) => `${light.x}:${light.z}:${Number(light.dead)}`).join('|'),
+    (world.propPlacements ?? [])
+      .map((placement) =>
+        `${placement.assetId}:${placement.position.x.toFixed(2)},${placement.position.z.toFixed(2)}`
+      )
+      .join('|'),
   ].join('::');
   let hash = 2166136261;
   for (let index = 0; index < payload.length; index += 1) {

@@ -75,5 +75,73 @@
       "license": "CC0 1.0",
       "file": "audio/ventilation-cc0.mp3"
     }
+  ],
+  "models": [
+    {
+      "name": "Furniture Kit",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/furniture-kit",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "files": ["models/props/kenney-furniture/*.glb"],
+      "changes": "Original embedded GLB exports; runtime-only normalization and subtle material toning."
+    },
+    {
+      "name": "Retro Urban Kit",
+      "author": "Kenney",
+      "source": "https://kenney.nl/assets/retro-urban-kit",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "files": ["models/props/kenney-retro-urban/*.glb"],
+      "changes": "Selected small urban props from the original embedded GLB exports."
+    },
+    {
+      "name": "Low-poly Bike",
+      "author": "Lyricsz",
+      "source": "https://opengameart.org/content/bike-0",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "files": [
+        "models/props/opengameart-bike/bike.obj",
+        "models/props/opengameart-bike/bike.png"
+      ],
+      "changes": "OBJ and original texture; converted to a rough PBR material at runtime."
+    },
+    {
+      "name": "Television 01",
+      "author": "Gabriel Radić / Poly Haven",
+      "source": "https://polyhaven.com/a/Television_01",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://polyhaven.com/license",
+      "files": ["models/props/poly-haven/Television_01/**"],
+      "changes": "Official 1K glTF distribution."
+    },
+    {
+      "name": "Metal Office Desk",
+      "author": "Ulan Cabanilla / Poly Haven",
+      "source": "https://polyhaven.com/a/metal_office_desk",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://polyhaven.com/license",
+      "files": ["models/props/poly-haven/metal_office_desk/**"],
+      "changes": "Official 1K glTF distribution."
+    },
+    {
+      "name": "Cassette Player",
+      "author": "Oday Abuzaeed / Poly Haven",
+      "source": "https://polyhaven.com/a/cassette_player",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://polyhaven.com/license",
+      "files": ["models/props/poly-haven/cassette_player/**"],
+      "changes": "Official 1K glTF distribution."
+    },
+    {
+      "name": "Korean Fire Extinguisher 01",
+      "author": "UM JOORIN / Poly Haven",
+      "source": "https://polyhaven.com/a/korean_fire_extinguisher_01",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://polyhaven.com/license",
+      "files": ["models/props/poly-haven/korean_fire_extinguisher_01/**"],
+      "changes": "Official 1K glTF distribution."
+    }
   ]
 }

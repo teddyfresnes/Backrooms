@@ -59,6 +59,7 @@ export interface WorldStreamDebugCounts {
   lights: number;
   lightSources: number;
   colliders: number;
+  props: number;
   pendingChunks: number;
 }
 
@@ -458,6 +459,56 @@ export class WorldStream {
     };
 
     for (const runtime of this.chunks.values()) {
+      const propGroups = new Map<string, Rect>();
+      for (const placement of runtime.plan.propPlacements ?? []) {
+        const key = placement.sceneId ?? placement.id;
+        const existing = propGroups.get(key);
+        propGroups.set(key, existing
+          ? {
+              minX: Math.min(existing.minX, placement.bounds.minX),
+              minZ: Math.min(existing.minZ, placement.bounds.minZ),
+              maxX: Math.max(existing.maxX, placement.bounds.maxX),
+              maxZ: Math.max(existing.maxZ, placement.bounds.maxZ),
+            }
+          : { ...placement.bounds });
+        const room = runtime.plan.rooms.find((candidate) => candidate.id === placement.roomId);
+        if (!room) continue;
+        if (placement.assetId === 'bike:low-poly') {
+          addTarget(
+            runtime,
+            'bicycle',
+            'velo abandonne',
+            ['bike', 'bicycle', 'velo', 'vélo'],
+            approachPointForRect(placement.bounds, room.bounds, 0.865),
+          );
+        }
+        if (
+          placement.assetId === 'polyhaven:crt-television' ||
+          placement.assetId === 'furniture:televisionVintage'
+        ) {
+          addTarget(
+            runtime,
+            'crt-tv',
+            'television cathodique',
+            ['crt', 'tv', 'television', 'télévision', 'television-cathodique'],
+            approachPointForRect(placement.bounds, room.bounds, 0.865),
+          );
+        }
+      }
+      for (const bounds of propGroups.values()) {
+        const center = rectCenter(bounds);
+        const room = runtime.plan.rooms.find((candidate) =>
+          pointInRect(center.x, center.z, candidate.bounds)
+        );
+        if (!room) continue;
+        addTarget(
+          runtime,
+          'objects',
+          'objets abandonnes',
+          ['object', 'objects', 'objet', 'objets', 'props', 'scene', 'scène'],
+          approachPointForRect(bounds, room.bounds, 0.865),
+        );
+      }
       for (const feature of runtime.plan.features) {
         if (feature.kind === 'grid-pit') {
           const largest = [...feature.holes].sort((a, b) => rectArea(b) - rectArea(a))[0];
@@ -697,10 +748,12 @@ export class WorldStream {
     let rooms = 0;
     let lights = 0;
     let colliders = 0;
+    let props = 0;
     for (const runtime of this.chunks.values()) {
       rooms += runtime.plan.rooms.length;
       lights += runtime.plan.lights.length;
       colliders += runtime.plan.colliders.length;
+      props += runtime.plan.propPlacements?.length ?? 0;
     }
     return {
       chunks: this.chunks.size,
@@ -710,6 +763,7 @@ export class WorldStream {
       lights,
       lightSources: this.sourceCount,
       colliders,
+      props,
       pendingChunks: this.pendingChunks,
     };
   }
@@ -728,6 +782,10 @@ export class WorldStream {
     this.clearMountedChunks();
     this.sourceCount = 0;
     this.pendingChunks = 0;
+  }
+
+  async waitForVisualAssets(): Promise<void> {
+    await Promise.all([...this.chunks.values()].map((runtime) => runtime.view.ready));
   }
 
   private mountChunk(
