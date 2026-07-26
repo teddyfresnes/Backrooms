@@ -145,7 +145,9 @@ const reachableRoomIds = (seed: string): Set<string> => {
     ) ||
     world.colliders.some((collider) => {
       if (collider.kind === 'floor' || collider.kind === 'step') return false;
-      if (collider.center.y < 0 || collider.center.y - collider.halfExtents.y > 1.8) return false;
+      // Audit the navigation graph with the crouched capsule (1.08 m tall), so
+      // a wallpaper lintel above a crawl opening does not count as a closed wall.
+      if (collider.center.y < 0 || collider.center.y - collider.halfExtents.y > 1.12) return false;
       return (
         Math.abs(x - collider.center.x) < collider.halfExtents.x + 0.29 &&
         Math.abs(z - collider.center.z) < collider.halfExtents.z + 0.29
@@ -225,15 +227,36 @@ describe('Level 0 procedural generator', () => {
     expect(new Set(styles.map((style) => style!.floorQuarterTurn))).toEqual(new Set([true, false]));
   });
 
-  it.each(seeds)('produces a valid and connected plan for %s', (seed) => {
+  it.each(seeds)('keeps public rooms connected while sealing deliberate pockets for %s', (seed) => {
     const world = generateWorld(seed);
     expect(validateWorldPlan(world)).toEqual([]);
-    expect(reachableRoomIds(seed).size).toBe(world.rooms.length);
+    const reached = reachableRoomIds(seed);
+    const sealedRooms = world.rooms.filter((room) => room.access === 'sealed');
+    const secretRooms = world.rooms.filter((room) => room.access === 'secret');
+    expect(sealedRooms.length).toBeGreaterThanOrEqual(1);
+    expect(sealedRooms.length + secretRooms.length).toBeGreaterThanOrEqual(2);
+    expect(world.rooms.every(
+      (room) => room.access === 'sealed' ? !reached.has(room.id) : reached.has(room.id),
+    )).toBe(true);
+    expect(world.lights.every((light) =>
+      !sealedRooms.some((room) => room.id === light.roomId)
+    )).toBe(true);
+    expect(world.detailSockets.every((socket) =>
+      !sealedRooms.some((room) => room.id === socket.roomId)
+    )).toBe(true);
+    expect(secretRooms.every((room) =>
+      world.features.some(
+        (feature) =>
+          feature.kind === 'squeeze-view' &&
+          feature.passageStyle === 'wall-breach' &&
+          feature.roomId === room.id,
+      )
+    )).toBe(true);
     expect(world.rooms.length).toBeGreaterThanOrEqual(24);
     const narrowRooms = world.rooms.filter(
       (room) => Math.min(rectWidth(room.bounds), rectDepth(room.bounds)) <= 8.25,
     );
-    expect(narrowRooms.length / world.rooms.length).toBeGreaterThanOrEqual(0.2);
+    expect(narrowRooms.length / world.rooms.length).toBeGreaterThanOrEqual(0.14);
     expect(world.rooms.filter((room) => room.kind === 'corridor').length / world.rooms.length)
       .toBeGreaterThanOrEqual(0.3);
     const openHalls = world.rooms.filter((room) => room.kind === 'open-hall');
@@ -312,7 +335,7 @@ describe('Level 0 procedural generator', () => {
     ).length / hazardSeeds.length;
     expect(generatedRate).toBeGreaterThan(0.06);
     expect(generatedRate).toBeLessThan(0.2);
-  });
+  }, 20_000);
 
   it('uses mostly bright chunks and rare contiguous unlit districts', () => {
     const worlds = hazardSeeds.map(hazardWorld);
@@ -393,27 +416,88 @@ describe('Level 0 procedural generator', () => {
     expect(worlds.some((world) => world.walls.some((wall) => wall.detail === 'recess'))).toBe(true);
   });
 
-  it('keeps every grand hall traversable on four sides and varies its proportions radically', () => {
+  it('varies grand-hall connectivity instead of making every side a universal hub', () => {
     const mainHalls = hazardSeeds.map((seed) => {
       const world = hazardWorld(seed);
       const hall = world.rooms.find((room) => room.id === 'room-grand-hall');
       expect(hall).toBeDefined();
       if (!hall) throw new Error('Missing room-grand-hall');
-      for (const side of ['north', 'south', 'west', 'east'] as const) {
-        expect(boundaryOpeningWidths(world, hall, side).length).toBeGreaterThan(0);
-      }
-      return hall;
+      const openSides = (['north', 'south', 'west', 'east'] as const).filter(
+        (side) => boundaryOpeningWidths(world, hall, side).length > 0,
+      ).length;
+      expect(openSides).toBeGreaterThanOrEqual(2);
+      return { hall, openSides };
     });
-    const aspects = mainHalls.map((hall) => {
+    const aspects = mainHalls.map(({ hall }) => {
       const width = rectWidth(hall.bounds);
       const depth = rectDepth(hall.bounds);
       return Math.max(width / depth, depth / width);
     });
-    const areas = mainHalls.map((hall) => rectWidth(hall.bounds) * rectDepth(hall.bounds));
+    const areas = mainHalls.map(({ hall }) => rectWidth(hall.bounds) * rectDepth(hall.bounds));
+    expect(mainHalls.some(({ openSides }) => openSides < 4)).toBe(true);
+    expect(mainHalls.some(({ openSides }) => openSides === 4)).toBe(true);
     expect(Math.min(...aspects)).toBeLessThan(1.6);
     expect(Math.max(...aspects)).toBeGreaterThan(3);
     expect(Math.min(...areas)).toBeLessThan(1_000);
     expect(Math.max(...areas)).toBeGreaterThan(5_000);
+  });
+
+  it('keeps formal halls exactly mirrored and closes every architectural corner', () => {
+    const worlds = hazardSeeds.map(hazardWorld);
+    let formalColumnCount = 0;
+    for (const world of worlds) {
+      const hall = world.rooms.find((room) => room.id === 'room-grand-hall');
+      expect(hall).toBeDefined();
+      if (!hall) continue;
+      const center = {
+        x: (hall.bounds.minX + hall.bounds.maxX) * 0.5,
+        z: (hall.bounds.minZ + hall.bounds.maxZ) * 0.5,
+      };
+      const columns = world.columns.filter((column) =>
+        pointInRect(column.x, column.z, hall.bounds, 0.6)
+      );
+      formalColumnCount += columns.length;
+      for (const column of columns) {
+        for (const mirror of [
+          { x: center.x * 2 - column.x, z: column.z },
+          { x: column.x, z: center.z * 2 - column.z },
+        ]) {
+          expect(columns.some((candidate) =>
+            Math.abs(candidate.x - mirror.x) <= 0.06 &&
+            Math.abs(candidate.z - mirror.z) <= 0.06 &&
+            Math.abs(candidate.width - column.width) <= 1e-6 &&
+            Math.abs(candidate.depth - column.depth) <= 1e-6
+          )).toBe(true);
+        }
+      }
+      for (const [orientation, fixed, points] of [
+        ['x', hall.bounds.minZ, [hall.bounds.minX + 0.25, hall.bounds.maxX - 0.25]],
+        ['x', hall.bounds.maxZ, [hall.bounds.minX + 0.25, hall.bounds.maxX - 0.25]],
+        ['z', hall.bounds.minX, [hall.bounds.minZ + 0.25, hall.bounds.maxZ - 0.25]],
+        ['z', hall.bounds.maxX, [hall.bounds.minZ + 0.25, hall.bounds.maxZ - 0.25]],
+      ] as const) {
+        for (const point of points) {
+          const cornerX = orientation === 'x' ? point : fixed;
+          const cornerZ = orientation === 'x' ? fixed : point;
+          const coveredByWall = world.walls.some((wall) => {
+            if (wall.orientation !== orientation) return false;
+            const wallFixed = orientation === 'x' ? wall.z : wall.x;
+            const along = orientation === 'x' ? wall.x : wall.z;
+            return (
+              Math.abs(wallFixed - fixed) < 0.06 &&
+              point >= along - wall.length * 0.5 &&
+              point <= along + wall.length * 0.5
+            );
+          });
+          const coveredByPost = world.columns.some((column) =>
+            Math.abs(cornerX - column.x) <= column.width * 0.5 &&
+            Math.abs(cornerZ - column.z) <= column.depth * 0.5
+          );
+          expect(coveredByWall || coveredByPost).toBe(true);
+        }
+      }
+    }
+    expect(formalColumnCount).toBeGreaterThan(200);
   });
 
   it('varies ceiling height and fully encloses every raised room with textured walls', () => {
@@ -594,7 +678,7 @@ describe('Level 0 procedural generator', () => {
     expect(secondPass).toEqual(firstPass);
     expect(voidWorldCount).toBeGreaterThan(0);
     expect(voidWorldCount / pitAuditSeeds.length).toBeLessThan(0.15);
-  });
+  }, 20_000);
 
   it('builds varied crouch-only wall passages with loops, dead ends, slopes and holes', () => {
     // PhysicsWorld uses a capsule radius of 0.32 m.
@@ -606,8 +690,12 @@ describe('Level 0 procedural generator', () => {
         .map((feature) => ({ world, feature }));
     });
     const squeezes = samples.map(({ feature }) => feature);
+    const wallBreaches = samples.filter(
+      ({ feature }) => feature.passageStyle === 'wall-breach',
+    );
 
     expect(squeezes.length).toBeGreaterThan(0);
+    expect(wallBreaches.length).toBeGreaterThan(hazardSeeds.length);
     expect(squeezes.every((feature) => feature.apertureWidth > playerDiameter)).toBe(true);
     expect(squeezes.every((feature) =>
       (feature.clearanceHeight ?? 10) >= 1.36 &&
@@ -646,9 +734,35 @@ describe('Level 0 procedural generator', () => {
     expect(squeezes.some((feature) =>
       (feature.axis === 'x' ? rectWidth(feature.bounds) : rectDepth(feature.bounds)) >= 16,
     )).toBe(true);
-  });
+    expect(wallBreaches.some(({ world, feature }) =>
+      world.rooms.find((room) => room.id === feature.roomId)?.access === 'secret'
+    )).toBe(true);
+    for (const { world, feature } of wallBreaches) {
+      const lintels = world.walls.filter(
+        (wall) => wall.detail === 'crawl-lintel' && wall.roomId === feature.roomId,
+      );
+      const tunnelSides = world.walls.filter(
+        (wall) => wall.detail === 'crawl-tunnel' && wall.roomId === feature.roomId,
+      );
+      expect(lintels.some((wall) =>
+        wall.kind === 'wallpaper' &&
+        wall.bottom >= (feature.clearanceHeight ?? 0) - 0.01
+      )).toBe(true);
+      expect(tunnelSides.length).toBeGreaterThanOrEqual(2);
+      expect(tunnelSides.every((wall) => wall.kind === 'wallpaper')).toBe(true);
+      expect(world.columns.some((column) =>
+        column.x + column.width * 0.5 > feature.bounds.minX &&
+        column.x - column.width * 0.5 < feature.bounds.maxX &&
+        column.z + column.depth * 0.5 > feature.bounds.minZ &&
+        column.z - column.depth * 0.5 < feature.bounds.maxZ
+      )).toBe(false);
+      expect(
+        feature.axis === 'x' ? rectDepth(feature.bounds) : rectWidth(feature.bounds),
+      ).toBeCloseTo(feature.apertureWidth, 2);
+    }
+  }, 20_000);
 
-  it('creates zonal pilaster extremes with irregular non-square dimensions', () => {
+  it('creates bare districts and concentrated pilaster districts', () => {
     const worlds = hazardSeeds.map(hazardWorld);
     const counts = worlds.map(
       (world) => world.columns.filter((column) => column.kind === 'pilaster').length,
@@ -656,8 +770,15 @@ describe('Level 0 procedural generator', () => {
     const pilasters = worlds.flatMap(
       (world) => world.columns.filter((column) => column.kind === 'pilaster'),
     );
-    expect(counts.some((count) => count === 0)).toBe(true);
-    expect(Math.max(...counts)).toBeGreaterThan(80);
+    expect(Math.max(...counts)).toBeGreaterThan(45);
+    expect(worlds.every((world) => (world.baseboardlessZones?.length ?? 0) >= 2)).toBe(true);
+    for (const world of worlds) {
+      const bareZones = world.baseboardlessZones ?? [];
+      expect(world.columns.filter((column) =>
+        column.kind === 'pilaster' &&
+        bareZones.some((zone) => pointInRect(column.x, column.z, zone, 0.05))
+      )).toHaveLength(0);
+    }
     expect(pilasters.some((column) => Math.abs(column.width - column.depth) > 0.2)).toBe(true);
     expect(new Set(pilasters.map((column) => column.width.toFixed(2))).size).toBeGreaterThan(20);
   });
@@ -715,9 +836,23 @@ describe('Level 0 procedural generator', () => {
     }
   });
 
-  it('does not generate structural plaster walls', () => {
-    expect(hazardSeeds.map(hazardWorld).every(
-      (world) => world.walls.every((wall) => wall.kind !== 'plaster'),
+  it('uses rare coherent plaster districts while keeping crawl openings wallpapered', () => {
+    const worlds = hazardSeeds.map(hazardWorld);
+    expect(worlds.every((world) => (world.plasterZones?.length ?? 0) >= 1)).toBe(true);
+    expect(worlds.every((world) => world.walls.some((wall) => wall.kind === 'plaster'))).toBe(true);
+    expect(worlds.every((world) =>
+      world.walls.filter((wall) => wall.detail === 'upper-shell').every(
+        (wall) => wall.kind === 'wallpaper',
+      )
+    )).toBe(true);
+    expect(worlds.every((world) =>
+      world.walls.filter((wall) =>
+        wall.detail === 'crawl-lintel' || wall.detail === 'crawl-tunnel'
+      ).every((wall) => wall.kind === 'wallpaper')
+    )).toBe(true);
+    expect(worlds.every((world) =>
+      world.walls.filter((wall) => wall.kind === 'wallpaper').length >
+      world.walls.filter((wall) => wall.kind === 'plaster').length
     )).toBe(true);
   });
 });

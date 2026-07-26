@@ -4,19 +4,25 @@ import type { MaterialSet } from './MaterialLibrary';
 import { WorldView, createOpenShaftWallGeometries } from './WorldBuilder';
 import type { WorldPlan } from '../world/types';
 
-const createTestMaterials = (): MaterialSet => ({
-  wall: new THREE.MeshStandardMaterial(),
-  plaster: new THREE.MeshStandardMaterial(),
-  floor: new THREE.MeshStandardMaterial(),
-  ceiling: new THREE.MeshStandardMaterial({ side: THREE.FrontSide }),
-  baseboard: new THREE.MeshStandardMaterial(),
-  pitWall: new THREE.MeshStandardMaterial(),
-  pitBottom: new THREE.MeshStandardMaterial(),
-  metal: new THREE.MeshStandardMaterial(),
-  fixtureFrame: new THREE.MeshStandardMaterial(),
-  fixtureGlow: new THREE.MeshBasicMaterial(),
-  void: new THREE.MeshBasicMaterial(),
-});
+const createTestMaterials = (): MaterialSet => {
+  const wall = new THREE.MeshStandardMaterial();
+  wall.name = 'test-wall';
+  const ceiling = new THREE.MeshStandardMaterial({ side: THREE.FrontSide });
+  ceiling.name = 'test-ceiling';
+  return {
+    wall,
+    plaster: new THREE.MeshStandardMaterial(),
+    floor: new THREE.MeshStandardMaterial(),
+    ceiling,
+    baseboard: new THREE.MeshStandardMaterial(),
+    pitWall: new THREE.MeshStandardMaterial(),
+    pitBottom: new THREE.MeshStandardMaterial(),
+    metal: new THREE.MeshStandardMaterial(),
+    fixtureFrame: new THREE.MeshStandardMaterial(),
+    fixtureGlow: new THREE.MeshBasicMaterial(),
+    void: new THREE.MeshBasicMaterial(),
+  };
+};
 
 describe('open pit shaft rendering', () => {
   it('uses capless vertical faces that remain below the walkable floor', () => {
@@ -188,6 +194,99 @@ describe('open pit shaft rendering', () => {
   });
 });
 
+describe('baseboard suppression', () => {
+  it('omits trim in baseboardless zones and on crawl-tunnel walls', () => {
+    const plan: WorldPlan = {
+      version: 1,
+      seed: 'BASEBOARDLESS-ZONE-RENDER-AUDIT',
+      size: 32,
+      wallHeight: 2.74,
+      rooms: [],
+      walls: [
+        {
+          id: 'wall-with-baseboard',
+          x: -8,
+          z: 0,
+          length: 2,
+          orientation: 'x',
+          bottom: 0,
+          height: 2.74,
+          thickness: 0.22,
+          tint: 1,
+          collision: true,
+          kind: 'wallpaper',
+        },
+        {
+          id: 'wall-in-baseboardless-zone',
+          x: 0,
+          z: 0,
+          length: 2,
+          orientation: 'x',
+          bottom: 0,
+          height: 2.74,
+          thickness: 0.22,
+          tint: 1,
+          collision: true,
+          kind: 'wallpaper',
+        },
+        {
+          id: 'crawl-tunnel-outside-zone',
+          x: 8,
+          z: 0,
+          length: 2,
+          orientation: 'x',
+          bottom: 0,
+          height: 2.74,
+          thickness: 0.22,
+          tint: 1,
+          collision: true,
+          kind: 'wallpaper',
+          detail: 'crawl-tunnel',
+        },
+      ],
+      columns: [{
+        x: 0,
+        z: 4,
+        width: 1,
+        depth: 1,
+        height: 2.74,
+        tint: 1,
+      }],
+      solidMasses: [{
+        id: 'mass-in-baseboardless-zone',
+        bounds: { minX: 2, maxX: 4, minZ: 2, maxZ: 4 },
+        height: 2.74,
+        tint: 1,
+      }],
+      baseboardlessZones: [
+        { minX: 1, maxX: 1.5, minZ: -0.2, maxZ: 0.2 },
+        { minX: 0.5, maxX: 1, minZ: 3.5, maxZ: 4.5 },
+        { minX: 4, maxX: 4.5, minZ: 2, maxZ: 4 },
+      ],
+      lights: [],
+      missingCeilingTiles: [],
+      features: [],
+      detailSockets: [],
+      colliders: [],
+      floorRects: [{ minX: -16, maxX: 16, minZ: -16, maxZ: 16 }],
+      spawn: { x: -8, y: 0.9, z: 0 },
+    };
+    const materials = createTestMaterials();
+    const view = new WorldView(plan, materials);
+    const baseboards = view.group.getObjectByName('merged-baseboards') as THREE.Mesh;
+
+    expect(baseboards).toBeDefined();
+    const positions = baseboards.geometry.getAttribute('position');
+    expect(positions.count).toBe(24);
+    for (let index = 0; index < positions.count; index += 1) {
+      expect(positions.getX(index)).toBeLessThan(-6.8);
+    }
+
+    view.dispose();
+    Object.values(materials).forEach((material) => material.dispose());
+  });
+});
+
 describe('crouch passages and inter-storey stairs', () => {
   it('renders a low physical roof and a stair flight reaching 5.4m', () => {
     const stairBounds = { minX: 0, maxX: 8, minZ: -2.5, maxZ: 2.5 };
@@ -251,6 +350,7 @@ describe('crouch passages and inter-storey stairs', () => {
     const stairs = view.group.getObjectByName('inter-storey-stair-flights') as THREE.Mesh;
     expect(roof).toBeDefined();
     expect(stairs).toBeDefined();
+    expect((roof.material as THREE.Material).name).toBe('test-wall-baked');
     roof.geometry.computeBoundingBox();
     stairs.geometry.computeBoundingBox();
     expect(roof.geometry.boundingBox?.min.y).toBeCloseTo(1.4, 5);

@@ -20,7 +20,7 @@ import type {
 } from './types';
 import { pointInRect, rectArea, rectCenter, rectDepth, rectWidth } from './types';
 
-const GENERATOR_VERSION = 8;
+const GENERATOR_VERSION = 9;
 const WORLD_SIZE = 112;
 const WALL_HEIGHT = 2.74;
 const WALL_THICKNESS = 0.22;
@@ -275,12 +275,12 @@ const partitionGaps = (
   const span = spanMax - spanMin;
   const count = span >= 42
     ? rng.weighted([
-        { value: 1, weight: 0.16 },
-        { value: 2, weight: 0.5 },
-        { value: 3, weight: 0.34 },
+        { value: 1, weight: 0.62 },
+        { value: 2, weight: 0.3 },
+        { value: 3, weight: 0.08 },
       ])
     : span >= 27
-      ? (rng.chance(0.42) ? 2 : 1)
+      ? (rng.chance(0.2) ? 2 : 1)
       : 1;
   const mirrored = count > 1 && rng.chance(0.72);
   const jitter = mirrored ? rng.float(-0.055, 0.055) : 0;
@@ -290,8 +290,16 @@ const partitionGaps = (
     const lane = mirrored
       ? evenLane + (index < count * 0.5 ? jitter : -jitter)
       : clamp(evenLane + rng.float(-0.12, 0.12), 0.14, 0.86);
-    const center = quantize(spanMin + span * lane, 0.25);
     const width = rng.chance(0.14) ? rng.float(3.5, 5.2) : rng.float(2.15, 3.2);
+    const endReturn = Math.min(1.15, Math.max(0.72, span * 0.045));
+    const center = quantize(
+      clamp(
+        spanMin + span * lane,
+        spanMin + endReturn + width * 0.5,
+        spanMax - endReturn - width * 0.5,
+      ),
+      0.25,
+    );
     gaps.push({ min: center - width * 0.5, max: center + width * 0.5 });
   }
   return gaps;
@@ -466,9 +474,14 @@ const splitWorldWithGrandHall = (
   ): Gap[] => {
     const center = (min + max) * 0.5;
     const span = max - min;
+    const endReturn = Math.min(1.5, Math.max(0.82, span * 0.045));
+    const usableHalfSpan = Math.max(
+      width * 0.5,
+      span * 0.5 - width * 0.5 - endReturn,
+    );
     const gaps: Gap[] = [];
     for (let pair = 0; pair < pairCount; pair += 1) {
-      const distance = span * (0.18 + pair * 0.19);
+      const distance = usableHalfSpan * ((pair + 1) / (pairCount + 1));
       for (const side of [-1, 1] as const) {
         const gapCenter = center + side * distance;
         gaps.push({ min: gapCenter - width * 0.5, max: gapCenter + width * 0.5 });
@@ -490,8 +503,8 @@ const splitWorldWithGrandHall = (
       }];
   const longMin = longAlongX ? hall.minX : hall.minZ;
   const longMax = longAlongX ? hall.maxX : hall.maxZ;
-  const sidePairCount = longSpan >= 72 ? 3 : longSpan >= 42 ? 2 : 1;
-  const sideGaps = symmetricGaps(longMin, longMax, sidePairCount, rng.float(2.35, 4.4));
+  const sidePairCount = longSpan >= 72 ? 2 : 1;
+  const sideGaps = symmetricGaps(longMin, longMax, sidePairCount, rng.float(2.15, 3.5));
 
   if (longAlongX) {
     wallAroundGaps(plan, rng.fork('north-hall-wall'), 'x', hall.minZ, hall.minX, hall.maxX, sideGaps, 'wallpaper', 0.42);
@@ -1277,6 +1290,233 @@ const addRaisedZones = (
 const portalNear = (plan: MutablePlan, x: number, z: number, radius: number): boolean =>
   plan.portals.some((portal) => Math.hypot(portal.x - x, portal.z - z) < radius);
 
+const roomIsRestricted = (room: RoomRecord): boolean =>
+  room.access === 'sealed' || room.access === 'secret';
+
+const roomInZones = (room: RoomRecord, zones: readonly Rect[] | undefined): boolean => {
+  if (!zones) return false;
+  const center = rectCenter(room.bounds);
+  return zones.some((zone) => pointInRect(center.x, center.z, zone));
+};
+
+const roomPortalGraph = (
+  plan: MutablePlan,
+  rooms: readonly RoomRecord[],
+): Map<string, Set<string>> => {
+  const minimumWalkableOpening = 0.72;
+  const graph = new Map(rooms.map((room) => [room.id, new Set<string>()]));
+  const boundaryHasOpening = (
+    orientation: 'x' | 'z',
+    fixed: number,
+    spanMin: number,
+    spanMax: number,
+  ): boolean => {
+    const intervals = plan.walls
+      .filter((wall) => {
+        if (
+          wall.orientation !== orientation ||
+          wall.bottom > 0.08 ||
+          wall.bottom + wall.height < 1.12
+        ) return false;
+        const wallFixed = orientation === 'x' ? wall.z : wall.x;
+        return Math.abs(wallFixed - fixed) < 0.08;
+      })
+      .map((wall) => {
+        const center = orientation === 'x' ? wall.x : wall.z;
+        return {
+          min: Math.max(spanMin, center - wall.length * 0.5),
+          max: Math.min(spanMax, center + wall.length * 0.5),
+        };
+      })
+      .filter((interval) => interval.max - interval.min > 0.02)
+      .sort((left, right) => left.min - right.min);
+    let cursor = spanMin;
+    for (const interval of intervals) {
+      if (interval.min - cursor >= minimumWalkableOpening) return true;
+      cursor = Math.max(cursor, interval.max);
+    }
+    return spanMax - cursor >= minimumWalkableOpening;
+  };
+  for (let firstIndex = 0; firstIndex < rooms.length; firstIndex += 1) {
+    const first = rooms[firstIndex]!;
+    for (let secondIndex = firstIndex + 1; secondIndex < rooms.length; secondIndex += 1) {
+      const second = rooms[secondIndex]!;
+      let orientation: 'x' | 'z' | undefined;
+      let fixed = 0;
+      let spanMin = 0;
+      let spanMax = 0;
+      if (
+        Math.abs(first.bounds.maxX - second.bounds.minX) < 0.08 ||
+        Math.abs(second.bounds.maxX - first.bounds.minX) < 0.08
+      ) {
+        orientation = 'z';
+        fixed = Math.abs(first.bounds.maxX - second.bounds.minX) < 0.08
+          ? first.bounds.maxX
+          : second.bounds.maxX;
+        spanMin = Math.max(first.bounds.minZ, second.bounds.minZ);
+        spanMax = Math.min(first.bounds.maxZ, second.bounds.maxZ);
+      } else if (
+        Math.abs(first.bounds.maxZ - second.bounds.minZ) < 0.08 ||
+        Math.abs(second.bounds.maxZ - first.bounds.minZ) < 0.08
+      ) {
+        orientation = 'x';
+        fixed = Math.abs(first.bounds.maxZ - second.bounds.minZ) < 0.08
+          ? first.bounds.maxZ
+          : second.bounds.maxZ;
+        spanMin = Math.max(first.bounds.minX, second.bounds.minX);
+        spanMax = Math.min(first.bounds.maxX, second.bounds.maxX);
+      }
+      if (
+        orientation === undefined ||
+        spanMax - spanMin < minimumWalkableOpening ||
+        !boundaryHasOpening(orientation, fixed, spanMin, spanMax)
+      ) continue;
+      graph.get(first.id)?.add(second.id);
+      graph.get(second.id)?.add(first.id);
+    }
+  }
+  return graph;
+};
+
+const assignRestrictedRooms = (
+  plan: MutablePlan,
+  world: WorldPlan,
+  reservedRoomIds: Set<string>,
+  rootRng: SeededRandom,
+): void => {
+  const rng = rootRng.fork('topology:restricted-rooms');
+  const half = world.size * 0.5;
+  const graph = roomPortalGraph(plan, world.rooms);
+  const candidates = world.rooms.filter((room) => {
+    const center = rectCenter(room.bounds);
+    return (
+      !reservedRoomIds.has(room.id) &&
+      room.id !== 'room-grand-hall' &&
+      room.kind !== 'open-hall' &&
+      room.kind !== 'corridor' &&
+      room.kind !== 'pit-gallery' &&
+      rectArea(room.bounds) >= 42 &&
+      rectArea(room.bounds) <= 300 &&
+      room.bounds.minX > -half + 1.2 &&
+      room.bounds.maxX < half - 1.2 &&
+      room.bounds.minZ > -half + 1.2 &&
+      room.bounds.maxZ < half - 1.2 &&
+      Math.hypot(center.x - world.spawn.x, center.z - world.spawn.z) >= 17
+    );
+  });
+  if (candidates.length === 0) return;
+
+  const anchor = rng.pick(candidates);
+  const anchorCenter = rectCenter(anchor.bounds);
+  const ordered = rng
+    .shuffle(candidates)
+    .sort((left, right) => {
+      const leftCenter = rectCenter(left.bounds);
+      const rightCenter = rectCenter(right.bounds);
+      return (
+        Math.hypot(leftCenter.x - anchorCenter.x, leftCenter.z - anchorCenter.z) -
+        Math.hypot(rightCenter.x - anchorCenter.x, rightCenter.z - anchorCenter.z)
+      );
+    });
+  const targetCount = Math.min(
+    candidates.length,
+    clamp(Math.round(world.rooms.length * rng.float(0.065, 0.11)), 2, 7),
+  );
+  const restricted = new Set<string>();
+  const spawnRoom = world.rooms.find((room) =>
+    pointInRect(world.spawn.x, world.spawn.z, room.bounds, -0.02)
+  );
+  const preservesPublicConnectivity = (blocked: ReadonlySet<string>): boolean => {
+    if (!spawnRoom || blocked.has(spawnRoom.id)) return false;
+    const reached = new Set<string>([spawnRoom.id]);
+    const queue = [spawnRoom.id];
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      for (const neighbor of graph.get(queue[cursor]!) ?? []) {
+        if (blocked.has(neighbor) || reached.has(neighbor)) continue;
+        reached.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+    return world.rooms.every((room) => blocked.has(room.id) || reached.has(room.id));
+  };
+  for (const room of ordered) {
+    if (restricted.size >= targetCount) break;
+    const trial = new Set(restricted);
+    trial.add(room.id);
+    if (preservesPublicConnectivity(trial)) restricted.add(room.id);
+  }
+  if (restricted.size === 0) return;
+
+  const restrictedRooms = ordered.filter((room) => restricted.has(room.id));
+  const secretTarget = restrictedRooms.length >= 4 && rng.chance(0.38) ? 2 : 1;
+  const secretCandidates = restrictedRooms.filter((room) =>
+    [...(graph.get(room.id) ?? [])].some((neighbor) => !restricted.has(neighbor))
+  );
+  const secretIds = new Set(
+    rng.shuffle(secretCandidates).slice(0, Math.min(secretTarget, secretCandidates.length))
+      .map((room) => room.id),
+  );
+  for (const room of restrictedRooms) {
+    room.access = secretIds.has(room.id) ? 'secret' : 'sealed';
+    room.detailDensity = 0;
+    reservedRoomIds.add(room.id);
+  }
+};
+
+const selectArchitectureZones = (
+  world: WorldPlan,
+  rootRng: SeededRandom,
+): void => {
+  const rng = rootRng.fork('architecture:zones');
+  const grandHall = world.rooms.find((room) => room.id === 'room-grand-hall');
+  world.symmetryZones = grandHall ? [{ ...grandHall.bounds }] : [];
+
+  const candidates = world.rooms.filter(
+    (room) =>
+      !roomIsRestricted(room) &&
+      room.id !== grandHall?.id &&
+      room.kind !== 'pit-gallery' &&
+      rectArea(room.bounds) >= 38,
+  );
+  if (candidates.length === 0) {
+    world.baseboardlessZones = [];
+    world.plasterZones = [];
+    return;
+  }
+  const baseboardAnchor = rng.pick(candidates);
+  const baseboardCenter = rectCenter(baseboardAnchor.bounds);
+  const baseboardCount = Math.min(candidates.length, rng.int(2, 6));
+  const baseboardRooms = [...candidates]
+    .sort((left, right) => {
+      const leftCenter = rectCenter(left.bounds);
+      const rightCenter = rectCenter(right.bounds);
+      return (
+        Math.hypot(leftCenter.x - baseboardCenter.x, leftCenter.z - baseboardCenter.z) -
+        Math.hypot(rightCenter.x - baseboardCenter.x, rightCenter.z - baseboardCenter.z)
+      );
+    })
+    .slice(0, baseboardCount);
+  world.baseboardlessZones = baseboardRooms.map((room) => ({ ...room.bounds }));
+
+  const plasterPool = candidates.filter((room) => {
+    const center = rectCenter(room.bounds);
+    return Math.hypot(center.x - baseboardCenter.x, center.z - baseboardCenter.z) >= 18;
+  });
+  const plasterAnchor = rng.pick(plasterPool.length > 0 ? plasterPool : candidates);
+  const plasterCenter = rectCenter(plasterAnchor.bounds);
+  world.plasterZones = [...candidates]
+    .sort((left, right) => {
+      const leftCenter = rectCenter(left.bounds);
+      const rightCenter = rectCenter(right.bounds);
+      return (
+        Math.hypot(leftCenter.x - plasterCenter.x, leftCenter.z - plasterCenter.z) -
+        Math.hypot(rightCenter.x - plasterCenter.x, rightCenter.z - plasterCenter.z)
+      );
+    })
+    .slice(0, Math.min(candidates.length, rng.int(1, 4)))
+    .map((room) => ({ ...room.bounds }));
+};
+
 type PilasterProfile = 'none' | 'sparse' | 'regular' | 'dense' | 'clustered';
 
 const addPilasterSeries = (
@@ -1323,16 +1563,20 @@ const addPilasterSeries = (
       cursor += spacing * rng.float(0.78, 1.24);
     }
   }
-  for (const side of sides) {
-    for (const along of basePositions) {
-      const width = rng.float(
+  const profiles = basePositions.map((along) => ({
+    along,
+    width: rng.float(
         profile === 'dense' ? 0.3 : 0.42,
         profile === 'clustered' ? 1.45 : profile === 'dense' ? 1.15 : 0.9,
-      );
-      const projection = rng.float(
+      ),
+    projection: rng.float(
         profile === 'dense' ? 0.22 : 0.28,
         profile === 'clustered' ? 0.92 : 0.68,
-      );
+      ),
+  }));
+  for (const side of sides) {
+    for (const placement of profiles) {
+      const { along, width, projection } = placement;
       const x = longX
         ? rectCenter(room.bounds).x + along
         : (side < 0 ? room.bounds.minX + projection * 0.5 : room.bounds.maxX - projection * 0.5);
@@ -1451,25 +1695,159 @@ const addWallRecess = (
   }
 };
 
+const addSymmetricCornerPosts = (
+  plan: MutablePlan,
+  world: WorldPlan,
+  room: RoomRecord,
+): void => {
+  // Let the posts overlap the boundary skin very slightly. Exact face-to-face
+  // contact can leave a hairline seam after floating-point transforms.
+  const size = 0.68;
+  const inset = 0.32;
+  const positions = [
+    { x: room.bounds.minX + inset, z: room.bounds.minZ + inset },
+    { x: room.bounds.maxX - inset, z: room.bounds.minZ + inset },
+    { x: room.bounds.minX + inset, z: room.bounds.maxZ - inset },
+    { x: room.bounds.maxX - inset, z: room.bounds.maxZ - inset },
+  ];
+  for (const [index, position] of positions.entries()) {
+    if (world.columns.some((column) =>
+      Math.abs(column.x - position.x) < 0.02 &&
+      Math.abs(column.z - position.z) < 0.02
+    )) continue;
+    world.columns.push({
+      ...position,
+      width: size,
+      depth: size,
+      height: room.ceilingHeight,
+      tint: 0.96,
+      kind: 'column',
+    });
+    plan.colliders.push({
+      id: `formal-corner-${room.id}-${index}`,
+      center: { ...position, y: room.ceilingHeight * 0.5 },
+      halfExtents: { x: inset, y: room.ceilingHeight * 0.5, z: inset },
+      kind: 'column',
+    });
+  }
+};
+
+const addFormalSymmetry = (
+  plan: MutablePlan,
+  world: WorldPlan,
+  room: RoomRecord,
+  rng: SeededRandom,
+): void => {
+  addSymmetricCornerPosts(plan, world, room);
+  const center = rectCenter(room.bounds);
+  const width = rectWidth(room.bounds);
+  const depth = rectDepth(room.bounds);
+  const longX = width >= depth;
+  const longSpan = longX ? width : depth;
+  const crossSpan = longX ? depth : width;
+  const style = rng.weighted([
+    { value: 'empty' as const, weight: 0.32 },
+    { value: 'paired-columns' as const, weight: 0.4 },
+    { value: 'pilaster-bays' as const, weight: 0.28 },
+  ]);
+  if (style === 'empty' || longSpan < 16 || crossSpan < 10) return;
+
+  const pairCount = clamp(Math.floor(longSpan / rng.float(9, 14)), 1, 5);
+  const crossDistances = style === 'paired-columns' && crossSpan >= 17
+    ? [crossSpan * 0.18]
+    : [crossSpan * 0.5 - rng.float(0.28, 0.48)];
+  const columnKind = style === 'pilaster-bays' ? 'pilaster' as const : 'column' as const;
+  const widthAlong = style === 'pilaster-bays' ? rng.float(0.55, 0.9) : rng.float(0.72, 1.18);
+  const widthAcross = style === 'pilaster-bays' ? rng.float(0.3, 0.48) : rng.float(0.72, 1.18);
+
+  for (let pair = 0; pair < pairCount; pair += 1) {
+    const distance = longSpan * 0.43 * ((pair + 1) / pairCount);
+    for (const crossDistance of crossDistances) {
+      const positions = ([-1, 1] as const).flatMap((alongSide) =>
+        ([-1, 1] as const).map((crossSide) => {
+          const along = alongSide * distance;
+          const across = crossSide * crossDistance;
+          return {
+            x: quantize(center.x + (longX ? along : across), 0.05),
+            z: quantize(center.z + (longX ? across : along), 0.05),
+          };
+        })
+      );
+      if (positions.some(({ x, z }) =>
+        !pointInRect(x, z, room.bounds, 0.26) || portalNear(plan, x, z, 1.5)
+      )) continue;
+      for (const { x, z } of positions) {
+          const column = {
+            x,
+            z,
+            width: longX ? widthAlong : widthAcross,
+            depth: longX ? widthAcross : widthAlong,
+            height: room.ceilingHeight,
+            tint: 0.96,
+            kind: columnKind,
+          };
+          world.columns.push(column);
+          plan.colliders.push({
+            id: `formal-${columnKind}-${world.columns.length - 1}`,
+            center: { x, y: column.height * 0.5, z },
+            halfExtents: {
+              x: column.width * 0.5,
+              y: column.height * 0.5,
+              z: column.depth * 0.5,
+            },
+            kind: 'column',
+          });
+      }
+    }
+  }
+};
+
 const addColumnsAndPartialWalls = (
   plan: MutablePlan,
   world: WorldPlan,
   reservedRoomIds: Set<string>,
   rootRng: SeededRandom,
 ): void => {
-  const profileRng = rootRng.fork('architecture:pilaster-profile');
-  const pilasterProfile = profileRng.weighted([
-    { value: 'none' as const, weight: 0.24 },
-    { value: 'sparse' as const, weight: 0.19 },
-    { value: 'regular' as const, weight: 0.31 },
-    { value: 'dense' as const, weight: 0.17 },
-    { value: 'clustered' as const, weight: 0.09 },
-  ]);
+  const districtRng = rootRng.fork('architecture:pilaster-districts');
+  const districtCandidates = world.rooms.filter(
+    (room) =>
+      !reservedRoomIds.has(room.id) &&
+      !roomInZones(room, world.symmetryZones) &&
+      !roomInZones(room, world.baseboardlessZones),
+  );
+  const denseAnchor = districtCandidates.length > 0
+    ? districtRng.pick(districtCandidates)
+    : undefined;
+  const denseCenter = denseAnchor ? rectCenter(denseAnchor.bounds) : undefined;
+  const denseRadius = districtRng.float(17, 28);
   for (const room of world.rooms) {
     if (reservedRoomIds.has(room.id)) continue;
     const rng = rootRng.fork(`architecture:${room.id}`);
     const width = rectWidth(room.bounds);
     const depth = rectDepth(room.bounds);
+
+    if (roomInZones(room, world.symmetryZones)) {
+      addFormalSymmetry(plan, world, room, rng.fork('formal-symmetry'));
+      continue;
+    }
+
+    const roomCenter = rectCenter(room.bounds);
+    const inDenseDistrict = denseCenter !== undefined &&
+      Math.hypot(roomCenter.x - denseCenter.x, roomCenter.z - denseCenter.z) <= denseRadius;
+    const pilasterProfile: PilasterProfile = roomInZones(room, world.baseboardlessZones)
+      ? 'none'
+      : inDenseDistrict
+        ? rng.weighted([
+            { value: 'dense' as const, weight: 0.58 },
+            { value: 'clustered' as const, weight: 0.27 },
+            { value: 'regular' as const, weight: 0.15 },
+          ])
+        : rng.weighted([
+            { value: 'none' as const, weight: 0.5 },
+            { value: 'sparse' as const, weight: 0.28 },
+            { value: 'regular' as const, weight: 0.18 },
+            { value: 'clustered' as const, weight: 0.04 },
+          ]);
 
     if (room.kind === 'open-hall' && width > 12 && depth > 12) {
       const columnStyle = rng.weighted([
@@ -1570,11 +1948,20 @@ const addColumnsAndPartialWalls = (
       for (let index = 0; index < count; index += 1) {
         const alongX = index % 2 === 0 ? width >= depth : width < depth;
         const mirrored = index === 0 && rng.chance(0.68);
+        const anchorSide = rng.chance(0.5) ? -1 : 1;
+        const height = rng.chance(0.12) ? room.ceilingHeight * 0.68 : room.ceilingHeight;
+        const tint = rng.float(0.88, 1.03);
         if (alongX) {
-          const length = rng.float(width * 0.38, width * 0.68);
-          const centerX = rng.float(room.bounds.minX + length * 0.5 + 1.8, room.bounds.maxX - length * 0.5 - 1.8);
-          const z = rng.float(room.bounds.minZ + 3, room.bounds.maxZ - 3);
-          const positions = mirrored ? [z, rectCenter(room.bounds).z * 2 - z] : [z];
+          const length = rng.float(width * 0.34, width * 0.62);
+          const centerX = anchorSide < 0
+            ? room.bounds.minX + length * 0.5
+            : room.bounds.maxX - length * 0.5;
+          const roomCenter = rectCenter(room.bounds);
+          const offset = rng.float(2.2, Math.max(2.25, depth * 0.5 - 1.35));
+          const z = roomCenter.z + (rng.chance(0.5) ? -1 : 1) * offset;
+          const positions = mirrored ? [z, roomCenter.z * 2 - z] : [z];
+          const anchorX = anchorSide < 0 ? room.bounds.minX : room.bounds.maxX;
+          if (positions.some((wallZ) => portalNear(plan, anchorX, wallZ, 1.35))) continue;
           for (const [mirrorIndex, wallZ] of positions.entries()) {
             addWall(plan, rng.fork(`return-${index}-${mirrorIndex}`), {
               x: centerX,
@@ -1582,17 +1969,24 @@ const addColumnsAndPartialWalls = (
               length,
               orientation: 'x',
               bottom: 0,
-              height: rng.chance(0.18) ? room.ceilingHeight * 0.68 : room.ceilingHeight,
+              height,
               thickness: WALL_THICKNESS,
+              tint,
               collision: true,
               kind: 'wallpaper',
             });
           }
         } else {
-          const length = rng.float(depth * 0.38, depth * 0.68);
-          const centerZ = rng.float(room.bounds.minZ + length * 0.5 + 1.8, room.bounds.maxZ - length * 0.5 - 1.8);
-          const x = rng.float(room.bounds.minX + 3, room.bounds.maxX - 3);
-          const positions = mirrored ? [x, rectCenter(room.bounds).x * 2 - x] : [x];
+          const length = rng.float(depth * 0.34, depth * 0.62);
+          const centerZ = anchorSide < 0
+            ? room.bounds.minZ + length * 0.5
+            : room.bounds.maxZ - length * 0.5;
+          const roomCenter = rectCenter(room.bounds);
+          const offset = rng.float(2.2, Math.max(2.25, width * 0.5 - 1.35));
+          const x = roomCenter.x + (rng.chance(0.5) ? -1 : 1) * offset;
+          const positions = mirrored ? [x, roomCenter.x * 2 - x] : [x];
+          const anchorZ = anchorSide < 0 ? room.bounds.minZ : room.bounds.maxZ;
+          if (positions.some((wallX) => portalNear(plan, wallX, anchorZ, 1.35))) continue;
           for (const [mirrorIndex, wallX] of positions.entries()) {
             addWall(plan, rng.fork(`return-${index}-${mirrorIndex}`), {
               x: wallX,
@@ -1600,14 +1994,67 @@ const addColumnsAndPartialWalls = (
               length,
               orientation: 'z',
               bottom: 0,
-              height: rng.chance(0.18) ? room.ceilingHeight * 0.68 : room.ceilingHeight,
+              height,
               thickness: WALL_THICKNESS,
+              tint,
               collision: true,
               kind: 'wallpaper',
             });
           }
         }
       }
+    }
+  }
+
+  for (const room of world.rooms.filter(
+    (candidate) =>
+      !reservedRoomIds.has(candidate.id) &&
+      roomInZones(candidate, world.symmetryZones),
+  )) {
+    const removedColumns = world.columns.filter((column) =>
+      pointInRect(column.x, column.z, room.bounds)
+    );
+    if (removedColumns.length > 0) {
+      world.columns = world.columns.filter((column) => !removedColumns.includes(column));
+      plan.colliders = plan.colliders.filter((collider) =>
+        collider.kind !== 'column' ||
+        !removedColumns.some((column) =>
+          Math.abs(collider.center.x - column.x) < 0.02 &&
+          Math.abs(collider.center.z - column.z) < 0.02
+        )
+      );
+    }
+    addFormalSymmetry(
+      plan,
+      world,
+      room,
+      rootRng.fork(`architecture:${room.id}`).fork('formal-symmetry'),
+    );
+  }
+  for (const room of world.rooms.filter(
+    (candidate) =>
+      reservedRoomIds.has(candidate.id) &&
+      roomInZones(candidate, world.symmetryZones),
+  )) {
+    addSymmetricCornerPosts(plan, world, room);
+  }
+
+  const bareZones = world.baseboardlessZones ?? [];
+  if (bareZones.length > 0) {
+    const removedPilasters = world.columns.filter(
+      (column) =>
+        column.kind === 'pilaster' &&
+        bareZones.some((zone) => pointInRect(column.x, column.z, zone)),
+    );
+    if (removedPilasters.length > 0) {
+      world.columns = world.columns.filter((column) => !removedPilasters.includes(column));
+      plan.colliders = plan.colliders.filter((collider) =>
+        collider.kind !== 'column' ||
+        !removedPilasters.some((column) =>
+          Math.abs(collider.center.x - column.x) < 0.02 &&
+          Math.abs(collider.center.z - column.z) < 0.02
+        )
+      );
     }
   }
 };
@@ -2092,6 +2539,7 @@ const addSqueezeViews = (
       bounds,
       axis: alongX ? 'x' : 'z',
       apertureWidth,
+      passageStyle: 'room-network',
       layout,
       exitCount,
       clearanceHeight,
@@ -2114,6 +2562,530 @@ const addSqueezeViews = (
       level: 0,
     }, bounds);
     reservedRoomIds.add(room.id);
+  }
+};
+
+const sealRestrictedRooms = (
+  plan: MutablePlan,
+  world: WorldPlan,
+  rootRng: SeededRandom,
+): void => {
+  const restrictedRooms = world.rooms.filter(roomIsRestricted);
+  for (const room of restrictedRooms) {
+    const rng = rootRng.fork(`topology:seal:${room.id}`);
+    const sides = [
+      {
+        label: 'north',
+        orientation: 'x' as const,
+        fixed: room.bounds.minZ,
+        min: room.bounds.minX,
+        max: room.bounds.maxX,
+      },
+      {
+        label: 'south',
+        orientation: 'x' as const,
+        fixed: room.bounds.maxZ,
+        min: room.bounds.minX,
+        max: room.bounds.maxX,
+      },
+      {
+        label: 'west',
+        orientation: 'z' as const,
+        fixed: room.bounds.minX,
+        min: room.bounds.minZ,
+        max: room.bounds.maxZ,
+      },
+      {
+        label: 'east',
+        orientation: 'z' as const,
+        fixed: room.bounds.maxX,
+        min: room.bounds.minZ,
+        max: room.bounds.maxZ,
+      },
+    ];
+    for (const side of sides) {
+      const intervals = plan.walls
+        .filter((wall) => {
+          if (
+            wall.orientation !== side.orientation ||
+            wall.bottom > 0.08 ||
+            wall.bottom + wall.height < world.wallHeight - 0.08
+          ) return false;
+          const fixed = wall.orientation === 'x' ? wall.z : wall.x;
+          return Math.abs(fixed - side.fixed) < 0.09;
+        })
+        .map((wall) => {
+          const along = wall.orientation === 'x' ? wall.x : wall.z;
+          return {
+            min: Math.max(side.min, along - wall.length * 0.5),
+            max: Math.min(side.max, along + wall.length * 0.5),
+          };
+        })
+        .filter((interval) => interval.max - interval.min > 0.02)
+        .sort((left, right) => left.min - right.min);
+      const merged: Gap[] = [];
+      for (const interval of intervals) {
+        const previous = merged[merged.length - 1];
+        if (previous && interval.min <= previous.max + 0.04) {
+          previous.max = Math.max(previous.max, interval.max);
+        } else {
+          merged.push({ ...interval });
+        }
+      }
+      let cursor = side.min;
+      for (const [index, interval] of [...merged, { min: side.max, max: side.max }].entries()) {
+        if (interval.min - cursor > 0.18) {
+          const segmentCenter = (cursor + interval.min) * 0.5;
+          addWall(plan, rng.fork(`${side.label}:${index}`), {
+            roomId: room.id,
+            x: side.orientation === 'x' ? segmentCenter : side.fixed,
+            z: side.orientation === 'z' ? segmentCenter : side.fixed,
+            length: interval.min - cursor,
+            orientation: side.orientation,
+            bottom: 0,
+            height: room.ceilingHeight,
+            thickness: rng.chance(0.3) ? 0.42 : 0.3,
+            tint: rng.float(0.91, 1.01),
+            collision: true,
+            kind: 'wallpaper',
+            detail: 'sealed-boundary',
+          });
+        }
+        cursor = Math.max(cursor, interval.max);
+      }
+    }
+  }
+};
+
+interface BoundaryWallCandidate {
+  wall: WallSegment;
+  firstRoom: RoomRecord;
+  secondRoom: RoomRecord;
+  min: number;
+  max: number;
+}
+
+const boundaryWallCandidates = (
+  plan: MutablePlan,
+  world: WorldPlan,
+  acceptsRooms: (first: RoomRecord, second: RoomRecord) => boolean,
+): BoundaryWallCandidate[] => {
+  const candidates: BoundaryWallCandidate[] = [];
+  for (const wall of plan.walls) {
+    if (
+      Math.abs(wall.bottom) > 0.05 ||
+      wall.height < world.wallHeight - 0.08 ||
+      wall.length < 2.6 ||
+      wall.kind !== 'wallpaper' ||
+      (wall.detail !== undefined && wall.detail !== 'sealed-boundary')
+    ) continue;
+    const fixed = wall.orientation === 'x' ? wall.z : wall.x;
+    const wallCenter = wall.orientation === 'x' ? wall.x : wall.z;
+    const wallMin = wallCenter - wall.length * 0.5;
+    const wallMax = wallCenter + wall.length * 0.5;
+    const firstRooms = world.rooms.filter((room) =>
+      Math.abs(
+        (wall.orientation === 'x' ? room.bounds.maxZ : room.bounds.maxX) - fixed,
+      ) < 0.08
+    );
+    const secondRooms = world.rooms.filter((room) =>
+      Math.abs(
+        (wall.orientation === 'x' ? room.bounds.minZ : room.bounds.minX) - fixed,
+      ) < 0.08
+    );
+    for (const firstRoom of firstRooms) {
+      for (const secondRoom of secondRooms) {
+        if (firstRoom.id === secondRoom.id || !acceptsRooms(firstRoom, secondRoom)) continue;
+        if (
+          firstRoom.ceilingHeight > world.wallHeight + 0.1 ||
+          secondRoom.ceilingHeight > world.wallHeight + 0.1
+        ) continue;
+        const firstMin = wall.orientation === 'x' ? firstRoom.bounds.minX : firstRoom.bounds.minZ;
+        const firstMax = wall.orientation === 'x' ? firstRoom.bounds.maxX : firstRoom.bounds.maxZ;
+        const secondMin = wall.orientation === 'x' ? secondRoom.bounds.minX : secondRoom.bounds.minZ;
+        const secondMax = wall.orientation === 'x' ? secondRoom.bounds.maxX : secondRoom.bounds.maxZ;
+        const min = Math.max(wallMin, firstMin, secondMin);
+        const max = Math.min(wallMax, firstMax, secondMax);
+        if (max - min < 2.6) continue;
+        candidates.push({ wall, firstRoom, secondRoom, min, max });
+      }
+    }
+  }
+  return candidates;
+};
+
+const carveWallBreach = (
+  plan: MutablePlan,
+  world: WorldPlan,
+  candidate: BoundaryWallCandidate,
+  rng: SeededRandom,
+  secretRoom?: RoomRecord,
+): boolean => {
+  const source = candidate.wall;
+  if (!plan.walls.includes(source)) return false;
+  const maximumWidth = Math.min(1.42, candidate.max - candidate.min - 1.35);
+  if (maximumWidth < 1.02) return false;
+  const apertureWidth = quantize(rng.float(1.02, maximumWidth), 0.01);
+  const centerMin = candidate.min + apertureWidth * 0.5 + 0.62;
+  const centerMax = candidate.max - apertureWidth * 0.5 - 0.62;
+  if (centerMax < centerMin) return false;
+  let alongCenter = (centerMin + centerMax) * 0.5;
+  let foundCenter = secretRoom !== undefined;
+  for (let attempt = 0; attempt < 8 && !foundCenter; attempt += 1) {
+    const proposed = rng.float(centerMin, centerMax);
+    const x = source.orientation === 'x' ? proposed : source.x;
+    const z = source.orientation === 'z' ? proposed : source.z;
+    if (!portalNear(plan, x, z, 2.25)) {
+      alongCenter = proposed;
+      foundCenter = true;
+    }
+  }
+  if (!foundCenter) return false;
+  const openingMin = alongCenter - apertureWidth * 0.5;
+  const openingMax = alongCenter + apertureWidth * 0.5;
+  const sourceCenter = source.orientation === 'x' ? source.x : source.z;
+  const sourceMin = sourceCenter - source.length * 0.5;
+  const sourceMax = sourceCenter + source.length * 0.5;
+  const roomId = secretRoom?.id ?? candidate.secondRoom.id;
+
+  plan.walls = plan.walls.filter((wall) => wall !== source);
+  plan.colliders = plan.colliders.filter(
+    (collider) =>
+      collider.id !== `collider-${source.id}` &&
+      collider.id !== `collider-wall-${source.id}`,
+  );
+  const fragment = (min: number, max: number, label: string): void => {
+    if (max - min <= 0.18) return;
+    addWall(plan, rng.fork(label), {
+      roomId: source.roomId,
+      x: source.orientation === 'x' ? (min + max) * 0.5 : source.x,
+      z: source.orientation === 'z' ? (min + max) * 0.5 : source.z,
+      length: max - min,
+      orientation: source.orientation,
+      bottom: source.bottom,
+      height: source.height,
+      thickness: source.thickness,
+      tint: source.tint,
+      collision: true,
+      kind: 'wallpaper',
+      detail: source.detail,
+    });
+  };
+  fragment(sourceMin, openingMin, 'left-jamb');
+  fragment(openingMax, sourceMax, 'right-jamb');
+
+  const clearanceHeight = quantize(rng.float(1.36, 1.47), 0.01);
+  addWall(plan, rng.fork('lintel'), {
+    roomId,
+    x: source.orientation === 'x' ? alongCenter : source.x,
+    z: source.orientation === 'z' ? alongCenter : source.z,
+    length: apertureWidth,
+    orientation: source.orientation,
+    bottom: clearanceHeight,
+    height: source.height - clearanceHeight,
+    thickness: source.thickness,
+    tint: source.tint,
+    collision: true,
+    kind: 'wallpaper',
+    detail: 'crawl-lintel',
+  });
+
+  const deepTunnel = secretRoom !== undefined || rng.chance(0.42);
+  const tunnelDepth = quantize(
+    secretRoom
+      ? rng.float(2.2, 4.2)
+      : deepTunnel
+        ? rng.float(1.35, 2.35)
+        : Math.max(source.thickness + 0.34, rng.float(0.68, 1.12)),
+    0.05,
+  );
+  const sideThickness = 0.18;
+  const fixed = source.orientation === 'x' ? source.z : source.x;
+  const openReveal = secretRoom ? rng.float(0.42, 0.68) : tunnelDepth * 0.5;
+  const secretOnNegativeSide = secretRoom?.id === candidate.firstRoom.id;
+  const travelMin = secretRoom
+    ? secretOnNegativeSide
+      ? fixed - (tunnelDepth - openReveal)
+      : fixed - openReveal
+    : fixed - tunnelDepth * 0.5;
+  const travelMax = secretRoom
+    ? secretOnNegativeSide
+      ? fixed + openReveal
+      : fixed + (tunnelDepth - openReveal)
+    : fixed + tunnelDepth * 0.5;
+  const travelCenter = (travelMin + travelMax) * 0.5;
+  const bounds: Rect = source.orientation === 'x'
+    ? {
+        minX: openingMin,
+        maxX: openingMax,
+        minZ: travelMin,
+        maxZ: travelMax,
+      }
+    : {
+        minX: travelMin,
+        maxX: travelMax,
+        minZ: openingMin,
+        maxZ: openingMax,
+      };
+  const removedColumns = world.columns.filter((column) =>
+    column.x + column.width * 0.5 > bounds.minX - 0.08 &&
+    column.x - column.width * 0.5 < bounds.maxX + 0.08 &&
+    column.z + column.depth * 0.5 > bounds.minZ - 0.08 &&
+    column.z - column.depth * 0.5 < bounds.maxZ + 0.08
+  );
+  if (removedColumns.length > 0) {
+    world.columns = world.columns.filter((column) => !removedColumns.includes(column));
+    plan.colliders = plan.colliders.filter((collider) =>
+      collider.kind !== 'column' ||
+      !removedColumns.some((column) =>
+        Math.abs(collider.center.x - column.x) < 0.02 &&
+        Math.abs(collider.center.z - column.z) < 0.02
+      )
+    );
+  }
+  for (const side of [-1, 1] as const) {
+    addWall(plan, rng.fork(`tunnel-side:${side}`), {
+      roomId,
+      x: source.orientation === 'x'
+        ? alongCenter + side * (apertureWidth * 0.5 + sideThickness * 0.5)
+        : travelCenter,
+      z: source.orientation === 'x'
+        ? travelCenter
+        : alongCenter + side * (apertureWidth * 0.5 + sideThickness * 0.5),
+      length: tunnelDepth,
+      orientation: source.orientation === 'x' ? 'z' : 'x',
+      bottom: 0,
+      height: source.height,
+      thickness: sideThickness,
+      tint: source.tint,
+      collision: true,
+      kind: 'wallpaper',
+      detail: 'crawl-tunnel',
+    });
+  }
+
+  const featureId = `wall-breach-${world.features.filter(
+    (feature) => feature.kind === 'squeeze-view' && feature.passageStyle === 'wall-breach',
+  ).length}`;
+  world.features.push({
+    kind: 'squeeze-view',
+    id: featureId,
+    roomId,
+    bounds,
+    axis: source.orientation === 'x' ? 'z' : 'x',
+    apertureWidth,
+    passageStyle: 'wall-breach',
+    layout: 'through',
+    exitCount: 1,
+    clearanceHeight,
+    holes: [],
+  });
+  plan.colliders.push({
+    id: `${featureId}-low-ceiling`,
+    center: {
+      x: rectCenter(bounds).x,
+      y: clearanceHeight + (source.height - clearanceHeight) * 0.5,
+      z: rectCenter(bounds).z,
+    },
+    halfExtents: {
+      x: rectWidth(bounds) * 0.5,
+      y: (source.height - clearanceHeight) * 0.5,
+      z: rectDepth(bounds) * 0.5,
+    },
+    kind: 'barrier',
+  });
+  return true;
+};
+
+const addWallBreaches = (
+  plan: MutablePlan,
+  world: WorldPlan,
+  rootRng: SeededRandom,
+): void => {
+  const rng = rootRng.fork('feature:wall-breaches');
+  const secretRooms = world.rooms.filter((room) => room.access === 'secret');
+  const usedRooms = new Set<string>();
+  for (const secretRoom of secretRooms) {
+    const candidates = rng.shuffle(boundaryWallCandidates(
+      plan,
+      world,
+      (first, second) =>
+        !roomInZones(first, world.symmetryZones) &&
+        !roomInZones(second, world.symmetryZones) &&
+        (
+          (first.id === secretRoom.id && !roomIsRestricted(second)) ||
+          (second.id === secretRoom.id && !roomIsRestricted(first))
+        ),
+    ));
+    const carved = candidates.some((candidate, index) =>
+      carveWallBreach(plan, world, candidate, rng.fork(`secret:${secretRoom.id}:${index}`), secretRoom)
+    );
+    if (carved) usedRooms.add(secretRoom.id);
+    else secretRoom.access = 'sealed';
+  }
+
+  const desired = rng.int(1, 3);
+  let placed = 0;
+  const candidates = rng.shuffle(boundaryWallCandidates(
+    plan,
+    world,
+    (first, second) =>
+      !roomIsRestricted(first) &&
+      !roomIsRestricted(second) &&
+      !roomInZones(first, world.symmetryZones) &&
+      !roomInZones(second, world.symmetryZones),
+  ));
+  for (const [index, candidate] of candidates.entries()) {
+    if (placed >= desired) break;
+    if (usedRooms.has(candidate.firstRoom.id) || usedRooms.has(candidate.secondRoom.id)) continue;
+    if (!carveWallBreach(plan, world, candidate, rng.fork(`ordinary:${index}`))) continue;
+    usedRooms.add(candidate.firstRoom.id);
+    usedRooms.add(candidate.secondRoom.id);
+    placed += 1;
+  }
+};
+
+const applyPlasterZones = (
+  plan: MutablePlan,
+  world: WorldPlan,
+): void => {
+  const zones = world.plasterZones ?? [];
+  if (zones.length === 0) return;
+  for (const wall of plan.walls) {
+    if (
+      wall.kind !== 'wallpaper' ||
+      wall.bottom < -1 ||
+      wall.detail === 'upper-shell' ||
+      wall.detail === 'crawl-lintel' ||
+      wall.detail === 'crawl-tunnel'
+    ) continue;
+    const halfX = wall.orientation === 'x' ? wall.length * 0.5 : wall.thickness * 0.5;
+    const halfZ = wall.orientation === 'z' ? wall.length * 0.5 : wall.thickness * 0.5;
+    const touchesZone = zones.some((zone) =>
+      wall.x + halfX >= zone.minX - 0.1 &&
+      wall.x - halfX <= zone.maxX + 0.1 &&
+      wall.z + halfZ >= zone.minZ - 0.1 &&
+      wall.z - halfZ <= zone.maxZ + 0.1
+    );
+    if (touchesZone) wall.kind = 'plaster';
+  }
+};
+
+const classifyInaccessibleRooms = (
+  plan: MutablePlan,
+  world: WorldPlan,
+): void => {
+  const step = 0.25;
+  const half = world.size * 0.5;
+  const count = Math.floor(world.size / step);
+  const indexOf = (gridX: number, gridZ: number): number => gridZ * count + gridX;
+  const coordinate = (index: number): number => -half + (index + 0.5) * step;
+  const gridRange = (min: number, max: number): [number, number] => [
+    clamp(Math.floor((min + half) / step), 0, count - 1),
+    clamp(Math.floor((max + half) / step), 0, count - 1),
+  ];
+  const blocked = new Uint8Array(count * count);
+  const markRect = (rect: Rect): void => {
+    const [minX, maxX] = gridRange(rect.minX, rect.maxX);
+    const [minZ, maxZ] = gridRange(rect.minZ, rect.maxZ);
+    for (let gridZ = minZ; gridZ <= maxZ; gridZ += 1) {
+      const z = coordinate(gridZ);
+      if (z <= rect.minZ || z >= rect.maxZ) continue;
+      for (let gridX = minX; gridX <= maxX; gridX += 1) {
+        const x = coordinate(gridX);
+        if (x > rect.minX && x < rect.maxX) blocked[indexOf(gridX, gridZ)] = 1;
+      }
+    }
+  };
+  for (const collider of plan.colliders) {
+    if (collider.kind === 'floor' || collider.kind === 'step') continue;
+    if (collider.center.y < 0 || collider.center.y - collider.halfExtents.y > 1.12) continue;
+    markRect({
+      minX: collider.center.x - collider.halfExtents.x - 0.29,
+      maxX: collider.center.x + collider.halfExtents.x + 0.29,
+      minZ: collider.center.z - collider.halfExtents.z - 0.29,
+      maxZ: collider.center.z + collider.halfExtents.z + 0.29,
+    });
+  }
+  for (const feature of world.features) {
+    if (feature.kind !== 'grid-pit') continue;
+    for (const hole of feature.holes) {
+      markRect({
+        minX: hole.minX - 0.29,
+        maxX: hole.maxX + 0.29,
+        minZ: hole.minZ - 0.29,
+        maxZ: hole.maxZ + 0.29,
+      });
+    }
+  }
+  const spawnX = clamp(Math.floor((world.spawn.x + half) / step), 0, count - 1);
+  const spawnZ = clamp(Math.floor((world.spawn.z + half) / step), 0, count - 1);
+  const start = indexOf(spawnX, spawnZ);
+  const visited = new Uint8Array(count * count);
+  const queue = [start];
+  visited[start] = 1;
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const index = queue[cursor]!;
+    const gridX = index % count;
+    const gridZ = Math.floor(index / count);
+    for (const [offsetX, offsetZ] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      const nextX = gridX + offsetX;
+      const nextZ = gridZ + offsetZ;
+      if (nextX < 0 || nextZ < 0 || nextX >= count || nextZ >= count) continue;
+      const next = indexOf(nextX, nextZ);
+      if (blocked[next] || visited[next]) continue;
+      visited[next] = 1;
+      queue.push(next);
+    }
+  }
+  for (const room of world.rooms) {
+    const minX = clamp(
+      Math.ceil((room.bounds.minX + 0.35 + half) / step - 0.5),
+      0,
+      count - 1,
+    );
+    const maxX = clamp(
+      Math.floor((room.bounds.maxX - 0.35 + half) / step - 0.5),
+      0,
+      count - 1,
+    );
+    const minZ = clamp(
+      Math.ceil((room.bounds.minZ + 0.35 + half) / step - 0.5),
+      0,
+      count - 1,
+    );
+    const maxZ = clamp(
+      Math.floor((room.bounds.maxZ - 0.35 + half) / step - 0.5),
+      0,
+      count - 1,
+    );
+    let reachable = false;
+    for (let gridZ = minZ; gridZ <= maxZ && !reachable; gridZ += 1) {
+      for (let gridX = minX; gridX <= maxX; gridX += 1) {
+        if (visited[indexOf(gridX, gridZ)]) {
+          reachable = true;
+          break;
+        }
+      }
+    }
+    if (!reachable) {
+      room.access = 'sealed';
+      room.detailDensity = 0;
+    } else if (room.access === 'sealed') {
+      room.access = world.features.some(
+        (feature) =>
+          feature.kind === 'squeeze-view' &&
+          feature.passageStyle === 'wall-breach' &&
+          feature.roomId === room.id,
+      )
+        ? 'secret'
+        : 'open';
+    }
   }
 };
 
@@ -2366,13 +3338,31 @@ const addLight = (world: WorldPlan, room: RoomRecord, rng: SeededRandom, x: numb
 
 const populateLightsAndDetails = (world: WorldPlan, rootRng: SeededRandom): void => {
   for (const room of world.rooms) {
+    if (room.access === 'sealed') continue;
     const rng = rootRng.fork(`lighting:${room.id}`);
     const width = rectWidth(room.bounds);
     const depth = rectDepth(room.bounds);
     const center = rectCenter(room.bounds);
     const longX = width >= depth;
 
-    if (room.kind === 'corridor') {
+    if (roomInZones(room, world.symmetryZones)) {
+      const countX = Math.max(1, Math.min(9, Math.floor((width - 2.6) / 5.8)));
+      const countZ = Math.max(1, Math.min(7, Math.floor((depth - 2.6) / 5.8)));
+      for (let xIndex = 0; xIndex < countX; xIndex += 1) {
+        for (let zIndex = 0; zIndex < countZ; zIndex += 1) {
+          const x = room.bounds.minX + ((xIndex + 0.5) / countX) * width;
+          const z = room.bounds.minZ + ((zIndex + 0.5) / countZ) * depth;
+          addLight(
+            world,
+            room,
+            rng.fork(`formal-slot-${xIndex}-${zIndex}`),
+            x,
+            z,
+            longX ? 0 : Math.PI * 0.5,
+          );
+        }
+      }
+    } else if (room.kind === 'corridor') {
       const span = longX ? width : depth;
       const count = Math.max(2, Math.floor(span / rng.float(4.4, 5.8)));
       for (let index = 0; index < count; index += 1) {
@@ -2731,14 +3721,20 @@ export const generateWorld = (seed: string): WorldPlan => {
     }
   }
 
+  assignRestrictedRooms(mutable, world, reservedRoomIds, rootRng);
+  selectArchitectureZones(world, rootRng);
   addCeilingVariations(mutable, world, reservedRoomIds, rootRng);
   addRaisedZones(world, reservedRoomIds, rootRng);
   addSqueezeViews(mutable, world, reservedRoomIds, rootRng);
   addColumnsAndPartialWalls(mutable, world, reservedRoomIds, rootRng);
   enforcePortalClearances(mutable);
+  sealRestrictedRooms(mutable, world, rootRng);
+  addWallBreaches(mutable, world, rootRng);
+  applyPlasterZones(mutable, world);
   world.walls = mutable.walls;
   world.colliders = mutable.colliders;
   addSolidMasses(world, reservedRoomIds, rootRng);
+  classifyInaccessibleRooms(mutable, world);
   populateLightsAndDetails(world, rootRng);
   applyLightingZones(world, rootRng);
   populateVistaLights(world, vista, rootRng);
@@ -2781,11 +3777,23 @@ export const fingerprintWorld = (world: WorldPlan): string => {
   const payload = [
     world.version,
     world.seed,
-    world.rooms.map((room) => `${room.id}:${room.kind}:${rectArea(room.bounds).toFixed(2)}`).join('|'),
+    world.rooms
+      .map((room) => `${room.id}:${room.kind}:${room.access ?? 'open'}:${rectArea(room.bounds).toFixed(2)}`)
+      .join('|'),
     world.walls
       .map((wall) => `${wall.orientation}:${wall.x.toFixed(2)}:${wall.z.toFixed(2)}:${wall.length.toFixed(2)}`)
       .join('|'),
-    world.features.map((feature) => feature.id).join('|'),
+    world.features.map((feature) =>
+      feature.kind === 'squeeze-view'
+        ? `${feature.id}:${feature.passageStyle ?? 'room-network'}`
+        : feature.id
+    ).join('|'),
+    (world.baseboardlessZones ?? []).map((zone) =>
+      `${zone.minX},${zone.minZ},${zone.maxX},${zone.maxZ}`
+    ).join('|'),
+    (world.plasterZones ?? []).map((zone) =>
+      `${zone.minX},${zone.minZ},${zone.maxX},${zone.maxZ}`
+    ).join('|'),
     world.lights.map((light) => `${light.x}:${light.z}:${Number(light.dead)}`).join('|'),
     (world.propPlacements ?? [])
       .map((placement) =>

@@ -40,7 +40,14 @@ export interface WallSegment {
   tint: number;
   collision: boolean;
   kind: 'wallpaper' | 'plaster' | 'vista-frame';
-  detail?: 'recess' | 'ceiling-drop' | 'upper-shell' | 'threshold';
+  detail?:
+    | 'recess'
+    | 'ceiling-drop'
+    | 'upper-shell'
+    | 'threshold'
+    | 'sealed-boundary'
+    | 'crawl-lintel'
+    | 'crawl-tunnel';
 }
 
 export interface StaticCollider {
@@ -51,6 +58,8 @@ export interface StaticCollider {
   rotation?: QuaternionData;
 }
 
+export type RoomAccess = 'open' | 'sealed' | 'secret';
+
 export interface RoomRecord {
   id: string;
   bounds: Rect;
@@ -58,6 +67,8 @@ export interface RoomRecord {
   level: number;
   ceilingHeight: number;
   detailDensity: number;
+  /** Restricted rooms are deliberately removed from the ordinary doorway graph. */
+  access?: RoomAccess;
 }
 
 export interface ColumnSlot {
@@ -178,6 +189,8 @@ export interface SqueezeViewFeature {
   bounds: Rect;
   axis: 'x' | 'z';
   apertureWidth: number;
+  /** Room networks sit inside a room; wall breaches are carved through a host partition. */
+  passageStyle?: 'room-network' | 'wall-breach';
   layout?: SqueezeLayout;
   exitCount?: number;
   clearanceHeight?: number;
@@ -280,6 +293,12 @@ export interface WorldPlan {
   stairCeilingOpenings?: Rect[];
   /** Rare contiguous room bounds whose ceiling circuit is intentionally absent. */
   unlitZones?: Rect[];
+  /** Coherent districts where wall and column trims are intentionally absent. */
+  baseboardlessZones?: Rect[];
+  /** Rooms reserved for strict mirrored architecture rather than generic clutter. */
+  symmetryZones?: Rect[];
+  /** Small coherent districts that replace wallpaper with bare plaster. */
+  plasterZones?: Rect[];
   /** Large-scale visual palette selected independently from room topology. */
   visualBiome?: VisualBiome;
   /** Deterministic per-chunk variation of the principal repeated surfaces. */

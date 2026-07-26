@@ -291,6 +291,12 @@ const intersectRects = (left: Rect, right: Rect): Rect | null => {
     : null;
 };
 
+const rectsTouchOrOverlap = (left: Rect, right: Rect): boolean =>
+  left.minX <= right.maxX + 1e-4 &&
+  left.maxX >= right.minX - 1e-4 &&
+  left.minZ <= right.maxZ + 1e-4 &&
+  left.maxZ >= right.minZ - 1e-4;
+
 /**
  * Covers only the rare half-texel junctions where an off-grid partition makes
  * the shared XZ lightmap sample the hidden space under the wall. The patch
@@ -615,6 +621,9 @@ export class WorldView {
     const plasterGeometries: THREE.BufferGeometry[] = [];
     const baseboardGeometries: THREE.BufferGeometry[] = [];
     const lowerBaseboardGeometries: THREE.BufferGeometry[] = [];
+    const baseboardlessZones = this.plan.baseboardlessZones ?? [];
+    const touchesBaseboardlessZone = (bounds: Rect): boolean =>
+      baseboardlessZones.some((zone) => rectsTouchOrOverlap(zone, bounds));
     const upperShells = this.plan.walls.filter((wall) => wall.detail === 'upper-shell');
     const continuesIntoUpperShell = (wall: WallSegment): boolean => {
       if (
@@ -650,7 +659,25 @@ export class WorldView {
       const restsOnWalkableFloor =
         Math.abs(wall.bottom) < 0.12 ||
         Math.abs(wall.bottom + INFINITE_STORY_PITCH) < 0.12;
-      if (wall.height > 1.3 && restsOnWalkableFloor) {
+      const halfLength = wall.length * 0.5;
+      const halfThickness = wall.thickness * 0.5;
+      const wallBounds: Rect = wall.orientation === 'x'
+        ? {
+            minX: wall.x - halfLength,
+            maxX: wall.x + halfLength,
+            minZ: wall.z - halfThickness,
+            maxZ: wall.z + halfThickness,
+          }
+        : {
+            minX: wall.x - halfThickness,
+            maxX: wall.x + halfThickness,
+            minZ: wall.z - halfLength,
+            maxZ: wall.z + halfLength,
+          };
+      const suppressBaseboard =
+        wall.detail === 'crawl-tunnel' ||
+        touchesBaseboardlessZone(wallBounds);
+      if (wall.height > 1.3 && restsOnWalkableFloor && !suppressBaseboard) {
         const alongX = wall.orientation === 'x';
         const trim = new THREE.BoxGeometry(
           alongX ? wall.length + 0.025 : wall.thickness + 0.055,
@@ -680,10 +707,18 @@ export class WorldView {
       );
       ensureBakedLightUv(geometry, this.materials.wall, 0.32);
       wallGeometries.push(geometry);
-      const trim = new THREE.BoxGeometry(column.width + 0.055, 0.115, column.depth + 0.055);
-      trim.translate(column.x, 0.0575, column.z);
-      ensureBakedLightUv(trim, this.materials.baseboard, 0.26);
-      baseboardGeometries.push(trim);
+      const columnBounds: Rect = {
+        minX: column.x - column.width * 0.5,
+        maxX: column.x + column.width * 0.5,
+        minZ: column.z - column.depth * 0.5,
+        maxZ: column.z + column.depth * 0.5,
+      };
+      if (!touchesBaseboardlessZone(columnBounds)) {
+        const trim = new THREE.BoxGeometry(column.width + 0.055, 0.115, column.depth + 0.055);
+        trim.translate(column.x, 0.0575, column.z);
+        ensureBakedLightUv(trim, this.materials.baseboard, 0.26);
+        baseboardGeometries.push(trim);
+      }
     }
 
     for (const mass of this.plan.solidMasses) {
@@ -702,31 +737,33 @@ export class WorldView {
       );
       ensureBakedLightUv(massGeometry, this.materials.wall, 0.36);
       wallGeometries.push(massGeometry);
-      const trimHeight = 0.115;
-      const massTrims = [
-        new THREE.BoxGeometry(width + 0.055, trimHeight, 0.09).translate(
-          center.x,
-          trimHeight * 0.5,
-          mass.bounds.minZ,
-        ),
-        new THREE.BoxGeometry(width + 0.055, trimHeight, 0.09).translate(
-          center.x,
-          trimHeight * 0.5,
-          mass.bounds.maxZ,
-        ),
-        new THREE.BoxGeometry(0.09, trimHeight, depth).translate(
-          mass.bounds.minX,
-          trimHeight * 0.5,
-          center.z,
-        ),
-        new THREE.BoxGeometry(0.09, trimHeight, depth).translate(
-          mass.bounds.maxX,
-          trimHeight * 0.5,
-          center.z,
-        ),
-      ];
-      for (const trim of massTrims) ensureBakedLightUv(trim, this.materials.baseboard, 0.28);
-      baseboardGeometries.push(...massTrims);
+      if (!touchesBaseboardlessZone(mass.bounds)) {
+        const trimHeight = 0.115;
+        const massTrims = [
+          new THREE.BoxGeometry(width + 0.055, trimHeight, 0.09).translate(
+            center.x,
+            trimHeight * 0.5,
+            mass.bounds.minZ,
+          ),
+          new THREE.BoxGeometry(width + 0.055, trimHeight, 0.09).translate(
+            center.x,
+            trimHeight * 0.5,
+            mass.bounds.maxZ,
+          ),
+          new THREE.BoxGeometry(0.09, trimHeight, depth).translate(
+            mass.bounds.minX,
+            trimHeight * 0.5,
+            center.z,
+          ),
+          new THREE.BoxGeometry(0.09, trimHeight, depth).translate(
+            mass.bounds.maxX,
+            trimHeight * 0.5,
+            center.z,
+          ),
+        ];
+        for (const trim of massTrims) ensureBakedLightUv(trim, this.materials.baseboard, 0.28);
+        baseboardGeometries.push(...massTrims);
+      }
     }
 
     makeMesh(mergeOrSingle(wallGeometries), this.materials.wall, 'merged-wallpaper-walls', this.group);
@@ -990,7 +1027,7 @@ export class WorldView {
           clearance,
           rectCenter(feature.bounds).z,
           0.96,
-          this.surfaceStyle.ceilingPatternScale,
+          this.surfaceStyle.wallPatternScale,
         ));
       }
       if (feature.hump) {
@@ -1036,7 +1073,7 @@ export class WorldView {
     }
     makeMesh(
       mergeOrSingle(roofGeometries),
-      this.materials.ceiling,
+      this.materials.wall,
       'low-passage-ceiling-masses',
       this.group,
     );

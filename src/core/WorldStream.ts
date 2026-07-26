@@ -632,6 +632,7 @@ export class WorldStream {
       }
 
       for (const room of runtime.plan.rooms) {
+        if (room.access === 'sealed') continue;
         const center = rectCenter(room.bounds);
         const safeFloor = runtime.plan.floorRects
           .map((floor): Rect | null => {

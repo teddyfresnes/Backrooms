@@ -573,6 +573,7 @@ const eligibleRooms = (plan: WorldPlan): RoomRecord[] => {
   return plan.rooms.filter((room) => {
     const width = rectWidth(room.bounds);
     const depth = rectDepth(room.bounds);
+    if (room.access === 'sealed') return false;
     if (room.level !== 0 || width < 5.8 || depth < 5.8) return false;
     if (room.kind === 'corridor' || room.kind === 'threshold' || room.kind === 'pit-gallery') {
       return false;
