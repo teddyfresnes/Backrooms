@@ -15,6 +15,7 @@ import { WorldPropLayer } from './WorldProps';
 import type {
   GridPitFeature,
   LightSlot,
+  RampSurface,
   RaisedZoneFeature,
   Rect,
   StairSocketFeature,
@@ -27,7 +28,11 @@ import type {
   SurfaceStyle,
 } from '../world/types';
 import { INFINITE_STORY_PITCH, getInfiniteChunkCeilingOpenings } from '../world/InfiniteWorld';
-import { getStairSlabs, STAIR_STORY_RISE } from '../world/StairLayout';
+import {
+  getStairFloorOpening,
+  getStairSlabs,
+  STAIR_STORY_RISE,
+} from '../world/StairLayout';
 import { pointInRect, rectCenter, rectDepth, rectWidth } from '../world/types';
 
 const setGeometryTint = (geometry: THREE.BufferGeometry, tint: number): void => {
@@ -58,38 +63,74 @@ const removeHorizontalCaps = <T extends THREE.BufferGeometry>(geometry: T): T =>
   return geometry;
 };
 
+const removeWallEndCaps = <T extends THREE.BufferGeometry>(
+  geometry: T,
+  orientation: WallSegment['orientation'],
+): T => {
+  const index = geometry.getIndex();
+  const normals = geometry.getAttribute('normal');
+  if (!index || !normals) return geometry;
+  const retainedIndices: number[] = [];
+  for (let offset = 0; offset < index.count; offset += 3) {
+    const first = index.getX(offset);
+    const pointsAlongWall = orientation === 'x'
+      ? Math.abs(normals.getX(first)) > 0.5
+      : Math.abs(normals.getZ(first)) > 0.5;
+    if (!pointsAlongWall) {
+      retainedIndices.push(first, index.getX(offset + 1), index.getX(offset + 2));
+    }
+  }
+  geometry.setIndex(retainedIndices);
+  geometry.clearGroups();
+  return geometry;
+};
+
 const createWallGeometry = (
   wall: WallSegment,
   capless = false,
   patternScale = 1,
+  openEnds = false,
 ): THREE.BoxGeometry => {
   const alongX = wall.orientation === 'x';
+  const width = alongX ? wall.length : wall.thickness;
+  const depth = alongX ? wall.thickness : wall.length;
   const geometry = new THREE.BoxGeometry(
-    alongX ? wall.length : wall.thickness,
+    width,
     wall.height,
-    alongX ? wall.thickness : wall.length,
+    depth,
   );
   const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
-  const normals = geometry.getAttribute('normal') as THREE.BufferAttribute;
-  const uScale = Math.max(0.24, wall.length / 2.05) * patternScale;
-  const vScale = Math.max(0.2, wall.height / 2.45) * patternScale;
   const worldVOffset = (wall.bottom / 2.45) * patternScale;
-  for (let index = 0; index < uv.count; index += 1) {
-    const verticalFace = Math.abs(normals.getY(index)) < 0.5;
-    uv.setXY(
-      index,
-      uv.getX(index) * uScale,
-      uv.getY(index) * vScale + (verticalFace ? worldVOffset : 0),
-    );
+  const faceScales: Array<[number, number]> = [
+    [depth / 2.05, wall.height / 2.45],
+    [depth / 2.05, wall.height / 2.45],
+    [width / 2.05, depth / 2.05],
+    [width / 2.05, depth / 2.05],
+    [width / 2.05, wall.height / 2.45],
+    [width / 2.05, wall.height / 2.45],
+  ];
+  for (let face = 0; face < 6; face += 1) {
+    const [baseUScale, baseVScale] = faceScales[face]!;
+    const uScale = Math.max(0.12, baseUScale) * patternScale;
+    const vScale = Math.max(0.12, baseVScale) * patternScale;
+    const verticalFace = face !== 2 && face !== 3;
+    for (let vertex = 0; vertex < 4; vertex += 1) {
+      const index = face * 4 + vertex;
+      uv.setXY(
+        index,
+        uv.getX(index) * uScale,
+        uv.getY(index) * vScale + (verticalFace ? worldVOffset : 0),
+      );
+    }
   }
   if (capless) removeHorizontalCaps(geometry);
+  if (openEnds) removeWallEndCaps(geometry, wall.orientation);
   geometry.translate(wall.x, wall.bottom + wall.height * 0.5, wall.z);
   setGeometryTint(geometry, wall.tint);
   return geometry;
 };
 
 const wallNeedsOpenVerticalShell = (wall: WallSegment): boolean =>
-  wall.detail === 'upper-shell' ||
   wall.id.includes('inherited-shaft-') ||
   wall.id.includes('ceiling-shaft-collar-');
 
@@ -250,22 +291,36 @@ const createFloorGeometry = (
 const createSlopedSurfaceGeometry = (
   elevation: number,
   ramp: RaisedZoneFeature['ramp'],
+  patternScale = 1,
+  quarterTurn = false,
+  surfaceOffset = 0.0012,
+  seamOverlap = 0.018,
 ): THREE.BufferGeometry => {
   const { bounds, axis, riseDirection } = ramp;
   const yAt = (x: number, z: number): number => {
-    const progress = axis === 'x'
+    const rawProgress = axis === 'x'
       ? (x - bounds.minX) / Math.max(1e-6, rectWidth(bounds))
       : (z - bounds.minZ) / Math.max(1e-6, rectDepth(bounds));
+    const progress = THREE.MathUtils.clamp(rawProgress, 0, 1);
     return elevation * (riseDirection > 0 ? progress : 1 - progress);
   };
+  const renderBounds: Rect = {
+    minX: bounds.minX - seamOverlap,
+    maxX: bounds.maxX + seamOverlap,
+    minZ: bounds.minZ - seamOverlap,
+    maxZ: bounds.maxZ + seamOverlap,
+  };
   const corners = [
-    [bounds.minX, bounds.minZ],
-    [bounds.maxX, bounds.minZ],
-    [bounds.maxX, bounds.maxZ],
-    [bounds.minX, bounds.maxZ],
+    [renderBounds.minX, renderBounds.minZ],
+    [renderBounds.maxX, renderBounds.minZ],
+    [renderBounds.maxX, renderBounds.maxZ],
+    [renderBounds.minX, renderBounds.maxZ],
   ] as const;
-  const positions = corners.flatMap(([x, z]) => [x, yAt(x, z) + 0.004, z]);
-  const uvs = corners.flatMap(([x, z]) => [x / 2.15, z / 2.15]);
+  const positions = corners.flatMap(([x, z]) => [x, yAt(x, z) + surfaceOffset, z]);
+  const textureCoords = (x: number, z: number): [number, number] => quarterTurn
+    ? [(z / 2.15) * patternScale, (-x / 2.15) * patternScale]
+    : [(x / 2.15) * patternScale, (z / 2.15) * patternScale];
+  const uvs = corners.flatMap(([x, z]) => textureCoords(x, z));
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
@@ -275,9 +330,6 @@ const createSlopedSurfaceGeometry = (
   geometry.computeBoundingSphere();
   return geometry;
 };
-
-const createRampSurfaceGeometry = (feature: RaisedZoneFeature): THREE.BufferGeometry =>
-  createSlopedSurfaceGeometry(feature.elevation, feature.ramp);
 
 const intersectRects = (left: Rect, right: Rect): Rect | null => {
   const intersection: Rect = {
@@ -289,6 +341,45 @@ const intersectRects = (left: Rect, right: Rect): Rect | null => {
   return intersection.maxX - intersection.minX > 1e-4 && intersection.maxZ - intersection.minZ > 1e-4
     ? intersection
     : null;
+};
+
+const subtractRect = (source: Rect, cut: Rect): Rect[] => {
+  const overlap = intersectRects(source, cut);
+  if (!overlap) return [source];
+  const pieces: Rect[] = [];
+  if (source.minX < overlap.minX - 1e-4) {
+    pieces.push({
+      minX: source.minX,
+      maxX: overlap.minX,
+      minZ: source.minZ,
+      maxZ: source.maxZ,
+    });
+  }
+  if (overlap.maxX < source.maxX - 1e-4) {
+    pieces.push({
+      minX: overlap.maxX,
+      maxX: source.maxX,
+      minZ: source.minZ,
+      maxZ: source.maxZ,
+    });
+  }
+  if (source.minZ < overlap.minZ - 1e-4) {
+    pieces.push({
+      minX: overlap.minX,
+      maxX: overlap.maxX,
+      minZ: source.minZ,
+      maxZ: overlap.minZ,
+    });
+  }
+  if (overlap.maxZ < source.maxZ - 1e-4) {
+    pieces.push({
+      minX: overlap.minX,
+      maxX: overlap.maxX,
+      minZ: overlap.maxZ,
+      maxZ: source.maxZ,
+    });
+  }
+  return pieces;
 };
 
 const rectsTouchOrOverlap = (left: Rect, right: Rect): boolean =>
@@ -320,6 +411,7 @@ const createHorizontalJunctionRepairGeometry = (
   const repairWidth = texelSize * 1.05;
   const y = surface === 'floor' ? 0.002 : wallHeight - 0.002;
   const normalY = surface === 'floor' ? 1 : -1;
+  const occupiedPatches: Rect[] = [];
 
   const addPatch = (rect: Rect, wall: WallSegment, side: -1 | 1): void => {
     const offset = positions.length / 3;
@@ -363,6 +455,18 @@ const createHorizontalJunctionRepairGeometry = (
     }
   };
 
+  const addVisiblePatch = (rect: Rect, wall: WallSegment, side: -1 | 1): void => {
+    let visiblePieces = [rect];
+    for (const occupied of occupiedPatches) {
+      visiblePieces = visiblePieces.flatMap((piece) => subtractRect(piece, occupied));
+      if (visiblePieces.length === 0) return;
+    }
+    for (const piece of visiblePieces) {
+      addPatch(piece, wall, side);
+      occupiedPatches.push(piece);
+    }
+  };
+
   for (const wall of walls) {
     if (wall.bottom < -1 || wall.height <= 1.2) continue;
     const touchesSurface = surface === 'floor'
@@ -392,7 +496,7 @@ const createHorizontalJunctionRepairGeometry = (
           };
       for (const clip of clipRects) {
         const clipped = intersectRects(strip, clip);
-        if (clipped) addPatch(clipped, wall, side);
+        if (clipped) addVisiblePatch(clipped, wall, side);
       }
     }
   }
@@ -454,6 +558,116 @@ const cellsAroundHoles = (bounds: Rect, holes: Rect[]): Rect[] => {
   return cells;
 };
 
+interface RectBoundarySegment {
+  orientation: 'x' | 'z';
+  fixed: number;
+  min: number;
+  max: number;
+  inward: -1 | 1;
+}
+
+const subtractInterval = (
+  intervals: Array<{ min: number; max: number }>,
+  cutMin: number,
+  cutMax: number,
+): Array<{ min: number; max: number }> =>
+  intervals.flatMap((interval) => {
+    if (cutMax <= interval.min + 1e-4 || cutMin >= interval.max - 1e-4) return [interval];
+    const pieces: Array<{ min: number; max: number }> = [];
+    if (cutMin > interval.min + 1e-4) {
+      pieces.push({ min: interval.min, max: Math.min(interval.max, cutMin) });
+    }
+    if (cutMax < interval.max - 1e-4) {
+      pieces.push({ min: Math.max(interval.min, cutMax), max: interval.max });
+    }
+    return pieces;
+  });
+
+const exposedRectBoundaries = (
+  rects: readonly Rect[],
+  rampOpenings: readonly RampSurface[] = [],
+): RectBoundarySegment[] => {
+  const result: RectBoundarySegment[] = [];
+  for (const [rectIndex, rect] of rects.entries()) {
+    const sides = [
+      {
+        orientation: 'x' as const,
+        fixed: rect.minZ,
+        min: rect.minX,
+        max: rect.maxX,
+        inward: 1 as const,
+        adjacent: (other: Rect) => Math.abs(other.maxZ - rect.minZ) < 0.02,
+        overlap: (other: Rect) => ({ min: other.minX, max: other.maxX }),
+      },
+      {
+        orientation: 'x' as const,
+        fixed: rect.maxZ,
+        min: rect.minX,
+        max: rect.maxX,
+        inward: -1 as const,
+        adjacent: (other: Rect) => Math.abs(other.minZ - rect.maxZ) < 0.02,
+        overlap: (other: Rect) => ({ min: other.minX, max: other.maxX }),
+      },
+      {
+        orientation: 'z' as const,
+        fixed: rect.minX,
+        min: rect.minZ,
+        max: rect.maxZ,
+        inward: 1 as const,
+        adjacent: (other: Rect) => Math.abs(other.maxX - rect.minX) < 0.02,
+        overlap: (other: Rect) => ({ min: other.minZ, max: other.maxZ }),
+      },
+      {
+        orientation: 'z' as const,
+        fixed: rect.maxX,
+        min: rect.minZ,
+        max: rect.maxZ,
+        inward: -1 as const,
+        adjacent: (other: Rect) => Math.abs(other.minX - rect.maxX) < 0.02,
+        overlap: (other: Rect) => ({ min: other.minZ, max: other.maxZ }),
+      },
+    ];
+    for (const side of sides) {
+      let intervals = [{ min: side.min, max: side.max }];
+      for (const [otherIndex, other] of rects.entries()) {
+        if (otherIndex === rectIndex || !side.adjacent(other)) continue;
+        const overlap = side.overlap(other);
+        intervals = subtractInterval(intervals, overlap.min, overlap.max);
+      }
+      for (const ramp of rampOpenings) {
+        const touchesBoundary = side.orientation === 'x'
+          ? ramp.axis === 'z' &&
+            (
+              Math.abs(ramp.bounds.minZ - side.fixed) < 0.02 ||
+              Math.abs(ramp.bounds.maxZ - side.fixed) < 0.02
+            )
+          : ramp.axis === 'x' &&
+            (
+              Math.abs(ramp.bounds.minX - side.fixed) < 0.02 ||
+              Math.abs(ramp.bounds.maxX - side.fixed) < 0.02
+            );
+        if (!touchesBoundary) continue;
+        intervals = subtractInterval(
+          intervals,
+          side.orientation === 'x' ? ramp.bounds.minX : ramp.bounds.minZ,
+          side.orientation === 'x' ? ramp.bounds.maxX : ramp.bounds.maxZ,
+        );
+      }
+      for (const interval of intervals) {
+        if (interval.max - interval.min <= 1e-4) continue;
+        result.push({
+          orientation: side.orientation,
+          fixed: side.fixed,
+          min: interval.min,
+          max: interval.max,
+          inward: side.inward,
+        });
+      }
+    }
+  }
+  return result;
+};
+
 const mergeOrSingle = (geometries: THREE.BufferGeometry[]): THREE.BufferGeometry | null => {
   if (geometries.length === 0) return null;
   if (geometries.length === 1) return geometries[0]!;
@@ -491,6 +705,20 @@ const createPreviewMaterial = (
   return material;
 };
 
+const createUnbakedMaterial = (
+  source: THREE.MeshStandardMaterial,
+  name: string,
+): THREE.MeshStandardMaterial => {
+  const material = source.clone();
+  material.name = name;
+  // Lower and intermediate storeys are lit by their actual runtime fixtures.
+  // Reusing the upper storey's baked light map gives incorrect illumination,
+  // while the old preview emissive made these surfaces look fullbright.
+  material.lightMap = null;
+  material.needsUpdate = true;
+  return material;
+};
+
 export interface WorldViewOptions {
   createLightRig?: boolean;
   bakedLightMaps?: BakedLightMapData;
@@ -520,7 +748,11 @@ export class WorldView {
   private readonly fixtureSlots: LightSlot[];
   private readonly previewMaterials: Pick<
     MaterialSet,
-    'wall' | 'floor' | 'ceiling' | 'baseboard' | 'pitWall'
+    'wall' | 'floor' | 'ceiling' | 'baseboard'
+  >;
+  private readonly lowerMaterials: Pick<
+    MaterialSet,
+    'wall' | 'floor' | 'ceiling' | 'baseboard'
   >;
   private readonly materials: MaterialSet;
   private readonly bakedLightMaps: BakedLightMaps;
@@ -548,13 +780,18 @@ export class WorldView {
     this.materials.baseboard.color.multiplyScalar(
       (this.surfaceStyle.wallTint + this.surfaceStyle.floorTint) * 0.5,
     );
+    this.lowerMaterials = {
+      wall: createUnbakedMaterial(this.materials.wall, 'lower-storey-wallpaper'),
+      floor: createUnbakedMaterial(this.materials.floor, 'lower-storey-carpet'),
+      ceiling: createUnbakedMaterial(this.materials.ceiling, 'lower-storey-ceiling'),
+      baseboard: createUnbakedMaterial(this.materials.baseboard, 'lower-storey-baseboard'),
+    };
     const previewGlow = plan.visualBiome === 'red'
       ? {
           wall: 0x6f0906,
           floor: 0x510604,
           ceiling: 0x790c08,
           baseboard: 0x4e0504,
-          pitWall: 0x3d0403,
         }
       : plan.visualBiome === 'white'
         ? {
@@ -562,28 +799,27 @@ export class WorldView {
             floor: 0x3b4446,
             ceiling: 0x566165,
             baseboard: 0x3d4547,
-            pitWall: 0x343b3d,
           }
         : {
             wall: 0x77713a,
             floor: 0x686331,
             ceiling: 0x918743,
             baseboard: 0x5f592b,
-            pitWall: 0x504923,
           };
     this.previewMaterials = {
       wall: createPreviewMaterial(sourceMaterials.wall, 'preview-wallpaper', previewGlow.wall, 0.13),
       floor: createPreviewMaterial(sourceMaterials.floor, 'preview-carpet', previewGlow.floor, 0.09),
       ceiling: createPreviewMaterial(sourceMaterials.ceiling, 'preview-ceiling', previewGlow.ceiling, 0.16),
       baseboard: createPreviewMaterial(sourceMaterials.baseboard, 'preview-baseboard', previewGlow.baseboard, 0.1),
-      pitWall: createPreviewMaterial(sourceMaterials.pitWall, 'preview-pit-wall', previewGlow.pitWall, 0.11),
     };
     this.previewMaterials.wall.color.multiplyScalar(this.surfaceStyle.wallTint);
     this.previewMaterials.floor.color.multiplyScalar(this.surfaceStyle.floorTint);
     this.previewMaterials.ceiling.color.multiplyScalar(this.surfaceStyle.ceilingTint);
     this.previewMaterials.baseboard.color.multiplyScalar(this.surfaceStyle.wallTint);
-    this.previewMaterials.pitWall.color.multiplyScalar(this.surfaceStyle.wallTint);
-    this.ownedMaterials.push(...Object.values(this.previewMaterials));
+    this.ownedMaterials.push(
+      ...Object.values(this.lowerMaterials),
+      ...Object.values(this.previewMaterials),
+    );
     this.fixtureSlots = plan.lights;
     this.buildArchitecture();
     this.buildWallGraffiti();
@@ -618,12 +854,57 @@ export class WorldView {
   private buildArchitecture(): void {
     const wallGeometries: THREE.BufferGeometry[] = [];
     const lowerWallGeometries: THREE.BufferGeometry[] = [];
+    const shaftCarpetGeometries: THREE.BufferGeometry[] = [];
     const plasterGeometries: THREE.BufferGeometry[] = [];
     const baseboardGeometries: THREE.BufferGeometry[] = [];
     const lowerBaseboardGeometries: THREE.BufferGeometry[] = [];
     const baseboardlessZones = this.plan.baseboardlessZones ?? [];
+    const elevationFeatures = this.plan.features.filter(
+      (feature): feature is RaisedZoneFeature => feature.kind === 'raised-zone',
+    );
+    const districtFloorElevations = elevationFeatures.map((feature) => feature.elevation);
     const touchesBaseboardlessZone = (bounds: Rect): boolean =>
       baseboardlessZones.some((zone) => rectsTouchOrOverlap(zone, bounds));
+    const elevationClaimsForWall = (
+      wall: WallSegment,
+    ): Array<{ min: number; max: number; elevation: number }> => {
+      if (Math.abs(wall.bottom) > 0.12) return [];
+      const alongCenter = wall.orientation === 'x' ? wall.x : wall.z;
+      const fixed = wall.orientation === 'x' ? wall.z : wall.x;
+      const wallMin = alongCenter - wall.length * 0.5;
+      const wallMax = alongCenter + wall.length * 0.5;
+      const crossTolerance = wall.thickness * 0.5 + 0.025;
+      const claims = elevationFeatures.flatMap((feature) =>
+        (feature.platformRects ?? [feature.platformBounds]).flatMap((platform) => {
+          const crossMin = wall.orientation === 'x' ? platform.minZ : platform.minX;
+          const crossMax = wall.orientation === 'x' ? platform.maxZ : platform.maxX;
+          if (fixed < crossMin - crossTolerance || fixed > crossMax + crossTolerance) return [];
+          const min = Math.max(
+            wallMin,
+            wall.orientation === 'x' ? platform.minX : platform.minZ,
+          );
+          const max = Math.min(
+            wallMax,
+            wall.orientation === 'x' ? platform.maxX : platform.maxZ,
+          );
+          return max - min > 0.02 ? [{ min, max, elevation: feature.elevation }] : [];
+        })
+      ).sort((left, right) => left.min - right.min);
+      const merged: Array<{ min: number; max: number; elevation: number }> = [];
+      for (const claim of claims) {
+        const previous = merged[merged.length - 1];
+        if (
+          previous &&
+          Math.abs(previous.elevation - claim.elevation) < 0.02 &&
+          claim.min <= previous.max + 0.02
+        ) {
+          previous.max = Math.max(previous.max, claim.max);
+        } else {
+          merged.push({ ...claim });
+        }
+      }
+      return merged;
+    };
     const upperShells = this.plan.walls.filter((wall) => wall.detail === 'upper-shell');
     const continuesIntoUpperShell = (wall: WallSegment): boolean => {
       if (
@@ -643,13 +924,31 @@ export class WorldView {
       });
     };
     for (const wall of this.plan.walls) {
+      const isShaftLining =
+        wall.id.includes('inherited-shaft-') ||
+        wall.id.includes('ceiling-shaft-collar-');
+      const isLowerStoreyWall = wall.bottom < -INFINITE_STORY_PITCH * 0.55;
       const geometry = createWallGeometry(
         wall,
-        wallNeedsOpenVerticalShell(wall) || continuesIntoUpperShell(wall),
-        this.surfaceStyle.wallPatternScale,
+        wallNeedsOpenVerticalShell(wall) ||
+          continuesIntoUpperShell(wall) ||
+          wall.detail === 'biome-boundary-skin' ||
+          wall.detail === 'biome-boundary-band',
+        isShaftLining
+          ? this.surfaceStyle.floorPatternScale
+          : this.surfaceStyle.wallPatternScale,
+        wall.detail === 'upper-shell' ||
+          wall.detail === 'upper-portal-lintel' ||
+          wall.detail === 'biome-boundary-band' ||
+          (
+            wall.detail === 'biome-boundary-skin' &&
+            wall.id.includes('-return-')
+          ),
       );
       const wallMaterial = wall.kind === 'plaster' ? this.materials.plaster : this.materials.wall;
-      if (wall.bottom < -1) {
+      if (isShaftLining) {
+        shaftCarpetGeometries.push(geometry);
+      } else if (isLowerStoreyWall) {
         lowerWallGeometries.push(geometry);
       } else {
         ensureBakedLightUv(geometry, wallMaterial, 0.42);
@@ -658,7 +957,8 @@ export class WorldView {
 
       const restsOnWalkableFloor =
         Math.abs(wall.bottom) < 0.12 ||
-        Math.abs(wall.bottom + INFINITE_STORY_PITCH) < 0.12;
+        Math.abs(wall.bottom + INFINITE_STORY_PITCH) < 0.12 ||
+        districtFloorElevations.some((elevation) => Math.abs(wall.bottom - elevation) < 0.12);
       const halfLength = wall.length * 0.5;
       const halfThickness = wall.thickness * 0.5;
       const wallBounds: Rect = wall.orientation === 'x'
@@ -676,31 +976,66 @@ export class WorldView {
           };
       const suppressBaseboard =
         wall.detail === 'crawl-tunnel' ||
+        wall.detail === 'lower-shell' ||
+        wall.detail === 'biome-boundary-band' ||
+        (
+          wall.detail === 'biome-boundary-skin' &&
+          wall.id.includes('-return-')
+        ) ||
         touchesBaseboardlessZone(wallBounds);
       if (wall.height > 1.3 && restsOnWalkableFloor && !suppressBaseboard) {
         const alongX = wall.orientation === 'x';
-        const trim = new THREE.BoxGeometry(
-          alongX ? wall.length + 0.025 : wall.thickness + 0.055,
-          0.115,
-          alongX ? wall.thickness + 0.055 : wall.length + 0.025,
-        );
-        trim.translate(wall.x, wall.bottom + 0.0575, wall.z);
-        if (wall.bottom < -1) {
-          lowerBaseboardGeometries.push(trim);
-        } else {
-          ensureBakedLightUv(trim, this.materials.baseboard, 0.36);
-          baseboardGeometries.push(trim);
+        const wallAlong = alongX ? wall.x : wall.z;
+        const wallMin = wallAlong - wall.length * 0.5;
+        const wallMax = wallAlong + wall.length * 0.5;
+        const elevationClaims = elevationClaimsForWall(wall);
+        let ordinaryIntervals = [{ min: wallMin, max: wallMax }];
+        for (const claim of elevationClaims) {
+          ordinaryIntervals = subtractInterval(ordinaryIntervals, claim.min, claim.max);
+        }
+        const addTrim = (
+          min: number,
+          max: number,
+          bottom: number,
+          lowerStorey: boolean,
+        ): void => {
+          if (max - min <= 0.02) return;
+          const length = max - min;
+          const alongCenter = (min + max) * 0.5;
+          const trim = new THREE.BoxGeometry(
+            alongX ? length + 0.025 : wall.thickness + 0.055,
+            0.115,
+            alongX ? wall.thickness + 0.055 : length + 0.025,
+          );
+          trim.translate(
+            alongX ? alongCenter : wall.x,
+            bottom + 0.0575,
+            alongX ? wall.z : alongCenter,
+          );
+          if (lowerStorey) {
+            lowerBaseboardGeometries.push(trim);
+          } else {
+            ensureBakedLightUv(trim, this.materials.baseboard, 0.36);
+            baseboardGeometries.push(trim);
+          }
+        };
+        for (const interval of ordinaryIntervals) {
+          addTrim(interval.min, interval.max, wall.bottom, isLowerStoreyWall);
+        }
+        for (const claim of elevationClaims) {
+          addTrim(claim.min, claim.max, claim.elevation, false);
         }
       }
     }
 
     for (const column of this.plan.columns) {
+      const columnBottom = column.bottom ?? 0;
       const geometry = createTexturedBoxGeometry(
         column.width,
         column.height,
         column.depth,
         column.x,
-        0,
+        columnBottom,
         column.z,
         column.tint,
         this.surfaceStyle.wallPatternScale,
@@ -715,7 +1050,7 @@ export class WorldView {
       };
       if (!touchesBaseboardlessZone(columnBounds)) {
         const trim = new THREE.BoxGeometry(column.width + 0.055, 0.115, column.depth + 0.055);
-        trim.translate(column.x, 0.0575, column.z);
+        trim.translate(column.x, columnBottom + 0.0575, column.z);
         ensureBakedLightUv(trim, this.materials.baseboard, 0.26);
         baseboardGeometries.push(trim);
       }
@@ -769,15 +1104,21 @@ export class WorldView {
     makeMesh(mergeOrSingle(wallGeometries), this.materials.wall, 'merged-wallpaper-walls', this.group);
     makeMesh(
       mergeOrSingle(lowerWallGeometries),
-      this.previewMaterials.wall,
-      'lower-and-through-shaft-wallpaper-walls',
+      this.lowerMaterials.wall,
+      'lower-storey-wallpaper-walls',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(shaftCarpetGeometries),
+      this.lowerMaterials.floor,
+      'carpet-lined-through-shaft-walls',
       this.group,
     );
     makeMesh(mergeOrSingle(plasterGeometries), this.materials.plaster, 'merged-plaster-walls', this.group);
     makeMesh(mergeOrSingle(baseboardGeometries), this.materials.baseboard, 'merged-baseboards', this.group);
     makeMesh(
       mergeOrSingle(lowerBaseboardGeometries),
-      this.previewMaterials.baseboard,
+      this.lowerMaterials.baseboard,
       'lower-level-baseboards',
       this.group,
     );
@@ -971,25 +1312,81 @@ export class WorldView {
     const topGeometries: THREE.BufferGeometry[] = [];
     const rampGeometries: THREE.BufferGeometry[] = [];
     const skirtGeometries: THREE.BufferGeometry[] = [];
+    const supportWallGeometries: THREE.BufferGeometry[] = [];
     for (const feature of features) {
-      topGeometries.push(createFloorGeometry(
-        [feature.platformBounds],
-        feature.elevation + 0.004,
-        this.surfaceStyle.floorPatternScale,
-        this.surfaceStyle.floorQuarterTurn,
+      const platforms = feature.platformRects ?? [feature.platformBounds];
+      const ramps = feature.ramps ?? [feature.ramp];
+      topGeometries.push(...platforms.map((platform) =>
+        createFloorGeometry(
+          [platform],
+          feature.elevation,
+          this.surfaceStyle.floorPatternScale,
+          this.surfaceStyle.floorQuarterTurn,
+        )
       ));
-      rampGeometries.push(createRampSurfaceGeometry(feature));
-      const platform = feature.platformBounds;
-      skirtGeometries.push(removeHorizontalCaps(createTexturedBoxGeometry(
-        rectWidth(platform),
-        feature.elevation,
-        rectDepth(platform),
-        rectCenter(platform).x,
-        0,
-        rectCenter(platform).z,
-        0.96,
-        this.surfaceStyle.wallPatternScale,
-      )));
+      rampGeometries.push(...ramps.map((ramp) =>
+        createSlopedSurfaceGeometry(
+          feature.elevation,
+          ramp,
+          this.surfaceStyle.floorPatternScale,
+          this.surfaceStyle.floorQuarterTurn,
+        )
+      ));
+      const skirtBottom = Math.min(0, feature.elevation);
+      const skirtHeight = Math.abs(feature.elevation);
+      const skirtThickness = 0.12;
+      const supportThickness = 0.1;
+      const supportBottom = skirtBottom - 0.012;
+      const supportHeight = skirtHeight + 0.024;
+      const supportBoundaries = exposedRectBoundaries(
+        platforms,
+        feature.elevation < 0 ? ramps : [],
+      );
+      for (const boundary of supportBoundaries) {
+        const length = boundary.max - boundary.min;
+        const alongCenter = (boundary.min + boundary.max) * 0.5;
+        const fixedCenter = boundary.fixed + boundary.inward * supportThickness * 0.5;
+        supportWallGeometries.push(removeHorizontalCaps(createTexturedBoxGeometry(
+          boundary.orientation === 'x' ? length : supportThickness,
+          supportHeight,
+          boundary.orientation === 'x' ? supportThickness : length,
+          boundary.orientation === 'x' ? alongCenter : fixedCenter,
+          supportBottom,
+          boundary.orientation === 'x' ? fixedCenter : alongCenter,
+          0.94,
+          this.surfaceStyle.wallPatternScale,
+        )));
+      }
+      for (const ramp of ramps) {
+        const center = rectCenter(ramp.bounds);
+        if (ramp.axis === 'x') {
+          for (const z of [ramp.bounds.minZ, ramp.bounds.maxZ]) {
+            skirtGeometries.push(removeHorizontalCaps(createTexturedBoxGeometry(
+              rectWidth(ramp.bounds),
+              skirtHeight,
+              skirtThickness,
+              center.x,
+              skirtBottom,
+              z,
+              0.96,
+              this.surfaceStyle.wallPatternScale,
+            )));
+          }
+        } else {
+          for (const x of [ramp.bounds.minX, ramp.bounds.maxX]) {
+            skirtGeometries.push(removeHorizontalCaps(createTexturedBoxGeometry(
+              skirtThickness,
+              skirtHeight,
+              rectDepth(ramp.bounds),
+              x,
+              skirtBottom,
+              center.z,
+              0.96,
+              this.surfaceStyle.wallPatternScale,
+            )));
+          }
+        }
+      }
     }
     makeMesh(
       mergeOrSingle([...topGeometries, ...rampGeometries]),
@@ -1001,6 +1398,12 @@ export class WorldView {
       mergeOrSingle(skirtGeometries),
       this.materials.wall,
       'wallpaper-raised-platform-skirts',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(supportWallGeometries),
+      this.materials.wall,
+      'wallpaper-elevation-support-walls',
       this.group,
     );
   }
@@ -1019,13 +1422,22 @@ export class WorldView {
       const clearance = feature.clearanceHeight ?? 1.42;
       const ceilingY = room?.ceilingHeight ?? this.plan.wallHeight;
       if (ceilingY > clearance + 0.08) {
+        // Bleed the roof into the surrounding walls. A face exactly aligned
+        // with a tunnel wall or doorway jamb produces visible z-fighting.
+        const wallBleed = 0.018;
+        const roofBounds: Rect = {
+          minX: feature.bounds.minX - wallBleed,
+          maxX: feature.bounds.maxX + wallBleed,
+          minZ: feature.bounds.minZ - wallBleed,
+          maxZ: feature.bounds.maxZ + wallBleed,
+        };
         roofGeometries.push(createTexturedBoxGeometry(
-          rectWidth(feature.bounds),
+          rectWidth(roofBounds),
           ceilingY - clearance,
-          rectDepth(feature.bounds),
-          rectCenter(feature.bounds).x,
+          rectDepth(roofBounds),
+          rectCenter(roofBounds).x,
           clearance,
-          rectCenter(feature.bounds).z,
+          rectCenter(roofBounds).z,
           0.96,
           this.surfaceStyle.wallPatternScale,
         ));
@@ -1039,7 +1451,13 @@ export class WorldView {
             this.surfaceStyle.floorQuarterTurn,
           ),
           ...feature.hump.ramps.map((ramp) =>
-            createSlopedSurfaceGeometry(feature.hump!.elevation, ramp)
+            createSlopedSurfaceGeometry(
+              feature.hump!.elevation,
+              ramp,
+              this.surfaceStyle.floorPatternScale,
+              this.surfaceStyle.floorQuarterTurn,
+              0.0052,
+            )
           ),
         );
         skirtGeometries.push(removeHorizontalCaps(createTexturedBoxGeometry(
@@ -1091,7 +1509,7 @@ export class WorldView {
     );
     makeMesh(
       mergeOrSingle(shaftGeometries),
-      this.materials.pitWall,
+      this.lowerMaterials.floor,
       'low-passage-hole-walls',
       this.group,
     );
@@ -1218,7 +1636,7 @@ export class WorldView {
         this.surfaceStyle.floorPatternScale,
         this.surfaceStyle.floorQuarterTurn,
       );
-      const lowerFloor = new THREE.Mesh(lowerFloorGeometry, this.previewMaterials.floor);
+      const lowerFloor = new THREE.Mesh(lowerFloorGeometry, this.lowerMaterials.floor);
       lowerFloor.name = `lower-carpet-${feature.id}`;
       lowerFloor.matrixAutoUpdate = false;
       lowerFloor.updateMatrix();
@@ -1233,25 +1651,25 @@ export class WorldView {
     }
     makeMesh(
       mergeOrSingle(sideGeometries),
-      this.previewMaterials.pitWall,
+      this.lowerMaterials.floor,
       'open-pit-shaft-walls',
       this.group,
     );
     makeMesh(
       mergeOrSingle(abyssSideGeometries),
-      this.previewMaterials.pitWall,
+      this.lowerMaterials.floor,
       'open-abyss-shaft-walls',
       this.group,
     );
     makeMesh(
       mergeOrSingle(abyssStoreyGeometries),
-      this.previewMaterials.ceiling,
+      this.lowerMaterials.floor,
       'abyss-storey-edges',
       this.group,
     );
     makeMesh(
       mergeOrSingle(lowerCeilingGeometries),
-      this.previewMaterials.ceiling,
+      this.lowerMaterials.ceiling,
       'lower-office-ceiling',
       this.group,
     );
@@ -1261,14 +1679,53 @@ export class WorldView {
     const stairFeatures = this.plan.features.filter(
       (feature): feature is StairSocketFeature => feature.kind === 'stair-socket',
     );
-    const geometries: THREE.BufferGeometry[] = [];
+    const treadGeometries: THREE.BufferGeometry[] = [];
+    const bodyGeometries: THREE.BufferGeometry[] = [];
     const cageGeometries: THREE.BufferGeometry[] = [];
     const lightGeometries: THREE.BufferGeometry[] = [];
+    const upperFloorGeometries: THREE.BufferGeometry[] = [];
+    const upperUndersideGeometries: THREE.BufferGeometry[] = [];
+    const upperWallGeometries: THREE.BufferGeometry[] = [];
+    const upperCeilingGeometries: THREE.BufferGeometry[] = [];
+    const upperLightGeometries: THREE.BufferGeometry[] = [];
+    const lowerFloorGeometries: THREE.BufferGeometry[] = [];
+    const lowerWallGeometries: THREE.BufferGeometry[] = [];
+    const lowerCeilingGeometries: THREE.BufferGeometry[] = [];
+    const lowerLightGeometries: THREE.BufferGeometry[] = [];
+    const worldHalf = this.plan.size * 0.5;
+    const previewZoneFor = (bounds: Rect): Rect => ({
+      minX: Math.max(-worldHalf, bounds.minX - 6),
+      maxX: Math.min(worldHalf, bounds.maxX + 6),
+      minZ: Math.max(-worldHalf, bounds.minZ - 6),
+      maxZ: Math.min(worldHalf, bounds.maxZ + 6),
+    });
+    const addPreviewLights = (
+      zone: Rect,
+      ceilingY: number,
+      openings: readonly Rect[],
+      target: THREE.BufferGeometry[],
+    ): void => {
+      const columns = Math.max(1, Math.min(3, Math.floor(rectWidth(zone) / 5.2)));
+      const rows = Math.max(1, Math.min(3, Math.floor(rectDepth(zone) / 5.2)));
+      for (let xIndex = 0; xIndex < columns; xIndex += 1) {
+        for (let zIndex = 0; zIndex < rows; zIndex += 1) {
+          const x = zone.minX + ((xIndex + 0.5) / columns) * rectWidth(zone);
+          const z = zone.minZ + ((zIndex + 0.5) / rows) * rectDepth(zone);
+          if (openings.some((opening) => pointInRect(x, z, opening, -0.65))) continue;
+          const light = new THREE.PlaneGeometry(1.72, 0.72);
+          light.rotateX(Math.PI * 0.5);
+          if ((xIndex + zIndex) % 2 === 1) light.rotateZ(Math.PI * 0.5);
+          light.translate(x, ceilingY - 0.035, z);
+          target.push(light);
+        }
+      }
+    };
     for (const stairs of stairFeatures) {
       const center = rectCenter(stairs.bounds);
       const alongX = stairs.heading.startsWith('x');
+      const positive = stairs.heading.endsWith('+');
       for (const slab of getStairSlabs(stairs)) {
-        geometries.push(createTexturedBoxGeometry(
+        bodyGeometries.push(createTexturedBoxGeometry(
           rectWidth(slab.bounds),
           slab.top - slab.bottom,
           rectDepth(slab.bounds),
@@ -1276,23 +1733,30 @@ export class WorldView {
           slab.bottom,
           rectCenter(slab.bounds).z,
           slab.kind === 'step' ? 0.94 : 0.98,
+          this.surfaceStyle.wallPatternScale,
+        ));
+        treadGeometries.push(createFloorGeometry(
+          [slab.bounds],
+          slab.top + 0.0012,
           this.surfaceStyle.floorPatternScale,
+          this.surfaceStyle.floorQuarterTurn,
         ));
       }
       const baseY = stairs.baseY ?? 0;
       const wallThickness = 0.16;
-      for (const lightY of [baseY + 2.52, baseY + 5.18]) {
-        const light = new THREE.PlaneGeometry(
-          alongX ? 1.55 : 0.72,
-          alongX ? 0.72 : 1.55,
-        );
-        light.rotateX(Math.PI * 0.5);
-        light.translate(center.x, lightY, center.z);
+      for (const lightY of [baseY + 1.72, baseY + 4.34]) {
+        const light = new THREE.PlaneGeometry(1.46, 0.56);
+        if (alongX) {
+          light.translate(center.x, lightY, stairs.bounds.minZ + 0.006);
+        } else {
+          light.rotateY(Math.PI * 0.5);
+          light.translate(stairs.bounds.minX + 0.006, lightY, center.z);
+        }
         lightGeometries.push(light);
       }
       if (alongX) {
         cageGeometries.push(
-          createTexturedBoxGeometry(
+          removeHorizontalCaps(createTexturedBoxGeometry(
             rectWidth(stairs.bounds),
             STAIR_STORY_RISE,
             wallThickness,
@@ -1301,8 +1765,8 @@ export class WorldView {
             stairs.bounds.minZ - wallThickness * 0.5,
             0.92,
             this.surfaceStyle.wallPatternScale,
-          ),
-          createTexturedBoxGeometry(
+          )),
+          removeHorizontalCaps(createTexturedBoxGeometry(
             rectWidth(stairs.bounds),
             STAIR_STORY_RISE,
             wallThickness,
@@ -1311,11 +1775,23 @@ export class WorldView {
             stairs.bounds.maxZ + wallThickness * 0.5,
             0.92,
             this.surfaceStyle.wallPatternScale,
-          ),
+          )),
+          removeHorizontalCaps(createTexturedBoxGeometry(
+            wallThickness,
+            STAIR_STORY_RISE,
+            rectDepth(stairs.bounds) + wallThickness * 2,
+            positive
+              ? stairs.bounds.maxX + wallThickness * 0.5
+              : stairs.bounds.minX - wallThickness * 0.5,
+            baseY,
+            center.z,
+            0.92,
+            this.surfaceStyle.wallPatternScale,
+          )),
         );
       } else {
         cageGeometries.push(
-          createTexturedBoxGeometry(
+          removeHorizontalCaps(createTexturedBoxGeometry(
             wallThickness,
             STAIR_STORY_RISE,
             rectDepth(stairs.bounds),
@@ -1324,8 +1800,8 @@ export class WorldView {
             center.z,
             0.92,
             this.surfaceStyle.wallPatternScale,
-          ),
-          createTexturedBoxGeometry(
+          )),
+          removeHorizontalCaps(createTexturedBoxGeometry(
             wallThickness,
             STAIR_STORY_RISE,
             rectDepth(stairs.bounds),
@@ -1334,13 +1810,164 @@ export class WorldView {
             center.z,
             0.92,
             this.surfaceStyle.wallPatternScale,
+          )),
+          removeHorizontalCaps(createTexturedBoxGeometry(
+            rectWidth(stairs.bounds) + wallThickness * 2,
+            STAIR_STORY_RISE,
+            wallThickness,
+            center.x,
+            baseY,
+            positive
+              ? stairs.bounds.maxZ + wallThickness * 0.5
+              : stairs.bounds.minZ - wallThickness * 0.5,
+            0.92,
+            this.surfaceStyle.wallPatternScale,
+          )),
+        );
+      }
+
+      const opening = getStairFloorOpening(stairs);
+      const previewZone = previewZoneFor(stairs.bounds);
+      if (!stairs.inherited && Math.abs(baseY) < 0.1) {
+        const previewFloorY = baseY + STAIR_STORY_RISE;
+        const previewCeilingY = previewFloorY + this.plan.wallHeight;
+        upperFloorGeometries.push(createFloorGeometry(
+          cellsAroundHoles(previewZone, [opening]),
+          previewFloorY,
+          this.surfaceStyle.floorPatternScale,
+          this.surfaceStyle.floorQuarterTurn,
+        ));
+        upperUndersideGeometries.push(...cellsAroundHoles(previewZone, [opening]).map((rect) =>
+          createCeilingGeometry(
+            rect,
+            previewFloorY - 0.12,
+            this.surfaceStyle.ceilingPatternScale,
+          )
+        ));
+        upperWallGeometries.push(
+          ...createOpenShaftWallGeometries(
+            previewZone,
+            previewFloorY,
+            previewCeilingY,
+            0.96,
+            this.surfaceStyle.wallPatternScale,
           ),
+          ...createOpenShaftWallGeometries(
+            opening,
+            previewFloorY - 0.12,
+            previewFloorY,
+            0.94,
+            this.surfaceStyle.wallPatternScale,
+          ),
+        );
+        upperCeilingGeometries.push(
+          createCeilingGeometry(
+            previewZone,
+            previewCeilingY,
+            this.surfaceStyle.ceilingPatternScale,
+          ),
+        );
+        addPreviewLights(previewZone, previewCeilingY, [], upperLightGeometries);
+      }
+      if (stairs.inherited || baseY < -0.1) {
+        const previewFloorY = baseY;
+        const previewCeilingY = previewFloorY + this.plan.wallHeight;
+        lowerFloorGeometries.push(createFloorGeometry(
+          [previewZone],
+          previewFloorY,
+          this.surfaceStyle.floorPatternScale,
+          this.surfaceStyle.floorQuarterTurn,
+        ));
+        lowerWallGeometries.push(...createOpenShaftWallGeometries(
+          previewZone,
+          previewFloorY,
+          previewCeilingY,
+          0.96,
+          this.surfaceStyle.wallPatternScale,
+        ));
+        lowerCeilingGeometries.push(...cellsAroundHoles(previewZone, [stairs.bounds]).map((rect) =>
+          createCeilingGeometry(
+            rect,
+            previewCeilingY,
+            this.surfaceStyle.ceilingPatternScale,
+          )
+        ));
+        addPreviewLights(
+          previewZone,
+          previewCeilingY,
+          [stairs.bounds],
+          lowerLightGeometries,
         );
       }
     }
-    makeMesh(mergeOrSingle(geometries), this.materials.floor, 'inter-storey-stair-flights', this.group);
+    makeMesh(
+      mergeOrSingle(treadGeometries),
+      this.materials.floor,
+      'inter-storey-stair-flights',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(bodyGeometries),
+      this.materials.wall,
+      'inter-storey-stair-bodies',
+      this.group,
+    );
     makeMesh(mergeOrSingle(cageGeometries), this.materials.wall, 'inter-storey-stair-cages', this.group);
     makeMesh(mergeOrSingle(lightGeometries), this.materials.fixtureGlow, 'inter-storey-stair-lights', this.group);
+    makeMesh(
+      mergeOrSingle(upperFloorGeometries),
+      this.previewMaterials.floor,
+      'upper-stair-preview-floor',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(upperUndersideGeometries),
+      this.previewMaterials.ceiling,
+      'upper-stair-preview-floor-underside',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(upperWallGeometries),
+      this.previewMaterials.wall,
+      'upper-stair-preview-wallpaper-walls',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(upperCeilingGeometries),
+      this.previewMaterials.ceiling,
+      'upper-stair-preview-ceiling',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(upperLightGeometries),
+      this.materials.fixtureGlow,
+      'upper-stair-preview-lights',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(lowerFloorGeometries),
+      this.previewMaterials.floor,
+      'lower-stair-preview-floor',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(lowerWallGeometries),
+      this.previewMaterials.wall,
+      'lower-stair-preview-wallpaper-walls',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(lowerCeilingGeometries),
+      this.previewMaterials.ceiling,
+      'lower-stair-preview-ceiling',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(lowerLightGeometries),
+      this.materials.fixtureGlow,
+      'lower-stair-preview-lights',
+      this.group,
+    );
   }
 
   private buildCeilingDamage(): void {

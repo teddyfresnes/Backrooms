@@ -16,7 +16,11 @@ export type GraffitiSymbol =
   | 'spiral'
   | 'tallies'
   | 'cross'
-  | 'door';
+  | 'door'
+  | 'hand'
+  | 'skull'
+  | 'house'
+  | 'stick-figure';
 
 export interface WallGraffitiPlacement {
   id: string;
@@ -63,6 +67,12 @@ const HORROR_MESSAGES = [
   'NE REGARDE PAS EN HAUT',
   'IL CONNAÎT TON NOM',
   'J’ENTENDS TON SOUFFLE',
+  'HOME N’EST PLUS ICI',
+  'J’AI DESSINÉ LA SORTIE',
+  'PERSONNE NE VIT ICI',
+  'LES FENÊTRES REGARDENT',
+  'COMPTE ENCORE',
+  'MA MAIN NE M’APPARTIENT PLUS',
 ] as const;
 
 const WARNINGS = [
@@ -84,6 +94,10 @@ const WARNINGS = [
   'ON REVIENT TOUJOURS',
   'PORTE 17',
   'PAS DE FIN',
+  'HOME ?',
+  'NE SUIS PAS LES MAINS',
+  'JOUR 0',
+  'ILS COMPTENT AUSSI',
 ] as const;
 
 const SUBJECTS = [
@@ -139,6 +153,10 @@ const SYMBOLS: GraffitiSymbol[] = [
   'tallies',
   'cross',
   'door',
+  'hand',
+  'skull',
+  'house',
+  'stick-figure',
 ];
 
 const FONT_FAMILIES = [
@@ -148,6 +166,10 @@ const FONT_FAMILIES = [
   '"Bradley Hand ITC", "Segoe Print", cursive',
   '"Lucida Handwriting", "Segoe Print", cursive',
   '"Comic Sans MS", cursive',
+  '"Courier New", monospace',
+  '"Times New Roman", serif',
+  'Impact, sans-serif',
+  '"Trebuchet MS", sans-serif',
 ] as const;
 
 const inkPalette = (plan: WorldPlan): readonly string[] =>
@@ -169,7 +191,10 @@ const eligibleGraffitiWalls = (plan: WorldPlan): WallSegment[] =>
     wall.height >= 1.9 &&
     wall.length >= 2.35 &&
     wall.detail !== 'upper-shell' &&
+    wall.detail !== 'upper-portal-lintel' &&
     wall.detail !== 'ceiling-drop' &&
+    wall.detail !== 'biome-boundary-skin' &&
+    wall.detail !== 'biome-boundary-band' &&
     !wall.id.includes('shaft-') &&
     !wall.id.includes('vista-')
   );
@@ -293,7 +318,7 @@ const findDirectionWall = (
  * deterministic, so worker streaming and chunk remounts never reshuffle them.
  */
 export const selectWallGraffiti = (plan: WorldPlan): WallGraffitiPlacement[] => {
-  const rng = new SeededRandom(`${plan.seed}::wall-graffiti:v1`);
+  const rng = new SeededRandom(`${plan.seed}::wall-graffiti:v2`);
   const candidates = eligibleGraffitiWalls(plan);
   if (candidates.length === 0) return [];
   const placements: WallGraffitiPlacement[] = [];
@@ -359,10 +384,11 @@ export const selectWallGraffiti = (plan: WorldPlan): WallGraffitiPlacement[] => 
   const ambientCount = Math.min(
     candidates.length,
     rng.weighted([
-      { value: 0, weight: 0.48 },
-      { value: 1, weight: 0.34 },
-      { value: 2, weight: 0.14 },
-      { value: 3, weight: 0.04 },
+      { value: 0, weight: 0.3 },
+      { value: 1, weight: 0.36 },
+      { value: 2, weight: 0.21 },
+      { value: 3, weight: 0.1 },
+      { value: 4, weight: 0.03 },
     ]),
   );
   const ambientWalls = rng.shuffle(candidates.filter((wall) => !usedWallIds.has(wall.id)));
@@ -673,6 +699,208 @@ const drawSymbol = (
             1.5,
           );
         }
+      }
+      break;
+    }
+    case 'hand': {
+      const palmY = centerY + radius * 0.25;
+      drawIrregularEllipse(
+        context,
+        centerX,
+        palmY,
+        radius * 0.46,
+        radius * 0.56,
+        rng,
+      );
+      const fingerOffsets = [-0.62, -0.31, 0, 0.31, 0.62];
+      for (const [index, offset] of fingerOffsets.entries()) {
+        const fingerRng = rng.fork(`finger:${index}`);
+        const rootX = centerX + radius * offset * 0.58;
+        const rootY = palmY - radius * 0.42;
+        const tipX = centerX + radius * offset * fingerRng.float(0.78, 1.02);
+        const tipY = centerY - radius * fingerRng.float(
+          index === 2 ? 1.18 : 0.82,
+          index === 2 ? 1.34 : 1.14,
+        );
+        strokePolyline(
+          context,
+          [
+            [rootX - radius * 0.07, rootY],
+            [tipX - radius * 0.055, tipY],
+            [tipX + radius * 0.055, tipY + wobble(fingerRng, 3)],
+            [rootX + radius * 0.07, rootY],
+          ],
+          fingerRng,
+          1.5,
+        );
+      }
+      strokePolyline(
+        context,
+        [
+          [centerX - radius * 0.38, palmY - radius * 0.08],
+          [centerX - radius * 0.88, centerY],
+          [centerX - radius * 0.72, centerY + radius * 0.22],
+          [centerX - radius * 0.35, palmY + radius * 0.18],
+        ],
+        rng.fork('thumb'),
+        1.8,
+      );
+      break;
+    }
+    case 'skull': {
+      drawIrregularEllipse(
+        context,
+        centerX,
+        centerY - radius * 0.12,
+        radius * 0.78,
+        radius * 0.82,
+        rng,
+      );
+      for (const side of [-1, 1] as const) {
+        drawIrregularEllipse(
+          context,
+          centerX + side * radius * 0.3,
+          centerY - radius * 0.25,
+          radius * 0.2,
+          radius * 0.24,
+          rng.fork(`skull-eye:${side}`),
+        );
+      }
+      strokePolyline(
+        context,
+        [
+          [centerX, centerY - radius * 0.08],
+          [centerX - radius * 0.11, centerY + radius * 0.16],
+          [centerX + radius * 0.11, centerY + radius * 0.16],
+          [centerX, centerY - radius * 0.08],
+        ],
+        rng.fork('skull-nose'),
+        1.3,
+      );
+      strokePolyline(
+        context,
+        [
+          [centerX - radius * 0.46, centerY + radius * 0.42],
+          [centerX - radius * 0.34, centerY + radius * 0.78],
+          [centerX + radius * 0.34, centerY + radius * 0.78],
+          [centerX + radius * 0.46, centerY + radius * 0.42],
+        ],
+        rng.fork('skull-jaw'),
+        1.8,
+      );
+      for (let tooth = -2; tooth <= 2; tooth += 1) {
+        strokePolyline(
+          context,
+          [
+            [centerX + tooth * radius * 0.13, centerY + radius * 0.48],
+            [centerX + tooth * radius * 0.12, centerY + radius * 0.75],
+          ],
+          rng.fork(`tooth:${tooth}`),
+          1,
+        );
+      }
+      break;
+    }
+    case 'house': {
+      const left = centerX - radius * 0.72;
+      const right = centerX + radius * 0.72;
+      const roofY = centerY - radius * 0.88;
+      const eaveY = centerY - radius * 0.24;
+      const groundY = centerY + radius * 0.72;
+      strokePolyline(
+        context,
+        [
+          [left - radius * 0.12, eaveY],
+          [centerX, roofY],
+          [right + radius * 0.12, eaveY],
+          [right, eaveY],
+          [right, groundY],
+          [left, groundY],
+          [left, eaveY],
+          [centerX, roofY],
+        ],
+        rng,
+        2.3,
+      );
+      for (const side of [-1, 1] as const) {
+        const windowX = centerX + side * radius * 0.36;
+        drawIrregularEllipse(
+          context,
+          windowX,
+          centerY + radius * 0.08,
+          radius * 0.16,
+          radius * 0.2,
+          rng.fork(`window:${side}`),
+        );
+        strokePolyline(
+          context,
+          [
+            [windowX - radius * 0.13, centerY - radius * 0.08],
+            [windowX + radius * 0.13, centerY + radius * 0.24],
+          ],
+          rng.fork(`window-cross:${side}`),
+          1.2,
+        );
+      }
+      strokePolyline(
+        context,
+        [
+          [centerX - radius * 0.16, groundY],
+          [centerX - radius * 0.16, centerY + radius * 0.25],
+          [centerX + radius * 0.16, centerY + radius * 0.25],
+          [centerX + radius * 0.16, groundY],
+        ],
+        rng.fork('home-door'),
+        1.5,
+      );
+      drawTextLine(
+        context,
+        'HOME',
+        centerX,
+        Math.min(canvas.height * 0.96, groundY + radius * 0.28),
+        canvas.width * 0.7,
+        Math.max(20, radius * 0.36),
+        rng.fork('home-label'),
+      );
+      break;
+    }
+    case 'stick-figure': {
+      drawIrregularEllipse(
+        context,
+        centerX,
+        centerY - radius * 0.66,
+        radius * 0.22,
+        radius * 0.25,
+        rng,
+      );
+      strokePolyline(
+        context,
+        [
+          [centerX, centerY - radius * 0.4],
+          [centerX + wobble(rng, 4), centerY + radius * 0.3],
+        ],
+        rng,
+        1.8,
+      );
+      for (const side of [-1, 1] as const) {
+        strokePolyline(
+          context,
+          [
+            [centerX, centerY - radius * 0.12],
+            [centerX + side * radius * 0.68, centerY + wobble(rng, radius * 0.16)],
+          ],
+          rng.fork(`arm:${side}`),
+          1.6,
+        );
+        strokePolyline(
+          context,
+          [
+            [centerX, centerY + radius * 0.28],
+            [centerX + side * radius * 0.54, centerY + radius * 0.92],
+          ],
+          rng.fork(`leg:${side}`),
+          1.6,
+        );
       }
       break;
     }

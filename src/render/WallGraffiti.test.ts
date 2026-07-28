@@ -112,23 +112,38 @@ describe('procedural wall graffiti selection', () => {
     const counts = plans.map((plan) => selectWallGraffiti(plan).length);
     const totalWalls = plans.reduce((sum, plan) => sum + plan.walls.length, 0);
     const emptyRatio = counts.filter((count) => count === 0).length / counts.length;
-    expect(emptyRatio).toBeGreaterThan(0.35);
-    expect(emptyRatio).toBeLessThan(0.62);
-    expect(Math.max(...counts)).toBeLessThanOrEqual(3);
-    expect(counts.reduce((sum, count) => sum + count, 0) / totalWalls).toBeLessThan(0.03);
+    expect(emptyRatio).toBeGreaterThan(0.22);
+    expect(emptyRatio).toBeLessThan(0.42);
+    expect(Math.max(...counts)).toBeLessThanOrEqual(4);
+    expect(counts.reduce((sum, count) => sum + count, 0) / totalWalls).toBeLessThan(0.04);
   });
 
   it('produces a large vocabulary instead of repeating a short decal list', () => {
     const messages = new Set<string>();
+    const symbols = new Set<string>();
     const styleSeeds = new Set<string>();
     for (let index = 0; index < 720; index += 1) {
       for (const placement of selectWallGraffiti(makePlan(`GRAFFITI-VOCAB-${index}`))) {
         styleSeeds.add(placement.seed);
         if (placement.kind === 'message') messages.add(placement.lines.join(' / '));
+        if (placement.kind === 'symbol' && placement.symbol) symbols.add(placement.symbol);
       }
     }
     expect(messages.size).toBeGreaterThan(100);
     expect(styleSeeds.size).toBeGreaterThan(400);
+    expect(symbols.has('hand')).toBe(true);
+    expect(symbols.has('skull')).toBe(true);
+    expect(symbols.has('house')).toBe(true);
+    expect(symbols.has('tallies')).toBe(true);
+  });
+
+  it('does not place graffiti on the thin biome-transition lining', () => {
+    const plan = makePlan('GRAFFITI-BIOME-LINING');
+    plan.walls = plan.walls.map((wall) => ({
+      ...wall,
+      detail: 'biome-boundary-skin',
+    }));
+    expect(selectWallGraffiti(plan)).toEqual([]);
   });
 
   it('occasionally creates multi-arrow signs that point toward real stairs and pitfalls', () => {

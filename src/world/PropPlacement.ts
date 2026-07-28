@@ -321,7 +321,14 @@ const structuralRects = (plan: WorldPlan): Rect[] => [
   ...(plan.stairCeilingOpenings ?? []),
   ...plan.features
     .filter((feature) => feature.kind !== 'impossible-vista')
-    .map((feature) => feature.bounds),
+    .flatMap((feature) =>
+      feature.kind === 'raised-zone'
+        ? [
+            ...(feature.platformRects ?? [feature.platformBounds]),
+            ...(feature.ramps ?? [feature.ramp]).map((ramp) => ramp.bounds),
+          ]
+        : [feature.bounds]
+    ),
 ];
 
 const placementIsSafe = (
@@ -604,27 +611,37 @@ export const populateRareProps = (
   const usedAssets = new Set<string>();
   let placementIndex = 0;
   for (let cluster = 0; cluster < desiredClusters; cluster += 1) {
-    const room = rooms.find((candidate) => !usedRooms.has(candidate.id));
-    if (!room) break;
-    usedRooms.add(room.id);
-    const scene = rng.chance(0.47)
-      ? tryScenePlacement(plan, room, rng.fork(`scene-${cluster}`), placementIndex, usedAssets)
-      : null;
-    if (scene && scene.length > 0) {
-      appendPlacements(plan, scene);
-      placementIndex += scene.length;
-      continue;
-    }
-    const isolated = tryWallPlacement(
-      plan,
-      room,
-      rng.fork(`wall-${cluster}`),
-      placementIndex,
-      usedAssets,
-    );
-    if (isolated) {
-      appendPlacements(plan, [isolated]);
-      placementIndex += 1;
+    const candidates = rooms.filter((candidate) => !usedRooms.has(candidate.id)).slice(0, 14);
+    if (candidates.length === 0) break;
+    for (const room of candidates) {
+      usedRooms.add(room.id);
+      const roomRng = rng.fork(`cluster-${cluster}:${room.id}`);
+      const scene = roomRng.chance(0.47)
+        ? tryScenePlacement(
+            plan,
+            room,
+            roomRng.fork('scene'),
+            placementIndex,
+            usedAssets,
+          )
+        : null;
+      if (scene && scene.length > 0) {
+        appendPlacements(plan, scene);
+        placementIndex += scene.length;
+        break;
+      }
+      const isolated = tryWallPlacement(
+        plan,
+        room,
+        roomRng.fork('wall'),
+        placementIndex,
+        usedAssets,
+      );
+      if (isolated) {
+        appendPlacements(plan, [isolated]);
+        placementIndex += 1;
+        break;
+      }
     }
   }
 };

@@ -44,10 +44,15 @@ export interface WallSegment {
     | 'recess'
     | 'ceiling-drop'
     | 'upper-shell'
+    | 'upper-portal-lintel'
     | 'threshold'
     | 'sealed-boundary'
     | 'crawl-lintel'
-    | 'crawl-tunnel';
+    | 'crawl-tunnel'
+    | 'lower-shell'
+    | 'elevation-seal'
+    | 'biome-boundary-skin'
+    | 'biome-boundary-band';
 }
 
 export interface StaticCollider {
@@ -76,6 +81,8 @@ export interface ColumnSlot {
   z: number;
   width: number;
   depth: number;
+  /** Optional base for columns that continue down into a sunken floor district. */
+  bottom?: number;
   height: number;
   tint: number;
   kind?: 'column' | 'pilaster';
@@ -207,11 +214,26 @@ export interface RampSurface {
 export interface RaisedZoneFeature {
   kind: 'raised-zone';
   id: string;
+  /** Stable representative room kept for command and legacy integrations. */
   roomId: string;
+  /** Every connected room whose carpet shares this elevation. */
+  roomIds?: string[];
   bounds: Rect;
+  /** Legacy representative platform; platformRects describes the complete district. */
   platformBounds: Rect;
+  platformRects?: Rect[];
+  /** Signed world-space floor offset: positive is raised, negative is sunken. */
   elevation: number;
+  /** Legacy representative ramp; ramps describes every district entrance. */
   ramp: RampSurface;
+  ramps?: RampSurface[];
+}
+
+export interface CeilingZone {
+  id: string;
+  roomIds: string[];
+  height: number;
+  scale: 'medium' | 'high' | 'vast' | 'colossal';
 }
 
 export type WorldFeature =
@@ -299,6 +321,8 @@ export interface WorldPlan {
   symmetryZones?: Rect[];
   /** Small coherent districts that replace wallpaper with bare plaster. */
   plasterZones?: Rect[];
+  /** Connected multi-room ceiling districts with one shared absolute height. */
+  ceilingZones?: CeilingZone[];
   /** Large-scale visual palette selected independently from room topology. */
   visualBiome?: VisualBiome;
   /** Deterministic per-chunk variation of the principal repeated surfaces. */

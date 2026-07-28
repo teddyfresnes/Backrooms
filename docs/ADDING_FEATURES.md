@@ -1,80 +1,90 @@
 # Ajouter une feature architecturale
 
-Une feature est une réservation sémantique posée dans une salle après la topologie principale. Elle ne doit jamais modifier un mur ou un collider sans publier la même modification dans le `WorldPlan`.
+Ce guide décrit le chemin minimal. Lire aussi
+`docs/agents/WORLD_GENERATION.md` pour les invariants de chunks et d’étages.
 
-## 1. Déclarer les données
+## 1. Définir un contrat de données
 
-Ajouter un type dans `src/world/types.ts`, puis l’inclure dans `WorldFeature`.
+Ajouter une interface sérialisable dans `src/world/types.ts`, avec un
+discriminant `kind`, puis l’inclure dans `WorldFeature`.
 
-```ts
-export interface ShallowPitFeature {
-  kind: 'shallow-pit';
-  id: string;
-  roomId: string;
-  bounds: Rect;
-  depth: number;
-  entrySide: 'x+' | 'x-' | 'z+' | 'z-';
-}
-```
+Le plan accepte des nombres, chaînes, booléens, tableaux et objets de données
+simples. Ne jamais y mettre d’objet Three.js/Rapier, de fonction, `Map` ou `Set`.
 
-Les données doivent rester des nombres, chaînes et tableaux simples. Aucun objet Three.js ou Rapier ne doit entrer dans le plan.
+Ajouter uniquement les données nécessaires à plusieurs consommateurs. Un détail
+utilisé seulement pour construire une géométrie peut souvent être dérivé de
+`bounds`, de l’orientation et des constantes partagées.
 
-## 2. Enregistrer la proposition
+## 2. Proposer la feature de façon déterministe
 
-Dans `FeatureRegistry.ts`, déclarer :
+Pour une proposition réutilisable, enregistrer une `FeatureDefinition` dans
+`src/world/FeatureRegistry.ts`. Pour une transformation liée à une phase précise
+du générateur, l’insérer directement près de cette phase dans
+`generateWorld.ts`.
 
-- l’empreinte minimale ;
-- le poids ;
-- les contraintes de salle ;
-- la proposition déterministe à partir du `SeededRandom` fourni.
+- utiliser le `SeededRandom` fourni et un fork nommé stable ;
+- vérifier taille, accès et contraintes de la salle ;
+- respecter `reservedRoomIds` et réserver la salle dès acceptation ;
+- ne pas placer une feature dans le spawn ou une autre réservation incompatible ;
+- conserver des IDs locaux uniques et stables.
 
-Le générateur maintient `reservedRoomIds`. Une feature qui occupe une salle doit la réserver avant la décoration afin d’éviter colonnes, escaliers ou objets incompatibles.
+## 3. Publier toute la géométrie jouable
 
-## 3. Préserver la navigation
+La même intention doit apparaître dans toutes les données concernées :
 
-- largeur praticable minimale : 1,60 m ;
-- garder au moins un passage entre chaque portail de la salle ;
-- ajouter les surfaces solides à `floorRects` ;
-- ne pas créer de collider au-dessus d’un vide ;
-- ajouter un collider simple par mur, marche ou plateforme ;
-- laisser le seuil de chute global replacer le joueur, ou enregistrer un futur sensor dédié.
+- `floorRects` pour les surfaces praticables ;
+- `floorOpenings` et champs verticaux spécialisés pour les vides ;
+- `walls`, colonnes ou masses pour les obstacles visibles ;
+- `colliders` pour la physique ;
+- `LightSlot` et `DetailSocket` pour les consommateurs ultérieurs.
 
-Une feature qui coupe la salle doit lancer un flood-fill local avant d’être acceptée.
+Si la feature modifie murs, planchers ou hauteur après leur création, utiliser
+les helpers de reconstruction existants. Ne pas supprimer seulement la face
+visible ou seulement le collider.
 
-## 4. Émettre le rendu
+Préserver au moins 1,60 m de largeur praticable et les accès nécessaires entre
+portails. Une transformation qui peut couper une salle doit être auditée par le
+graphe ou le flood-fill utilisé par le générateur.
 
-Ajouter une méthode ciblée dans `WorldBuilder` :
+## 4. Gérer les chunks et les étages
 
-```ts
-private buildShallowPits(): void {
-  const pits = this.plan.features.filter(
-    (feature): feature is ShallowPitFeature => feature.kind === 'shallow-pit',
-  );
-  // Construire des BufferGeometry, puis les fusionner par matériau.
-}
-```
+Si la feature contient des IDs référencés, étendre `prefixPlanIds()` dans
+`src/world/InfiniteWorld.ts`.
 
-Éviter un `Mesh` par module. Utiliser :
+Si elle traverse un étage :
 
-- `mergeGeometries` pour murs, sols et marches statiques ;
-- `InstancedMesh` pour répétitions ;
-- une géométrie proxy lointaine pour les vues impossibles ;
-- des matériaux existants sauf si la surface est réellement différente.
+- définir clairement le propriétaire canonique de l’ouverture ;
+- réconcilier le plan avec le chunk au-dessus ou en dessous ;
+- sérialiser dans `WorldPlan` les données dont le worker et `WorldView` ont
+  besoin ;
+- tester le chunk source, le chunk destination et au moins un étage
+  intermédiaire si la portée dépasse 5,4 m.
 
-## 5. Lumières, audio et futurs objets
+Une géométrie compacte sous un trou est un aperçu local, pas un deuxième chunk
+canonique.
 
-Ajouter des `LightSlot` au plan au lieu de vraies lumières. Le baker de chunk transforme automatiquement ces emplacements en champ lumineux stable, limité aux pièces et occlus autour des murs ; les dalles visibles restent instanciées.
+## 5. Construire le rendu
 
-Ajouter des `DetailSocket` avec tags pour les futurs items, props, sources audio ou entités. Une pièce spéciale peut ainsi annoncer des points d’intérêt avant que le système d’items existe.
+Ajouter une méthode `build…()` ciblée dans `WorldView` et filtrer les features par
+leur `kind`.
 
-## Features prévues
+- fusionner les surfaces statiques par matériau ;
+- utiliser `InstancedMesh` pour les répétitions ;
+- réutiliser les matériaux existants ;
+- fournir les UV de lightmap attendus ;
+- construire les faces réellement visibles depuis les étages adjacents ;
+- libérer toute ressource possédée dans `dispose()`.
 
-- `shallow-pit` : sol abaissé et trois marches ;
-- `deep-void` : vide profond et sensor de recalage ;
-- `cut-wall` : mur suspendu ou tronqué ;
-- `giant-atrium` : plafond élevé et LOD distant ;
-- `detail-room` : sockets d’objets à densité élevée ;
-- `dark-gallery` : champ lumineux presque entièrement en panne ;
-- `multi-level-stairs` : changement réel de surface Y et portail de zone.
+## 6. Tester au niveau du contrat
 
-Ajouter un test seedé pour chaque feature, puis étendre le tableau de seeds de `generateWorld.test.ts` si elle touche à la connectivité.
+Ajouter seulement les tests qui protègent le risque introduit :
+
+- déterminisme, distribution et navigation dans `generateWorld.test.ts` ;
+- héritage, frontières et IDs dans `InfiniteWorld.test.ts` ;
+- surfaces/caps dans `WorldBuilder.test.ts` ;
+- franchissement et colliders dans `PhysicsWorld.test.ts` ;
+- lightmap dans `BakedLighting.test.ts`.
+
+Itérer avec `npx vitest run <fichier> -t "nom du test"`, puis lancer le fichier
+complet et `npm run build`. Utiliser `npm run validate` si le contrat
+`WorldPlan` ou plusieurs couches ont changé.

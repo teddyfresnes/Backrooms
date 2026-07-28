@@ -172,8 +172,8 @@ const worldOccluders = (plan: WorldPlan): BakedOccluder[] => [
     maxX: column.x + column.width * 0.5,
     minZ: column.z - column.depth * 0.5,
     maxZ: column.z + column.depth * 0.5,
-    bottom: 0,
-    top: column.height,
+    bottom: column.bottom ?? 0,
+    top: (column.bottom ?? 0) + column.height,
   })),
   ...plan.solidMasses.map((mass) => ({
     ...mass.bounds,

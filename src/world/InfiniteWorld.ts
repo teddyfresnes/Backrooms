@@ -3,12 +3,14 @@ import {
   generateWorld,
   lightPanelOverlapsRect,
   MAX_PIT_STORIES,
+  rebuildSunkenArchitectureExtensions,
   worldMaxPitStories,
 } from './generateWorld';
 import { populateRareProps } from './PropPlacement';
 import { SeededRandom } from './SeededRandom';
 import type {
   GridPitFeature,
+  RaisedZoneFeature,
   Rect,
   StaticCollider,
   StairSocketFeature,
@@ -75,6 +77,27 @@ const metadataByPlan = new WeakMap<WorldPlan, InfiniteChunkMetadata>();
 
 const quantize = (value: number, step: number): number =>
   Math.round(value / step) * step;
+
+const chooseStructuralWallThickness = (
+  rng: SeededRandom,
+  span: number,
+): number => {
+  const compact = span < 10;
+  const profile = rng.weighted([
+    { value: 'thin' as const, weight: compact ? 0.14 : 0.09 },
+    { value: 'solid' as const, weight: compact ? 0.24 : 0.18 },
+    { value: 'thick' as const, weight: compact ? 0.48 : 0.45 },
+    { value: 'massive' as const, weight: compact ? 0.14 : 0.28 },
+  ]);
+  const thickness = profile === 'thin'
+    ? rng.pick([0.22, 0.32, 0.42])
+    : profile === 'solid'
+      ? rng.float(0.68, compact ? 0.96 : 1.08)
+      : profile === 'thick'
+        ? rng.float(compact ? 1.02 : 1.16, compact ? 1.48 : 1.78)
+        : rng.float(compact ? 1.56 : 1.92, compact ? 1.94 : 2.8);
+  return quantize(thickness, 0.05);
+};
 
 const assertCoordinate = (value: number, label: string): void => {
   if (!Number.isSafeInteger(value)) {
@@ -269,6 +292,8 @@ const clearInteriorWallsIn = (plan: WorldPlan, bounds: Rect): void => {
   const removed = new Set<string>();
   plan.walls = plan.walls.filter((wall) => {
     const remove =
+      wall.detail !== 'upper-shell' &&
+      wall.detail !== 'upper-portal-lintel' &&
       wall.bottom >= -1 &&
       pointInRect(wall.x, wall.z, bounds, 0.55);
     if (remove) removed.add(wall.id);
@@ -304,6 +329,7 @@ const addSymmetricGallery = (
   const corridorHalfWidth = Math.min(rng.float(3.1, 5.2), Math.max(2.2, (alongX
     ? rectDepth(hall.bounds)
     : rectWidth(hall.bounds)) * rng.float(0.1, 0.19)));
+  const galleryWallThickness = chooseStructuralWallThickness(rng.fork('wall-thickness'), span);
 
   for (const side of [-1, 1] as const) {
     let cursor = spanMin;
@@ -319,7 +345,7 @@ const addSymmetricGallery = (
           orientation: alongX ? 'x' : 'z',
           bottom: 0,
           height: plan.wallHeight,
-          thickness: 0.3,
+          thickness: galleryWallThickness,
           tint: 0.96,
           collision: true,
           kind: 'wallpaper',
@@ -353,7 +379,10 @@ const addSymmetricGallery = (
           orientation: alongX ? 'z' : 'x',
           bottom: 0,
           height: plan.wallHeight,
-          thickness: rng.chance(0.24) ? 0.42 : 0.24,
+          thickness: chooseStructuralWallThickness(
+            rng.fork(`bay-thickness:${pairIndex}:${alongSide}:${crossSide}`),
+            sideBandDepth,
+          ),
           tint: rng.float(0.91, 1.03),
           collision: true,
           kind: 'wallpaper',
@@ -410,6 +439,10 @@ const addTightThresholds = (
   if (longSpan < 8 || shortSpan < 6) return;
 
   const layerCount = Math.max(3, Math.min(9, Math.floor(longSpan / rng.float(6.5, 10.5))));
+  const layerThicknesses = Array.from(
+    { length: layerCount },
+    (_, layer) => chooseStructuralWallThickness(rng.fork(`layer-thickness:${layer}`), shortSpan),
+  );
   const addSegment = (layer: number, segment: number, fixed: number, min: number, max: number): void => {
     if (max - min < 0.2) return;
     const wall: WallSegment = {
@@ -420,7 +453,7 @@ const addTightThresholds = (
       orientation: alongX ? 'z' : 'x',
       bottom: 0,
       height: hall.ceilingHeight,
-      thickness: rng.chance(0.18) ? 0.42 : 0.24,
+      thickness: layerThicknesses[layer]!,
       tint: rng.float(0.88, 1.03),
       collision: true,
       kind: 'wallpaper',
@@ -605,28 +638,15 @@ const demoteTallRoomsIntersecting = (
   for (const room of plan.rooms) {
     if (roomIds.has(room.id)) room.ceilingHeight = plan.wallHeight;
   }
-  const removedWallIds = new Set(
-    plan.walls
-      .filter((wall) => wall.detail === 'upper-shell' && wall.roomId && roomIds.has(wall.roomId))
-      .map((wall) => wall.id),
-  );
-  plan.walls = plan.walls.filter((wall) => !removedWallIds.has(wall.id));
   plan.lights = plan.lights.map((light) =>
     roomIds.has(light.roomId) ? { ...light, ceilingY: plan.wallHeight } : light
   );
-  plan.features = plan.features.filter(
-    (feature) => feature.kind !== 'raised-zone' || !roomIds.has(feature.roomId),
-  );
-  plan.colliders = plan.colliders.filter((collider) => {
-    if (removedWallIds.has(collider.id.replace(/^collider-/, ''))) return false;
-    for (const roomId of roomIds) {
-      if (
-        collider.id === `raised-platform-${roomId}` ||
-        collider.id === `raised-ramp-${roomId}`
-      ) return false;
-    }
-    return true;
-  });
+  plan.ceilingZones = plan.ceilingZones
+    ?.map((zone) => ({
+      ...zone,
+      roomIds: zone.roomIds.filter((roomId) => !roomIds.has(roomId)),
+    }))
+    .filter((zone) => zone.roomIds.length > 0);
 };
 
 const floorCellsOutsideOpenings = (worldSize: number, openings: readonly Rect[]): Rect[] => {
@@ -658,6 +678,62 @@ const floorCellsOutsideOpenings = (worldSize: number, openings: readonly Rect[])
     }
   }
   return cells;
+};
+
+const elevationFloorCutouts = (plan: WorldPlan): Rect[] =>
+  plan.features
+    .filter((feature): feature is RaisedZoneFeature => feature.kind === 'raised-zone')
+    .flatMap((feature) => [
+      ...(feature.platformRects ?? [feature.platformBounds]).map(cloneRect),
+      ...(feature.ramps ?? [feature.ramp]).map((ramp) => cloneRect(ramp.bounds)),
+    ]);
+
+const rebuildBaseFloorColliders = (plan: WorldPlan): void => {
+  plan.colliders = plan.colliders.filter((collider) => !collider.id.startsWith('floor-'));
+  plan.floorRects = floorCellsOutsideOpenings(plan.size, [
+    ...(plan.floorOpenings ?? []),
+    ...elevationFloorCutouts(plan),
+  ]);
+  for (const [index, floor] of plan.floorRects.entries()) {
+    plan.colliders.push({
+      id: `floor-${index}`,
+      center: {
+        x: (floor.minX + floor.maxX) * 0.5,
+        y: -0.12,
+        z: (floor.minZ + floor.maxZ) * 0.5,
+      },
+      halfExtents: { x: rectWidth(floor) * 0.5, y: 0.12, z: rectDepth(floor) * 0.5 },
+      kind: 'floor',
+    });
+  }
+};
+
+const removeElevationZoneArtifacts = (
+  plan: WorldPlan,
+  removedZones: readonly RaisedZoneFeature[],
+): void => {
+  if (removedZones.length === 0) return;
+  const featureIds = new Set(removedZones.map((feature) => feature.id));
+  const roomIds = new Set(
+    removedZones.flatMap((feature) => feature.roomIds ?? [feature.roomId]),
+  );
+  const removedWallIds = new Set(
+    plan.walls
+      .filter((wall) =>
+        wall.roomId !== undefined &&
+        roomIds.has(wall.roomId) &&
+        (wall.detail === 'lower-shell' || wall.detail === 'elevation-seal')
+      )
+      .map((wall) => wall.id),
+  );
+  plan.walls = plan.walls.filter((wall) => !removedWallIds.has(wall.id));
+  plan.colliders = plan.colliders.filter((collider) =>
+    ![...featureIds].some((featureId) => collider.id.startsWith(`${featureId}-`)) &&
+    !removedWallIds.has(collider.id.replace(/^collider-/, ''))
+  );
+  plan.features = plan.features.filter(
+    (feature) => feature.kind !== 'raised-zone' || !featureIds.has(feature.id),
+  );
 };
 
 export interface InheritedShaftOpening extends Rect {
@@ -803,6 +879,11 @@ const applyInheritedShaftOpenings = (
   plan.detailSockets = plan.detailSockets.filter(
     (socket) => !openings.some((opening) => pointInRect(socket.position.x, socket.position.z, opening, -0.6)),
   );
+  const removedElevationZones = plan.features.filter(
+    (feature): feature is RaisedZoneFeature =>
+      feature.kind === 'raised-zone' && intersectsOpening(feature.bounds, 0.4),
+  );
+  removeElevationZoneArtifacts(plan, removedElevationZones);
   plan.features = plan.features.filter(
     (feature) => feature.kind === 'impossible-vista' || !intersectsOpening(feature.bounds, 0.4),
   );
@@ -830,19 +911,7 @@ const applyInheritedShaftOpenings = (
     ...(plan.lowerPreviewOpenings ?? []),
     ...continuingOpenings,
   ].map(cloneRect);
-  plan.floorRects = floorCellsOutsideOpenings(plan.size, plan.floorOpenings);
-  for (const [index, floor] of plan.floorRects.entries()) {
-    plan.colliders.push({
-      id: `floor-${index}`,
-      center: {
-        x: (floor.minX + floor.maxX) * 0.5,
-        y: -0.12,
-        z: (floor.minZ + floor.maxZ) * 0.5,
-      },
-      halfExtents: { x: rectWidth(floor) * 0.5, y: 0.12, z: rectDepth(floor) * 0.5 },
-      kind: 'floor',
-    });
-  }
+  rebuildBaseFloorColliders(plan);
 
   for (const [openingIndex, opening] of openings.entries()) {
     const center = rectCenter(opening);
@@ -1002,6 +1071,11 @@ const applyCeilingLandingClearance = (
     (socket) =>
       !landings.some((landing) => pointInRect(socket.position.x, socket.position.z, landing, 0.55)),
   );
+  const removedElevationZones = plan.features.filter(
+    (feature): feature is RaisedZoneFeature =>
+      feature.kind === 'raised-zone' && intersectsLanding(feature.bounds, 0.48),
+  );
+  removeElevationZoneArtifacts(plan, removedElevationZones);
   plan.features = plan.features.filter(
     (feature) =>
       (
@@ -1023,6 +1097,7 @@ const applyCeilingLandingClearance = (
       maxZ: collider.center.z + collider.halfExtents.z,
     }, 0.48);
   });
+  if (removedElevationZones.length > 0) rebuildBaseFloorColliders(plan);
 
   // The upper source chunk is released at the shaft midpoint. A lightweight
   // collar keeps the remaining 2.66 m plenum readable when the player looks
@@ -1228,6 +1303,11 @@ const applyInheritedStair = (
   plan.solidMasses = plan.solidMasses.filter(
     (mass) => !intersectsClearance(mass.bounds, 0.2),
   );
+  const removedElevationZones = plan.features.filter(
+    (feature): feature is RaisedZoneFeature =>
+      feature.kind === 'raised-zone' && intersectsClearance(feature.bounds, 0.2),
+  );
+  removeElevationZoneArtifacts(plan, removedElevationZones);
   plan.features = plan.features.filter(
     (feature) =>
       feature.kind === 'grid-pit' ||
@@ -1253,23 +1333,7 @@ const applyInheritedStair = (
   });
 
   plan.floorOpenings = [...(plan.floorOpenings ?? []), opening].map(cloneRect);
-  plan.floorRects = floorCellsOutsideOpenings(plan.size, plan.floorOpenings);
-  for (const [index, floor] of plan.floorRects.entries()) {
-    plan.colliders.push({
-      id: `floor-${index}`,
-      center: {
-        x: (floor.minX + floor.maxX) * 0.5,
-        y: -0.12,
-        z: (floor.minZ + floor.maxZ) * 0.5,
-      },
-      halfExtents: {
-        x: rectWidth(floor) * 0.5,
-        y: 0.12,
-        z: rectDepth(floor) * 0.5,
-      },
-      kind: 'floor',
-    });
-  }
+  rebuildBaseFloorColliders(plan);
   plan.features.push(stairs);
   addStepColliders(plan, stairs);
 };
@@ -1288,9 +1352,8 @@ const boundaryWallStyle = (
 ): { thickness: number; tint: number; kind: WallSegment['kind'] } => {
   const address = canonicalEdgeAddress(coord, edge);
   const rng = new SeededRandom(edgeAddressSeed(seed, address, 'material'));
-  const thicknessRoll = rng.float();
   return {
-    thickness: thicknessRoll < 0.08 ? 0.72 : thicknessRoll < 0.3 ? 0.42 : 0.22,
+    thickness: chooseStructuralWallThickness(rng.fork('thickness'), INFINITE_CHUNK_SIZE),
     tint: rng.float(0.84, 1.06),
     kind: 'wallpaper',
   };
@@ -1314,15 +1377,9 @@ const colliderForWall = (wall: WallSegment): StaticCollider => {
   };
 };
 
-const emitBoundary = (
-  plan: WorldPlan,
-  seed: string,
-  coord: Readonly<ChunkCoord>,
-  edge: ChunkEdge,
+const solidBoundaryIntervals = (
   gates: readonly EdgeGate[],
-  level: 'upper' | 'lower',
-): void => {
-  const style = boundaryWallStyle(seed, coord, edge);
+): Array<{ min: number; max: number }> => {
   const intervals = gates
     .map((gate) => ({
       min: Math.max(-HALF_CHUNK_SIZE, gate.offset - gate.width * 0.5),
@@ -1338,6 +1395,19 @@ const emitBoundary = (
   if (HALF_CHUNK_SIZE - cursor > 0.18) {
     solidIntervals.push({ min: cursor, max: HALF_CHUNK_SIZE });
   }
+  return solidIntervals;
+};
+
+const emitBoundary = (
+  plan: WorldPlan,
+  seed: string,
+  coord: Readonly<ChunkCoord>,
+  edge: ChunkEdge,
+  gates: readonly EdgeGate[],
+  level: 'upper' | 'lower',
+): void => {
+  const style = boundaryWallStyle(seed, coord, edge);
+  const solidIntervals = solidBoundaryIntervals(gates);
 
   const orientation: WallSegment['orientation'] = edge === 'north' || edge === 'south' ? 'x' : 'z';
   const fixed = edge === 'north' || edge === 'west' ? -HALF_CHUNK_SIZE : HALF_CHUNK_SIZE;
@@ -1361,6 +1431,98 @@ const emitBoundary = (
   }
 };
 
+const emitBiomeBoundarySkin = (
+  plan: WorldPlan,
+  seed: string,
+  coord: Readonly<ChunkCoord>,
+  edge: ChunkEdge,
+  gates: readonly EdgeGate[],
+): void => {
+  const localBiome = plan.visualBiome ?? getInfiniteVisualBiome(seed, coord);
+  const neighborCoord = parseChunkKey(getNeighborChunkKey(coord, edge));
+  if (getInfiniteVisualBiome(seed, neighborCoord) === localBiome) return;
+
+  const style = boundaryWallStyle(seed, coord, edge);
+  const horizontal = edge === 'north' || edge === 'south';
+  const boundaryFixed = edge === 'north' || edge === 'west'
+    ? -HALF_CHUNK_SIZE
+    : HALF_CHUNK_SIZE;
+  const inward: -1 | 1 = edge === 'north' || edge === 'west' ? 1 : -1;
+  const skinThickness = 0.12;
+  const skinOffset = style.thickness * 0.5 + skinThickness * 0.5 + 0.018;
+  const skinFixed = boundaryFixed + inward * skinOffset;
+  const transitionBandHalf = 0.09;
+  for (const [index, interval] of solidBoundaryIntervals(gates).entries()) {
+    const center = (interval.min + interval.max) * 0.5;
+    plan.walls.push({
+      id: `biome-transition-${edge}-face-${index}`,
+      x: horizontal ? center : skinFixed,
+      z: horizontal ? skinFixed : center,
+      length: interval.max - interval.min,
+      orientation: horizontal ? 'x' : 'z',
+      bottom: 0,
+      height: plan.wallHeight,
+      thickness: skinThickness,
+      tint: 0.98,
+      collision: false,
+      kind: 'wallpaper',
+      detail: 'biome-boundary-skin',
+    });
+  }
+
+  const skinJoinFixed = skinFixed + inward * skinThickness * 0.5;
+  const bandJoinFixed = boundaryFixed + inward * transitionBandHalf;
+  const returnLength = Math.abs(skinJoinFixed - bandJoinFixed);
+  const returnFixed = (skinJoinFixed + bandJoinFixed) * 0.5;
+  for (const [gateIndex, gate] of gates.entries()) {
+    const gateMin = Math.max(-HALF_CHUNK_SIZE, gate.offset - gate.width * 0.5);
+    const gateMax = Math.min(HALF_CHUNK_SIZE, gate.offset + gate.width * 0.5);
+    if (gateMax - gateMin < 0.72) continue;
+    for (const [sideIndex, along] of [gateMin, gateMax].entries()) {
+      plan.walls.push({
+        id: `biome-transition-${edge}-gate-${gateIndex}-return-${sideIndex}`,
+        x: horizontal ? along : returnFixed,
+        z: horizontal ? returnFixed : along,
+        length: returnLength,
+        orientation: horizontal ? 'z' : 'x',
+        bottom: 0,
+        height: plan.wallHeight,
+        thickness: skinThickness,
+        tint: 0.98,
+        collision: false,
+        kind: 'wallpaper',
+        detail: 'biome-boundary-skin',
+      });
+    }
+  }
+
+  // The north/west owner adds one canonical strip across the exact chunk
+  // seam. Both local return walls stop at this strip, so two differently
+  // textured boxes never overlap or expose coplanar end faces in the passage.
+  if (edge !== 'north' && edge !== 'west') return;
+  for (const [gateIndex, gate] of gates.entries()) {
+    const gateMin = Math.max(-HALF_CHUNK_SIZE, gate.offset - gate.width * 0.5);
+    const gateMax = Math.min(HALF_CHUNK_SIZE, gate.offset + gate.width * 0.5);
+    if (gateMax - gateMin < 0.72) continue;
+    for (const [sideIndex, along] of [gateMin, gateMax].entries()) {
+      plan.walls.push({
+        id: `biome-transition-${edge}-gate-${gateIndex}-band-${sideIndex}`,
+        x: horizontal ? along : boundaryFixed,
+        z: horizontal ? boundaryFixed : along,
+        length: transitionBandHalf * 2,
+        orientation: horizontal ? 'z' : 'x',
+        bottom: 0,
+        height: plan.wallHeight,
+        thickness: skinThickness,
+        tint: 0.98,
+        collision: false,
+        kind: 'wallpaper',
+        detail: 'biome-boundary-band',
+      });
+    }
+  }
+};
+
 const prefixFeature = (feature: WorldFeature, prefix: string): WorldFeature => {
   if (feature.kind === 'grid-pit') {
     return { ...feature, id: `${prefix}${feature.id}`, roomId: `${prefix}${feature.roomId}` };
@@ -1370,7 +1532,14 @@ const prefixFeature = (feature: WorldFeature, prefix: string): WorldFeature => {
     feature.kind === 'squeeze-view' ||
     feature.kind === 'raised-zone'
   ) {
-    return { ...feature, id: `${prefix}${feature.id}`, roomId: `${prefix}${feature.roomId}` };
+    return {
+      ...feature,
+      id: `${prefix}${feature.id}`,
+      roomId: `${prefix}${feature.roomId}`,
+      ...(feature.kind === 'raised-zone' && feature.roomIds
+        ? { roomIds: feature.roomIds.map((roomId) => `${prefix}${roomId}`) }
+        : {}),
+    };
   }
   return { ...feature, id: `${prefix}${feature.id}` };
 };
@@ -1403,6 +1572,11 @@ const prefixPlanIds = (plan: WorldPlan, key: ChunkKey): void => {
   plan.colliders = plan.colliders.map((collider) => ({
     ...collider,
     id: `${prefix}${collider.id}`,
+  }));
+  plan.ceilingZones = plan.ceilingZones?.map((zone) => ({
+    ...zone,
+    id: `${prefix}${zone.id}`,
+    roomIds: zone.roomIds.map((roomId) => `${prefix}${roomId}`),
   }));
 };
 
@@ -1472,6 +1646,13 @@ export const generateInfiniteChunk = (
   // is only a local preview and must never receive a second 112 m boundary.
   emitBoundary(plan, seed, coord, 'north', edgeGates.north, 'upper');
   emitBoundary(plan, seed, coord, 'west', edgeGates.west, 'upper');
+  for (const edge of ['north', 'east', 'south', 'west'] as const) {
+    emitBiomeBoundarySkin(plan, seed, coord, edge, edgeGates[edge]);
+  }
+  // Biome and vertical-opening passes may remove or replace walls after the
+  // finite plan was generated. Re-derive the sunken continuations from the
+  // surviving final architecture so none of those walls can float at y=0.
+  rebuildSunkenArchitectureExtensions(plan);
   populateRareProps(plan, `${seed}:${normalizedKey}:rare-props`);
   prefixPlanIds(plan, normalizedKey);
 

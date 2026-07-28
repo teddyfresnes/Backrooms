@@ -600,6 +600,24 @@ export class WorldStream {
             ],
             entrance,
           );
+        } else if (feature.kind === 'raised-zone') {
+          const ramp = (feature.ramps ?? [feature.ramp])[0]!;
+          const center = rectCenter(ramp.bounds);
+          const baseAlong = ramp.riseDirection > 0
+            ? ramp.axis === 'x' ? ramp.bounds.minX : ramp.bounds.minZ
+            : ramp.axis === 'x' ? ramp.bounds.maxX : ramp.bounds.maxZ;
+          const entrance = ramp.axis === 'x'
+            ? { x: baseAlong, y: 0.865, z: center.z }
+            : { x: center.x, y: 0.865, z: baseAlong };
+          addTarget(
+            runtime,
+            feature.elevation < 0 ? 'sunken-zone' : 'raised-zone',
+            feature.elevation < 0 ? 'rampe vers secteur encaisse' : 'rampe vers secteur sureleve',
+            feature.elevation < 0
+              ? ['sunken', 'sunken-zone', 'lower-zone', 'bas', 'pente-bas', 'rampe-bas']
+              : ['raised', 'raised-zone', 'upper-zone', 'haut', 'pente', 'slope', 'rampe'],
+            entrance,
+          );
         } else if (feature.kind === 'stair-socket') {
           const center = rectCenter(feature.bounds);
           addTarget(
@@ -650,8 +668,10 @@ export class WorldStream {
         const raisedZone = runtime.plan.features.find(
           (feature): feature is RaisedZoneFeature =>
             feature.kind === 'raised-zone' &&
-            feature.roomId === room.id &&
-            pointInRect(safeCenter.x, safeCenter.z, feature.platformBounds),
+            (feature.roomIds ?? [feature.roomId]).includes(room.id) &&
+            (feature.platformRects ?? [feature.platformBounds]).some((platform) =>
+              pointInRect(safeCenter.x, safeCenter.z, platform)
+            ),
         );
         const safePosition = {
           x: safeCenter.x,
@@ -669,7 +689,7 @@ export class WorldStream {
             'dark-room',
             'piece plongee dans le noir',
             ['dark', 'dark-room', 'blackout', 'noir', 'piece-noire', 'sans-lumiere'],
-            { x: fixture.x, y: 0.865, z: fixture.z },
+            { x: fixture.x, y: safePosition.y, z: fixture.z },
           );
         } else if (missingLights.length > 0) {
           const fixture = missingLights[0]!;
@@ -678,7 +698,7 @@ export class WorldStream {
             'missing-lights',
             'salle aux lampes manquantes',
             ['missing-light', 'missing-lights', 'lampes', 'panne', 'partial-blackout'],
-            { x: fixture.x, y: 0.865, z: fixture.z },
+            { x: fixture.x, y: safePosition.y, z: fixture.z },
           );
         }
         if (room.ceilingHeight > runtime.plan.wallHeight + 0.1) {

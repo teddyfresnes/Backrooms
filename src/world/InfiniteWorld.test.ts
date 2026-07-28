@@ -289,7 +289,9 @@ describe('InfiniteWorld chunk contracts', () => {
     expect(plan.features.every(
       (feature) =>
         feature.kind !== 'raised-zone' ||
-        plan.rooms.some((room) => room.id === feature.roomId),
+        (feature.roomIds ?? [feature.roomId]).every((roomId) =>
+          plan.rooms.some((room) => room.id === roomId)
+        ),
     )).toBe(true);
     expect(isInfiniteChunkPlan(plan)).toBe(true);
     expect(getInfiniteChunkMetadata(plan)?.key).toBe(key);
@@ -361,6 +363,9 @@ describe('InfiniteWorld chunk contracts', () => {
     expect(upper.colliders.filter((collider) =>
       collider.id.includes(`${inherited.id}-`) && collider.kind === 'step'
     )).toHaveLength(4);
+    expect(upper.colliders.filter((collider) =>
+      collider.id.includes(`${inherited.id}-cage-wall-`) && collider.kind === 'wall'
+    )).toHaveLength(3);
 
     const lower = generateInfiniteChunk(stairSeed, {
       ...destination!,
@@ -401,21 +406,94 @@ describe('InfiniteWorld chunk contracts', () => {
       )) {
         tallRoomCount += 1;
         expect(openings.some((opening) => overlaps(room.bounds, opening))).toBe(false);
-        const shells = plan.walls.filter(
-          (wall) => wall.detail === 'upper-shell' && wall.roomId === room.id,
-        );
-        expect(shells).toHaveLength(4);
-        expect(shells.every((wall) =>
+        const shells = plan.walls.filter((wall) =>
+          (wall.detail === 'upper-shell' || wall.detail === 'upper-portal-lintel') &&
           wall.kind === 'wallpaper' &&
           wall.bottom <= plan.wallHeight &&
-          wall.bottom + wall.height >= room.ceilingHeight
-        )).toBe(true);
+          wall.bottom + wall.height >= room.ceilingHeight - 0.03
+        );
+        for (const side of [
+          { orientation: 'x' as const, fixed: room.bounds.minZ, min: room.bounds.minX, max: room.bounds.maxX },
+          { orientation: 'x' as const, fixed: room.bounds.maxZ, min: room.bounds.minX, max: room.bounds.maxX },
+          { orientation: 'z' as const, fixed: room.bounds.minX, min: room.bounds.minZ, max: room.bounds.maxZ },
+          { orientation: 'z' as const, fixed: room.bounds.maxX, min: room.bounds.minZ, max: room.bounds.maxZ },
+        ]) {
+          const intervals = shells
+            .filter((wall) =>
+              wall.orientation === side.orientation &&
+              Math.abs((wall.orientation === 'x' ? wall.z : wall.x) - side.fixed) < 0.06
+            )
+            .map((wall) => {
+              const along = wall.orientation === 'x' ? wall.x : wall.z;
+              return {
+                min: Math.max(side.min, along - wall.length * 0.5),
+                max: Math.min(side.max, along + wall.length * 0.5),
+              };
+            })
+            .filter((interval) => interval.max > interval.min)
+            .sort((left, right) => left.min - right.min);
+          let coveredUntil = side.min;
+          for (const interval of intervals) {
+            expect(interval.min).toBeLessThanOrEqual(coveredUntil + 0.03);
+            coveredUntil = Math.max(coveredUntil, interval.max);
+          }
+          expect(coveredUntil).toBeGreaterThanOrEqual(side.max - 0.03);
+        }
       }
       for (const feature of plan.features.filter((candidate) => candidate.kind === 'raised-zone')) {
         expect(openings.some((opening) => overlaps(feature.bounds, opening))).toBe(false);
       }
     }
     expect(tallRoomCount).toBeGreaterThan(0);
+  });
+
+  it('preserves signed elevation districts without restoring the zero-height floor beneath them', () => {
+    let districtCount = 0;
+    let sunkenCount = 0;
+    for (let index = 0; index < 36; index += 1) {
+      const plan = generateInfiniteChunk('ELEVATION-DISTRICT-INVARIANT-AUDIT', {
+        x: index % 6 - 3,
+        z: Math.floor(index / 6) - 3,
+        story: index % 3 - 1,
+      });
+      for (const feature of plan.features.filter(
+        (candidate) => candidate.kind === 'raised-zone',
+      )) {
+        districtCount += 1;
+        if (feature.elevation < 0) sunkenCount += 1;
+        expect((feature.roomIds ?? [feature.roomId]).length).toBeGreaterThanOrEqual(2);
+        for (const [platformIndex, platform] of (
+          feature.platformRects ?? [feature.platformBounds]
+        ).entries()) {
+          const center = {
+            x: (platform.minX + platform.maxX) * 0.5,
+            z: (platform.minZ + platform.maxZ) * 0.5,
+          };
+          expect(plan.floorRects.some((floor) => containsPoint(floor, center))).toBe(false);
+          expect(plan.colliders.some((collider) =>
+            collider.id === `${feature.id}-platform-${platformIndex}` &&
+            Math.abs(
+              collider.center.y + collider.halfExtents.y - feature.elevation,
+            ) < 0.02
+          )).toBe(true);
+        }
+        for (const [rampIndex] of (feature.ramps ?? [feature.ramp]).entries()) {
+          expect(plan.colliders.some((collider) =>
+            collider.id === `${feature.id}-ramp-${rampIndex}` &&
+            collider.rotation !== undefined
+          )).toBe(true);
+        }
+        if (feature.elevation < 0) {
+          expect(plan.walls.some((wall) =>
+            wall.detail === 'lower-shell' &&
+            wall.roomId === feature.roomId &&
+            wall.bottom <= feature.elevation + 0.02
+          )).toBe(true);
+        }
+      }
+    }
+    expect(districtCount).toBeGreaterThan(15);
+    expect(sunkenCount).toBeGreaterThan(3);
   });
 
   it('coalesces inherited shafts so active openings never overlap or explode in count', () => {
@@ -568,5 +646,151 @@ describe('InfiniteWorld chunk contracts', () => {
     }
     expect(plan.walls.some((wall) => wall.id.includes('/infinite-boundary-') && wall.id.includes('-lower-')))
       .toBe(false);
+  });
+
+  it('double-lines visual-biome borders while keeping the same passages open', () => {
+    const biomeSeed = 'BIOME-DOUBLE-WALL-AUDIT';
+    let sourceCoord: ChunkCoord | undefined;
+    search:
+    for (let z = -12; z <= 12; z += 1) {
+      for (let x = -12; x <= 12; x += 1) {
+        const candidate = { x, z, story: 0 };
+        const neighbor = parseChunkKey(getNeighborChunkKey(candidate, 'east'));
+        if (
+          getInfiniteVisualBiome(biomeSeed, candidate) !==
+          getInfiniteVisualBiome(biomeSeed, neighbor)
+        ) {
+          sourceCoord = candidate;
+          break search;
+        }
+      }
+    }
+    expect(sourceCoord).toBeDefined();
+    if (!sourceCoord) return;
+
+    const neighborCoord = parseChunkKey(getNeighborChunkKey(sourceCoord, 'east'));
+    const source = generateInfiniteChunk(biomeSeed, sourceCoord);
+    const neighbor = generateInfiniteChunk(biomeSeed, neighborCoord);
+    expect(source.visualBiome).not.toBe(neighbor.visualBiome);
+
+    const sourceFaces = source.walls.filter((wall) =>
+      wall.id.includes('/biome-transition-east-face-')
+    );
+    const neighborFaces = neighbor.walls.filter((wall) =>
+      wall.id.includes('/biome-transition-west-face-')
+    );
+    const sourceReturns = source.walls.filter((wall) =>
+      wall.id.includes('/biome-transition-east-gate-') &&
+      wall.id.includes('-return-')
+    );
+    const neighborReturns = neighbor.walls.filter((wall) =>
+      wall.id.includes('/biome-transition-west-gate-') &&
+      wall.id.includes('-return-')
+    );
+    const neighborBands = neighbor.walls.filter((wall) =>
+      wall.id.includes('/biome-transition-west-gate-') &&
+      wall.id.includes('-band-')
+    );
+    const gates = getInfiniteChunkMetadata(source)!.edgeGates.east;
+
+    expect(sourceFaces).toHaveLength(gates.length + 1);
+    expect(neighborFaces).toHaveLength(gates.length + 1);
+    expect(sourceReturns).toHaveLength(gates.length * 2);
+    expect(neighborReturns).toHaveLength(gates.length * 2);
+    expect(neighborBands).toHaveLength(gates.length * 2);
+    expect([...sourceFaces, ...neighborFaces, ...sourceReturns, ...neighborReturns]
+      .every((wall) =>
+        wall.detail === 'biome-boundary-skin' &&
+        wall.collision === false &&
+        wall.bottom === 0
+      )).toBe(true);
+    expect(neighborBands.every((wall) =>
+      wall.detail === 'biome-boundary-band' &&
+      wall.collision === false &&
+      Math.abs(wall.length - 0.18) < 1e-6
+    )).toBe(true);
+
+    const sourceOffset = getChunkWorldOffset(sourceCoord);
+    const neighborOffset = getChunkWorldOffset(neighborCoord);
+    const sourceFaceWorldX = sourceOffset.x + sourceFaces[0]!.x;
+    const neighborFaceWorldX = neighborOffset.x + neighborFaces[0]!.x;
+    expect(sourceFaceWorldX).toBeLessThan(neighborFaceWorldX);
+    expect(neighborFaceWorldX - sourceFaceWorldX).toBeGreaterThan(0.25);
+    const sharedBoundaryX = sourceOffset.x + INFINITE_CHUNK_SIZE * 0.5;
+    for (const gate of gates) {
+      for (const along of [
+        gate.offset - gate.width * 0.5,
+        gate.offset + gate.width * 0.5,
+      ]) {
+        const sourceReturn = sourceReturns.find((wall) => Math.abs(wall.z - along) < 0.02);
+        const neighborReturn = neighborReturns.find((wall) => Math.abs(wall.z - along) < 0.02);
+        const band = neighborBands.find((wall) => Math.abs(wall.z - along) < 0.02);
+        expect(sourceReturn).toBeDefined();
+        expect(neighborReturn).toBeDefined();
+        expect(band).toBeDefined();
+        if (!sourceReturn || !neighborReturn || !band) continue;
+        const sourceReturnMax =
+          sourceOffset.x + sourceReturn.x + sourceReturn.length * 0.5;
+        const neighborReturnMin =
+          neighborOffset.x + neighborReturn.x - neighborReturn.length * 0.5;
+        const bandMin = neighborOffset.x + band.x - band.length * 0.5;
+        const bandMax = neighborOffset.x + band.x + band.length * 0.5;
+        expect(sourceReturnMax).toBeCloseTo(bandMin, 6);
+        expect(neighborReturnMin).toBeCloseTo(bandMax, 6);
+        expect((bandMin + bandMax) * 0.5).toBeCloseTo(sharedBoundaryX, 6);
+      }
+    }
+
+    const coreWalls = neighbor.walls.filter((wall) =>
+      wall.id.includes('/infinite-boundary-west-upper-')
+    );
+    expect(coreWalls.length).toBeGreaterThan(0);
+    for (const gate of gates) {
+      const coversGateCenter = (wall: (typeof sourceFaces)[number]): boolean => {
+        const along = wall.orientation === 'x' ? wall.x : wall.z;
+        return Math.abs(along - gate.offset) < wall.length * 0.5 - 1e-4;
+      };
+      expect(sourceFaces.some(coversGateCenter)).toBe(false);
+      expect(neighborFaces.some(coversGateCenter)).toBe(false);
+      expect(coreWalls.some(coversGateCenter)).toBe(false);
+    }
+  });
+
+  it('builds chunk seams as deep structural volumes with matching collision depth', () => {
+    const plans = Array.from({ length: 36 }, (_, index) =>
+      generateInfiniteChunk('BOUNDARY-THICKNESS-AUDIT', {
+        x: index - 18,
+        z: (index % 7) - 3,
+        story: index % 3,
+      })
+    );
+    const boundaryWalls = plans.flatMap((plan) =>
+      plan.walls.filter((wall) =>
+        wall.id.includes('/infinite-boundary-') &&
+        wall.bottom === 0
+      ).map((wall) => ({ plan, wall }))
+    );
+    const ordered = boundaryWalls
+      .map(({ wall }) => wall.thickness)
+      .sort((left, right) => left - right);
+    const median = ordered[Math.floor(ordered.length * 0.5)]!;
+    expect(median).toBeGreaterThanOrEqual(1.1);
+    expect(boundaryWalls.some(({ wall }) => wall.thickness <= 0.42)).toBe(true);
+    expect(boundaryWalls.some(({ wall }) => wall.thickness >= 2.4)).toBe(true);
+    expect(boundaryWalls.every(({ plan, wall }) => {
+      const separator = wall.id.indexOf('/');
+      const colliderId = separator >= 0
+        ? `${wall.id.slice(0, separator + 1)}collider-${wall.id.slice(separator + 1)}`
+        : `collider-${wall.id}`;
+      const collider = plan.colliders.find(
+        (candidate) => candidate.id === colliderId,
+      );
+      if (!collider) return false;
+      const collisionDepth = wall.orientation === 'x'
+        ? collider.halfExtents.z * 2
+        : collider.halfExtents.x * 2;
+      return Math.abs(collisionDepth - wall.thickness) < 1e-6;
+    })).toBe(true);
+    expect(plans.every((plan) => plan.walls.every((wall) => wall.kind !== 'plaster'))).toBe(true);
   });
 });
