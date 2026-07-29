@@ -9,6 +9,7 @@ import type {
 } from './PropCatalog';
 import { SeededRandom } from './SeededRandom';
 import type {
+  InteractiveDoorFeature,
   PropPlacement,
   Rect,
   RoomRecord,
@@ -27,6 +28,9 @@ interface SceneSlot {
   y?: number;
   rotation?: number;
   scale?: number;
+  chance?: number;
+  jitter?: number;
+  rotationJitter?: number;
 }
 
 interface SceneRecipe {
@@ -35,217 +39,153 @@ interface SceneRecipe {
   slots: readonly SceneSlot[];
 }
 
-const furnitureIds = (...names: string[]): string[] =>
-  names.map((name) => `furniture:${name}`);
-const retroIds = (...names: string[]): string[] =>
-  names.map((name) => `retro:${name}`);
+const polyIds = (...names: string[]): string[] =>
+  names.map((name) => `polyhaven:${name}`);
+const kenneyFurnitureIds = (...names: string[]): string[] =>
+  names.map((name) => `kenney-furniture:${name}`);
+const kenneyUrbanIds = (...names: string[]): string[] =>
+  names.map((name) => `kenney-urban:${name}`);
 
-const CHAIRS = furnitureIds(
-  'chair',
-  'chairCushion',
-  'chairDesk',
-  'chairModernCushion',
-  'chairModernFrameCushion',
-  'chairRounded',
-  'loungeChair',
-  'loungeChairRelax',
-  'loungeDesignChair',
+const CHAIRS = polyIds(
+  'armchair_01',
+  'dining_chair_02',
+  'greenchair_01',
+  'mid_century_lounge_chair',
+  'painted_wooden_chair_01',
+  'plastic_monobloc_chair_01',
+  'schoolchair_01',
+  'woodenchair_01',
 );
-const SOFAS = furnitureIds(
-  'loungeSofa',
-  'loungeSofaLong',
-  'loungeDesignSofa',
-  'loungeSofaCorner',
-  'loungeDesignSofaCorner',
+const SOFAS = polyIds('sofa_01', 'sofa_02');
+const DESKS = polyIds('metal_office_desk', 'schooldesk_01');
+const TABLES = polyIds('woodentable_01', 'woodentable_02');
+const SIDE_TABLES = polyIds('side_table_01', 'side_table_tall_01');
+const TELEVISIONS = polyIds('television_01', 'television_02');
+const SMALL_ELECTRONICS = polyIds(
+  'boombox',
+  'portable_cassette_player',
+  'vintage_radio_transceiver',
 );
-const DESKS = [
-  ...furnitureIds('desk', 'deskCorner'),
-  'polyhaven:metal-office-desk',
-];
-const SCREENS = [
-  ...furnitureIds('computerScreen', 'televisionModern', 'televisionVintage'),
-  'polyhaven:crt-television',
-];
-const SMALL_ELECTRONICS = [
-  ...furnitureIds('radio', 'laptop'),
-  'polyhaven:cassette-player',
-];
-const BOXES = furnitureIds('cardboardBoxClosed', 'cardboardBoxOpen');
-const TABLE_LAMPS = furnitureIds('lampRoundTable', 'lampSquareTable');
-const FLOOR_LAMPS = furnitureIds('lampRoundFloor', 'lampSquareFloor');
-const SIDE_TABLES = furnitureIds('sideTable', 'sideTableDrawers', 'tableCoffeeSquare');
-const DINING_TABLES = furnitureIds('table', 'tableCross', 'tableGlass', 'tableRound');
-const STORAGE = furnitureIds(
-  'bookcaseClosed',
-  'bookcaseClosedDoors',
-  'bookcaseOpen',
-  'bookcaseOpenLow',
-  'cabinetBed',
-  'cabinetTelevision',
+const STORAGE = polyIds(
+  'drawer_cabinet',
+  'industrial_storage_cart',
+  'modern_wooden_cabinet',
+  'painted_wooden_cabinet_02',
+  'shelf_01',
+  'tool_cart',
+  'vintage_cabinet_01',
 );
-const CONSTRUCTION = [
-  ...retroIds(
-    'detail-barrier-strong-damaged',
-    'detail-barrier-strong-type-a',
-    'detail-barrier-type-a',
-    'detail-bricks-type-a',
-    'detail-bricks-type-b',
-    'detail-cables-type-a',
-    'detail-cables-type-b',
-    'pallet',
-    'pallet-small',
-    'planks',
+const BOXES = [
+  ...polyIds(
+    'cardboard_box_01',
+    'plastic_crate_02',
+    'utility_box_01',
+    'utility_box_02',
+    'wooden_crate_01',
+    'wooden_crate_02',
   ),
-  'polyhaven:fire-extinguisher',
+  ...kenneyFurnitureIds('cardboardBoxClosed', 'cardboardBoxOpen'),
+];
+const DESK_CLUTTER = [
+  ...kenneyFurnitureIds('books', 'computerKeyboard', 'computerMouse'),
+  ...SMALL_ELECTRONICS,
 ];
 
 const SCENE_RECIPES: readonly SceneRecipe[] = [
   {
-    id: 'abandoned-office',
-    minSpan: 6.8,
-    slots: [
-      { choices: DESKS, x: 0, z: -0.3 },
-      { choices: CHAIRS, x: 0, z: 1.05, rotation: Math.PI },
-      { choices: SCREENS, x: 0, z: -0.4, y: 0.8, scale: 0.78 },
-      { choices: furnitureIds('computerKeyboard'), x: 0, z: 0.05, y: 0.81 },
-      { choices: BOXES, x: 1.22, z: -0.5, scale: 0.86 },
-    ],
-  },
-  {
-    id: 'dead-workstation',
-    minSpan: 7.2,
-    slots: [
-      { choices: DESKS, x: -0.95, z: 0 },
-      { choices: DESKS, x: 0.95, z: 0, rotation: Math.PI },
-      { choices: CHAIRS, x: -0.95, z: 1.12, rotation: Math.PI },
-      { choices: CHAIRS, x: 0.95, z: -1.12 },
-      { choices: SCREENS, x: -0.95, z: -0.08, y: 0.8, scale: 0.72 },
-      { choices: SMALL_ELECTRONICS, x: 0.95, z: 0.08, y: 0.8 },
-    ],
-  },
-  {
-    id: 'crt-audience',
-    minSpan: 7.4,
-    slots: [
-      { choices: SCREENS, x: 0, z: -1.72, scale: 1.08 },
-      { choices: CHAIRS, x: -1.15, z: 0.62, rotation: Math.PI },
-      { choices: CHAIRS, x: 0, z: 0.85, rotation: Math.PI },
-      { choices: CHAIRS, x: 1.15, z: 0.62, rotation: Math.PI },
-      { choices: SMALL_ELECTRONICS, x: 0.86, z: -1.55 },
-    ],
-  },
-  {
-    id: 'waiting-fragment',
-    minSpan: 7.5,
-    slots: [
-      { choices: CHAIRS, x: -1.45, z: -0.55, rotation: Math.PI * 0.5 },
-      { choices: CHAIRS, x: -1.45, z: 0.55, rotation: Math.PI * 0.5 },
-      { choices: CHAIRS, x: 1.45, z: -0.55, rotation: -Math.PI * 0.5 },
-      { choices: CHAIRS, x: 1.45, z: 0.55, rotation: -Math.PI * 0.5 },
-      { choices: SIDE_TABLES, x: 0, z: 0 },
-      { choices: furnitureIds('books', 'bear'), x: 0, z: 0, y: 0.67 },
-    ],
-  },
-  {
-    id: 'meeting-remnant',
-    minSpan: 8.4,
-    slots: [
-      { choices: DINING_TABLES, x: 0, z: 0, scale: 1.18 },
-      { choices: CHAIRS, x: -1.55, z: 0, rotation: Math.PI * 0.5 },
-      { choices: CHAIRS, x: 1.55, z: 0, rotation: -Math.PI * 0.5 },
-      { choices: CHAIRS, x: -0.5, z: 1.25, rotation: Math.PI },
-      { choices: CHAIRS, x: 0.5, z: -1.25 },
-      { choices: SMALL_ELECTRONICS, x: 0, z: 0, y: 0.8 },
-    ],
-  },
-  {
-    id: 'lounge-loop',
-    minSpan: 8.2,
-    slots: [
-      { choices: SOFAS, x: 0, z: 1.55, rotation: Math.PI },
-      { choices: furnitureIds('tableCoffee', 'tableCoffeeGlass'), x: 0, z: 0 },
-      { choices: SCREENS, x: 0, z: -1.62 },
-      { choices: FLOOR_LAMPS, x: 1.55, z: 1.45 },
-      { choices: furnitureIds('pillow', 'pillowBlue', 'pillowLong'), x: -0.5, z: 1.2, y: 0.48 },
-    ],
-  },
-  {
-    id: 'bedroom-without-walls',
-    minSpan: 8.4,
-    slots: [
-      { choices: furnitureIds('bedSingle', 'bedDouble'), x: 0, z: 0 },
-      { choices: SIDE_TABLES, x: 1.35, z: -0.45 },
-      { choices: TABLE_LAMPS, x: 1.35, z: -0.45, y: 0.67 },
-      { choices: CHAIRS, x: -1.42, z: 0.6, rotation: Math.PI * 0.5 },
-      { choices: furnitureIds('bear', 'books'), x: 0.2, z: 0.15, y: 0.52 },
-    ],
-  },
-  {
-    id: 'bathroom-displaced',
+    id: 'abandoned-office-corner',
     minSpan: 8,
     slots: [
-      { choices: furnitureIds('bathtub'), x: -0.65, z: 0 },
-      { choices: furnitureIds('toilet'), x: 1.05, z: -0.55 },
-      { choices: furnitureIds('bathroomSink'), x: 1.12, z: 0.78, rotation: Math.PI },
-      { choices: CHAIRS, x: -0.55, z: 1.35, rotation: Math.PI },
-      { choices: BOXES, x: -1.65, z: -0.75, scale: 0.78 },
+      { choices: DESKS, x: 0, z: -0.45 },
+      { choices: CHAIRS, x: -0.15, z: 0.92, rotation: Math.PI, jitter: 0.14, rotationJitter: 0.16 },
+      { choices: TELEVISIONS, x: -0.28, z: -0.48, y: 0.8, scale: 0.72, chance: 0.48 },
+      { choices: DESK_CLUTTER, x: 0.34, z: -0.38, y: 0.81, scale: 0.82 },
+      { choices: polyIds('desk_lamp_arm_01'), x: 0.58, z: -0.46, y: 0.81, scale: 0.84, chance: 0.62 },
+      { choices: BOXES, x: 1.26, z: 0.2, scale: 0.86, chance: 0.78, jitter: 0.16 },
     ],
   },
   {
-    id: 'laundry-island',
-    minSpan: 7.5,
+    id: 'meeting-left-behind',
+    minSpan: 8.6,
     slots: [
-      { choices: furnitureIds('washer', 'dryer'), x: -0.72, z: 0 },
-      { choices: furnitureIds('washer', 'dryer'), x: 0.72, z: 0 },
-      { choices: furnitureIds('trashcan'), x: 1.35, z: 0.72 },
-      { choices: BOXES, x: -1.35, z: 0.78, scale: 0.84 },
-      { choices: furnitureIds('books', 'pillowLong'), x: 0, z: 0.05, y: 1.03 },
+      { choices: TABLES, x: 0, z: 0, scale: 1.08 },
+      { choices: CHAIRS, x: -1.35, z: 0.1, rotation: Math.PI * 0.5, jitter: 0.12 },
+      { choices: CHAIRS, x: 1.38, z: -0.12, rotation: -Math.PI * 0.5, jitter: 0.16, rotationJitter: 0.12 },
+      { choices: CHAIRS, x: -0.38, z: 1.12, rotation: Math.PI, chance: 0.72, jitter: 0.14 },
+      { choices: CHAIRS, x: 0.48, z: -1.18, chance: 0.55, jitter: 0.16, rotationJitter: 0.18 },
+      { choices: SMALL_ELECTRONICS, x: 0.2, z: 0.05, y: 0.79, scale: 0.82, chance: 0.62 },
     ],
   },
   {
-    id: 'storage-collapse',
-    minSpan: 8,
-    slots: [
-      { choices: STORAGE, x: -1.05, z: -0.7 },
-      { choices: STORAGE, x: 1.05, z: -0.7 },
-      { choices: BOXES, x: -0.75, z: 0.95 },
-      { choices: BOXES, x: 0, z: 1.15, scale: 0.82 },
-      { choices: BOXES, x: 0.75, z: 0.88, scale: 1.08 },
-      { choices: FLOOR_LAMPS, x: 1.78, z: 0.62 },
-    ],
-  },
-  {
-    id: 'construction-stop',
+    id: 'dead-television-corner',
     minSpan: 8.2,
     slots: [
-      { choices: retroIds('detail-barrier-strong-damaged', 'detail-barrier-strong-type-a'), x: 0, z: -0.75 },
-      { choices: retroIds('pallet', 'pallet-small'), x: -1.38, z: 0.72, rotation: 0.24 },
-      { choices: retroIds('planks', 'detail-bricks-type-a', 'detail-bricks-type-b'), x: 0.2, z: 0.8, rotation: -0.18 },
-      { choices: retroIds('detail-cables-type-a', 'detail-cables-type-b'), x: 1.25, z: 0.7 },
-      { choices: furnitureIds('trashcan'), x: 1.62, z: -0.62 },
-      { choices: ['polyhaven:fire-extinguisher'], x: -1.25, z: -0.65 },
+      { choices: polyIds('television_01'), x: 0, z: -1.02, scale: 1.08, rotationJitter: 0.16 },
+      { choices: SIDE_TABLES, x: 1.05, z: -0.92, chance: 0.42, jitter: 0.1 },
+      { choices: CHAIRS, x: -1.18, z: 0.72, rotation: Math.PI * 0.84, jitter: 0.18, rotationJitter: 0.22 },
+      { choices: CHAIRS, x: 0.72, z: 0.92, rotation: Math.PI, chance: 0.58, jitter: 0.2, rotationJitter: 0.22 },
+      { choices: SMALL_ELECTRONICS, x: 0.82, z: -0.88, chance: 0.68, jitter: 0.1 },
+      { choices: BOXES, x: 1.32, z: 0.18, scale: 0.82, chance: 0.74, jitter: 0.16 },
     ],
   },
   {
-    id: 'bike-rest',
-    minSpan: 7.5,
+    id: 'storage-overflow',
+    minSpan: 8.6,
     slots: [
-      { choices: ['bike:low-poly'], x: -0.72, z: 0, rotation: 0.1 },
-      { choices: furnitureIds('bench', 'benchCushion'), x: 0.75, z: 1.1, rotation: Math.PI },
-      { choices: furnitureIds('trashcan'), x: 1.55, z: 0.42 },
-      { choices: BOXES, x: 0.85, z: -0.75, scale: 0.82 },
+      { choices: STORAGE, x: -1.05, z: -0.78, jitter: 0.12 },
+      { choices: STORAGE, x: 0.85, z: -0.72, rotation: Math.PI, chance: 0.62, jitter: 0.16 },
+      { choices: BOXES, x: -0.9, z: 0.82, scale: 1.02, jitter: 0.14 },
+      { choices: BOXES, x: 0, z: 1.08, scale: 0.82, jitter: 0.14 },
+      { choices: BOXES, x: 0.86, z: 0.72, scale: 0.94, chance: 0.8, jitter: 0.18 },
+      { choices: kenneyUrbanIds('pallet', 'pallet-small'), x: 1.5, z: 0.02, rotation: 0.22, chance: 0.55 },
     ],
   },
   {
-    id: 'kitchen-orphan',
-    minSpan: 8.4,
+    id: 'abandoned-lounge',
+    minSpan: 9,
     slots: [
-      { choices: furnitureIds('kitchenFridge', 'kitchenFridgeSmall'), x: -1.15, z: -0.5 },
-      { choices: furnitureIds('kitchenStove', 'kitchenStoveElectric'), x: 0, z: -0.5 },
-      { choices: furnitureIds('kitchenCabinet', 'kitchenCabinetDrawer'), x: 1.08, z: -0.5 },
-      { choices: furnitureIds('kitchenMicrowave', 'toaster', 'kitchenCoffeeMachine'), x: 1.08, z: -0.5, y: 1.2 },
-      { choices: CHAIRS, x: 0.4, z: 1.05, rotation: Math.PI },
-      { choices: furnitureIds('trashcan'), x: -1.3, z: 0.72 },
+      { choices: SOFAS, x: 0, z: 1.28, rotation: Math.PI, jitter: 0.12 },
+      { choices: SIDE_TABLES, x: 0.08, z: 0.05, jitter: 0.1 },
+      { choices: TELEVISIONS, x: 0, z: -1.35, scale: 0.96, chance: 0.78, rotationJitter: 0.12 },
+      { choices: CHAIRS, x: 1.62, z: 0.42, rotation: -Math.PI * 0.54, chance: 0.68, jitter: 0.15, rotationJitter: 0.2 },
+      { choices: BOXES, x: -1.56, z: 0.18, scale: 0.82, chance: 0.6, jitter: 0.18 },
+      { choices: DESK_CLUTTER, x: 0.08, z: 0.05, y: 0.61, scale: 0.82, chance: 0.62 },
+    ],
+  },
+  {
+    id: 'maintenance-cache',
+    minSpan: 8.8,
+    slots: [
+      { choices: polyIds('tool_cart', 'industrial_storage_cart'), x: -0.82, z: -0.62, jitter: 0.12 },
+      { choices: polyIds('hand_truck'), x: 0.92, z: -0.62, rotation: 0.18, chance: 0.72 },
+      { choices: kenneyUrbanIds('pallet', 'pallet-small'), x: -1.02, z: 0.88, rotation: -0.18, chance: 0.72 },
+      { choices: kenneyUrbanIds('detail-cables-type-a', 'detail-cables-type-b', 'planks'), x: 0.2, z: 0.92, rotation: 0.14, jitter: 0.16 },
+      { choices: kenneyUrbanIds('detail-bricks-type-a', 'detail-bricks-type-b'), x: 1.15, z: 0.78, rotation: -0.12, chance: 0.72 },
+      { choices: polyIds('portable_searchlight'), x: -0.28, z: -0.2, chance: 0.64 },
+    ],
+  },
+  {
+    id: 'sealed-carton-drop',
+    minSpan: 8.2,
+    slots: [
+      { choices: STORAGE, x: -1.18, z: -0.62, jitter: 0.1 },
+      { choices: BOXES, x: -0.72, z: 0.68, scale: 1.08, jitter: 0.18 },
+      { choices: BOXES, x: 0.05, z: 0.94, scale: 0.84, jitter: 0.18 },
+      { choices: BOXES, x: 0.82, z: 0.72, scale: 0.96, jitter: 0.2 },
+      { choices: BOXES, x: 1.28, z: -0.12, scale: 0.74, chance: 0.68, jitter: 0.18 },
+      { choices: polyIds('metal_trash_can', 'wetfloorsign_01'), x: 1.15, z: -0.9, chance: 0.52, jitter: 0.14 },
+    ],
+  },
+  {
+    id: 'school-office-remnant',
+    minSpan: 8.8,
+    slots: [
+      { choices: DESKS, x: -1.05, z: -0.48, jitter: 0.1 },
+      { choices: DESKS, x: 1.05, z: 0.42, rotation: Math.PI, chance: 0.58, jitter: 0.12 },
+      { choices: polyIds('schoolchair_01'), x: -1.05, z: 0.72, rotation: Math.PI, jitter: 0.12, rotationJitter: 0.16 },
+      { choices: polyIds('schoolchair_01'), x: 1.05, z: -0.82, chance: 0.58, jitter: 0.12, rotationJitter: 0.16 },
+      { choices: kenneyFurnitureIds('books'), x: -0.95, z: -0.38, y: 0.81, chance: 0.74 },
+      { choices: BOXES, x: 1.48, z: 0.85, scale: 0.82, chance: 0.65, jitter: 0.14 },
     ],
   },
 ];
@@ -369,17 +309,18 @@ const propCollider = (
 ): StaticCollider | null => {
   if (!definition.collidable || placement.position.y > 0.12) return null;
   const height = definition.size.y * placement.scale;
+  const colliderScale = definition.colliderScale;
   return {
     id: `prop-collider-${placement.id}`,
     center: {
       x: placement.position.x,
-      y: placement.position.y + height * 0.44,
+      y: placement.position.y + height * colliderScale.y * 0.5,
       z: placement.position.z,
     },
     halfExtents: {
-      x: definition.size.x * placement.scale * 0.4,
-      y: Math.max(0.18, height * 0.44),
-      z: definition.size.z * placement.scale * 0.4,
+      x: definition.size.x * placement.scale * colliderScale.x * 0.5,
+      y: Math.max(0.18, height * colliderScale.y * 0.5),
+      z: definition.size.z * placement.scale * colliderScale.z * 0.5,
     },
     kind: 'barrier',
     rotation: {
@@ -428,14 +369,8 @@ const wallPropCategories: readonly PropCategory[] = [
   'seating',
   'storage',
   'table',
-  'electronics',
-  'appliance',
-  'bathroom',
-  'lamp',
-  'plant',
   'clutter',
   'construction',
-  'vehicle',
 ];
 
 const tryWallPlacement = (
@@ -496,7 +431,7 @@ const tryWallPlacement = (
       scale,
       bounds,
       kind: 'wall',
-      tone: rng.float(0.82, 1.08),
+      tone: rng.float(0.9, 1.02),
     };
   }
   return null;
@@ -532,12 +467,21 @@ const tryScenePlacement = (
       const candidates: PropPlacement[] = [];
       const localUsed = new Set(used);
       let valid = true;
-      for (const [slotIndex, slot] of recipe.slots.entries()) {
+      for (const slot of recipe.slots) {
+        if (slot.chance !== undefined && !rng.chance(slot.chance)) continue;
         const definition = weightedAsset(rng, choicesByIds(slot.choices), localUsed);
         localUsed.add(definition.id);
-        const offset = rotateOffset(slot.x, slot.z, angle);
+        const jitter = slot.jitter ?? 0;
+        const offset = rotateOffset(
+          slot.x + (jitter > 0 ? rng.float(-jitter, jitter) : 0),
+          slot.z + (jitter > 0 ? rng.float(-jitter, jitter) : 0),
+          angle,
+        );
         const scale = (slot.scale ?? 1) * rng.float(0.9, 1.1);
-        const rotationY = angle + (slot.rotation ?? 0) + rng.float(-0.055, 0.055);
+        const rotationJitter = slot.rotationJitter ?? 0.055;
+        const rotationY = angle +
+          (slot.rotation ?? 0) +
+          rng.float(-rotationJitter, rotationJitter);
         const x = anchor.x + offset.x;
         const z = anchor.z + offset.z;
         const bounds = placementBounds(definition, x, z, rotationY, scale);
@@ -555,7 +499,7 @@ const tryScenePlacement = (
           break;
         }
         candidates.push({
-          id: `rare-prop-${placementIndex + slotIndex}`,
+          id: `rare-prop-${placementIndex + candidates.length}`,
           assetId: definition.id,
           roomId: room.id,
           position: { x, y: slot.y ?? 0, z },
@@ -564,7 +508,7 @@ const tryScenePlacement = (
           bounds,
           kind: 'scene',
           sceneId: recipe.id,
-          tone: rng.float(0.8, 1.1),
+          tone: rng.float(0.9, 1.02),
         });
       }
       if (!valid) continue;
@@ -602,14 +546,33 @@ export const populateRareProps = (
 ): void => {
   plan.propPlacements = [];
   const rng = new SeededRandom(seed);
+  const usedAssets = new Set<string>();
+  let placementIndex = 0;
+  const objectDoors = plan.features.filter(
+    (feature): feature is InteractiveDoorFeature =>
+      feature.kind === 'interactive-door' && feature.content === 'object',
+  );
+  for (const door of objectDoors) {
+    const room = plan.rooms.find((candidate) => candidate.id === door.targetRoomId);
+    if (!room) continue;
+    const placement = tryWallPlacement(
+      plan,
+      room,
+      rng.fork(`door-room:${door.id}`),
+      placementIndex,
+      usedAssets,
+    );
+    if (!placement) continue;
+    appendPlacements(plan, [placement]);
+    placementIndex += 1;
+  }
+
   if (!rng.chance(PROP_CHUNK_PRESENCE_RATE)) return;
   const rooms = rng.shuffle(eligibleRooms(plan));
   if (rooms.length === 0) return;
 
   const desiredClusters = rng.chance(0.12) ? 2 : 1;
   const usedRooms = new Set<string>();
-  const usedAssets = new Set<string>();
-  let placementIndex = 0;
   for (let cluster = 0; cluster < desiredClusters; cluster += 1) {
     const candidates = rooms.filter((candidate) => !usedRooms.has(candidate.id)).slice(0, 14);
     if (candidates.length === 0) break;

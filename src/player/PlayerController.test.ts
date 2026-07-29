@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const inputState = vi.hoisted(() => ({
   axes: { forward: 0, right: 0, vertical: 0, sprint: false, crouch: false },
   presses: new Set<string>(),
+  releases: new Set<string>(),
+  down: new Set<string>(),
 }));
 
 vi.mock('three/addons/controls/PointerLockControls.js', async () => {
@@ -35,6 +37,14 @@ vi.mock('../input/InputManager', () => ({
       const pressed = inputState.presses.has(code);
       inputState.presses.delete(code);
       return pressed;
+    }
+    consumeRelease(code: string): boolean {
+      const released = inputState.releases.has(code);
+      inputState.releases.delete(code);
+      return released;
+    }
+    isPressed(code: string): boolean {
+      return inputState.down.has(code);
     }
     setEnabled(): void {}
     dispose(): void {}
@@ -130,6 +140,48 @@ beforeEach(() => {
   inputState.axes.sprint = false;
   inputState.axes.crouch = false;
   inputState.presses.clear();
+  inputState.releases.clear();
+  inputState.down.clear();
+});
+
+describe('PlayerController interaction timing', () => {
+  it('uses a quick open for a short E press', () => {
+    const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });
+    const { callbacks, controller } = createController(physics);
+
+    inputState.presses.add('KeyE');
+    inputState.down.add('KeyE');
+    controller.fixedUpdate(0.2);
+    expect(callbacks.onInteract).not.toHaveBeenCalled();
+
+    inputState.down.delete('KeyE');
+    inputState.releases.add('KeyE');
+    controller.fixedUpdate(1 / 60);
+
+    expect(callbacks.onInteract).toHaveBeenCalledOnce();
+    expect(callbacks.onInteract).toHaveBeenCalledWith('fast');
+    controller.dispose();
+  });
+
+  it('uses a slow open after E is held for one second', () => {
+    const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });
+    const { callbacks, controller } = createController(physics);
+
+    inputState.presses.add('KeyE');
+    inputState.down.add('KeyE');
+    controller.fixedUpdate(0.5);
+    controller.fixedUpdate(0.5);
+    controller.fixedUpdate(0.5);
+
+    expect(callbacks.onInteract).toHaveBeenCalledOnce();
+    expect(callbacks.onInteract).toHaveBeenCalledWith('slow');
+
+    inputState.down.delete('KeyE');
+    inputState.releases.add('KeyE');
+    controller.fixedUpdate(1 / 60);
+    expect(callbacks.onInteract).toHaveBeenCalledOnce();
+    controller.dispose();
+  });
 });
 
 describe('PlayerController locomotion', () => {

@@ -105,17 +105,17 @@ describe('procedural wall graffiti selection', () => {
     expect(fingerprint(plan)).toEqual(fingerprint(plan));
   });
 
-  it('keeps ambient markings rare across otherwise dense wall plans', () => {
+  it('keeps ambient markings varied without covering every wall', () => {
     const plans = Array.from({ length: 240 }, (_, index) =>
       makePlan(`GRAFFITI-DENSITY-${index}`)
     );
     const counts = plans.map((plan) => selectWallGraffiti(plan).length);
     const totalWalls = plans.reduce((sum, plan) => sum + plan.walls.length, 0);
     const emptyRatio = counts.filter((count) => count === 0).length / counts.length;
-    expect(emptyRatio).toBeGreaterThan(0.22);
-    expect(emptyRatio).toBeLessThan(0.42);
-    expect(Math.max(...counts)).toBeLessThanOrEqual(4);
-    expect(counts.reduce((sum, count) => sum + count, 0) / totalWalls).toBeLessThan(0.04);
+    expect(emptyRatio).toBeGreaterThan(0.1);
+    expect(emptyRatio).toBeLessThan(0.25);
+    expect(Math.max(...counts)).toBeLessThanOrEqual(6);
+    expect(counts.reduce((sum, count) => sum + count, 0) / totalWalls).toBeLessThan(0.075);
   });
 
   it('produces a large vocabulary instead of repeating a short decal list', () => {
@@ -135,6 +135,56 @@ describe('procedural wall graffiti selection', () => {
     expect(symbols.has('skull')).toBe(true);
     expect(symbols.has('house')).toBe(true);
     expect(symbols.has('tallies')).toBe(true);
+    expect(symbols.has('broken-heart')).toBe(true);
+    expect(symbols.has('eyes')).toBe(true);
+    expect(symbols.has('web')).toBe(true);
+    expect(symbols.has('doll')).toBe(true);
+  });
+
+  it('writes every selected wall message in English-friendly ASCII', () => {
+    const lines = Array.from({ length: 720 }, (_, index) =>
+      selectWallGraffiti(makePlan(`GRAFFITI-ENGLISH-${index}`))
+        .flatMap((placement) => placement.lines)
+    ).flat();
+    expect(lines.length).toBeGreaterThan(500);
+    for (const line of lines) expect(line).toMatch(/^[\x20-\x7E]+$/);
+  });
+
+  it('guarantees an English warning inside a message-designated door room', () => {
+    const plan = makePlan('GRAFFITI-DOOR-MESSAGE');
+    plan.walls.push({
+      id: 'door-room-far-wall',
+      x: 0,
+      z: -50,
+      length: 26,
+      orientation: 'x',
+      bottom: 0,
+      height: 2.74,
+      thickness: 0.22,
+      tint: 1,
+      collision: true,
+      kind: 'wallpaper',
+    });
+    plan.features.push({
+      kind: 'interactive-door',
+      id: 'message-door',
+      sourceRoomId: 'approach-room',
+      targetRoomId: 'room',
+      position: { x: 0, y: 0, z: 50 },
+      orientation: 'x',
+      width: 1.38,
+      height: 2.32,
+      openingDirection: -1,
+      style: 'office-windowed',
+      content: 'message',
+      colliderId: 'message-door-collider',
+      bounds: { minX: -0.69, maxX: 0.69, minZ: 49.88, maxZ: 50.12 },
+    });
+
+    const messages = selectWallGraffiti(plan).flatMap((placement) => placement.lines);
+    expect(messages).toEqual(expect.arrayContaining([
+      expect.stringMatching(/DOOR|ROOM|OPEN|WAITING|INSIDE|THROUGH/),
+    ]));
   });
 
   it('does not place graffiti on the thin biome-transition lining', () => {
@@ -197,8 +247,8 @@ describe('procedural wall graffiti selection', () => {
     const placements = worlds.flatMap((plan) =>
       selectWallGraffiti(plan).map((placement) => ({ placement, plan }))
     );
-    expect(placements.length).toBeGreaterThan(20);
-    expect(placements.length).toBeLessThan(90);
+    expect(placements.length).toBeGreaterThan(60);
+    expect(placements.length).toBeLessThan(140);
     expect(placements.some(({ placement }) => placement.kind === 'message')).toBe(true);
     expect(placements.some(({ placement }) => placement.kind === 'symbol')).toBe(true);
     expect(placements.some(({ placement }) => placement.kind === 'direction')).toBe(true);

@@ -10,7 +10,7 @@ import type { ConsoleCompletion, ConsoleMode, ConsoleSubmitResult } from '../ui/
 import { createReadableSeed } from '../world/SeededRandom';
 import { fingerprintWorld, validateWorldPlan } from '../world/generateWorld';
 import { generateInfiniteChunk } from '../world/InfiniteWorld';
-import type { VisualBiome, WorldPlan } from '../world/types';
+import type { DoorOpenMode, VisualBiome, WorldPlan } from '../world/types';
 import { WorldStream } from './WorldStream';
 import type { LocateTarget } from './WorldStream';
 
@@ -198,7 +198,7 @@ export class Game {
     this.player = new PlayerController(this.camera, this.renderer.domElement, this.physics, {
       onLockChange: (locked) => this.ui.setLocked(locked),
       onFootstep: (strength) => this.audio.footstep(strength),
-      onInteract: () => this.tryInteract(),
+      onInteract: (mode) => this.tryInteract(mode),
       onLand: () => this.audio.impact(),
       onFallReset: () => {
         this.audio.impact();
@@ -270,11 +270,17 @@ export class Game {
     void this.audio.start();
   }
 
-  private tryInteract(): void {
+  private tryInteract(mode: DoorOpenMode): void {
     if (!this.player || !this.worldStream || this.player.isTraversing || this.player.isNoclipEnabled) return;
     this.player.getViewDirection(this.lookDirection);
     const interaction = this.worldStream.getInteraction(this.player.position, this.lookDirection);
     if (!interaction) return;
+    if (interaction.kind === 'door') {
+      if (this.worldStream.openDoor(this.player.position, interaction, mode)) {
+        this.ui.setInteraction(null);
+      }
+      return;
+    }
     if (this.player.beginTraversal(
       interaction.path,
       interaction.duration,

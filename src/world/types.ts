@@ -166,6 +166,10 @@ export interface StairSocketFeature {
   roomId: string;
   bounds: Rect;
   heading: 'x+' | 'x-' | 'z+' | 'z-';
+  /** Defaults to the compact switchback layout for older serialized plans. */
+  layout?: 'switchback' | 'straight';
+  /** Switchback flights either touch or are separated by a solid central wall. */
+  switchbackJoin?: 'joined' | 'divider';
   /** Local height of the first tread; inherited stairs start one story below. */
   baseY?: number;
   inherited?: boolean;
@@ -187,6 +191,9 @@ export interface PassageHump {
 
 export interface PassageHole extends Rect {
   depth: number;
+  /** Missing values in older plans are interpreted as a one-storey drop. */
+  kind?: 'drop' | 'void';
+  stories?: number;
 }
 
 export interface SqueezeViewFeature {
@@ -229,6 +236,26 @@ export interface RaisedZoneFeature {
   ramps?: RampSurface[];
 }
 
+export type DoorRoomContent = 'empty' | 'message' | 'object' | 'hole' | 'crawl' | 'passage';
+export type DoorOpenMode = 'fast' | 'slow';
+
+export interface InteractiveDoorFeature {
+  kind: 'interactive-door';
+  id: string;
+  sourceRoomId: string;
+  targetRoomId: string;
+  position: Vec3Data;
+  orientation: 'x' | 'z';
+  width: number;
+  height: number;
+  /** Direction normal to the closed leaf; the door swings into the destination room. */
+  openingDirection: -1 | 1;
+  style: 'office-windowed';
+  content: DoorRoomContent;
+  colliderId: string;
+  bounds: Rect;
+}
+
 export interface CeilingZone {
   id: string;
   roomIds: string[];
@@ -241,7 +268,8 @@ export type WorldFeature =
   | VistaFeature
   | StairSocketFeature
   | SqueezeViewFeature
-  | RaisedZoneFeature;
+  | RaisedZoneFeature
+  | InteractiveDoorFeature;
 
 export interface DetailSocket {
   id: string;

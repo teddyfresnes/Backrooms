@@ -23,6 +23,7 @@ Three.js et au lot de colliders. Le démontage doit retirer les deux.
 - éléments répétitifs en `InstancedMesh` ;
 - lightmaps de plafond et générales produites par `BakedLighting.ts` ;
 - graffitis procéduraux via `WallGraffiti.ts` ;
+- portes de bureau articulées via `WorldDoors.ts` ;
 - props asynchrones via `WorldProps.ts`.
 
 Chercher la méthode `build…` correspondant à la feature. Ne pas lire tout
@@ -62,6 +63,13 @@ Les coordonnées de `LightSlot.ceilingY` sont absolues dans le plan local ;
 indexés par clé de chunk. Les mutations groupées passent par
 `batchChunkChanges()` pour limiter les synchronisations.
 
+Une porte interactive garde son collider fermé au début de l’animation.
+`WorldDoorLayer` signale à `WorldStream` quand l’ouverture devient praticable,
+puis `PhysicsWorld.setChunkColliderEnabled()` désactive uniquement ce collider.
+La broad phase prend ce changement au tick fixe planifié suivant : ne pas forcer
+un `world.step()` supplémentaire depuis la mise à jour d’interaction.
+Un appui bref sur E ouvre vite ; un maintien d’une seconde ouvre en deux secondes.
+
 `Game.frame()` :
 
 1. borne le delta et exécute `PlayerController.fixedUpdate()` à 60 Hz ;
@@ -79,6 +87,12 @@ séparation.
 - `PropCatalog.ts` décrit chemins, tailles, catégories et transformations.
 - `PropPlacement.ts` sélectionne des placements déterministes et sûrs.
 - `WorldProps.ts` charge, normalise, clone et détruit les modèles.
+- Le catalogue runtime est volontairement resserré : ancres PBR Poly Haven,
+  petit désordre Kenney seulement. Les sources sont servies depuis
+  `public/assets/textures/{polyhaven,kenney}`.
+- `WorldProps` met en cache le modèle normalisé et partage ses géométries entre
+  instances ; seules les matières teintées appartiennent au chunk et sont
+  détruites au démontage.
 - `WorldView.ready` permet au chargement initial d’attendre les assets visibles.
 - Toute ressource ajoutée doit être locale et déclarée dans
   `public/assets/licenses.json`.
@@ -105,4 +119,3 @@ séparation.
 - déplacement : `src/player/PlayerController.test.ts`
 
 Voir `docs/agents/VERIFICATION.md` avant de lancer plusieurs suites lourdes.
-

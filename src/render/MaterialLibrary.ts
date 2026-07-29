@@ -51,7 +51,7 @@ export class MaterialLibrary {
     const base = '/assets/textures';
 
     const paths = {
-      wallpaper: `${base}/wallpaper/backrooms-wallpaper-generated.webp`,
+      wallpaper: `${base}/wallpaper/backrooms-wallpaper-seamless.webp`,
       plasterColor: `${base}/plaster/plaster-color.webp`,
       plasterNormal: `${base}/plaster/plaster-normal-gl.webp`,
       plasterArm: `${base}/plaster/plaster-arm.webp`,

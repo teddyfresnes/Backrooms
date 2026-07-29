@@ -58,6 +58,16 @@
       "changes": "Downscaled to 1024 px and encoded as WebP.",
       "generationMode": "OpenAI built-in imagegen",
       "generationPrompt": "Use case: stylized-concept\nAsset type: tileable game texture for a professional WebGL liminal-horror environment\nPrimary request: seamless vintage mono-yellow office wallpaper from the late 1980s, subtle repeating vertical fleur-and-chevron pattern, faded nicotine-yellow and muted olive tones, realistic woven paper fibers, gentle age variation and extremely subtle water discoloration\nStyle/medium: orthographic flat diffuse/albedo texture scan, photorealistic material reference, evenly lit\nComposition/framing: perfectly front-facing square texture, pattern aligned vertically, edge-to-edge\nLighting/mood: neutral flat diffuse lighting with no directional shadows or highlights\nConstraints: must tile seamlessly on all four edges; uniform texel scale; no perspective; no wall edges; no baseboard; no room; no holes; no objects; no text; no logos; no watermark; no strong focal stain; avoid baked shadows and avoid high contrast"
+    },
+    {
+      "name": "Seamless aged Backrooms wallpaper variation",
+      "author": "Generated specifically for Threshold Zero with OpenAI image generation",
+      "source": "Project-local generated asset derived from the existing wallpaper pattern",
+      "license": "Project asset",
+      "files": ["textures/wallpaper/backrooms-wallpaper-seamless.webp"],
+      "changes": "Edited from the original wallpaper, resized to 1024 px, edge-blended for seamless repetition, and encoded as WebP.",
+      "generationMode": "OpenAI built-in imagegen edit",
+      "generationPrompt": "Use case: precise-object-edit\nAsset type: seamless PBR-style albedo texture for a first-person Backrooms game wall\nPrimary request: turn this exact aged yellow striped damask wallpaper into a genuinely seamless tile in both horizontal and vertical directions, while preserving the recognizable stripe spacing, scale, palette, faded fabric/paper grain, and subtle age marks. Introduce a few restrained, irregular stains, faded patches, and print-density variations distributed across the full texture so repetition is less obvious, but keep them low contrast and avoid any single landmark that reveals the tile.\nComposition: flat orthographic texture swatch filling the entire square image; identical scale and density to the source.\nLighting: completely flat diffuse albedo; no directional lighting, gradients, highlights, shadows, perspective, vignette, or baked ambient occlusion.\nConstraints: left/right edges must match perfectly; top/bottom edges must match perfectly; preserve continuous vertical stripes across both seams; no border; no trim; no baseboard; no ceiling; no floor; no text; no watermark. Do not make it cleaner, more saturated, more ornate, or more contrasty than the source."
     }
   ],
   "audio": [
@@ -78,13 +88,22 @@
   ],
   "models": [
     {
+      "name": "Modern door",
+      "author": "Kenney",
+      "source": "https://poly.pizza/m/919pouyoML",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "files": ["models/doors/kenney-modern-office-door/**"],
+      "changes": "Original downloadable GLB. The existing hinge pivot drives interaction; runtime materials are limited to muted office laminate, brushed hardware and dirty frosted glass. The mesh was not remodeled."
+    },
+    {
       "name": "Furniture Kit",
       "author": "Kenney",
       "source": "https://kenney.nl/assets/furniture-kit",
       "license": "CC0 1.0",
       "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
-      "files": ["models/props/kenney-furniture/*.glb"],
-      "changes": "Original embedded GLB exports; runtime-only normalization and subtle material toning."
+      "files": ["textures/kenney/furniture-kit/**"],
+      "changes": "Original embedded GLB exports. The curated runtime catalog now uses only small clutter from the complete downloaded pack."
     },
     {
       "name": "Retro Urban Kit",
@@ -92,56 +111,17 @@
       "source": "https://kenney.nl/assets/retro-urban-kit",
       "license": "CC0 1.0",
       "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
-      "files": ["models/props/kenney-retro-urban/*.glb"],
-      "changes": "Selected small urban props from the original embedded GLB exports."
+      "files": ["textures/kenney/retro-urban-kit/**"],
+      "changes": "Original pack and embedded GLB exports. The runtime catalog uses only restrained construction clutter."
     },
     {
-      "name": "Low-poly Bike",
-      "author": "Lyricsz",
-      "source": "https://opengameart.org/content/bike-0",
-      "license": "CC0 1.0",
-      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
-      "files": [
-        "models/props/opengameart-bike/bike.obj",
-        "models/props/opengameart-bike/bike.png"
-      ],
-      "changes": "OBJ and original texture; converted to a rough PBR material at runtime."
-    },
-    {
-      "name": "Television 01",
-      "author": "Gabriel Radić / Poly Haven",
-      "source": "https://polyhaven.com/a/Television_01",
+      "name": "Curated 1K Prop Collection",
+      "author": "Various artists / Poly Haven",
+      "source": "https://polyhaven.com/models",
       "license": "CC0 1.0",
       "licenseUrl": "https://polyhaven.com/license",
-      "files": ["models/props/poly-haven/Television_01/**"],
-      "changes": "Official 1K glTF distribution."
-    },
-    {
-      "name": "Metal Office Desk",
-      "author": "Ulan Cabanilla / Poly Haven",
-      "source": "https://polyhaven.com/a/metal_office_desk",
-      "license": "CC0 1.0",
-      "licenseUrl": "https://polyhaven.com/license",
-      "files": ["models/props/poly-haven/metal_office_desk/**"],
-      "changes": "Official 1K glTF distribution."
-    },
-    {
-      "name": "Cassette Player",
-      "author": "Oday Abuzaeed / Poly Haven",
-      "source": "https://polyhaven.com/a/cassette_player",
-      "license": "CC0 1.0",
-      "licenseUrl": "https://polyhaven.com/license",
-      "files": ["models/props/poly-haven/cassette_player/**"],
-      "changes": "Official 1K glTF distribution."
-    },
-    {
-      "name": "Korean Fire Extinguisher 01",
-      "author": "UM JOORIN / Poly Haven",
-      "source": "https://polyhaven.com/a/korean_fire_extinguisher_01",
-      "license": "CC0 1.0",
-      "licenseUrl": "https://polyhaven.com/license",
-      "files": ["models/props/poly-haven/korean_fire_extinguisher_01/**"],
-      "changes": "Official 1K glTF distribution."
+      "files": ["textures/polyhaven/**"],
+      "changes": "Official 1K glTF distributions with original PBR textures. A curated subset is normalized to realistic metre-scale envelopes at runtime."
     }
   ]
 }

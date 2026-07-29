@@ -9,6 +9,7 @@ export interface MoveAxes {
 export class InputManager {
   private readonly pressed = new Set<string>();
   private readonly justPressed = new Set<string>();
+  private readonly justReleased = new Set<string>();
   private enabled = true;
 
   constructor() {
@@ -41,6 +42,17 @@ export class InputManager {
     return available;
   }
 
+  consumeRelease(code: string): boolean {
+    if (!this.enabled) return false;
+    const available = this.justReleased.has(code);
+    this.justReleased.delete(code);
+    return available;
+  }
+
+  isPressed(code: string): boolean {
+    return this.enabled && this.pressed.has(code);
+  }
+
   setEnabled(enabled: boolean): void {
     if (this.enabled === enabled) return;
     this.enabled = enabled;
@@ -59,12 +71,14 @@ export class InputManager {
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
     if (InputManager.isEditableTarget(event.target)) return;
+    if (this.enabled && this.pressed.has(event.code)) this.justReleased.add(event.code);
     this.pressed.delete(event.code);
   };
 
   private readonly clear = (): void => {
     this.pressed.clear();
     this.justPressed.clear();
+    this.justReleased.clear();
   };
 
   private static isEditableTarget(target: EventTarget | null): boolean {

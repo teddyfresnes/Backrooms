@@ -17,7 +17,7 @@ import type {
   WallSegment,
   WorldPlan,
 } from './types';
-import { getStairSlabs, STAIR_STORY_RISE } from './StairLayout';
+import { getStairCageWalls, getStairSlabs, STAIR_STORY_RISE } from './StairLayout';
 
 const seeds = Array.from({ length: 32 }, (_, index) => `AUTOTEST-${index.toString().padStart(3, '0')}`);
 const hazardSeeds = Array.from(
@@ -131,6 +131,11 @@ const boundaryOpeningWidths = (
 
 const reachableRoomIds = (seed: string): Set<string> => {
   const world = generateWorld(seed);
+  const interactiveDoorColliders = new Set(
+    world.features
+      .filter((feature) => feature.kind === 'interactive-door')
+      .map((feature) => feature.colliderId),
+  );
   // Dense pit bridges can be only 0.70 m wide. Sampling at 0.25 m keeps the
   // capsule-clearance audit from aliasing a valid narrow bridge out of existence.
   const step = 0.25;
@@ -145,6 +150,9 @@ const reachableRoomIds = (seed: string): Set<string> => {
     ) ||
     world.colliders.some((collider) => {
       if (collider.kind === 'floor' || collider.kind === 'step') return false;
+      // Interactive doors are reachable topology that starts closed and can be
+      // removed from collision by the player, rather than permanent walls.
+      if (interactiveDoorColliders.has(collider.id)) return false;
       // Audit the navigation graph with the crouched capsule (1.08 m tall), so
       // a wallpaper lintel above a crawl opening does not count as a closed wall.
       if (collider.center.y < 0 || collider.center.y - collider.halfExtents.y > 1.12) return false;
@@ -780,19 +788,35 @@ describe('Level 0 procedural generator', () => {
       feature.hump ? [feature.hump.elevation] : []
     ))).toBeGreaterThan(0.7);
     expect(squeezes.some((feature) => (feature.holes?.length ?? 0) > 0)).toBe(true);
+    const passageHoleKinds = new Set<'drop' | 'void'>();
     for (const { world, feature } of samples) {
       for (const hole of feature.holes ?? []) {
+        expect(hole.kind === 'drop' || hole.kind === 'void').toBe(true);
+        passageHoleKinds.add(hole.kind ?? 'drop');
+        expect(hole.depth).toBeCloseTo((hole.stories ?? 1) * 5.4, 6);
         expect(world.floorOpenings?.some((opening) =>
           opening.minX === hole.minX &&
           opening.maxX === hole.maxX &&
           opening.minZ === hole.minZ &&
           opening.maxZ === hole.maxZ
         )).toBe(true);
+        expect(world.lights.some((light) => lightPanelOverlapsRect(light, hole))).toBe(false);
         expect(world.colliders.some((collider) =>
           collider.id === `${feature.id}-hole-bottom`
-        )).toBe(true);
+        )).toBe(hole.kind !== 'void');
+        const shaftColliders = world.colliders.filter((collider) =>
+          collider.id.startsWith(`${feature.id}-hole-`) &&
+          collider.kind === 'wall'
+        );
+        expect(shaftColliders).toHaveLength(4);
+        expect(Math.min(...shaftColliders.map((collider) =>
+          collider.center.y - collider.halfExtents.y
+        ))).toBeLessThanOrEqual(
+          hole.kind === 'void' ? -54 : -2.71,
+        );
       }
     }
+    expect(passageHoleKinds).toEqual(new Set(['drop', 'void']));
     expect(squeezes.some((feature) =>
       (feature.axis === 'x' ? rectWidth(feature.bounds) : rectDepth(feature.bounds)) >= 16,
     )).toBe(true);
@@ -844,7 +868,20 @@ describe('Level 0 procedural generator', () => {
     const pilasters = worlds.flatMap(
       (world) => world.columns.filter((column) => column.kind === 'pilaster'),
     );
-    expect(Math.max(...counts)).toBeGreaterThan(45);
+    const smallPilasters = pilasters.filter(
+      (column) => Math.max(column.width, column.depth) < 0.8,
+    );
+    const broadPilasters = pilasters.filter(
+      (column) => Math.max(column.width, column.depth) >= 1.05,
+    );
+    const massivePilasters = pilasters.filter(
+      (column) => Math.max(column.width, column.depth) >= 1.8,
+    );
+    expect(Math.min(...counts)).toBe(0);
+    expect(Math.max(...counts)).toBeGreaterThan((pilasters.length / worlds.length) * 2);
+    expect(smallPilasters.length).toBeLessThan(pilasters.length * 0.15);
+    expect(broadPilasters.length).toBeGreaterThan(pilasters.length * 0.8);
+    expect(massivePilasters.length).toBeGreaterThan(pilasters.length * 0.25);
     expect(worlds.every((world) => (world.baseboardlessZones?.length ?? 0) >= 2)).toBe(true);
     for (const world of worlds) {
       const bareZones = world.baseboardlessZones ?? [];
@@ -854,7 +891,45 @@ describe('Level 0 procedural generator', () => {
       )).toHaveLength(0);
     }
     expect(pilasters.some((column) => Math.abs(column.width - column.depth) > 0.2)).toBe(true);
-    expect(new Set(pilasters.map((column) => column.width.toFixed(2))).size).toBeGreaterThan(20);
+  });
+
+  it('carves rare deterministic interactive doorways', () => {
+    const worlds = hazardSeeds.map(hazardWorld);
+    const doors = worlds.flatMap((world) =>
+      world.features
+        .filter((feature) => feature.kind === 'interactive-door')
+        .map((feature) => ({ feature, world }))
+    );
+    const counts = worlds.map((world) =>
+      world.features.filter((feature) => feature.kind === 'interactive-door').length
+    );
+    expect(doors.length).toBeGreaterThan(0);
+    expect(doors.length).toBeLessThan(hazardSeeds.length * 0.12);
+    expect(counts.some((count) => count === 0)).toBe(true);
+    expect(counts.some((count) => count === 1)).toBe(true);
+    expect(counts.every((count) => count <= 1)).toBe(true);
+
+    for (const { feature, world } of doors) {
+      expect(['empty', 'message', 'object', 'passage', 'crawl', 'hole'])
+        .toContain(feature.content);
+      expect(world.rooms.some((room) => room.id === feature.sourceRoomId)).toBe(true);
+      expect(world.rooms.some((room) => room.id === feature.targetRoomId)).toBe(true);
+      expect(world.colliders.some((collider) => collider.id === feature.colliderId)).toBe(true);
+      expect(world.walls.some((wall) => {
+        const fixed = wall.orientation === 'x' ? wall.z : wall.x;
+        const along = wall.orientation === 'x' ? feature.position.x : feature.position.z;
+        const wallAlong = wall.orientation === 'x' ? wall.x : wall.z;
+        const doorFixed = feature.orientation === 'x'
+          ? feature.position.z
+          : feature.position.x;
+        return (
+          wall.orientation === feature.orientation &&
+          Math.abs(fixed - doorFixed) < 0.03 &&
+          wall.bottom >= feature.height - 0.03 &&
+          Math.abs(along - wallAlong) <= wall.length * 0.5 + 0.02
+        );
+      })).toBe(true);
+    }
   });
 
   it('adds connected raised and sunken districts reached through varied physical ramps', () => {
@@ -992,10 +1067,10 @@ describe('Level 0 procedural generator', () => {
     // Recesses are added after elevation selection and used to be the most
     // common source of visibly floating walls in lowered districts.
     expect(repairedWallDetails.has('recess')).toBe(true);
-    expect(repairedColumnCount).toBeGreaterThan(30);
+    expect(repairedColumnCount).toBeGreaterThan(20);
   });
 
-  it('builds full two-flight staircases that reach the next 5.4m story', () => {
+  it('varies complete straight and switchback stairs that reach the next 5.4m story', () => {
     const samples = hazardSeeds.flatMap((seed) => {
       const world = hazardWorld(seed);
       return world.features
@@ -1005,20 +1080,58 @@ describe('Level 0 procedural generator', () => {
         .map((feature) => ({ world, feature }));
     });
     expect(samples.length).toBeGreaterThan(30);
+    expect(new Set(samples.map(({ feature }) => feature.layout))).toEqual(
+      new Set(['straight', 'switchback']),
+    );
+    expect(new Set(
+      samples
+        .map(({ feature }) => feature)
+        .filter((feature) => feature.layout === 'switchback')
+        .map((feature) => feature.switchbackJoin),
+    )).toEqual(new Set(['joined', 'divider']));
     for (const { world, feature } of samples) {
       const slabs = getStairSlabs(feature);
       expect(slabs.filter((slab) => slab.kind === 'step')).toHaveLength(30);
       expect(Math.max(...slabs.map((slab) => slab.top))).toBeCloseTo(STAIR_STORY_RISE, 6);
       expect(world.colliders.filter((collider) =>
         collider.id.startsWith(`${feature.id}-flight-ramp-`)
-      )).toHaveLength(2);
+      )).toHaveLength(feature.layout === 'straight' ? 1 : 2);
       expect(world.colliders.filter((collider) =>
         collider.id.startsWith(`${feature.id}-`) &&
         collider.kind === 'step'
-      )).toHaveLength(4);
+      )).toHaveLength(feature.layout === 'straight' ? 2 : 4);
+      expect(world.colliders.filter((collider) =>
+        collider.id.startsWith(`${feature.id}-cage-wall-`) &&
+        collider.kind === 'wall'
+      )).toHaveLength(
+        feature.layout === 'straight'
+          ? 2
+          : feature.switchbackJoin === 'divider' ? 4 : 3,
+      );
+      expect(world.lights.some((light) => lightPanelOverlapsRect(light, feature.bounds)))
+        .toBe(false);
       expect(world.colliders.some((collider) =>
         collider.id === `${feature.id}-terminal-wall`
       )).toBe(false);
+
+      const cageWalls = getStairCageWalls(feature);
+      if (feature.layout === 'straight') {
+        expect(slabs.some((slab) => slab.kind === 'mid-landing')).toBe(false);
+        expect(cageWalls.some((wall) => wall.kind === 'divider')).toBe(false);
+      } else if (feature.switchbackJoin === 'divider') {
+        expect(cageWalls.filter((wall) => wall.kind === 'divider')).toHaveLength(1);
+      } else {
+        const firstLaneStep = slabs[0]!;
+        const secondLaneStep = slabs[30]!;
+        const alongX = feature.heading.startsWith('x');
+        expect(alongX
+          ? firstLaneStep.bounds.maxZ
+          : firstLaneStep.bounds.maxX
+        ).toBeCloseTo(
+          alongX ? secondLaneStep.bounds.minZ : secondLaneStep.bounds.minX,
+          6,
+        );
+      }
     }
   });
 

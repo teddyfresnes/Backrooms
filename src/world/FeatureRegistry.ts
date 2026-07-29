@@ -53,10 +53,22 @@ export const createDefaultFeatureRegistry = (): FeatureRegistry => {
       if (candidates.length === 0) return null;
       const room = rng.pick(candidates);
       const center = rectCenter(room.bounds);
-      const heading = rng.pick(['x+', 'x-', 'z+', 'z-'] as const);
+      const layoutRng = rng.fork('layout');
+      const straightHeadings = [
+        ...(rectWidth(room.bounds) >= 16 ? ['x+', 'x-'] as const : []),
+        ...(rectDepth(room.bounds) >= 16 ? ['z+', 'z-'] as const : []),
+      ];
+      const layout = straightHeadings.length > 0 && layoutRng.chance(0.4)
+        ? 'straight'
+        : 'switchback';
+      const heading = layout === 'straight'
+        ? layoutRng.pick(straightHeadings)
+        : rng.pick(['x+', 'x-', 'z+', 'z-'] as const);
       const alongX = heading.startsWith('x');
-      const width = Math.min(alongX ? 8 : 5, rectWidth(room.bounds) - 4);
-      const depth = Math.min(alongX ? 5 : 8, rectDepth(room.bounds) - 4);
+      const longSpan = layout === 'straight' ? 12 : 8;
+      const crossSpan = layout === 'straight' ? 4.2 : 5;
+      const width = Math.min(alongX ? longSpan : crossSpan, rectWidth(room.bounds) - 4);
+      const depth = Math.min(alongX ? crossSpan : longSpan, rectDepth(room.bounds) - 4);
       return {
         kind: 'stair-socket',
         id: `stair-socket-${room.id}`,
@@ -68,6 +80,10 @@ export const createDefaultFeatureRegistry = (): FeatureRegistry => {
           maxZ: center.z + depth * 0.5,
         },
         heading,
+        layout,
+        ...(layout === 'switchback'
+          ? { switchbackJoin: layoutRng.chance(0.5) ? 'divider' as const : 'joined' as const }
+          : {}),
         baseY: 0,
       };
     },

@@ -4,7 +4,7 @@ import type { BiomeMaterialSets } from '../render/MaterialLibrary';
 import { bakeLightMapData } from '../render/BakedLighting';
 import type { BakedLightMapData } from '../render/BakedLighting';
 import { WorldView } from '../render/WorldBuilder';
-import type { WorldInteraction } from '../render/WorldBuilder';
+import type { DoorWorldInteraction, WorldInteraction } from '../render/WorldBuilder';
 import {
   INFINITE_CHUNK_SIZE,
   INFINITE_STORY_PITCH,
@@ -25,6 +25,7 @@ import type {
   Vec3Data,
   VisualBiome,
   WorldPlan,
+  DoorOpenMode,
 } from '../world/types';
 import { pointInRect, rectArea, rectCenter, rectDepth, rectWidth } from '../world/types';
 
@@ -390,6 +391,9 @@ export class WorldStream {
     for (const runtime of this.chunks.values()) {
       this.localPlayer.copy(playerPosition).sub(runtime.offset);
       runtime.view.update(time, this.localPlayer, delta);
+      for (const colliderId of runtime.view.consumePassableDoorColliderIds()) {
+        this.physics.setChunkColliderEnabled(runtime.key, colliderId, false);
+      }
     }
   }
 
@@ -404,6 +408,7 @@ export class WorldStream {
     this.localPlayer.copy(playerPosition).sub(runtime.offset);
     const interaction = runtime.view.getInteraction(this.localPlayer, lookDirection);
     if (!interaction) return null;
+    if (interaction.kind === 'door') return interaction;
     return {
       ...interaction,
       path: interaction.path.map((point) => ({
@@ -412,6 +417,18 @@ export class WorldStream {
         z: point.z + runtime.offset.z,
       })),
     };
+  }
+
+  openDoor(
+    playerPosition: THREE.Vector3,
+    interaction: DoorWorldInteraction,
+    mode: DoorOpenMode,
+  ): boolean {
+    if (!this.initialized || this.disposed) return false;
+    const runtime = this.runtimeAt(playerPosition);
+    if (!runtime) return false;
+    const colliderId = runtime.view.openDoor(interaction.doorId, mode);
+    return colliderId !== null;
   }
 
   findRoomAt(x: number, y: number, z: number): RoomKind {
@@ -473,18 +490,9 @@ export class WorldStream {
           : { ...placement.bounds });
         const room = runtime.plan.rooms.find((candidate) => candidate.id === placement.roomId);
         if (!room) continue;
-        if (placement.assetId === 'bike:low-poly') {
-          addTarget(
-            runtime,
-            'bicycle',
-            'velo abandonne',
-            ['bike', 'bicycle', 'velo', 'vélo'],
-            approachPointForRect(placement.bounds, room.bounds, 0.865),
-          );
-        }
         if (
-          placement.assetId === 'polyhaven:crt-television' ||
-          placement.assetId === 'furniture:televisionVintage'
+          placement.assetId === 'polyhaven:television_01' ||
+          placement.assetId === 'polyhaven:television_02'
         ) {
           addTarget(
             runtime,

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { MaterialSet } from './MaterialLibrary';
 import { WorldView, createOpenShaftWallGeometries } from './WorldBuilder';
 import type { GridPitFeature, RaisedZoneFeature, Rect, WorldPlan } from '../world/types';
+import { rectCenter, rectWidth } from '../world/types';
 
 const createTestMaterials = (): MaterialSet => {
   const wall = new THREE.MeshStandardMaterial();
@@ -41,22 +42,131 @@ const horizontalQuadBounds = (geometry: THREE.BufferGeometry): Rect[] => {
   return bounds;
 };
 
+const vertexUvsAt = (
+  geometry: THREE.BufferGeometry,
+  point: THREE.Vector3,
+  normal: THREE.Vector3,
+): THREE.Vector2[] => {
+  const positions = geometry.getAttribute('position');
+  const normals = geometry.getAttribute('normal');
+  const uvs = geometry.getAttribute('uv');
+  const matches: THREE.Vector2[] = [];
+  for (let index = 0; index < positions.count; index += 1) {
+    if (
+      Math.abs(positions.getX(index) - point.x) < 1e-5 &&
+      Math.abs(positions.getY(index) - point.y) < 1e-5 &&
+      Math.abs(positions.getZ(index) - point.z) < 1e-5 &&
+      Math.abs(normals.getX(index) - normal.x) < 1e-5 &&
+      Math.abs(normals.getY(index) - normal.y) < 1e-5 &&
+      Math.abs(normals.getZ(index) - normal.z) < 1e-5
+    ) {
+      matches.push(new THREE.Vector2(uvs.getX(index), uvs.getY(index)));
+    }
+  }
+  return matches;
+};
+
+describe('wallpaper mapping', () => {
+  it('keeps one UV field across adjacent and vertically stacked wall fragments', () => {
+    const wall = (
+      id: string,
+      x: number,
+      z: number,
+      bottom: number,
+    ): WorldPlan['walls'][number] => ({
+      id,
+      x,
+      z,
+      length: 4,
+      orientation: 'x',
+      bottom,
+      height: bottom === 0 ? 2.74 : 3,
+      thickness: 0.22,
+      tint: 1,
+      collision: true,
+      kind: 'wallpaper',
+    });
+    const plan: WorldPlan = {
+      version: 1,
+      seed: 'SEAMLESS-WALLPAPER-UV-AUDIT',
+      size: 16,
+      wallHeight: 2.74,
+      rooms: [],
+      walls: [
+        wall('base-left', -2, 0, 0),
+        wall('base-right', 2, 0, 0),
+        wall('upper-left', -2, 0, 2.74),
+        wall('upper-right', 2, 0, 2.74),
+        wall('parallel-plane', -2, 4, 0),
+      ],
+      columns: [],
+      solidMasses: [],
+      lights: [],
+      missingCeilingTiles: [],
+      features: [],
+      detailSockets: [],
+      colliders: [],
+      floorRects: [{ minX: -8, maxX: 8, minZ: -8, maxZ: 8 }],
+      spawn: { x: 0, y: 0.9, z: -4 },
+    };
+    const materials = createTestMaterials();
+    const view = new WorldView(plan, materials, {
+      bakedLightMaps: {
+        resolution: 1,
+        general: Uint8Array.of(255, 255, 255, 255),
+        ceiling: Uint8Array.of(255, 255, 255, 255),
+      },
+    });
+    const walls = view.group.getObjectByName('merged-wallpaper-walls') as THREE.Mesh;
+    const junctionUvs = vertexUvsAt(
+      walls.geometry,
+      new THREE.Vector3(0, 2.74, 0.11),
+      new THREE.Vector3(0, 0, 1),
+    );
+    expect(junctionUvs).toHaveLength(4);
+    for (const uv of junctionUvs.slice(1)) {
+      expect(uv.x).toBeCloseTo(junctionUvs[0]!.x, 5);
+      expect(uv.y).toBeCloseTo(junctionUvs[0]!.y, 5);
+    }
+
+    const firstPlaneUv = vertexUvsAt(
+      walls.geometry,
+      new THREE.Vector3(-4, 0, 0.11),
+      new THREE.Vector3(0, 0, 1),
+    )[0]!;
+    const parallelPlaneUv = vertexUvsAt(
+      walls.geometry,
+      new THREE.Vector3(-4, 0, 4.11),
+      new THREE.Vector3(0, 0, 1),
+    )[0]!;
+    expect(parallelPlaneUv.y).not.toBeCloseTo(firstPlaneUv.y, 5);
+
+    view.dispose();
+    Object.values(materials).forEach((material) => material.dispose());
+  });
+});
+
 describe('open pit shaft rendering', () => {
   it('uses capless vertical faces that remain below the walkable floor', () => {
     const bottom = -2.72;
     const top = -0.004;
+    const hole = { minX: -2, maxX: 3, minZ: 4, maxZ: 7 };
     const geometries = createOpenShaftWallGeometries(
-      { minX: -2, maxX: 3, minZ: 4, maxZ: 7 },
+      hole,
       bottom,
       top,
       0.72,
     );
 
     expect(geometries).toHaveLength(4);
-    for (const geometry of geometries) {
+    for (const [wallIndex, geometry] of geometries.entries()) {
       geometry.computeBoundingBox();
       expect(geometry.boundingBox?.min.y).toBeCloseTo(bottom, 5);
       expect(geometry.boundingBox?.max.y).toBeCloseTo(top, 5);
+      if (wallIndex === 0) {
+        expect(geometry.boundingBox?.min.z).toBeLessThan(hole.minZ);
+        expect(geometry.boundingBox?.max.z).toBeGreaterThan(hole.minZ);
+      }
       const normals = geometry.getAttribute('normal');
       const geometryIndex = geometry.getIndex();
       expect(geometryIndex).not.toBeNull();
@@ -87,6 +197,103 @@ describe('open pit shaft rendering', () => {
 
     for (const geometry of geometries) geometry.dispose();
     material.dispose();
+  });
+
+  it('overlaps inherited shaft corners without adding a visible rim', () => {
+    const opening = { minX: -2, maxX: 2, minZ: -1.5, maxZ: 1.5 };
+    const thickness = 0.12;
+    const center = {
+      x: (opening.minX + opening.maxX) * 0.5,
+      z: (opening.minZ + opening.maxZ) * 0.5,
+    };
+    const sides = [
+      {
+        suffix: 'north',
+        x: center.x,
+        z: opening.minZ,
+        length: opening.maxX - opening.minX + thickness * 2,
+        orientation: 'x' as const,
+      },
+      {
+        suffix: 'south',
+        x: center.x,
+        z: opening.maxZ,
+        length: opening.maxX - opening.minX + thickness * 2,
+        orientation: 'x' as const,
+      },
+      {
+        suffix: 'west',
+        x: opening.minX,
+        z: center.z,
+        length: opening.maxZ - opening.minZ + thickness * 2,
+        orientation: 'z' as const,
+      },
+      {
+        suffix: 'east',
+        x: opening.maxX,
+        z: center.z,
+        length: opening.maxZ - opening.minZ + thickness * 2,
+        orientation: 'z' as const,
+      },
+    ];
+    const plan: WorldPlan = {
+      version: 1,
+      seed: 'INHERITED-SHAFT-CORNER-AUDIT',
+      size: 16,
+      wallHeight: 2.74,
+      rooms: [],
+      walls: sides.map((side) => ({
+        id: `inherited-shaft-0-${side.suffix}`,
+        x: side.x,
+        z: side.z,
+        length: side.length,
+        orientation: side.orientation,
+        bottom: -2.66,
+        height: 8.14,
+        thickness,
+        tint: 0.96,
+        collision: true,
+        kind: 'wallpaper',
+      })),
+      columns: [],
+      solidMasses: [],
+      lights: [],
+      missingCeilingTiles: [],
+      features: [],
+      detailSockets: [],
+      colliders: [],
+      floorRects: [{ minX: -8, maxX: 8, minZ: -8, maxZ: 8 }],
+      ceilingOpenings: [opening],
+      spawn: { x: 0, y: 0.9, z: 0 },
+    };
+    const materials = createTestMaterials();
+    const view = new WorldView(plan, materials);
+    const shaft = view.group.getObjectByName('carpet-lined-through-shaft-walls') as THREE.Mesh;
+    const positions = shaft.geometry.getAttribute('position');
+    const normals = shaft.geometry.getAttribute('normal');
+    const northInnerXs: number[] = [];
+    const westInnerZs: number[] = [];
+    for (let index = 0; index < positions.count; index += 1) {
+      if (
+        normals.getZ(index) > 0.9 &&
+        Math.abs(positions.getZ(index) - (opening.minZ + thickness * 0.5)) < 1e-5
+      ) northInnerXs.push(positions.getX(index));
+      if (
+        normals.getX(index) > 0.9 &&
+        Math.abs(positions.getX(index) - (opening.minX + thickness * 0.5)) < 1e-5
+      ) westInnerZs.push(positions.getZ(index));
+    }
+    expect(Math.min(...northInnerXs)).toBeLessThan(opening.minX - thickness * 0.9);
+    expect(Math.min(...westInnerZs)).toBeLessThan(opening.minZ - thickness * 0.9);
+
+    const geometryIndex = shaft.geometry.getIndex();
+    expect(geometryIndex).not.toBeNull();
+    for (let offset = 0; offset < geometryIndex!.count; offset += 1) {
+      expect(Math.abs(normals.getY(geometryIndex!.getX(offset)))).toBeLessThan(1e-6);
+    }
+
+    view.dispose();
+    Object.values(materials).forEach((material) => material.dispose());
   });
 
   it('lines every pit depth with carpet and keeps intermediate storeys non-emissive', () => {
@@ -680,6 +887,15 @@ describe('coplanar ceiling repair prevention', () => {
       colliders: [],
       floorRects: [{ minX: -56, maxX: 56, minZ: -56, maxZ: 56 }],
       spawn: { x: 8, y: 0.9, z: 8 },
+      surfaceStyle: {
+        wallTint: 1,
+        floorTint: 1,
+        ceilingTint: 1,
+        wallPatternScale: 1,
+        floorPatternScale: 1,
+        ceilingPatternScale: 1.23,
+        floorQuarterTurn: false,
+      },
     };
     const materials = createTestMaterials();
     const whitePixel = Uint8Array.of(255, 255, 255, 255);
@@ -691,15 +907,33 @@ describe('coplanar ceiling repair prevention', () => {
       },
     });
     const repairs = view.group.getObjectByName('ceiling-lightmap-junction-repairs') as THREE.Mesh;
+    const ceiling = view.group.getObjectByName('office-drop-ceiling') as THREE.Mesh;
     expect(repairs).toBeDefined();
+    expect(ceiling).toBeDefined();
     const patches = horizontalQuadBounds(repairs.geometry);
+    const ceilingPatches = horizontalQuadBounds(ceiling.geometry);
     expect(patches.length).toBeGreaterThan(2);
+    const positions = repairs.geometry.getAttribute('position');
+    const uvs = repairs.geometry.getAttribute('uv');
+    for (let index = 0; index < positions.count; index += 1) {
+      expect(positions.getY(index)).toBeCloseTo(plan.wallHeight, 6);
+      expect(uvs.getX(index)).toBeCloseTo((positions.getX(index) / 2.4) * 1.23, 5);
+      expect(uvs.getY(index)).toBeCloseTo((positions.getZ(index) / 2.4) * 1.23, 5);
+    }
     for (let left = 0; left < patches.length; left += 1) {
       for (let right = left + 1; right < patches.length; right += 1) {
         const first = patches[left]!;
         const second = patches[right]!;
         const overlapX = Math.min(first.maxX, second.maxX) - Math.max(first.minX, second.minX);
         const overlapZ = Math.min(first.maxZ, second.maxZ) - Math.max(first.minZ, second.minZ);
+        expect(overlapX > 1e-5 && overlapZ > 1e-5).toBe(false);
+      }
+      for (const ceilingPatch of ceilingPatches) {
+        const repair = patches[left]!;
+        const overlapX = Math.min(repair.maxX, ceilingPatch.maxX)
+          - Math.max(repair.minX, ceilingPatch.minX);
+        const overlapZ = Math.min(repair.maxZ, ceilingPatch.maxZ)
+          - Math.max(repair.minZ, ceilingPatch.minZ);
         expect(overlapX > 1e-5 && overlapZ > 1e-5).toBe(false);
       }
     }
@@ -791,6 +1025,13 @@ describe('multi-room elevation districts', () => {
     expect(floors.geometry.boundingBox?.max.x).toBeGreaterThan(9.01);
     expect(retainingWalls.geometry.boundingBox?.min.y).toBeCloseTo(-1.25, 3);
     expect(retainingWalls.geometry.boundingBox?.max.y).toBeCloseTo(0, 3);
+    const retainingWallTopRay = new THREE.Raycaster(
+      new THREE.Vector3(7.5, 1, ramp.bounds.maxZ),
+      new THREE.Vector3(0, -1, 0),
+      0,
+      2,
+    );
+    expect(retainingWallTopRay.intersectObject(retainingWalls).length).toBeGreaterThan(0);
     expect(supportWalls.geometry.boundingBox?.min.y).toBeLessThan(-1.25);
     expect(supportWalls.geometry.boundingBox?.max.y).toBeGreaterThan(0);
     expect(supportWalls.geometry.boundingBox?.min.x).toBeCloseTo(-8, 3);
@@ -839,6 +1080,17 @@ describe('multi-room elevation districts', () => {
     const raisedSupports = raisedView.group.getObjectByName(
       'wallpaper-elevation-support-walls',
     ) as THREE.Mesh;
+    const raisedRetainingWalls = raisedView.group.getObjectByName(
+      'wallpaper-raised-platform-skirts',
+    ) as THREE.Mesh;
+    const raisedRetainingWallTopRay = new THREE.Raycaster(
+      new THREE.Vector3(7.5, 2, ramp.bounds.maxZ),
+      new THREE.Vector3(0, -1, 0),
+      0,
+      2,
+    );
+    expect(raisedRetainingWallTopRay.intersectObject(raisedRetainingWalls).length)
+      .toBeGreaterThan(0);
     const underRampRay = new THREE.Raycaster(
       new THREE.Vector3(8, 0.6, 0),
       new THREE.Vector3(-1, 0, 0),
@@ -850,11 +1102,104 @@ describe('multi-room elevation districts', () => {
     raisedView.dispose();
     Object.values(raisedMaterials).forEach((material) => material.dispose());
   });
+
+  it.each([
+    ['raised', 1],
+    ['sunken', -1],
+  ] as const)(
+    'moves only the baseboard face beside a %s platform',
+    (_label, elevation) => {
+      const platform = { minX: -3, maxX: 3, minZ: 0, maxZ: 3 };
+      const ramp = {
+        bounds: { minX: 3, maxX: 5, minZ: 0.75, maxZ: 2.25 },
+        axis: 'x' as const,
+        riseDirection: -1 as const,
+      };
+      const plan: WorldPlan = {
+        version: 1,
+        seed: `ONE-SIDED-BASEBOARD-${elevation}`,
+        size: 12,
+        wallHeight: 2.74,
+        rooms: [{
+          id: 'platform-room',
+          bounds: platform,
+          kind: 'office',
+          level: 0,
+          ceilingHeight: 2.74,
+          detailDensity: 0,
+        }],
+        walls: [{
+          id: 'platform-boundary-wall',
+          x: 0,
+          z: 0,
+          length: 6,
+          orientation: 'x',
+          bottom: 0,
+          height: 2.74,
+          thickness: 0.22,
+          tint: 1,
+          collision: true,
+          kind: 'wallpaper',
+        }],
+        columns: [],
+        solidMasses: [],
+        lights: [],
+        missingCeilingTiles: [],
+        features: [{
+          kind: 'raised-zone',
+          id: 'one-sided-elevation-zone',
+          roomId: 'platform-room',
+          bounds: { minX: -3, maxX: 5, minZ: 0, maxZ: 3 },
+          platformBounds: platform,
+          platformRects: [platform],
+          elevation,
+          ramp,
+          ramps: [ramp],
+        }],
+        detailSockets: [],
+        colliders: [],
+        floorRects: [{ minX: -6, maxX: 6, minZ: -6, maxZ: 6 }],
+        floorOpenings: [],
+        spawn: { x: 0, y: 0.865, z: -2 },
+      };
+      const materials = createTestMaterials();
+      const view = new WorldView(plan, materials);
+      const baseboards = view.group.getObjectByName('merged-baseboards') as THREE.Mesh;
+      const normalFloorY = 0.0575;
+      const changedFloorY = elevation + 0.0575;
+      const rayFromSide = (side: -1 | 1, y: number): number => {
+        const raycaster = new THREE.Raycaster(
+          new THREE.Vector3(0, y, side),
+          new THREE.Vector3(0, 0, -side),
+          0,
+          1,
+        );
+        return raycaster.intersectObject(baseboards).length;
+      };
+
+      expect(rayFromSide(-1, normalFloorY)).toBeGreaterThan(0);
+      expect(rayFromSide(-1, changedFloorY)).toBe(0);
+      expect(rayFromSide(1, changedFloorY)).toBeGreaterThan(0);
+      expect(rayFromSide(1, normalFloorY)).toBe(0);
+
+      view.dispose();
+      Object.values(materials).forEach((material) => material.dispose());
+    },
+  );
 });
 
 describe('crouch passages and inter-storey stairs', () => {
   it('renders a low physical roof and a stair flight reaching 5.4m', () => {
     const stairBounds = { minX: 0, maxX: 8, minZ: -2.5, maxZ: 2.5 };
+    const passageHole = {
+      minX: -6.8,
+      maxX: -5.7,
+      minZ: -0.75,
+      maxZ: 0.75,
+      depth: 5.4,
+      kind: 'drop' as const,
+      stories: 1,
+    };
     const plan: WorldPlan = {
       version: 1,
       seed: 'LOW-PASSAGE-STAIR-RENDER-AUDIT',
@@ -884,7 +1229,7 @@ describe('crouch passages and inter-storey stairs', () => {
           layout: 'dead-end',
           exitCount: 0,
           clearanceHeight: 1.4,
-          holes: [],
+          holes: [passageHole],
         },
         {
           kind: 'stair-socket',
@@ -897,8 +1242,23 @@ describe('crouch passages and inter-storey stairs', () => {
       ],
       detailSockets: [],
       colliders: [],
-      floorRects: [{ minX: -10, maxX: 10, minZ: -10, maxZ: 10 }],
-      floorOpenings: [],
+      floorRects: [
+        { minX: -10, maxX: 10, minZ: -10, maxZ: passageHole.minZ },
+        { minX: -10, maxX: 10, minZ: passageHole.maxZ, maxZ: 10 },
+        {
+          minX: -10,
+          maxX: passageHole.minX,
+          minZ: passageHole.minZ,
+          maxZ: passageHole.maxZ,
+        },
+        {
+          minX: passageHole.maxX,
+          maxX: 10,
+          minZ: passageHole.minZ,
+          maxZ: passageHole.maxZ,
+        },
+      ],
+      floorOpenings: [passageHole],
       stairCeilingOpenings: [stairBounds],
       spawn: { x: -5, y: 0.865, z: 0 },
     };
@@ -912,10 +1272,20 @@ describe('crouch passages and inter-storey stairs', () => {
       },
     });
     const roof = view.group.getObjectByName('low-passage-ceiling-masses') as THREE.Mesh;
+    const passageShaft = view.group.getObjectByName('low-passage-hole-walls') as THREE.Mesh;
+    const passageLowerFloor = view.group.getObjectByName(
+      'low-passage-lower-floors',
+    ) as THREE.Mesh;
+    const passageLowerWalls = view.group.getObjectByName(
+      'low-passage-lower-walls',
+    ) as THREE.Mesh;
+    const passageLowerCeiling = view.group.getObjectByName(
+      'low-passage-lower-ceilings',
+    ) as THREE.Mesh;
     const stairs = view.group.getObjectByName('inter-storey-stair-flights') as THREE.Mesh;
     const stairBodies = view.group.getObjectByName('inter-storey-stair-bodies') as THREE.Mesh;
     const stairCage = view.group.getObjectByName('inter-storey-stair-cages') as THREE.Mesh;
-    const stairLights = view.group.getObjectByName('inter-storey-stair-lights') as THREE.Mesh;
+    const stairLights = view.group.getObjectByName('inter-storey-stair-lights');
     const upperFloor = view.group.getObjectByName('upper-stair-preview-floor') as THREE.Mesh;
     const upperUnderside = view.group.getObjectByName(
       'upper-stair-preview-floor-underside',
@@ -927,42 +1297,61 @@ describe('crouch passages and inter-storey stairs', () => {
       'upper-stair-preview-ceiling',
     ) as THREE.Mesh;
     expect(roof).toBeDefined();
+    expect(passageShaft).toBeDefined();
+    expect(passageLowerFloor).toBeDefined();
+    expect(passageLowerWalls).toBeDefined();
+    expect(passageLowerCeiling).toBeDefined();
+    expect(view.group.getObjectByName('low-passage-hole-bottoms')).toBeUndefined();
     expect(stairs).toBeDefined();
     expect(stairBodies).toBeDefined();
     expect(stairCage).toBeDefined();
-    expect(stairLights).toBeDefined();
+    expect(stairLights).toBeUndefined();
     expect(upperFloor).toBeDefined();
     expect(upperUnderside).toBeDefined();
     expect(upperWalls).toBeDefined();
     expect(upperCeiling).toBeDefined();
     expect((roof.material as THREE.Material).name).toBe('test-wall-baked');
+    expect((passageShaft.material as THREE.Material).name).toBe('lower-storey-wallpaper');
+    expect((passageLowerFloor.material as THREE.Material).name).toBe('lower-storey-carpet');
     expect((stairBodies.material as THREE.Material).name).toBe('test-wall-baked');
     expect((upperFloor.material as THREE.Material).name).toBe('preview-carpet');
     expect((upperWalls.material as THREE.Material).name).toBe('preview-wallpaper');
     roof.geometry.computeBoundingBox();
+    passageShaft.geometry.computeBoundingBox();
+    passageLowerFloor.geometry.computeBoundingBox();
+    passageLowerWalls.geometry.computeBoundingBox();
+    passageLowerCeiling.geometry.computeBoundingBox();
     stairs.geometry.computeBoundingBox();
     stairCage.geometry.computeBoundingBox();
-    stairLights.geometry.computeBoundingBox();
     upperFloor.geometry.computeBoundingBox();
     upperUnderside.geometry.computeBoundingBox();
+    upperWalls.geometry.computeBoundingBox();
     upperCeiling.geometry.computeBoundingBox();
     expect(roof.geometry.boundingBox?.min.y).toBeCloseTo(1.4, 5);
     expect(roof.geometry.boundingBox?.min.x).toBeLessThan(-8.01);
     expect(roof.geometry.boundingBox?.max.x).toBeGreaterThan(-2.99);
     expect(roof.geometry.boundingBox?.min.z).toBeLessThan(-2.01);
     expect(roof.geometry.boundingBox?.max.z).toBeGreaterThan(2.01);
+    expect(passageShaft.geometry.boundingBox?.min.y).toBeCloseTo(-2.72, 5);
+    expect(passageShaft.geometry.boundingBox?.max.y).toBeCloseTo(0.012, 5);
+    expect(passageLowerFloor.geometry.boundingBox?.min.y).toBeCloseTo(-5.4, 5);
+    expect(passageLowerWalls.geometry.boundingBox?.min.y).toBeCloseTo(-5.4, 5);
+    expect(passageLowerWalls.geometry.boundingBox?.max.y).toBeCloseTo(-2.66, 5);
+    expect(passageLowerCeiling.geometry.boundingBox?.min.y).toBeCloseTo(-2.66, 5);
+    const passageCenter = rectCenter(passageHole);
+    const topSeamRay = new THREE.Raycaster(
+      new THREE.Vector3(passageCenter.x, 0.006, passageCenter.z),
+      new THREE.Vector3(-1, 0, 0),
+      0,
+      rectWidth(passageHole) * 0.5 + 0.08,
+    );
+    expect(topSeamRay.intersectObject(passageShaft).length).toBeGreaterThan(0);
     expect(stairs.geometry.boundingBox?.max.y).toBeCloseTo(5.4012, 5);
     expect(stairCage.geometry.boundingBox?.max.x).toBeGreaterThan(8.15);
-    expect(
-      (stairLights.geometry.boundingBox?.max.y ?? 0) -
-      (stairLights.geometry.boundingBox?.min.y ?? 0),
-    ).toBeGreaterThan(3);
-    expect(
-      (stairLights.geometry.boundingBox?.max.z ?? 0) -
-      (stairLights.geometry.boundingBox?.min.z ?? 0),
-    ).toBeLessThan(0.01);
     expect(upperFloor.geometry.boundingBox?.min.y).toBeCloseTo(5.4, 5);
     expect(upperUnderside.geometry.boundingBox?.min.y).toBeCloseTo(5.28, 5);
+    expect(upperWalls.geometry.boundingBox?.min.y).toBeCloseTo(2.74, 5);
+    expect(upperWalls.geometry.boundingBox?.max.y).toBeCloseTo(8.14, 5);
     expect(upperCeiling.geometry.boundingBox?.min.y).toBeCloseTo(8.14, 5);
     const cageIndex = stairCage.geometry.getIndex();
     const cageNormals = stairCage.geometry.getAttribute('normal');
@@ -975,6 +1364,36 @@ describe('crouch passages and inter-storey stairs', () => {
 
     view.dispose();
     Object.values(materials).forEach((material) => material.dispose());
+
+    const voidHole = {
+      ...passageHole,
+      depth: 64.8,
+      kind: 'void' as const,
+      stories: 12,
+    };
+    const voidMaterials = createTestMaterials();
+    const voidPlan: WorldPlan = {
+      ...plan,
+      seed: 'LOW-PASSAGE-VOID-RENDER-AUDIT',
+      features: plan.features.map((feature) =>
+        feature.kind === 'squeeze-view'
+          ? { ...feature, holes: [voidHole] }
+          : feature
+      ),
+      floorOpenings: [voidHole],
+    };
+    const voidView = new WorldView(voidPlan, voidMaterials);
+    const voidShaft = voidView.group.getObjectByName(
+      'low-passage-hole-walls',
+    ) as THREE.Mesh;
+    voidShaft.geometry.computeBoundingBox();
+    expect(voidShaft.geometry.boundingBox?.min.y).toBeLessThan(-70);
+    expect(voidShaft.geometry.boundingBox?.max.y).toBeCloseTo(0.012, 5);
+    expect(voidView.group.getObjectByName('low-passage-lower-floors')).toBeUndefined();
+    expect(voidView.group.getObjectByName('low-passage-hole-bottoms')).toBeUndefined();
+
+    voidView.dispose();
+    Object.values(voidMaterials).forEach((material) => material.dispose());
   });
 
   it('renders a complete lower-room preview around an inherited stair', () => {
@@ -1036,7 +1455,7 @@ describe('crouch passages and inter-storey stairs', () => {
     expect(stairs.geometry.boundingBox?.max.y).toBeCloseTo(0.0012, 5);
     expect(lowerFloor.geometry.boundingBox?.min.y).toBeCloseTo(-5.4, 5);
     expect(lowerWalls.geometry.boundingBox?.min.y).toBeCloseTo(-5.4, 5);
-    expect(lowerWalls.geometry.boundingBox?.max.y).toBeCloseTo(-2.66, 5);
+    expect(lowerWalls.geometry.boundingBox?.max.y).toBeCloseTo(0, 5);
     expect(lowerCeiling.geometry.boundingBox?.min.y).toBeCloseTo(-2.66, 5);
 
     view.dispose();

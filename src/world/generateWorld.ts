@@ -1,9 +1,17 @@
 import { createDefaultFeatureRegistry } from './FeatureRegistry';
+import {
+  getPassageHoleAbyssBottom,
+  getPassageHolePreviewBounds,
+  PASSAGE_HOLE_LOWER_CEILING_Y,
+  PASSAGE_HOLE_LOWER_FLOOR_Y,
+} from './PassageHoleLayout';
 import { SeededRandom } from './SeededRandom';
-import { getStairCollisionShapes, STAIR_STORY_RISE } from './StairLayout';
+import { getStairCageWalls, getStairCollisionShapes } from './StairLayout';
 import type {
   CeilingZone,
+  DoorRoomContent,
   GridPitFeature,
+  InteractiveDoorFeature,
   LightSlot,
   PassageHole,
   PassageHump,
@@ -29,6 +37,7 @@ const MAX_STRUCTURAL_WALL_THICKNESS = 2.8;
 const MIN_ROOM_SPAN = 7;
 const PIT_STORY_PITCH = 5.4;
 export const MAX_PIT_STORIES = 12;
+const PASSAGE_VOID_PRESENCE_RATE = 0.12;
 export const PIT_PRESENCE_RATE = 0.12;
 export const UNLIT_ZONE_PRESENCE_RATE = 0.09;
 const VISTA_LENGTH = 58;
@@ -81,6 +90,17 @@ export const worldMaxPitStories = (seed: string): number => {
   if (voidRng.chance(0.055)) stories = Math.max(stories, voidRng.int(8, MAX_PIT_STORIES));
   return stories;
 };
+
+const worldMayHavePassageVoid = (seed: string): boolean => {
+  const rootRng = new SeededRandom(`${seed}:v${GENERATOR_VERSION}`);
+  return rootRng.fork('feature:squeeze-hole:void').chance(PASSAGE_VOID_PRESENCE_RATE);
+};
+
+export const worldMaxShaftStories = (seed: string): number =>
+  Math.max(
+    worldMaxPitStories(seed),
+    worldMayHavePassageVoid(seed) ? MAX_PIT_STORIES : 0,
+  );
 
 const addColliderForWall = (
   colliders: StaticCollider[],
@@ -2036,50 +2056,61 @@ const addPilasterSeries = (
   const span = longX ? rectWidth(room.bounds) : rectDepth(room.bounds);
   if (span < 12) return;
   const spacing = profile === 'sparse'
-    ? rng.float(9, 15)
+    ? rng.float(12, 19)
     : profile === 'regular'
-      ? rng.float(5.8, 10)
+      ? rng.float(8, 13)
       : profile === 'dense'
-        ? rng.float(2.2, 4.1)
-        : rng.float(3.2, 6.8);
+        ? rng.float(5.2, 8.2)
+        : rng.float(7, 12);
   const bothSides = rng.chance(
     profile === 'dense'
-      ? 0.82
+      ? 0.58
       : profile === 'clustered'
-        ? 0.68
+        ? 0.48
         : room.kind === 'corridor'
-          ? 0.62
-          : 0.32,
+          ? 0.38
+          : 0.2,
   );
   const firstSide = rng.chance(0.5) ? -1 : 1;
   const sides = bothSides ? [-1, 1] as const : [firstSide] as const;
   const basePositions: number[] = [];
   let cursor = -span * 0.5 + rng.float(0.7, spacing);
-  while (cursor <= span * 0.5 - 0.7 && basePositions.length < 36) {
+  while (cursor <= span * 0.5 - 0.7 && basePositions.length < 18) {
     if (profile === 'clustered') {
-      const clusterSize = rng.int(2, 4);
-      const clusterSpacing = rng.float(0.65, 1.45);
+      const clusterSize = rng.int(2, 3);
+      const clusterSpacing = rng.float(2.1, 3.4);
       for (let member = 0; member < clusterSize; member += 1) {
         const along = cursor + (member - (clusterSize - 1) * 0.5) * clusterSpacing;
         if (Math.abs(along) <= span * 0.5 - 0.6) basePositions.push(along);
       }
-      cursor += spacing * rng.float(1.15, 1.85);
+      cursor += spacing * rng.float(1.35, 2);
     } else {
       basePositions.push(cursor + rng.float(-spacing * 0.18, spacing * 0.18));
       cursor += spacing * rng.float(0.78, 1.24);
     }
   }
-  const profiles = basePositions.map((along) => ({
-    along,
-    width: rng.float(
-        profile === 'dense' ? 0.3 : 0.42,
-        profile === 'clustered' ? 1.45 : profile === 'dense' ? 1.15 : 0.9,
-      ),
-    projection: rng.float(
-        profile === 'dense' ? 0.22 : 0.28,
-        profile === 'clustered' ? 0.92 : 0.68,
-      ),
-  }));
+  const profiles = basePositions.map((along, index) => {
+    const size = profile === 'clustered' && index % 3 === 2
+      ? 'subtle' as const
+      : rng.weighted([
+          { value: 'subtle' as const, weight: 0.1 },
+          { value: 'broad' as const, weight: 0.62 },
+          { value: 'massive' as const, weight: 0.28 },
+        ]);
+    return {
+      along,
+      width: size === 'subtle'
+        ? rng.float(0.38, 0.68)
+        : size === 'broad'
+          ? rng.float(1.05, 1.75)
+          : rng.float(1.8, 2.75),
+      projection: size === 'subtle'
+        ? rng.float(0.16, 0.28)
+        : size === 'broad'
+          ? rng.float(0.42, 0.72)
+          : rng.float(0.68, 1.08),
+    };
+  });
   for (const side of sides) {
     for (const placement of profiles) {
       const { along, width, projection } = placement;
@@ -2089,7 +2120,7 @@ const addPilasterSeries = (
       const z = longX
         ? (side < 0 ? room.bounds.minZ + projection * 0.5 : room.bounds.maxZ - projection * 0.5)
         : rectCenter(room.bounds).z + along;
-      if (portalNear(plan, x, z, 1.35)) continue;
+      if (portalNear(plan, x, z, 1.25 + Math.max(width, projection) * 0.55)) continue;
       const column = {
         x: quantize(x, 0.05),
         z: quantize(z, 0.05),
@@ -2208,8 +2239,8 @@ const addSymmetricCornerPosts = (
 ): void => {
   // Let the posts overlap the boundary skin very slightly. Exact face-to-face
   // contact can leave a hairline seam after floating-point transforms.
-  const size = 0.68;
-  const inset = 0.32;
+  const size = 0.9;
+  const inset = 0.42;
   const positions = [
     { x: room.bounds.minX + inset, z: room.bounds.minZ + inset },
     { x: room.bounds.maxX - inset, z: room.bounds.minZ + inset },
@@ -2232,7 +2263,7 @@ const addSymmetricCornerPosts = (
     plan.colliders.push({
       id: `formal-corner-${room.id}-${index}`,
       center: { ...position, y: room.ceilingHeight * 0.5 },
-      halfExtents: { x: inset, y: room.ceilingHeight * 0.5, z: inset },
+      halfExtents: { x: size * 0.5, y: room.ceilingHeight * 0.5, z: size * 0.5 },
       kind: 'column',
     });
   }
@@ -2252,9 +2283,9 @@ const addFormalSymmetry = (
   const longSpan = longX ? width : depth;
   const crossSpan = longX ? depth : width;
   const style = rng.weighted([
-    { value: 'empty' as const, weight: 0.32 },
-    { value: 'paired-columns' as const, weight: 0.4 },
-    { value: 'pilaster-bays' as const, weight: 0.28 },
+    { value: 'empty' as const, weight: 0.28 },
+    { value: 'paired-columns' as const, weight: 0.5 },
+    { value: 'pilaster-bays' as const, weight: 0.22 },
   ]);
   if (style === 'empty' || longSpan < 16 || crossSpan < 10) return;
 
@@ -2263,8 +2294,8 @@ const addFormalSymmetry = (
     ? [crossSpan * 0.18]
     : [crossSpan * 0.5 - rng.float(0.28, 0.48)];
   const columnKind = style === 'pilaster-bays' ? 'pilaster' as const : 'column' as const;
-  const widthAlong = style === 'pilaster-bays' ? rng.float(0.55, 0.9) : rng.float(0.72, 1.18);
-  const widthAcross = style === 'pilaster-bays' ? rng.float(0.3, 0.48) : rng.float(0.72, 1.18);
+  const widthAlong = style === 'pilaster-bays' ? rng.float(1.25, 2.2) : rng.float(1.15, 2.1);
+  const widthAcross = style === 'pilaster-bays' ? rng.float(0.45, 0.76) : rng.float(1.05, 2);
 
   for (let pair = 0; pair < pairCount; pair += 1) {
     const distance = longSpan * 0.43 * ((pair + 1) / pairCount);
@@ -2325,7 +2356,7 @@ const addColumnsAndPartialWalls = (
     ? districtRng.pick(districtCandidates)
     : undefined;
   const denseCenter = denseAnchor ? rectCenter(denseAnchor.bounds) : undefined;
-  const denseRadius = districtRng.float(17, 28);
+  const denseRadius = districtRng.float(11, 18);
   for (const room of world.rooms) {
     if (reservedRoomIds.has(room.id)) continue;
     const rng = rootRng.fork(`architecture:${room.id}`);
@@ -2344,35 +2375,37 @@ const addColumnsAndPartialWalls = (
       ? 'none'
       : inDenseDistrict
         ? rng.weighted([
-            { value: 'dense' as const, weight: 0.58 },
-            { value: 'clustered' as const, weight: 0.27 },
-            { value: 'regular' as const, weight: 0.15 },
+            { value: 'none' as const, weight: 0.08 },
+            { value: 'sparse' as const, weight: 0.08 },
+            { value: 'regular' as const, weight: 0.2 },
+            { value: 'dense' as const, weight: 0.34 },
+            { value: 'clustered' as const, weight: 0.3 },
           ])
         : rng.weighted([
-            { value: 'none' as const, weight: 0.5 },
-            { value: 'sparse' as const, weight: 0.28 },
-            { value: 'regular' as const, weight: 0.18 },
-            { value: 'clustered' as const, weight: 0.04 },
+            { value: 'none' as const, weight: 0.82 },
+            { value: 'sparse' as const, weight: 0.12 },
+            { value: 'regular' as const, weight: 0.05 },
+            { value: 'clustered' as const, weight: 0.01 },
           ]);
 
     if (room.kind === 'open-hall' && width > 12 && depth > 12) {
       const columnStyle = rng.weighted([
-        { value: 'none' as const, weight: 0.29 },
-        { value: 'field' as const, weight: 0.39 },
-        { value: 'sparse' as const, weight: 0.16 },
-        { value: 'dense' as const, weight: 0.1 },
-        { value: 'clustered' as const, weight: 0.06 },
+        { value: 'none' as const, weight: 0.36 },
+        { value: 'monumental' as const, weight: 0.28 },
+        { value: 'field' as const, weight: 0.22 },
+        { value: 'sparse' as const, weight: 0.09 },
+        { value: 'clustered' as const, weight: 0.05 },
       ]);
       const sparse = columnStyle === 'sparse';
-      const dense = columnStyle === 'dense';
+      const monumental = columnStyle === 'monumental';
       const clustered = columnStyle === 'clustered';
       const spacingX = rng.float(
-        sparse ? 8.5 : dense ? 3.7 : clustered ? 4.3 : 5.2,
-        sparse ? 12 : dense ? 5.2 : clustered ? 7.2 : 8.4,
+        monumental ? 10 : sparse ? 9 : clustered ? 7 : 6.5,
+        monumental ? 17 : sparse ? 14 : clustered ? 12 : 10,
       );
       const spacingZ = rng.float(
-        sparse ? 8.5 : dense ? 3.7 : clustered ? 4.3 : 5.2,
-        sparse ? 12 : dense ? 5.2 : clustered ? 7.2 : 8.4,
+        monumental ? 10 : sparse ? 9 : clustered ? 7 : 6.5,
+        monumental ? 17 : sparse ? 14 : clustered ? 12 : 10,
       );
       const center = rectCenter(room.bounds);
       const clearCross = columnStyle !== 'none' && rng.chance(0.42);
@@ -2388,7 +2421,7 @@ const addColumnsAndPartialWalls = (
           z += spacingZ * rng.float(0.8, 1.22)
         ) {
           if (
-            rng.chance(sparse ? 0.34 : clustered ? 0.26 : dense ? 0.06 : 0.12) ||
+            rng.chance(sparse ? 0.36 : clustered ? 0.42 : monumental ? 0.08 : 0.16) ||
             Math.hypot(x - world.spawn.x, z - world.spawn.z) < 3.4 ||
             portalNear(plan, x, z, 2.2) ||
             (clearCross && (Math.abs(x - center.x) < 2.1 || Math.abs(z - center.z) < 2.1))
@@ -2396,8 +2429,26 @@ const addColumnsAndPartialWalls = (
           const column = {
             x: quantize(x + rng.float(clustered ? -0.85 : -0.38, clustered ? 0.85 : 0.38), 0.05),
             z: quantize(z + rng.float(clustered ? -0.85 : -0.38, clustered ? 0.85 : 0.38), 0.05),
-            width: rng.float(dense ? 0.42 : 0.65, width > 35 ? 2.05 : 1.45),
-            depth: rng.float(dense ? 0.38 : 0.62, depth > 35 ? 2.35 : 1.65),
+            width: rng.float(
+              monumental ? 1.9 : sparse ? 0.62 : clustered ? 0.78 : 1.1,
+              monumental
+                ? Math.max(2.2, Math.min(3.8, width * 0.09))
+                : clustered
+                  ? 2.8
+                  : width > 35
+                    ? 2.65
+                    : 2.15,
+            ),
+            depth: rng.float(
+              monumental ? 1.8 : sparse ? 0.56 : clustered ? 0.72 : 1.05,
+              monumental
+                ? Math.max(2.15, Math.min(4.2, depth * 0.1))
+                : clustered
+                  ? 3.1
+                  : depth > 35
+                    ? 2.9
+                    : 2.35,
+            ),
             height: room.ceilingHeight,
             tint: rng.float(0.82, 1.07),
             kind: 'column' as const,
@@ -2640,6 +2691,10 @@ const addSqueezeViews = (
   rootRng: SeededRandom,
 ): void => {
   const rng = rootRng.fork('feature:squeeze-views');
+  const voidPassageEnabled = rootRng
+    .fork('feature:squeeze-hole:void')
+    .chance(PASSAGE_VOID_PRESENCE_RATE);
+  let voidPassageAssigned = false;
   if (!rng.chance(0.76)) return;
   const candidates = rng.shuffle(
     world.rooms.filter((room) => {
@@ -2892,8 +2947,13 @@ const addSqueezeViews = (
           };
     const longMinimum = alongX ? bounds.minX : bounds.minZ;
     const longMaximum = alongX ? bounds.maxX : bounds.maxZ;
+    const reserveForVoid =
+      voidPassageEnabled &&
+      !voidPassageAssigned &&
+      length >= 9 &&
+      corridorWidth >= 2.5;
     let hump: PassageHump | undefined;
-    if (length >= 10.5 && roomRng.chance(0.52)) {
+    if (!reserveForVoid && length >= 10.5 && roomRng.chance(0.52)) {
       const platformLength = quantize(roomRng.float(1.8, Math.min(4.8, length * 0.25)), 0.05);
       const maximumRampRun = Math.max(
         1.8,
@@ -3002,60 +3062,65 @@ const addSqueezeViews = (
     });
 
     const passageHoles: PassageHole[] = [];
-    if (!hump && length >= 9 && corridorWidth >= 2.5 && roomRng.chance(0.2)) {
+    if (
+      !hump &&
+      length >= 9 &&
+      corridorWidth >= 2.5 &&
+      (reserveForVoid || roomRng.chance(0.2))
+    ) {
       const holeLength = roomRng.float(0.95, Math.min(1.65, length * 0.14));
       const holeCenter = longMinimum + length * roomRng.float(0.42, 0.68);
       const crossPadding = corridorWidth * roomRng.float(0.17, 0.25);
-      const hole = {
+      const kind = reserveForVoid ? 'void' as const : 'drop' as const;
+      const stories = kind === 'void' ? MAX_PIT_STORIES : 1;
+      const hole: PassageHole = {
         ...rectAlong(holeCenter - holeLength * 0.5, holeCenter + holeLength * 0.5, crossPadding),
-        depth: quantize(roomRng.float(0.45, 0.78), 0.01),
+        depth: stories * PIT_STORY_PITCH,
+        kind,
+        stories,
       };
       passageHoles.push(hole);
-      world.colliders.push({
-        id: `${featureId}-hole-bottom`,
-        center: {
-          x: rectCenter(hole).x,
-          y: -hole.depth - 0.1,
-          z: rectCenter(hole).z,
-        },
-        halfExtents: {
-          x: rectWidth(hole) * 0.5,
-          y: 0.1,
-          z: rectDepth(hole) * 0.5,
-        },
-        kind: 'floor',
-      });
-      const shaftThickness = 0.1;
-      const shaftHeight = hole.depth;
+      if (kind === 'void') voidPassageAssigned = true;
+
+      const shaftThickness = 0.12;
+      const shaftTop = 0;
+      const shaftBottom = kind === 'void'
+        ? getPassageHoleAbyssBottom(hole)
+        : PASSAGE_HOLE_LOWER_CEILING_Y - 0.06;
+      const shaftHeight = shaftTop - shaftBottom;
       for (const [side, collider] of [
         ['north', {
           x: rectCenter(hole).x,
-          z: hole.minZ - shaftThickness * 0.5,
-          halfX: rectWidth(hole) * 0.5,
+          z: hole.minZ,
+          halfX: rectWidth(hole) * 0.5 + shaftThickness,
           halfZ: shaftThickness * 0.5,
         }],
         ['south', {
           x: rectCenter(hole).x,
-          z: hole.maxZ + shaftThickness * 0.5,
-          halfX: rectWidth(hole) * 0.5,
+          z: hole.maxZ,
+          halfX: rectWidth(hole) * 0.5 + shaftThickness,
           halfZ: shaftThickness * 0.5,
         }],
         ['west', {
-          x: hole.minX - shaftThickness * 0.5,
+          x: hole.minX,
           z: rectCenter(hole).z,
           halfX: shaftThickness * 0.5,
-          halfZ: rectDepth(hole) * 0.5,
+          halfZ: rectDepth(hole) * 0.5 + shaftThickness,
         }],
         ['east', {
-          x: hole.maxX + shaftThickness * 0.5,
+          x: hole.maxX,
           z: rectCenter(hole).z,
           halfX: shaftThickness * 0.5,
-          halfZ: rectDepth(hole) * 0.5,
+          halfZ: rectDepth(hole) * 0.5 + shaftThickness,
         }],
       ] as const) {
         world.colliders.push({
           id: `${featureId}-hole-${side}`,
-          center: { x: collider.x, y: -shaftHeight * 0.5, z: collider.z },
+          center: {
+            x: collider.x,
+            y: shaftBottom + shaftHeight * 0.5,
+            z: collider.z,
+          },
           halfExtents: {
             x: collider.halfX,
             y: shaftHeight * 0.5,
@@ -3063,6 +3128,64 @@ const addSqueezeViews = (
           },
           kind: 'wall',
         });
+      }
+
+      if (kind === 'drop') {
+        const previewBounds = getPassageHolePreviewBounds(hole, world.size);
+        world.colliders.push({
+          id: `${featureId}-hole-bottom`,
+          center: {
+            x: rectCenter(previewBounds).x,
+            y: PASSAGE_HOLE_LOWER_FLOOR_Y - 0.12,
+            z: rectCenter(previewBounds).z,
+          },
+          halfExtents: {
+            x: rectWidth(previewBounds) * 0.5,
+            y: 0.12,
+            z: rectDepth(previewBounds) * 0.5,
+          },
+          kind: 'floor',
+        });
+        const lowerWallHeight =
+          PASSAGE_HOLE_LOWER_CEILING_Y - PASSAGE_HOLE_LOWER_FLOOR_Y;
+        const lowerWallY = PASSAGE_HOLE_LOWER_FLOOR_Y + lowerWallHeight * 0.5;
+        for (const [side, collider] of [
+          ['north', {
+            x: rectCenter(previewBounds).x,
+            z: previewBounds.minZ,
+            halfX: rectWidth(previewBounds) * 0.5 + shaftThickness,
+            halfZ: shaftThickness * 0.5,
+          }],
+          ['south', {
+            x: rectCenter(previewBounds).x,
+            z: previewBounds.maxZ,
+            halfX: rectWidth(previewBounds) * 0.5 + shaftThickness,
+            halfZ: shaftThickness * 0.5,
+          }],
+          ['west', {
+            x: previewBounds.minX,
+            z: rectCenter(previewBounds).z,
+            halfX: shaftThickness * 0.5,
+            halfZ: rectDepth(previewBounds) * 0.5 + shaftThickness,
+          }],
+          ['east', {
+            x: previewBounds.maxX,
+            z: rectCenter(previewBounds).z,
+            halfX: shaftThickness * 0.5,
+            halfZ: rectDepth(previewBounds) * 0.5 + shaftThickness,
+          }],
+        ] as const) {
+          world.colliders.push({
+            id: `${featureId}-lower-preview-${side}`,
+            center: { x: collider.x, y: lowerWallY, z: collider.z },
+            halfExtents: {
+              x: collider.halfX,
+              y: lowerWallHeight * 0.5,
+              z: collider.halfZ,
+            },
+            kind: 'wall',
+          });
+        }
       }
     }
 
@@ -3250,6 +3373,249 @@ const boundaryWallCandidates = (
     }
   }
   return candidates;
+};
+
+const addInteractiveDoors = (
+  plan: MutablePlan,
+  world: WorldPlan,
+  rootRng: SeededRandom,
+): InteractiveDoorFeature[] => {
+  const rng = rootRng.fork('feature:interactive-doors');
+  const spawnRoom = world.rooms.find((room) =>
+    pointInRect(world.spawn.x, world.spawn.z, room.bounds)
+  );
+  const elevatedRoomIds = new Set(
+    world.features
+      .filter((feature): feature is RaisedZoneFeature => feature.kind === 'raised-zone')
+      .flatMap((feature) => feature.roomIds ?? [feature.roomId]),
+  );
+  const candidates = rng.shuffle(boundaryWallCandidates(
+    plan,
+    world,
+    (first, second) =>
+      first.id !== spawnRoom?.id &&
+      second.id !== spawnRoom?.id &&
+      first.level === 0 &&
+      second.level === 0 &&
+      first.access !== 'sealed' &&
+      second.access !== 'sealed' &&
+      !elevatedRoomIds.has(first.id) &&
+      !elevatedRoomIds.has(second.id) &&
+      !roomInZones(first, world.symmetryZones) &&
+      !roomInZones(second, world.symmetryZones),
+  ));
+  // At 5%, a streamed 3x3 neighbourhood still occasionally contains a door,
+  // but doors stop reading as a repeated decoration in every room.
+  const desired = rng.chance(0.05) ? 1 : 0;
+  const added: InteractiveDoorFeature[] = [];
+  const usedRoomIds = new Set<string>();
+
+  const explicitContent = (room: RoomRecord): DoorRoomContent | undefined => {
+    if (world.features.some(
+      (feature) => feature.kind === 'squeeze-view' && feature.roomId === room.id,
+    )) return 'crawl';
+    if (world.features.some(
+      (feature) => feature.kind === 'grid-pit' && feature.roomId === room.id,
+    )) return 'hole';
+    if (room.kind === 'corridor' || room.kind === 'threshold') return 'passage';
+    return undefined;
+  };
+
+  for (const [candidateIndex, candidate] of candidates.entries()) {
+    if (added.length >= desired) break;
+    if (!plan.walls.includes(candidate.wall)) continue;
+    const firstContent = explicitContent(candidate.firstRoom);
+    const secondContent = explicitContent(candidate.secondRoom);
+    const firstDistance = Math.hypot(
+      rectCenter(candidate.firstRoom.bounds).x - world.spawn.x,
+      rectCenter(candidate.firstRoom.bounds).z - world.spawn.z,
+    );
+    const secondDistance = Math.hypot(
+      rectCenter(candidate.secondRoom.bounds).x - world.spawn.x,
+      rectCenter(candidate.secondRoom.bounds).z - world.spawn.z,
+    );
+    const targetRoom = firstContent && !secondContent
+      ? candidate.firstRoom
+      : secondContent && !firstContent
+        ? candidate.secondRoom
+        : firstDistance > secondDistance
+          ? candidate.firstRoom
+          : candidate.secondRoom;
+    const sourceRoom = targetRoom === candidate.firstRoom
+      ? candidate.secondRoom
+      : candidate.firstRoom;
+    if (usedRoomIds.has(sourceRoom.id) || usedRoomIds.has(targetRoom.id)) continue;
+
+    const source = candidate.wall;
+    const apertureWidth = 0.96;
+    const doorHeight = 2.1;
+    const centerMin = candidate.min + apertureWidth * 0.5 + 0.64;
+    const centerMax = candidate.max - apertureWidth * 0.5 - 0.64;
+    if (centerMax < centerMin || source.height < doorHeight + 0.16) continue;
+    let alongCenter = (centerMin + centerMax) * 0.5;
+    let foundCenter = false;
+    const doorRng = rng.fork(`candidate:${candidateIndex}:${source.id}`);
+    for (let attempt = 0; attempt < 10 && !foundCenter; attempt += 1) {
+      const proposed = doorRng.float(centerMin, centerMax);
+      const x = source.orientation === 'x' ? proposed : source.x;
+      const z = source.orientation === 'z' ? proposed : source.z;
+      if (!portalNear(plan, x, z, 2.35)) {
+        alongCenter = proposed;
+        foundCenter = true;
+      }
+    }
+    if (!foundCenter) continue;
+
+    const openingMin = alongCenter - apertureWidth * 0.5;
+    const openingMax = alongCenter + apertureWidth * 0.5;
+    const sourceAlong = source.orientation === 'x' ? source.x : source.z;
+    const sourceMin = sourceAlong - source.length * 0.5;
+    const sourceMax = sourceAlong + source.length * 0.5;
+    plan.walls = plan.walls.filter((wall) => wall !== source);
+    plan.colliders = plan.colliders.filter(
+      (collider) =>
+        collider.id !== `collider-${source.id}` &&
+        collider.id !== `collider-wall-${source.id}`,
+    );
+    const addFragment = (min: number, max: number, label: string): void => {
+      if (max - min <= 0.18) return;
+      addWall(plan, doorRng.fork(label), {
+        roomId: source.roomId,
+        x: source.orientation === 'x' ? (min + max) * 0.5 : source.x,
+        z: source.orientation === 'z' ? (min + max) * 0.5 : source.z,
+        length: max - min,
+        orientation: source.orientation,
+        bottom: source.bottom,
+        height: source.height,
+        thickness: source.thickness,
+        tint: source.tint,
+        collision: true,
+        kind: source.kind,
+        detail: source.detail,
+      });
+    };
+    addFragment(sourceMin, openingMin, 'left-jamb');
+    addFragment(openingMax, sourceMax, 'right-jamb');
+    addWall(plan, doorRng.fork('lintel'), {
+      roomId: targetRoom.id,
+      x: source.orientation === 'x' ? alongCenter : source.x,
+      z: source.orientation === 'z' ? alongCenter : source.z,
+      length: apertureWidth,
+      orientation: source.orientation,
+      bottom: doorHeight,
+      height: source.bottom + source.height - doorHeight,
+      thickness: source.thickness,
+      tint: source.tint,
+      collision: true,
+      kind: source.kind,
+      detail: source.detail,
+    });
+
+    const position = {
+      x: source.orientation === 'x' ? quantize(alongCenter, 0.01) : source.x,
+      y: 0,
+      z: source.orientation === 'z' ? quantize(alongCenter, 0.01) : source.z,
+    };
+    const content = explicitContent(targetRoom) ?? doorRng.weighted([
+      { value: 'empty' as const, weight: 0.56 },
+      { value: 'message' as const, weight: 0.18 },
+      { value: 'object' as const, weight: 0.18 },
+      { value: 'passage' as const, weight: 0.08 },
+    ]);
+    const id = `interactive-door-${added.length}`;
+    const crossHalf = source.thickness * 0.5 + 0.08;
+    const bounds: Rect = source.orientation === 'x'
+      ? {
+          minX: position.x - apertureWidth * 0.5,
+          maxX: position.x + apertureWidth * 0.5,
+          minZ: position.z - crossHalf,
+          maxZ: position.z + crossHalf,
+        }
+      : {
+          minX: position.x - crossHalf,
+          maxX: position.x + crossHalf,
+          minZ: position.z - apertureWidth * 0.5,
+          maxZ: position.z + apertureWidth * 0.5,
+        };
+    const door: InteractiveDoorFeature = {
+      kind: 'interactive-door',
+      id,
+      sourceRoomId: sourceRoom.id,
+      targetRoomId: targetRoom.id,
+      position,
+      orientation: source.orientation,
+      width: apertureWidth,
+      height: doorHeight,
+      openingDirection: targetRoom === candidate.secondRoom ? 1 : -1,
+      style: 'office-windowed',
+      content,
+      colliderId: `interactive-door-collider-${added.length}`,
+      bounds,
+    };
+    added.push(door);
+    world.features.push(door);
+    plan.portals.push({
+      x: position.x,
+      z: position.z,
+      orientation: source.orientation,
+      width: apertureWidth,
+    });
+    usedRoomIds.add(sourceRoom.id);
+    usedRoomIds.add(targetRoom.id);
+
+    const clearance = source.orientation === 'x'
+      ? {
+          minX: bounds.minX - 0.55,
+          maxX: bounds.maxX + 0.55,
+          minZ: bounds.minZ - 1.1,
+          maxZ: bounds.maxZ + 1.1,
+        }
+      : {
+          minX: bounds.minX - 1.1,
+          maxX: bounds.maxX + 1.1,
+          minZ: bounds.minZ - 0.55,
+          maxZ: bounds.maxZ + 0.55,
+        };
+    const removedColumns = world.columns.filter((column) => pointInRect(
+      column.x,
+      column.z,
+      clearance,
+    ));
+    if (removedColumns.length > 0) {
+      world.columns = world.columns.filter((column) => !removedColumns.includes(column));
+      plan.colliders = plan.colliders.filter((collider) =>
+        collider.kind !== 'column' ||
+        !removedColumns.some((column) =>
+          Math.abs(collider.center.x - column.x) < 0.02 &&
+          Math.abs(collider.center.z - column.z) < 0.02
+        )
+      );
+    }
+  }
+  return added;
+};
+
+const addInteractiveDoorColliders = (
+  world: WorldPlan,
+  doors: readonly InteractiveDoorFeature[],
+): void => {
+  for (const door of doors) {
+    const alongHalf = Math.min(0.56, door.width * 0.42);
+    world.colliders.push({
+      id: door.colliderId,
+      center: {
+        x: door.position.x,
+        y: door.height * 0.5,
+        z: door.position.z,
+      },
+      halfExtents: {
+        x: door.orientation === 'x' ? alongHalf : 0.055,
+        y: door.height * 0.5,
+        z: door.orientation === 'z' ? alongHalf : 0.055,
+      },
+      kind: 'barrier',
+    });
+  }
 };
 
 const carveWallBreach = (
@@ -3815,8 +4181,14 @@ const lightIsBlocked = (world: WorldPlan, light: LightSlot): boolean => {
   if (world.walls.some((wall) => lightOverlapsWall(light, wall))) return true;
   if (world.features.some(
     (feature) =>
-      feature.kind === 'grid-pit' &&
-      feature.holes.some((hole) => lightPanelOverlapsRect(light, hole)),
+      (
+        (feature.kind === 'grid-pit' || feature.kind === 'squeeze-view') &&
+        (feature.holes ?? []).some((hole) => lightPanelOverlapsRect(light, hole))
+      ) ||
+      (
+        feature.kind === 'stair-socket' &&
+        lightPanelOverlapsRect(light, feature.bounds)
+      ),
   )) return true;
   if (light.level < 0) return false;
   return world.solidMasses.some(
@@ -4049,68 +4421,19 @@ export const addStepColliders = (world: WorldPlan, stairs: StairSocketFeature): 
       kind: 'step',
     });
   }
-  const center = rectCenter(stairs.bounds);
-  const alongX = stairs.heading.startsWith('x');
-  const positive = stairs.heading.endsWith('+');
-  const wallThickness = 0.16;
-  const baseY = stairs.baseY ?? 0;
-  const cageWalls = alongX
-    ? [
-        {
-          x: center.x,
-          z: stairs.bounds.minZ - wallThickness * 0.5,
-          halfX: rectWidth(stairs.bounds) * 0.5,
-          halfZ: wallThickness * 0.5,
-        },
-        {
-          x: center.x,
-          z: stairs.bounds.maxZ + wallThickness * 0.5,
-          halfX: rectWidth(stairs.bounds) * 0.5,
-          halfZ: wallThickness * 0.5,
-        },
-        {
-          x: positive
-            ? stairs.bounds.maxX + wallThickness * 0.5
-            : stairs.bounds.minX - wallThickness * 0.5,
-          z: center.z,
-          halfX: wallThickness * 0.5,
-          halfZ: rectDepth(stairs.bounds) * 0.5 + wallThickness,
-        },
-      ]
-    : [
-        {
-          x: stairs.bounds.minX - wallThickness * 0.5,
-          z: center.z,
-          halfX: wallThickness * 0.5,
-          halfZ: rectDepth(stairs.bounds) * 0.5,
-        },
-        {
-          x: stairs.bounds.maxX + wallThickness * 0.5,
-          z: center.z,
-          halfX: wallThickness * 0.5,
-          halfZ: rectDepth(stairs.bounds) * 0.5,
-        },
-        {
-          x: center.x,
-          z: positive
-            ? stairs.bounds.maxZ + wallThickness * 0.5
-            : stairs.bounds.minZ - wallThickness * 0.5,
-          halfX: rectWidth(stairs.bounds) * 0.5 + wallThickness,
-          halfZ: wallThickness * 0.5,
-        },
-      ];
-  for (const [index, wall] of cageWalls.entries()) {
+  for (const [index, wall] of getStairCageWalls(stairs).entries()) {
+    const center = rectCenter(wall.bounds);
     world.colliders.push({
       id: `${stairs.id}-cage-wall-${index}`,
       center: {
-        x: wall.x,
-        y: baseY + STAIR_STORY_RISE * 0.5,
-        z: wall.z,
+        x: center.x,
+        y: (wall.bottom + wall.top) * 0.5,
+        z: center.z,
       },
       halfExtents: {
-        x: wall.halfX,
-        y: STAIR_STORY_RISE * 0.5,
-        z: wall.halfZ,
+        x: rectWidth(wall.bounds) * 0.5,
+        y: (wall.top - wall.bottom) * 0.5,
+        z: rectDepth(wall.bounds) * 0.5,
       },
       kind: 'wall',
     });
@@ -4274,11 +4597,13 @@ export const generateWorld = (seed: string): WorldPlan => {
   addColumnsAndPartialWalls(mutable, world, reservedRoomIds, rootRng);
   enforcePortalClearances(mutable);
   sealRestrictedRooms(mutable, world, rootRng);
+  const interactiveDoors = addInteractiveDoors(mutable, world, rootRng);
   addWallBreaches(mutable, world, rootRng);
   world.walls = mutable.walls;
   world.colliders = mutable.colliders;
   addSolidMasses(world, reservedRoomIds, rootRng);
   classifyInaccessibleRooms(mutable, world);
+  addInteractiveDoorColliders(world, interactiveDoors);
   rebuildSunkenArchitectureExtensions(world);
   populateLightsAndDetails(world, rootRng);
   applyLightingZones(world, rootRng);
@@ -4336,9 +4661,13 @@ export const fingerprintWorld = (world: WorldPlan): string => {
       .join('|'),
     world.features.map((feature) =>
       feature.kind === 'squeeze-view'
-        ? `${feature.id}:${feature.passageStyle ?? 'room-network'}`
+        ? `${feature.id}:${feature.passageStyle ?? 'room-network'}:${(feature.holes ?? [])
+            .map((hole) => `${hole.kind ?? 'drop'}-${hole.stories ?? 1}`)
+            .join(',')}`
         : feature.kind === 'raised-zone'
           ? `${feature.id}:${feature.elevation}:${(feature.roomIds ?? [feature.roomId]).join(',')}:${(feature.ramps ?? [feature.ramp]).length}`
+          : feature.kind === 'stair-socket'
+            ? `${feature.id}:${feature.layout ?? 'switchback'}:${feature.switchbackJoin ?? 'joined'}`
           : feature.id
     ).join('|'),
     (world.ceilingZones ?? []).map((zone) =>

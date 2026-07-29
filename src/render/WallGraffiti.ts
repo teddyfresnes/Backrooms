@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SeededRandom } from '../world/SeededRandom';
 import type {
   GridPitFeature,
+  InteractiveDoorFeature,
   StairSocketFeature,
   WallSegment,
   WorldPlan,
@@ -20,7 +21,13 @@ export type GraffitiSymbol =
   | 'hand'
   | 'skull'
   | 'house'
-  | 'stick-figure';
+  | 'stick-figure'
+  | 'broken-heart'
+  | 'eyes'
+  | 'teeth'
+  | 'crown'
+  | 'web'
+  | 'doll';
 
 export interface WallGraffitiPlacement {
   id: string;
@@ -43,105 +50,142 @@ export interface WallGraffitiPlacement {
 }
 
 const HORROR_MESSAGES = [
-  'NE TE RETOURNE PAS',
-  'IL EST DERRIÈRE TOI',
-  'LES MURS ONT FAIM',
-  'LE PLAFOND RESPIRE',
-  'N’ÉCOUTE PAS LES LUMIÈRES',
-  'ILS M’ONT TROUVÉ',
-  'JE SUIS ENCORE ICI',
-  'CE N’EST PAS UN ÉTAGE',
-  'TU ES DÉJÀ DESCENDU',
-  'IL N’Y A PAS DE SORTIE',
-  'QUELQUE CHOSE MARCHE ICI',
-  'NE DORS JAMAIS',
-  'ÇA GRATTE DANS LE MUR',
-  'NOUS AVONS FAIM',
-  'LA MOQUETTE EST CHAUDE',
-  'LES PAS NE SONT PAS LES TIENS',
-  'NE COMPTE PAS LES PORTES',
-  'LA PIÈCE SE SOUVIENT',
-  'JE L’AI VU SANS VISAGE',
-  'TU N’ES PAS SEUL',
-  'LA SORTIE MENT',
-  'NE REGARDE PAS EN HAUT',
-  'IL CONNAÎT TON NOM',
-  'J’ENTENDS TON SOUFFLE',
-  'HOME N’EST PLUS ICI',
-  'J’AI DESSINÉ LA SORTIE',
-  'PERSONNE NE VIT ICI',
-  'LES FENÊTRES REGARDENT',
-  'COMPTE ENCORE',
-  'MA MAIN NE M’APPARTIENT PLUS',
+  'DO NOT TURN AROUND',
+  'IT IS BEHIND YOU',
+  'THE WALLS ARE HUNGRY',
+  'THE CEILING IS BREATHING',
+  "DON'T LISTEN TO THE LIGHTS",
+  'THEY FOUND ME',
+  'I AM STILL HERE',
+  'THIS IS NOT A FLOOR',
+  'YOU HAVE ALREADY BEEN DOWN HERE',
+  'THERE IS NO EXIT',
+  'SOMETHING WALKS HERE',
+  'NEVER SLEEP',
+  'IT SCRATCHES INSIDE THE WALL',
+  'WE ARE HUNGRY',
+  'THE CARPET IS WARM',
+  'THE FOOTSTEPS ARE NOT YOURS',
+  "DON'T COUNT THE DOORS",
+  'THE ROOM REMEMBERS',
+  'I SAW IT WITHOUT A FACE',
+  'YOU ARE NOT ALONE',
+  'THE EXIT LIES',
+  "DON'T LOOK UP",
+  'IT KNOWS YOUR NAME',
+  'I HEAR YOU BREATHING',
+  'HOME IS NOT HERE',
+  'I DREW THE EXIT',
+  'NO ONE LIVES HERE',
+  'THE WINDOWS ARE WATCHING',
+  'COUNT AGAIN',
+  'MY HAND IS NOT MINE',
+  'THE HUM HAS TEETH',
+  'IT LEARNED MY VOICE',
+  'YOUR SHADOW MOVED FIRST',
+  'DO NOT FOLLOW THE SMILE',
+  'THE LIGHTS BLINKED TWICE',
+  'THEY HIDE WHEN YOU LOOK',
+  'THIS HALLWAY WAS SHORTER',
+  'THE DOOR IS BREATHING',
+  'I CAN HEAR THE PAINT',
+  'THE FLOOR KNOWS YOUR WEIGHT',
+  'THERE ARE EYES IN THE CARPET',
+  'THEY ARE WAITING UPSTAIRS',
+  'YOU LEFT SOMETHING HERE',
+  "DON'T LET IT SEE YOU",
+  'IT WANTS TO BE FOUND',
 ] as const;
 
 const WARNINGS = [
-  'PAS PAR LÀ',
-  'DEMI-TOUR',
-  'FAUSSE SORTIE',
-  'NIVEAU -1 ?',
-  'ATTENDS ICI',
-  'COURS',
-  'PLUS DE LUMIÈRE',
-  'ZONE SÛRE ?',
-  'NE PAS ENTRER',
-  'ENCORE 3 PORTES',
-  'RESTE BAISSÉ',
-  'SILENCE',
-  'ÇA BOUCLE',
-  'J’ÉTAIS DÉJÀ LÀ',
-  'MAUVAIS CHEMIN',
-  'ON REVIENT TOUJOURS',
-  'PORTE 17',
-  'PAS DE FIN',
+  'NOT THIS WAY',
+  'TURN BACK',
+  'FALSE EXIT',
+  'LEVEL -1 ?',
+  'WAIT HERE',
+  'RUN',
+  'NO MORE LIGHT',
+  'SAFE ZONE ?',
+  'DO NOT ENTER',
+  'THREE MORE DOORS',
+  'STAY LOW',
+  'QUIET',
+  'IT LOOPS',
+  'I WAS HERE ALREADY',
+  'WRONG WAY',
+  'WE ALWAYS COME BACK',
+  'DOOR 17',
+  'NO END',
   'HOME ?',
-  'NE SUIS PAS LES MAINS',
-  'JOUR 0',
-  'ILS COMPTENT AUSSI',
+  'DO NOT FOLLOW THE HANDS',
+  'DAY 0',
+  'THEY ARE COUNTING TOO',
+  'KEEP WALKING',
+  "DON'T OPEN IT",
+  'NOT A WAY OUT',
+  'LIGHTS OFF',
+  'TOO LATE',
+  'NOT SAFE',
+  'HIDE',
+  'LOOK DOWN',
+  'LEAVE THE DOOR CLOSED',
+  'NO SIGNAL',
+  'STAY AWAY FROM THE CORNERS',
+  "DON'T TRUST THE ARROWS",
 ] as const;
 
 const SUBJECTS = [
-  'LES MURS',
-  'LES LAMPES',
-  'LE SOL',
-  'LA PIÈCE',
-  'LE COULOIR',
-  'LA PORTE',
-  'L’OMBRE',
-  'LE BRUIT',
+  'THE WALL',
+  'THE LIGHT',
+  'THE FLOOR',
+  'THE ROOM',
+  'THE HALL',
+  'THE DOOR',
+  'THE SHADOW',
+  'THE NOISE',
+  'THE HUM',
+  'THE SMILE',
+  'THE CARPET',
+  'THE CORNER',
+  'SOMETHING',
 ] as const;
 
 const ACTIONS = [
-  'REGARDE',
-  'ÉCOUTE',
-  'MENT',
-  'BOUGE',
-  'REVIENT',
-  'ATTEND',
-  'SAIT',
-  'RESPIRE',
+  'WATCHES',
+  'LISTENS',
+  'LIES',
+  'MOVES',
+  'COMES BACK',
+  'WAITS',
+  'KNOWS',
+  'BREATHES',
+  'COUNTS',
+  'LEARNS',
+  'FOLLOWS',
 ] as const;
 
 const OBJECTS = [
-  'TON NOM',
-  'TES PAS',
-  'LA SORTIE',
-  'CE CHEMIN',
-  'LE SILENCE',
-  'DERRIÈRE TOI',
-  'SOUS LE SOL',
-  'QUAND TU DORS',
+  'YOUR NAME',
+  'YOUR STEPS',
+  'THE EXIT',
+  'THIS WAY',
+  'THE SILENCE',
+  'BEHIND YOU',
+  'UNDER THE FLOOR',
+  'WHILE YOU SLEEP',
+  'THE NEXT ROOM',
+  'THE CORNER',
 ] as const;
 
 const NAMES = [
-  'MARC',
-  'LÉA',
+  'MIA',
   'NOAH',
   'MILO',
-  'INES',
+  'JUNE',
   'SAM',
   'ELI',
-  'JUNE',
+  'ASH',
+  'ADA',
   '???',
 ] as const;
 
@@ -157,6 +201,12 @@ const SYMBOLS: GraffitiSymbol[] = [
   'skull',
   'house',
   'stick-figure',
+  'broken-heart',
+  'eyes',
+  'teeth',
+  'crown',
+  'web',
+  'doll',
 ];
 
 const FONT_FAMILIES = [
@@ -241,8 +291,8 @@ const createMessage = (rng: SeededRandom): string[] => {
   if (mode === 'warning') return [rng.pick(WARNINGS)];
   if (mode === 'trace') {
     return rng.chance(0.5)
-      ? [`${rng.pick(NAMES)} ÉTAIT ICI`, `${rng.int(2, 93)} JOURS`]
-      : [`JOUR ${rng.int(4, 999)}`, rng.pick(['TOUJOURS RIEN', 'MÊME COULOIR', 'PLUS D’EAU'])];
+      ? [`${rng.pick(NAMES)} WAS HERE`, `${rng.int(2, 93)} DAYS`]
+      : [`DAY ${rng.int(4, 999)}`, rng.pick(['STILL NOTHING', 'SAME HALL', 'NO WATER'])];
   }
   const subject = rng.pick(SUBJECTS);
   const action = rng.pick(ACTIONS);
@@ -318,7 +368,7 @@ const findDirectionWall = (
  * deterministic, so worker streaming and chunk remounts never reshuffle them.
  */
 export const selectWallGraffiti = (plan: WorldPlan): WallGraffitiPlacement[] => {
-  const rng = new SeededRandom(`${plan.seed}::wall-graffiti:v2`);
+  const rng = new SeededRandom(`${plan.seed}::wall-graffiti:v3`);
   const candidates = eligibleGraffitiWalls(plan);
   if (candidates.length === 0) return [];
   const placements: WallGraffitiPlacement[] = [];
@@ -374,29 +424,86 @@ export const selectWallGraffiti = (plan: WorldPlan): WallGraffitiPlacement[] => 
       placement.targetKind = feature.kind === 'stair-socket' ? 'stairs' : 'pitfall';
       placement.targetFeatureId = feature.id;
       placement.lines = feature.kind === 'stair-socket'
-        ? [targetRng.pick(['MONTE', 'ESCALIER', 'ÉTAGE SUIVANT', 'PAR LÀ', 'UP'])]
-        : [targetRng.pick(['EN BAS', 'LE TROU', 'SAUTE ?', 'PLUS BAS', 'ILS SONT EN BAS'])];
+        ? [targetRng.pick(['UPSTAIRS', 'STAIRS', 'NEXT FLOOR', 'THIS WAY', 'UP'])]
+        : [targetRng.pick(['DOWN', 'THE HOLE', 'JUMP ?', 'LOWER LEVEL', 'THEY ARE DOWN THERE'])];
       placements.push(placement);
       usedWallIds.add(wall.id);
     }
   }
 
+  const messageDoors = plan.features.filter(
+    (feature): feature is InteractiveDoorFeature =>
+      feature.kind === 'interactive-door' && feature.content === 'message',
+  );
+  const doorMessages = [
+    'YOU OPENED THE WRONG DOOR',
+    'THIS ROOM WAS WAITING',
+    'LEAVE IT OPEN',
+    'IT CAME THROUGH HERE',
+    'NOTHING WAS INSIDE BEFORE',
+    'THE DOOR REMEMBERS YOU',
+  ] as const;
+  for (const door of messageDoors) {
+    const room = plan.rooms.find((candidate) => candidate.id === door.targetRoomId);
+    if (!room) continue;
+    const roomCenter = rectCenter(room.bounds);
+    const roomWalls = candidates
+      .filter((wall) => {
+        if (usedWallIds.has(wall.id)) return false;
+        if (wall.orientation === 'x') {
+          return (
+            Math.abs(wall.z - room.bounds.minZ) < 0.38 ||
+            Math.abs(wall.z - room.bounds.maxZ) < 0.38
+          );
+        }
+        return (
+          Math.abs(wall.x - room.bounds.minX) < 0.38 ||
+          Math.abs(wall.x - room.bounds.maxX) < 0.38
+        );
+      })
+      .sort(
+        (left, right) =>
+          wallCenterDistance(right, door.position) -
+          wallCenterDistance(left, door.position),
+      )
+      .slice(0, 8);
+    if (roomWalls.length === 0) continue;
+    const messageRng = rng.fork(`door-message:${door.id}`);
+    const wall = messageRng.pick(roomWalls);
+    const placement = makePlacement(
+      plan,
+      wall,
+      messageRng.fork('placement'),
+      placements.length,
+      'message',
+    );
+    const normalDelta = wall.orientation === 'x'
+      ? roomCenter.z - wall.z
+      : roomCenter.x - wall.x;
+    placement.side = normalDelta >= 0 ? 1 : -1;
+    placement.lines = [messageRng.pick(doorMessages)];
+    placements.push(placement);
+    usedWallIds.add(wall.id);
+  }
+
   const ambientCount = Math.min(
     candidates.length,
     rng.weighted([
-      { value: 0, weight: 0.3 },
-      { value: 1, weight: 0.36 },
-      { value: 2, weight: 0.21 },
-      { value: 3, weight: 0.1 },
-      { value: 4, weight: 0.03 },
+      { value: 0, weight: 0.15 },
+      { value: 1, weight: 0.27 },
+      { value: 2, weight: 0.26 },
+      { value: 3, weight: 0.18 },
+      { value: 4, weight: 0.09 },
+      { value: 5, weight: 0.04 },
+      { value: 6, weight: 0.01 },
     ]),
   );
   const ambientWalls = rng.shuffle(candidates.filter((wall) => !usedWallIds.has(wall.id)));
   for (const wall of ambientWalls.slice(0, ambientCount)) {
     const markRng = rng.fork(`ambient:${wall.id}`);
     const kind = markRng.weighted([
-      { value: 'message' as const, weight: 0.68 },
-      { value: 'symbol' as const, weight: 0.32 },
+      { value: 'message' as const, weight: 0.56 },
+      { value: 'symbol' as const, weight: 0.44 },
     ]);
     const placement = makePlacement(plan, wall, markRng, placements.length, kind);
     if (kind === 'message') {
@@ -648,6 +755,40 @@ const drawSymbol = (
       context.stroke();
       break;
     }
+    case 'broken-heart': {
+      const left = centerX - radius * 0.78;
+      const right = centerX + radius * 0.78;
+      const top = centerY - radius * 0.36;
+      const point = centerY + radius * 0.9;
+      strokePolyline(
+        context,
+        [
+          [centerX, point],
+          [left, centerY + radius * 0.12],
+          [left, top],
+          [centerX - radius * 0.38, centerY - radius * 0.76],
+          [centerX, centerY - radius * 0.3],
+          [centerX + radius * 0.38, centerY - radius * 0.76],
+          [right, top],
+          [right, centerY + radius * 0.12],
+          [centerX, point],
+        ],
+        rng,
+        2,
+      );
+      strokePolyline(
+        context,
+        [
+          [centerX, centerY - radius * 0.42],
+          [centerX - radius * 0.14, centerY - radius * 0.08],
+          [centerX + radius * 0.1, centerY + radius * 0.16],
+          [centerX - radius * 0.06, centerY + radius * 0.52],
+        ],
+        rng.fork('heart-crack'),
+        1.4,
+      );
+      break;
+    }
     case 'eye': {
       context.beginPath();
       context.moveTo(centerX - radius, centerY);
@@ -655,6 +796,21 @@ const drawSymbol = (
       context.quadraticCurveTo(centerX, centerY + radius * 0.8, centerX - radius, centerY);
       context.stroke();
       drawIrregularEllipse(context, centerX, centerY, radius * 0.28, radius * 0.32, rng);
+      break;
+    }
+    case 'eyes': {
+      for (const [index, offset] of [-0.48, 0, 0.48].entries()) {
+        const eyeRng = rng.fork(`eye:${index}`);
+        const x = centerX + radius * offset;
+        const y = centerY + wobble(eyeRng, radius * 0.16);
+        const eyeRadius = radius * (index === 1 ? 0.31 : 0.24);
+        context.beginPath();
+        context.moveTo(x - eyeRadius, y);
+        context.quadraticCurveTo(x, y - eyeRadius * 0.72, x + eyeRadius, y);
+        context.quadraticCurveTo(x, y + eyeRadius * 0.72, x - eyeRadius, y);
+        context.stroke();
+        drawIrregularEllipse(context, x, y, eyeRadius * 0.22, eyeRadius * 0.3, eyeRng);
+      }
       break;
     }
     case 'spiral': {
@@ -699,6 +855,75 @@ const drawSymbol = (
             1.5,
           );
         }
+      }
+      break;
+    }
+    case 'teeth': {
+      const left = centerX - radius * 0.82;
+      const right = centerX + radius * 0.82;
+      const top = centerY - radius * 0.5;
+      const bottom = centerY + radius * 0.58;
+      strokePolyline(
+        context,
+        [[left, top], [right, top], [right, bottom], [left, bottom], [left, top]],
+        rng,
+        1.8,
+      );
+      for (let tooth = 0; tooth < 7; tooth += 1) {
+        const toothRng = rng.fork(`tooth:${tooth}`);
+        const x = THREE.MathUtils.lerp(left + radius * 0.08, right - radius * 0.08, tooth / 6);
+        const length = radius * toothRng.float(0.52, 0.92);
+        strokePolyline(
+          context,
+          [[x, top], [x + wobble(toothRng, 3), top + length]],
+          toothRng,
+          1.2,
+        );
+      }
+      break;
+    }
+    case 'crown': {
+      strokePolyline(
+        context,
+        [
+          [centerX - radius * 0.86, centerY + radius * 0.62],
+          [centerX - radius * 0.72, centerY - radius * 0.54],
+          [centerX - radius * 0.24, centerY + radius * 0.06],
+          [centerX, centerY - radius * 0.8],
+          [centerX + radius * 0.3, centerY + radius * 0.05],
+          [centerX + radius * 0.77, centerY - radius * 0.46],
+          [centerX + radius * 0.88, centerY + radius * 0.62],
+          [centerX - radius * 0.86, centerY + radius * 0.62],
+        ],
+        rng,
+        2,
+      );
+      break;
+    }
+    case 'web': {
+      const rays = 8;
+      for (let ray = 0; ray < rays; ray += 1) {
+        const angle = (ray / rays) * Math.PI * 2 + wobble(rng, 0.08);
+        strokePolyline(
+          context,
+          [
+            [centerX, centerY],
+            [centerX + Math.cos(angle) * radius, centerY + Math.sin(angle) * radius],
+          ],
+          rng.fork(`web-ray:${ray}`),
+          1.1,
+        );
+      }
+      for (const scale of [0.32, 0.58, 0.84]) {
+        const ring: Array<readonly [number, number]> = [];
+        for (let point = 0; point <= rays; point += 1) {
+          const angle = (point / rays) * Math.PI * 2;
+          ring.push([
+            centerX + Math.cos(angle) * radius * scale,
+            centerY + Math.sin(angle) * radius * scale,
+          ]);
+        }
+        strokePolyline(context, ring, rng.fork(`web-ring:${scale}`), 1.3);
       }
       break;
     }
@@ -904,6 +1129,50 @@ const drawSymbol = (
       }
       break;
     }
+    case 'doll': {
+      drawIrregularEllipse(
+        context,
+        centerX,
+        centerY - radius * 0.52,
+        radius * 0.31,
+        radius * 0.34,
+        rng,
+      );
+      strokePolyline(
+        context,
+        [
+          [centerX, centerY - radius * 0.18],
+          [centerX - radius * 0.42, centerY + radius * 0.7],
+          [centerX + radius * 0.42, centerY + radius * 0.7],
+          [centerX, centerY - radius * 0.18],
+        ],
+        rng.fork('doll-body'),
+        1.8,
+      );
+      for (const side of [-1, 1] as const) {
+        strokePolyline(
+          context,
+          [
+            [centerX + side * radius * 0.24, centerY + radius * 0.12],
+            [centerX + side * radius * 0.82, centerY + radius * 0.36],
+          ],
+          rng.fork(`doll-arm:${side}`),
+          1.5,
+        );
+      }
+      for (const y of [-0.54, -0.43, -0.32]) {
+        strokePolyline(
+          context,
+          [
+            [centerX - radius * 0.18, centerY + radius * y],
+            [centerX + radius * 0.18, centerY + radius * (y + 0.04)],
+          ],
+          rng.fork(`doll-stitch:${y}`),
+          1,
+        );
+      }
+      break;
+    }
     case 'door': {
       strokePolyline(
         context,
@@ -950,6 +1219,56 @@ const drawSymbol = (
   }
 };
 
+const drawMarginScribbles = (
+  context: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  rng: SeededRandom,
+): void => {
+  const count = rng.int(1, 3);
+  for (let index = 0; index < count; index += 1) {
+    const doodleRng = rng.fork(`margin:${index}`);
+    const x = doodleRng.chance(0.5)
+      ? doodleRng.float(canvas.width * 0.06, canvas.width * 0.2)
+      : doodleRng.float(canvas.width * 0.8, canvas.width * 0.94);
+    const y = doodleRng.pick([
+      doodleRng.float(canvas.height * 0.08, canvas.height * 0.24),
+      doodleRng.float(canvas.height * 0.76, canvas.height * 0.92),
+    ]);
+    const radius = doodleRng.float(8, 26);
+    const kind = doodleRng.pick(['cross', 'orbit', 'scratch', 'star'] as const);
+    if (kind === 'cross') {
+      strokePolyline(context, [[x - radius, y - radius], [x + radius, y + radius]], doodleRng, 1.3);
+      strokePolyline(context, [[x + radius, y - radius], [x - radius, y + radius]], doodleRng, 1.3);
+    } else if (kind === 'orbit') {
+      drawIrregularEllipse(context, x, y, radius, radius * doodleRng.float(0.42, 0.78), doodleRng);
+      strokePolyline(
+        context,
+        [[x - radius * 1.15, y + radius * 0.2], [x + radius * 1.2, y - radius * 0.16]],
+        doodleRng,
+        1.2,
+      );
+    } else if (kind === 'scratch') {
+      for (let scratch = 0; scratch < 3; scratch += 1) {
+        const offset = (scratch - 1) * radius * 0.33;
+        strokePolyline(
+          context,
+          [[x - radius, y + offset - radius * 0.48], [x + radius, y + offset + radius * 0.48]],
+          doodleRng.fork(`scratch:${scratch}`),
+          1.1,
+        );
+      }
+    } else {
+      const points: Array<readonly [number, number]> = [];
+      for (let point = 0; point <= 8; point += 1) {
+        const angle = -Math.PI * 0.5 + point * Math.PI * 0.5;
+        const distance = point % 2 === 0 ? radius : radius * 0.42;
+        points.push([x + Math.cos(angle) * distance, y + Math.sin(angle) * distance]);
+      }
+      strokePolyline(context, points, doodleRng, 1.2);
+    }
+  }
+};
+
 export const createGraffitiCanvas = (
   placement: WallGraffitiPlacement,
 ): HTMLCanvasElement | null => {
@@ -979,7 +1298,10 @@ export const createGraffitiCanvas = (
     drawMessage(context, canvas, placement, rng);
   }
 
-  if (rng.chance(0.12)) {
+  if (rng.chance(placement.kind === 'message' ? 0.68 : 0.52)) {
+    drawMarginScribbles(context, canvas, rng.fork('margin-scribbles'));
+  }
+  if (rng.chance(0.23)) {
     const dripCount = rng.int(1, 4);
     for (let index = 0; index < dripCount; index += 1) {
       const x = rng.float(canvas.width * 0.16, canvas.width * 0.84);

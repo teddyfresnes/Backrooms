@@ -1,13 +1,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { getPropAsset } from '../world/PropCatalog';
 import type { PropAssetDefinition } from '../world/PropCatalog';
 import type { PropPlacement, VisualBiome, WorldPlan } from '../world/types';
 
 const gltfLoader = new GLTFLoader();
-const objLoader = new OBJLoader();
-const textureLoader = new THREE.TextureLoader();
 const normalizedAssetCache = new Map<string, Promise<THREE.Group>>();
 const failedAssets = new Set<string>();
 
@@ -42,29 +39,25 @@ const loadAsset = (definition: PropAssetDefinition): Promise<THREE.Group> => {
   const cached = normalizedAssetCache.get(definition.id);
   if (cached) return cached;
   const promise = (async (): Promise<THREE.Group> => {
-    if (definition.format === 'obj') {
-      const [object, texture] = await Promise.all([
-        objLoader.loadAsync(definition.path),
-        definition.texturePath
-          ? textureLoader.loadAsync(definition.texturePath)
-          : Promise.resolve<THREE.Texture | null>(null),
-      ]);
-      if (texture) {
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.anisotropy = 4;
-      }
-      object.traverse((child) => {
-        if (!(child instanceof THREE.Mesh)) return;
-        child.material = new THREE.MeshStandardMaterial({
-          color: 0xffffff,
-          map: texture,
-          roughness: 0.82,
-          metalness: 0.08,
-        });
-      });
-      return normalizeAsset(object, definition);
-    }
     const loaded = await gltfLoader.loadAsync(definition.path);
+    loaded.scene.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return;
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) {
+        if (!(material instanceof THREE.MeshStandardMaterial)) continue;
+        for (const texture of [
+          material.map,
+          material.aoMap,
+          material.metalnessMap,
+          material.normalMap,
+          material.roughnessMap,
+        ]) {
+          if (texture) texture.anisotropy = Math.max(texture.anisotropy, 4);
+        }
+      }
+      child.castShadow = false;
+      child.receiveShadow = false;
+    });
     return normalizeAsset(loaded.scene, definition);
   })().catch((error: unknown) => {
     if (!failedAssets.has(definition.id)) {
@@ -85,13 +78,8 @@ const cloneMaterial = (
   const material = source.clone();
   const colored = material as THREE.Material & { color?: THREE.Color };
   if (colored.color instanceof THREE.Color) {
-    const biomeTone = biome === 'red' ? 0.82 : biome === 'white' ? 0.94 : 0.9;
+    const biomeTone = biome === 'red' ? 0.88 : biome === 'white' ? 1 : 0.96;
     colored.color.multiplyScalar(tone * biomeTone);
-  }
-  if (material instanceof THREE.MeshStandardMaterial) {
-    material.roughness = Math.max(0.68, material.roughness);
-    material.emissive.copy(material.color).multiplyScalar(biome === 'red' ? 0.018 : 0.025);
-    material.emissiveIntensity = 1;
   }
   return material;
 };
@@ -105,7 +93,6 @@ const cloneAsset = (
   instance.name = `prop-model-${placement.assetId}`;
   instance.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
-    child.geometry = child.geometry.clone();
     child.material = Array.isArray(child.material)
       ? child.material.map((material) => cloneMaterial(material, placement.tone, biome))
       : cloneMaterial(child.material, placement.tone, biome);
@@ -126,7 +113,6 @@ const cloneAsset = (
 const disposeObject = (object: THREE.Object3D): void => {
   object.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
-    child.geometry.dispose();
     const materials = Array.isArray(child.material) ? child.material : [child.material];
     materials.forEach((material) => material.dispose());
   });

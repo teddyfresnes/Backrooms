@@ -104,24 +104,75 @@ describe('PhysicsWorld chunk ownership', () => {
     expect(physics.getPosition().y).toBeCloseTo(0.865, 3);
   });
 
-  it('walks both flights of an inter-storey stair up to the next story', async () => {
+  it.each(['joined', 'divider'] as const)(
+    'walks both %s switchback flights up to the next story',
+    async (switchbackJoin) => {
+      const stairs: StairSocketFeature = {
+        kind: 'stair-socket',
+        id: 'walkable-stairs',
+        roomId: 'test-room',
+        bounds: { minX: 0, maxX: 8, minZ: -2.5, maxZ: 2.5 },
+        heading: 'x+',
+        layout: 'switchback',
+        switchbackJoin,
+        baseY: 0,
+      };
+      const colliders: StaticCollider[] = [
+        {
+          id: 'approach-floor',
+          center: { x: 0.45, y: -0.12, z: -1.32 },
+          halfExtents: { x: 0.6, y: 0.12, z: 1 },
+          kind: 'floor',
+        },
+        ...getStairCollisionShapes(stairs).map((shape, index): StaticCollider => ({
+          id: `walkable-stairs-${shape.kind}-${index}`,
+          center: shape.center,
+          halfExtents: shape.halfExtents,
+          rotation: shape.rotation,
+          kind: 'step',
+        })),
+      ];
+      const plan = makePlan(colliders);
+      plan.spawn = { x: 0.45, y: 0.865, z: -1.32 };
+      const physics = await PhysicsWorld.create(plan);
+      activeWorlds.push(physics);
+
+      for (let index = 0; index < 220 && physics.getPosition().x < 7.45; index += 1) {
+        physics.move({ x: 0.065, y: -0.015, z: 0 });
+      }
+      expect(physics.getPosition().y).toBeGreaterThan(3.45);
+
+      for (let index = 0; index < 80 && physics.getPosition().z < 1.32; index += 1) {
+        physics.move({ x: 0, y: -0.015, z: 0.065 });
+      }
+      expect(physics.getPosition().z).toBeGreaterThan(1.1);
+      for (let index = 0; index < 220 && physics.getPosition().x > 0.6; index += 1) {
+        physics.move({ x: -0.065, y: -0.015, z: 0 });
+      }
+
+      expect(physics.getPosition().y).toBeCloseTo(6.265, 1);
+    },
+  );
+
+  it('walks one continuous stair flight up to the next story', async () => {
     const stairs: StairSocketFeature = {
       kind: 'stair-socket',
-      id: 'walkable-stairs',
+      id: 'walkable-straight-stairs',
       roomId: 'test-room',
-      bounds: { minX: 0, maxX: 8, minZ: -2.5, maxZ: 2.5 },
+      bounds: { minX: 0, maxX: 12, minZ: -2.1, maxZ: 2.1 },
       heading: 'x+',
+      layout: 'straight',
       baseY: 0,
     };
     const colliders: StaticCollider[] = [
       {
-        id: 'approach-floor',
-        center: { x: 0.45, y: -0.12, z: -1.32 },
+        id: 'straight-approach-floor',
+        center: { x: 0.45, y: -0.12, z: 0 },
         halfExtents: { x: 0.6, y: 0.12, z: 1 },
         kind: 'floor',
       },
       ...getStairCollisionShapes(stairs).map((shape, index): StaticCollider => ({
-        id: `walkable-stairs-${shape.kind}-${index}`,
+        id: `walkable-straight-stairs-${shape.kind}-${index}`,
         center: shape.center,
         halfExtents: shape.halfExtents,
         rotation: shape.rotation,
@@ -129,23 +180,15 @@ describe('PhysicsWorld chunk ownership', () => {
       })),
     ];
     const plan = makePlan(colliders);
-    plan.spawn = { x: 0.45, y: 0.865, z: -1.32 };
+    plan.spawn = { x: 0.45, y: 0.865, z: 0 };
     const physics = await PhysicsWorld.create(plan);
     activeWorlds.push(physics);
 
-    for (let index = 0; index < 220 && physics.getPosition().x < 7.45; index += 1) {
-      physics.move({ x: 0.065, y: -0.015, z: 0 });
-    }
-    expect(physics.getPosition().y).toBeGreaterThan(3.45);
-
-    for (let index = 0; index < 80 && physics.getPosition().z < 1.32; index += 1) {
-      physics.move({ x: 0, y: -0.015, z: 0.065 });
-    }
-    expect(physics.getPosition().z).toBeGreaterThan(1.1);
-    for (let index = 0; index < 220 && physics.getPosition().x > 0.6; index += 1) {
-      physics.move({ x: -0.065, y: -0.015, z: 0 });
+    for (let index = 0; index < 360 && physics.getPosition().x < 11.6; index += 1) {
+      physics.move({ x: 0.055, y: -0.015, z: 0 });
     }
 
+    expect(physics.getPosition().x).toBeGreaterThan(11.35);
     expect(physics.getPosition().y).toBeCloseTo(6.265, 1);
   });
 
@@ -200,6 +243,30 @@ describe('PhysicsWorld chunk ownership', () => {
     expect(physics.setChunkOffset('missing', { x: 0, y: 0, z: 0 })).toBe(false);
     expect(castDown(physics, 4, 2)).toBeNull();
     expect(castDown(physics, 8, 2)?.timeOfImpact).toBeCloseTo(8, 4);
+  });
+
+  it('disables an interactive collider without rebuilding its chunk', async () => {
+    const doorBarrier: StaticCollider = {
+      id: 'interactive-door-barrier',
+      center: { x: 0, y: 1, z: 0 },
+      halfExtents: { x: 0.08, y: 1, z: 0.7 },
+      kind: 'barrier',
+    };
+    const physics = await createPhysics([doorBarrier]);
+    const step = vi.spyOn(physics.world, 'step');
+    const ray = {
+      origin: { x: -2, y: 1, z: 0 },
+      dir: { x: 1, y: 0, z: 0 },
+      pointAt: (time: number) => ({ x: -2 + time, y: 1, z: 0 }),
+    };
+
+    expect(physics.world.castRay(ray, 4, true)).not.toBeNull();
+    expect(physics.setChunkColliderEnabled('origin', doorBarrier.id, false)).toBe(true);
+    expect(physics.setChunkColliderEnabled('origin', 'missing-door', false)).toBe(false);
+    expect(step).not.toHaveBeenCalled();
+    physics.move({ x: 0, y: 0, z: 0 });
+    expect(step).toHaveBeenCalledTimes(1);
+    expect(physics.world.castRay(ray, 4, true)).toBeNull();
   });
 
   it('rebases every loaded chunk by the same relative delta', async () => {

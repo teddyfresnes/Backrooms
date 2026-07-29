@@ -2,12 +2,12 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { InputManager } from '../input/InputManager';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
-import type { Vec3Data } from '../world/types';
+import type { DoorOpenMode, Vec3Data } from '../world/types';
 
 export interface PlayerCallbacks {
   onLockChange(locked: boolean): void;
   onFootstep(strength: number): void;
-  onInteract(): void;
+  onInteract(mode: DoorOpenMode): void;
   onLand(strength: number): void;
   onFallReset(): void;
 }
@@ -29,6 +29,7 @@ const NOCLIP_SPEED = 8.5;
 const NOCLIP_SPRINT_SPEED = 22;
 const STANDING_JUMP_SPEED = 5.45;
 const CROUCHED_JUMP_SPEED = 4.25;
+const SLOW_INTERACTION_HOLD = 1;
 
 export class PlayerController {
   readonly controls: PointerLockControls;
@@ -66,6 +67,8 @@ export class PlayerController {
   private previousTraversalProgress = 0;
   private landingKick = 0;
   private noclipEnabled = false;
+  private interactionHoldElapsed?: number;
+  private interactionHoldTriggered = false;
   private readonly baseFov: number;
 
   constructor(
@@ -211,6 +214,9 @@ export class PlayerController {
 
     if (!this.controls.isLocked) {
       this.input.consumePress('KeyE');
+      this.input.consumeRelease('KeyE');
+      this.interactionHoldElapsed = undefined;
+      this.interactionHoldTriggered = false;
       this.input.consumePress('Space');
       this.input.consumePress('ControlLeft');
       this.input.consumePress('ControlRight');
@@ -223,6 +229,9 @@ export class PlayerController {
 
     if (this.noclipEnabled) {
       this.input.consumePress('KeyE');
+      this.input.consumeRelease('KeyE');
+      this.interactionHoldElapsed = undefined;
+      this.interactionHoldTriggered = false;
       this.input.consumePress('Space');
       this.input.consumePress('ControlLeft');
       this.input.consumePress('ControlRight');
@@ -230,7 +239,27 @@ export class PlayerController {
       return;
     }
 
-    if (this.input.consumePress('KeyE')) this.callbacks.onInteract();
+    if (this.input.consumePress('KeyE')) {
+      this.interactionHoldElapsed = 0;
+      this.interactionHoldTriggered = false;
+    }
+    if (this.interactionHoldElapsed !== undefined && this.input.isPressed('KeyE')) {
+      this.interactionHoldElapsed += delta;
+      if (
+        !this.interactionHoldTriggered &&
+        this.interactionHoldElapsed >= SLOW_INTERACTION_HOLD
+      ) {
+        this.interactionHoldTriggered = true;
+        this.callbacks.onInteract('slow');
+      }
+    }
+    if (this.input.consumeRelease('KeyE')) {
+      if (this.interactionHoldElapsed !== undefined && !this.interactionHoldTriggered) {
+        this.callbacks.onInteract('fast');
+      }
+      this.interactionHoldElapsed = undefined;
+      this.interactionHoldTriggered = false;
+    }
     if (this.traversal) {
       const traversal = this.traversal;
       traversal.elapsed = Math.min(traversal.duration, traversal.elapsed + delta);

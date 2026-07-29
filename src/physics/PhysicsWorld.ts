@@ -34,6 +34,7 @@ export interface CharacterMotionResult {
 export class PhysicsWorld {
   readonly world: RAPIER.World;
   private readonly chunkBodies = new Map<string, RAPIER.RigidBody>();
+  private readonly chunkColliders = new Map<string, Map<string, RAPIER.Collider>>();
   private readonly playerBody: RAPIER.RigidBody;
   private readonly playerCollider: RAPIER.Collider;
   private readonly controller: RAPIER.KinematicCharacterController;
@@ -90,8 +91,15 @@ export class PhysicsWorld {
       RAPIER.RigidBodyDesc.fixed().setTranslation(offset.x, offset.y, offset.z),
     );
     try {
-      colliders.forEach((collider) => addStaticCollider(this.world, body, collider));
+      const indexedColliders = new Map<string, RAPIER.Collider>();
+      for (const collider of colliders) {
+        if (indexedColliders.has(collider.id)) {
+          throw new Error(`Duplicate collider id in chunk ${key}: ${collider.id}`);
+        }
+        indexedColliders.set(collider.id, addStaticCollider(this.world, body, collider));
+      }
       this.chunkBodies.set(key, body);
+      this.chunkColliders.set(key, indexedColliders);
       this.requestChunkSynchronization();
     } catch (error) {
       this.world.removeRigidBody(body);
@@ -104,7 +112,18 @@ export class PhysicsWorld {
     if (!body) return false;
     this.world.removeRigidBody(body);
     this.chunkBodies.delete(key);
+    this.chunkColliders.delete(key);
     this.requestChunkSynchronization();
+    return true;
+  }
+
+  setChunkColliderEnabled(key: string, colliderId: string, enabled: boolean): boolean {
+    const collider = this.chunkColliders.get(key)?.get(colliderId);
+    if (!collider) return false;
+    collider.setEnabled(enabled);
+    // Rapier refreshes its broad phase on the next scheduled fixed tick.
+    // Forcing an extra world.step() here would run a second, unplanned physics
+    // tick from the render/interaction update and can stall a streamed world.
     return true;
   }
 

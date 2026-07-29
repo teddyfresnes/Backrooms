@@ -34,6 +34,12 @@ const overlaps = (left: Rect, right: Rect): boolean =>
   left.minX < right.maxX && left.maxX > right.minX &&
   left.minZ < right.maxZ && left.maxZ > right.minZ;
 
+const sameRect = (left: Rect, right: Rect): boolean =>
+  Math.abs(left.minX - right.minX) < 0.02 &&
+  Math.abs(left.maxX - right.maxX) < 0.02 &&
+  Math.abs(left.minZ - right.minZ) < 0.02 &&
+  Math.abs(left.maxZ - right.maxZ) < 0.02;
+
 const containsPoint = (rect: Rect, point: { x: number; z: number }): boolean =>
   point.x > rect.minX && point.x < rect.maxX &&
   point.z > rect.minZ && point.z < rect.maxZ;
@@ -46,10 +52,7 @@ const floorOpeningsThatPierceTheStoryBelow = (
       feature.kind === 'stair-socket' && feature.inherited === true
     )
     .map((feature) => getStairFloorOpening(feature));
-  const shallowPassageHoles = plan.features.flatMap((feature) =>
-    feature.kind === 'squeeze-view' ? feature.holes ?? [] : []
-  );
-  const localOnlyOpenings = [...inheritedStairOpenings, ...shallowPassageHoles];
+  const localOnlyOpenings = inheritedStairOpenings;
   return getFloorOpenings(plan).filter((opening) =>
     !localOnlyOpenings.some((stairOpening) =>
       Math.abs(opening.minX - stairOpening.minX) < 0.02 &&
@@ -70,11 +73,11 @@ const wallsAround = (
   const centerZ = (opening.minZ + opening.maxZ) * 0.5;
   if (wall.orientation === 'x') {
     return Math.abs(wall.x - centerX) < 0.03 &&
-      Math.abs(wall.length - (opening.maxX - opening.minX)) < 0.03 &&
+      Math.abs(wall.length - (opening.maxX - opening.minX + wall.thickness * 2)) < 0.03 &&
       (Math.abs(wall.z - opening.minZ) < 0.08 || Math.abs(wall.z - opening.maxZ) < 0.08);
   }
   return Math.abs(wall.z - centerZ) < 0.03 &&
-    Math.abs(wall.length - (opening.maxZ - opening.minZ)) < 0.03 &&
+    Math.abs(wall.length - (opening.maxZ - opening.minZ + wall.thickness * 2)) < 0.03 &&
     (Math.abs(wall.x - opening.minX) < 0.08 || Math.abs(wall.x - opening.maxX) < 0.08);
 });
 
@@ -245,6 +248,10 @@ describe('InfiniteWorld chunk contracts', () => {
     expect(getInfiniteChunkMetadata(pillarPlan)?.biome).toBe('pillar-hall');
     const pillars = pillarPlan.columns.filter((column) => column.kind === 'column');
     expect(pillars.length).toBeGreaterThan(12);
+    expect(pillars.filter((column) => Math.max(column.width, column.depth) >= 1.5).length)
+      .toBeGreaterThan(pillars.length * 0.6);
+    expect(pillars.filter((column) => Math.max(column.width, column.depth) < 0.95).length)
+      .toBeLessThan(pillars.length * 0.15);
     expect(pillars.some((column) => Math.abs(column.width - column.depth) > 0.12)).toBe(true);
     expect(getInfiniteChunkMetadata(thresholdPlan)?.biome).toBe('tight-threshold');
     expect(thresholdPlan.walls.filter((wall) => wall.detail === 'threshold').length).toBeGreaterThan(0);
@@ -323,6 +330,32 @@ describe('InfiniteWorld chunk contracts', () => {
     expect(eastIds.some((id) => westIds.has(id))).toBe(false);
   });
 
+  it('prefixes every cross-reference owned by an interactive door', () => {
+    let plan: ReturnType<typeof generateInfiniteChunk> | undefined;
+    for (let index = 0; index < 24 && !plan; index += 1) {
+      const candidate = generateInfiniteChunk(
+        'INFINITE-DOOR-PREFIX',
+        createChunkKey({ x: index, z: -index, story: 0 }),
+      );
+      if (candidate.features.some((feature) => feature.kind === 'interactive-door')) {
+        plan = candidate;
+      }
+    }
+    expect(plan).toBeDefined();
+    const prefix = `chunk-${getInfiniteChunkMetadata(plan!)!.key}/`;
+    for (const door of plan!.features.filter(
+      (feature) => feature.kind === 'interactive-door',
+    )) {
+      expect(door.id.startsWith(prefix)).toBe(true);
+      expect(door.sourceRoomId.startsWith(prefix)).toBe(true);
+      expect(door.targetRoomId.startsWith(prefix)).toBe(true);
+      expect(door.colliderId.startsWith(prefix)).toBe(true);
+      expect(plan!.rooms.some((room) => room.id === door.sourceRoomId)).toBe(true);
+      expect(plan!.rooms.some((room) => room.id === door.targetRoomId)).toBe(true);
+      expect(plan!.colliders.some((collider) => collider.id === door.colliderId)).toBe(true);
+    }
+  });
+
   it('derives ceiling openings from the canonical chunk directly above', () => {
     const coord = { x: -3, z: 7, story: -2 } as const;
     const key = createChunkKey(coord);
@@ -335,6 +368,53 @@ describe('InfiniteWorld chunk contracts', () => {
     expect(getInfiniteChunkCeilingOpenings(plan)).toEqual(expected);
     for (const light of plan.lights) {
       expect(expected.some((opening) => lightPanelOverlapsRect(light, opening))).toBe(false);
+    }
+  });
+
+  it('connects crouch-passage drops to the lower storey and keeps voids open', () => {
+    const seed = 'PASSAGE-SHAFT-AUDIT';
+    const cases = [
+      { coord: { x: -12, z: 11, story: 1 }, kind: 'drop' as const },
+      { coord: { x: -10, z: -3, story: 1 }, kind: 'void' as const },
+    ];
+    for (const { coord, kind } of cases) {
+      const source = generateInfiniteChunk(seed, coord);
+      const sourceFeature = source.features.find(
+        (feature) =>
+          feature.kind === 'squeeze-view' &&
+          feature.holes?.some((hole) => (hole.kind ?? 'drop') === kind),
+      );
+      expect(sourceFeature?.kind).toBe('squeeze-view');
+      if (!sourceFeature || sourceFeature.kind !== 'squeeze-view') continue;
+      const hole = sourceFeature.holes?.find(
+        (candidate) => (candidate.kind ?? 'drop') === kind,
+      );
+      expect(hole).toBeDefined();
+      if (!hole) continue;
+
+      const destination = generateInfiniteChunk(seed, {
+        ...coord,
+        story: coord.story - 1,
+      });
+      expect(getInfiniteChunkCeilingOpenings(destination).some((opening) =>
+        sameRect(opening, hole)
+      )).toBe(true);
+      expect(getFloorOpenings(destination).some((opening) => sameRect(opening, hole)))
+        .toBe(kind === 'void');
+      expect(wallsAround(
+        destination.walls,
+        hole,
+        kind === 'void' ? '/inherited-shaft-' : '/ceiling-shaft-collar-',
+      )).toHaveLength(4);
+
+      if (kind === 'void') {
+        const deeper = generateInfiniteChunk(seed, {
+          ...coord,
+          story: coord.story - 2,
+        });
+        expect(getFloorOpenings(deeper).some((opening) => sameRect(opening, hole)))
+          .toBe(true);
+      }
     }
   });
 
@@ -359,13 +439,17 @@ describe('InfiniteWorld chunk contracts', () => {
     expect(upper.floorOpenings?.some((opening) => overlaps(opening, inherited.bounds))).toBe(true);
     expect(upper.colliders.filter((collider) =>
       collider.id.includes(`${inherited.id}-flight-ramp-`)
-    )).toHaveLength(2);
+    )).toHaveLength(inherited.layout === 'straight' ? 1 : 2);
     expect(upper.colliders.filter((collider) =>
       collider.id.includes(`${inherited.id}-`) && collider.kind === 'step'
-    )).toHaveLength(4);
+    )).toHaveLength(inherited.layout === 'straight' ? 2 : 4);
     expect(upper.colliders.filter((collider) =>
       collider.id.includes(`${inherited.id}-cage-wall-`) && collider.kind === 'wall'
-    )).toHaveLength(3);
+    )).toHaveLength(
+      inherited.layout === 'straight'
+        ? 2
+        : inherited.switchbackJoin === 'divider' ? 4 : 3,
+    );
 
     const lower = generateInfiniteChunk(stairSeed, {
       ...destination!,
@@ -586,6 +670,16 @@ describe('InfiniteWorld chunk contracts', () => {
         Math.abs(wall.bottom - (plan.wallHeight - INFINITE_STORY_PITCH)) < 0.01 &&
         Math.abs(wall.bottom + wall.height - INFINITE_STORY_PITCH) < 0.01
       )).toBe(true);
+      for (const wall of shells) {
+        const expectedLength = wall.orientation === 'x'
+          ? canonicalOpening.maxX - canonicalOpening.minX + wall.thickness * 2
+          : canonicalOpening.maxZ - canonicalOpening.minZ + wall.thickness * 2;
+        expect(wall.length).toBeCloseTo(expectedLength, 5);
+        if (wall.id.endsWith('-north')) expect(wall.z).toBeCloseTo(canonicalOpening.minZ, 5);
+        if (wall.id.endsWith('-south')) expect(wall.z).toBeCloseTo(canonicalOpening.maxZ, 5);
+        if (wall.id.endsWith('-west')) expect(wall.x).toBeCloseTo(canonicalOpening.minX, 5);
+        if (wall.id.endsWith('-east')) expect(wall.x).toBeCloseTo(canonicalOpening.maxX, 5);
+      }
       expect(getInfiniteChunkCeilingOpenings(plan)).toEqual(
         floorOpeningsThatPierceTheStoryBelow(generateInfiniteChunk(shaftSeed, {
           ...coord,
@@ -615,6 +709,12 @@ describe('InfiniteWorld chunk contracts', () => {
       Math.abs(wall.bottom + wall.height - INFINITE_STORY_PITCH) < 0.01
     )).toBe(true);
     expect(collars.every((wall) => wall.kind === 'wallpaper')).toBe(true);
+    for (const wall of collars) {
+      const expectedLength = wall.orientation === 'x'
+        ? terminalCeilingOpening.maxX - terminalCeilingOpening.minX + wall.thickness * 2
+        : terminalCeilingOpening.maxZ - terminalCeilingOpening.minZ + wall.thickness * 2;
+      expect(wall.length).toBeCloseTo(expectedLength, 5);
+    }
   });
 
   it('physically leaves every canonical boundary gate open', () => {

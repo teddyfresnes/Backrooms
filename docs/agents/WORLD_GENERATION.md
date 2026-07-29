@@ -63,6 +63,9 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
   des mêmes dimensions.
 - Après mutation de murs ou de zones verticales, appeler le helper de
   reconstruction prévu au bon endroit plutôt que patcher un seul tableau.
+- Une `interactive-door` remplace un vrai segment de mur par deux jambages et
+  un linteau. Son collider représente l’état fermé : les audits de topologie
+  permanente doivent l’ignorer, puis le runtime le désactive pendant l’ouverture.
 
 ### Topologie verticale
 
@@ -72,6 +75,12 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
   même plan ne sont que des aperçus de transition.
 - `floorOpenings`, `ceilingOpenings`, `lowerPreviewOpenings` et
   `stairCeilingOpenings` ont des rôles distincts ; ne pas les fusionner.
+- `StairSocketFeature.layout` choisit une volée `straight` ou un demi-tour
+  `switchback`; ce dernier utilise `switchbackJoin` (`joined` ou `divider`).
+  `StairLayout.ts` reste la source commune du rendu et des colliders.
+- Les `PassageHole` des passages accroupis sont de vrais puits : `drop`
+  rejoint le palier de l’étage inférieur et `void` propage son ouverture comme
+  un puits profond. Leur aperçu local vient de `PassageHoleLayout.ts`.
 - Les ouvertures héritées sont dérivées de chunks canoniques voisins. Tester au
   moins une paire d’étages, pas uniquement un plan isolé.
 
@@ -79,6 +88,7 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
 
 - Les IDs locaux doivent être uniques et stables.
 - `prefixPlanIds()` doit préfixer chaque nouvel ID et toute référence vers un ID.
+- Pour une porte, cela inclut `sourceRoomId`, `targetRoomId` et `colliderId`.
 - Les métadonnées stockées en `WeakMap` disparaissent lors du passage worker.
   Toute donnée nécessaire au rendu après clonage structuré doit aussi être
   sérialisée dans `WorldPlan`.
@@ -93,7 +103,7 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
 | Puits ou étages | `generateWorld.ts`, `InfiniteWorld.ts`, `StairLayout.ts` |
 | Biome/topologie régionale | `getInfiniteBiome()` / `applyBiome()` |
 | Palette de surfaces | `getInfiniteVisualBiome()` / `applyVisualBiome()` |
-| Props | `PropCatalog.ts` et `PropPlacement.ts`, après topologie héritée |
+| Props | `PropCatalog.ts` et `PropPlacement.ts`, après topologie héritée ; réserver les scènes aux grandes salles |
 
 ## Validation minimale
 
@@ -105,4 +115,3 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
 Ces suites auditent beaucoup de seeds et peuvent être lentes. Utiliser
 temporairement `-t "nom exact du test"` pendant l’itération, puis exécuter le
 fichier complet avant la livraison.
-
