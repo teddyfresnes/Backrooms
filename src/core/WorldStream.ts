@@ -6,6 +6,10 @@ import type { BakedLightMapData } from '../render/BakedLighting';
 import { WorldView } from '../render/WorldBuilder';
 import type { DoorWorldInteraction, WorldInteraction } from '../render/WorldBuilder';
 import {
+  getEpicStructureDefinition,
+  isInsideEpicStoryVolume,
+} from '../world/EpicStructures';
+import {
   INFINITE_CHUNK_SIZE,
   INFINITE_STORY_PITCH,
   attachInfiniteChunkMetadata,
@@ -272,9 +276,16 @@ export class WorldStream {
     if (!this.initialized || this.disposed) return;
 
     const observedCenter = streamChunkCoordAt(playerPosition);
+    const epicStoryPinned = this.isEpicStoryPinned(playerPosition);
     let nextCenter = observedCenter;
     const observedKey = createChunkKey(observedCenter);
-    if (shouldDeferStoryTransition(
+    if (epicStoryPinned) {
+      // Epic upper levels are one tall visual volume rather than logical
+      // stories. Pinning its source keeps that illusion stable; for epic1 it
+      // also keeps the lethal shaft and last safe respawn surface mounted.
+      nextCenter = { ...observedCenter, story: this.centerCoord.story };
+      this.pendingStoryKey = undefined;
+    } else if (shouldDeferStoryTransition(
       this.centerCoord,
       observedCenter,
       this.chunks.has(observedKey) || this.preparedChunks.has(observedKey),
@@ -333,7 +344,7 @@ export class WorldStream {
     // is stable. Near a known multi-storey shaft, queue its complete vertical chain in
     // advance so consecutive midpoints never wait behind horizontal jobs.
     const localStoryY = playerPosition.y - this.centerCoord.story * INFINITE_STORY_PITCH;
-    if (this.worker && missing.length === 0 && localStoryY < 1.1) {
+    if (this.worker && !epicStoryPinned && missing.length === 0 && localStoryY < 1.1) {
       this.enqueueVerticalPrefetch({
         x: this.centerCoord.x,
         z: this.centerCoord.z,
@@ -567,6 +578,15 @@ export class WorldStream {
               },
             );
           }
+        } else if (feature.kind === 'epic-structure') {
+          const definition = getEpicStructureDefinition(feature.index);
+          addTarget(
+            runtime,
+            definition.command,
+            definition.label,
+            definition.aliases,
+            feature.destination,
+          );
         } else if (feature.kind === 'squeeze-view') {
           const center = rectCenter(feature.bounds);
           const crouchOnly = (feature.clearanceHeight ?? this.originPlan.wallHeight) < 1.6;
@@ -657,8 +677,16 @@ export class WorldStream {
         }
       }
 
+      const epicRoomIds = new Set(
+        runtime.plan.features
+          .filter((feature) => feature.kind === 'epic-structure')
+          .map((feature) => feature.roomId),
+      );
       for (const room of runtime.plan.rooms) {
         if (room.access === 'sealed') continue;
+        // Epic rooms have dedicated, stable commands. Their base plan was
+        // intentionally replaced, so biome/generic labels would be false.
+        if (epicRoomIds.has(room.id)) continue;
         const center = rectCenter(room.bounds);
         const safeFloor = runtime.plan.floorRects
           .map((floor): Rect | null => {
@@ -886,6 +914,17 @@ export class WorldStream {
     return this.chunks.get(createChunkKey({ ...observed, story: this.centerCoord.story }));
   }
 
+  private isEpicStoryPinned(playerPosition: THREE.Vector3): boolean {
+    const runtime = this.chunks.get(createChunkKey(this.centerCoord));
+    if (!runtime) return false;
+    this.localPlayer.copy(playerPosition).sub(runtime.offset);
+    return runtime.plan.features.some(
+      (feature) =>
+        feature.kind === 'epic-structure' &&
+        isInsideEpicStoryVolume(feature, this.localPlayer),
+    );
+  }
+
   private readonly onWorkerMessage = (event: MessageEvent<WorkerResponse>): void => {
     if (this.disposed || !this.workerInFlight || event.data.id !== this.workerInFlight.id) return;
     const request = this.workerInFlight;
@@ -985,8 +1024,19 @@ export class WorldStream {
 
   private pumpVerticalPrefetch(): void {
     if (!this.worker || this.workerInFlight) return;
+    const horizontalNeighborhoodIncomplete = streamedCoordsAround(this.centerCoord).some((coord) => {
+      const key = createChunkKey(coord);
+      return !this.chunks.has(key) && !this.preparedChunks.has(key);
+    });
+    // Fill the visible neighborhood first. A real story hand-off remains
+    // urgent and is allowed to overtake horizontal background work.
+    if (horizontalNeighborhoodIncomplete && !this.pendingStoryKey) return;
     while (this.verticalPrefetchQueue.length > 0) {
       const coord = this.verticalPrefetchQueue.shift()!;
+      // A queued abyss or stair chain belongs to the horizontal column the
+      // player was exploring. After a horizontal teleport/move, discard the
+      // stale tail so it cannot starve the new 3x3 neighborhood.
+      if (coord.x !== this.centerCoord.x || coord.z !== this.centerCoord.z) continue;
       const key = createChunkKey(coord);
       if (this.chunks.has(key) || this.preparedChunks.has(key)) continue;
       const id = ++this.workerRequestId;

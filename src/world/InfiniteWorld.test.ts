@@ -27,7 +27,16 @@ import {
   lightPanelOverlapsRect,
   worldMaxPitStories,
 } from './generateWorld';
-import type { PitHole, Rect, StairSocketFeature } from './types';
+import {
+  EPIC_STRUCTURE_DEFINITIONS,
+  epicStructureIndexForCoord,
+} from './EpicStructures';
+import type {
+  EpicStructureFeature,
+  PitHole,
+  Rect,
+  StairSocketFeature,
+} from './types';
 import { getStairFloorOpening, getStairSlabs } from './StairLayout';
 
 const overlaps = (left: Rect, right: Rect): boolean =>
@@ -43,6 +52,13 @@ const sameRect = (left: Rect, right: Rect): boolean =>
 const containsPoint = (rect: Rect, point: { x: number; z: number }): boolean =>
   point.x > rect.minX && point.x < rect.maxX &&
   point.z > rect.minZ && point.z < rect.maxZ;
+
+const epicMarker = (
+  plan: ReturnType<typeof generateInfiniteChunk>,
+): EpicStructureFeature | undefined =>
+  plan.features.find(
+    (feature): feature is EpicStructureFeature => feature.kind === 'epic-structure',
+  );
 
 const floorOpeningsThatPierceTheStoryBelow = (
   plan: ReturnType<typeof generateInfiniteChunk>,
@@ -88,6 +104,27 @@ const sampleCoords: ChunkCoord[] = [
   { x: -9, z: 4, story: 3 },
   { x: 41, z: -27, story: -5 },
 ];
+
+const epicAuditSeed = 'EPIC-PAVING-AUDIT';
+const epicAuditCoords: ChunkCoord[] = Array.from(
+  { length: 9 },
+  (_, index): ChunkCoord => ({
+    x: -3 + index % 3,
+    z: -3 + Math.floor(index / 3),
+    story: -4,
+  }),
+);
+const epicAuditPlans = new Map<string, ReturnType<typeof generateInfiniteChunk>>();
+const epicAuditPlan = (
+  coord: ChunkCoord,
+): ReturnType<typeof generateInfiniteChunk> => {
+  const key = createChunkKey(coord);
+  const cached = epicAuditPlans.get(key);
+  if (cached) return cached;
+  const plan = generateInfiniteChunk(epicAuditSeed, key);
+  epicAuditPlans.set(key, plan);
+  return plan;
+};
 
 const opposite: Record<ChunkEdge, ChunkEdge> = {
   north: 'south',
@@ -137,13 +174,105 @@ describe('InfiniteWorld chunk contracts', () => {
 
     const fingerprints = new Set(
       Array.from({ length: 20 }, (_, index) => {
-        const plan = generateInfiniteChunk(seed, createChunkKey({ x: index - 10, z: index % 4, story: 0 }));
+        const plan = generateInfiniteChunk(seed, createChunkKey({
+          x: (index - 10) * 3,
+          z: (index % 4) * 3,
+          story: 0,
+        }));
         return plan.rooms
           .map((room) => `${room.kind}:${room.bounds.minX}:${room.bounds.minZ}:${room.bounds.maxX}:${room.bounds.maxZ}`)
           .join('|');
       }),
     );
     expect(fingerprints.size).toBeGreaterThanOrEqual(18);
+  });
+
+  describe('epic structure paving', () => {
+    it('fills a negative-coordinate 3x3 story with one ordinary chunk and epic1 through epic8', () => {
+      const observedIndices: number[] = [];
+      let ordinaryCount = 0;
+
+      for (const coord of epicAuditCoords) {
+        const plan = epicAuditPlan(coord);
+        const marker = epicMarker(plan);
+        const assignedIndex = epicStructureIndexForCoord(coord);
+        expect(marker?.index ?? null).toBe(assignedIndex);
+        expect(getInfiniteChunkMetadata(plan)?.coord).toEqual(coord);
+        if (marker) observedIndices.push(marker.index);
+        else ordinaryCount += 1;
+      }
+
+      expect(ordinaryCount).toBe(1);
+      expect(observedIndices.sort((left, right) => left - right)).toEqual(
+        EPIC_STRUCTURE_DEFINITIONS.map((definition) => definition.index),
+      );
+    });
+
+    it('keeps every epic destination on walkable floor and outside floor openings', () => {
+      for (const coord of epicAuditCoords) {
+        const plan = epicAuditPlan(coord);
+        const marker = epicMarker(plan);
+        if (!marker) continue;
+        expect(plan.floorRects.some((floor) =>
+          containsPoint(floor, marker.destination)
+        )).toBe(true);
+        expect(getFloorOpenings(plan).some((opening) =>
+          containsPoint(opening, marker.destination)
+        )).toBe(false);
+      }
+    });
+
+    it('leaves epic1 voidBounds free of every floor collider', () => {
+      const plan = epicAuditPlan(
+        epicAuditCoords.find((coord) => epicStructureIndexForCoord(coord) === 1)!,
+      );
+      const marker = epicMarker(plan);
+      expect(marker?.index).toBe(1);
+      expect(marker?.voidBounds).toBeDefined();
+      if (!marker?.voidBounds) return;
+
+      const floorColliders = plan.colliders.filter((collider) => collider.kind === 'floor');
+      expect(floorColliders.length).toBeGreaterThan(0);
+      for (const collider of floorColliders) {
+        const footprint: Rect = {
+          minX: collider.center.x - collider.halfExtents.x,
+          maxX: collider.center.x + collider.halfExtents.x,
+          minZ: collider.center.z - collider.halfExtents.z,
+          maxZ: collider.center.z + collider.halfExtents.z,
+        };
+        expect(overlaps(footprint, marker.voidBounds)).toBe(false);
+      }
+
+      const shaftColliders = plan.colliders.filter((collider) =>
+        collider.id.includes('/epic-abyss-shaft-')
+      );
+      expect(shaftColliders).toHaveLength(4);
+      for (const collider of shaftColliders) {
+        expect(collider.center.y + collider.halfExtents.y).toBeCloseTo(0, 5);
+        expect(collider.center.y - collider.halfExtents.y).toBeLessThanOrEqual(-72);
+      }
+    });
+
+    it('prefixes epic IDs and preserves every serialized marker through structuredClone', () => {
+      for (const coord of epicAuditCoords) {
+        const plan = epicAuditPlan(coord);
+        const marker = epicMarker(plan);
+        if (!marker) continue;
+        const prefix = `chunk-${createChunkKey(coord)}/`;
+        expect(marker.id.startsWith(prefix)).toBe(true);
+        expect(marker.roomId.startsWith(prefix)).toBe(true);
+        expect(plan.rooms.some((room) => room.id === marker.roomId)).toBe(true);
+
+        const cloned = structuredClone(plan);
+        expect(epicMarker(cloned)).toEqual(marker);
+      }
+    });
+
+    it('rebuilds the complete epic tile deterministically', () => {
+      for (const coord of epicAuditCoords) {
+        expect(generateInfiniteChunk(epicAuditSeed, coord)).toEqual(epicAuditPlan(coord));
+      }
+    });
   });
 
   it('assigns deterministic and coherent biomes to 3x3 macro regions', () => {
@@ -242,12 +371,40 @@ describe('InfiniteWorld chunk contracts', () => {
 
   it('builds giant pillar fields and repeated threshold halls for liminal biomes', () => {
     const biomeSeed = 'LIMINAL-BIOME-AUDIT';
-    const pillarPlan = generateInfiniteChunk(biomeSeed, { x: -15, z: -21, story: 0 });
-    const thresholdPlan = generateInfiniteChunk(biomeSeed, { x: -30, z: -18, story: 0 });
+    const pillarCoords: ChunkCoord[] = [];
+    pillarSearch:
+    for (let x = -30; x <= 30; x += 3) {
+      for (let z = -30; z <= 30; z += 3) {
+        const coord = { x, z, story: 0 };
+        if (getInfiniteBiome(biomeSeed, coord) !== 'pillar-hall') continue;
+        pillarCoords.push(coord);
+        if (pillarCoords.length === 4) break pillarSearch;
+      }
+    }
+    expect(pillarCoords).toHaveLength(4);
+    const pillarPlans = pillarCoords.map((coord) => generateInfiniteChunk(biomeSeed, coord));
+    let thresholdCoord: ChunkCoord | undefined;
+    thresholdSearch:
+    for (let x = -30; x <= 30; x += 3) {
+      for (let z = -30; z <= 30; z += 3) {
+        const coord = { x, z, story: 0 };
+        if (getInfiniteBiome(biomeSeed, coord) !== 'tight-threshold') continue;
+        thresholdCoord = coord;
+        break thresholdSearch;
+      }
+    }
+    expect(thresholdCoord).toBeDefined();
+    const thresholdPlan = generateInfiniteChunk(biomeSeed, thresholdCoord!);
 
-    expect(getInfiniteChunkMetadata(pillarPlan)?.biome).toBe('pillar-hall');
-    const pillars = pillarPlan.columns.filter((column) => column.kind === 'column');
-    expect(pillars.length).toBeGreaterThan(12);
+    expect(pillarPlans.every(
+      (plan) => getInfiniteChunkMetadata(plan)?.biome === 'pillar-hall',
+    )).toBe(true);
+    expect(pillarPlans.some(
+      (plan) => plan.columns.filter((column) => column.kind === 'column').length > 12,
+    )).toBe(true);
+    const pillars = pillarPlans.flatMap((plan) =>
+      plan.columns.filter((column) => column.kind === 'column')
+    );
     expect(pillars.filter((column) => Math.max(column.width, column.depth) >= 1.5).length)
       .toBeGreaterThan(pillars.length * 0.6);
     expect(pillars.filter((column) => Math.max(column.width, column.depth) < 0.95).length)
@@ -335,7 +492,7 @@ describe('InfiniteWorld chunk contracts', () => {
     for (let index = 0; index < 24 && !plan; index += 1) {
       const candidate = generateInfiniteChunk(
         'INFINITE-DOOR-PREFIX',
-        createChunkKey({ x: index, z: -index, story: 0 }),
+        createChunkKey({ x: index * 3, z: -index * 3, story: 0 }),
       );
       if (candidate.features.some((feature) => feature.kind === 'interactive-door')) {
         plan = candidate;
@@ -357,7 +514,7 @@ describe('InfiniteWorld chunk contracts', () => {
   });
 
   it('derives ceiling openings from the canonical chunk directly above', () => {
-    const coord = { x: -3, z: 7, story: -2 } as const;
+    const coord = { x: -3, z: 6, story: -2 } as const;
     const key = createChunkKey(coord);
     const aboveKey = createChunkKey({ ...coord, story: coord.story + 1 });
     const plan = generateInfiniteChunk(seed, key);
@@ -373,9 +530,12 @@ describe('InfiniteWorld chunk contracts', () => {
 
   it('connects crouch-passage drops to the lower storey and keeps voids open', () => {
     const seed = 'PASSAGE-SHAFT-AUDIT';
-    const cases = [
-      { coord: { x: -12, z: 11, story: 1 }, kind: 'drop' as const },
-      { coord: { x: -10, z: -3, story: 1 }, kind: 'void' as const },
+    const cases: Array<{
+      coord: ChunkCoord;
+      kind: 'drop' | 'void';
+    }> = [
+      { coord: { x: -21, z: -30, story: 1 }, kind: 'drop' },
+      { coord: { x: -6, z: -21, story: 1 }, kind: 'void' },
     ];
     for (const { coord, kind } of cases) {
       const source = generateInfiniteChunk(seed, coord);
@@ -479,7 +639,12 @@ describe('InfiniteWorld chunk contracts', () => {
   it('keeps every surviving high ceiling fully shelled and clear of vertical openings', () => {
     let tallRoomCount = 0;
     for (let index = 0; index < 36; index += 1) {
-      const coord = { x: index % 6 - 3, z: Math.floor(index / 6) - 3, story: index % 3 - 1 };
+      const coord = {
+        x: index % 6 - 3,
+        z: Math.floor(index / 6) - 3,
+        story: index % 3 - 1,
+      };
+      if (epicStructureIndexForCoord(coord) !== null) continue;
       const plan = generateInfiniteChunk('HIGH-CEILING-INVARIANT-AUDIT', coord);
       const openings = [
         ...getFloorOpenings(plan),
@@ -518,10 +683,16 @@ describe('InfiniteWorld chunk contracts', () => {
             .sort((left, right) => left.min - right.min);
           let coveredUntil = side.min;
           for (const interval of intervals) {
-            expect(interval.min).toBeLessThanOrEqual(coveredUntil + 0.03);
+            expect(
+              interval.min,
+              `upper shell gap in ${createChunkKey(coord)} room ${room.id}`,
+            ).toBeLessThanOrEqual(coveredUntil + 0.03);
             coveredUntil = Math.max(coveredUntil, interval.max);
           }
-          expect(coveredUntil).toBeGreaterThanOrEqual(side.max - 0.03);
+          expect(
+            coveredUntil,
+            `incomplete upper shell in ${createChunkKey(coord)} room ${room.id}`,
+          ).toBeGreaterThanOrEqual(side.max - 0.03);
         }
       }
       for (const feature of plan.features.filter((candidate) => candidate.kind === 'raised-zone')) {
@@ -536,8 +707,8 @@ describe('InfiniteWorld chunk contracts', () => {
     let sunkenCount = 0;
     for (let index = 0; index < 36; index += 1) {
       const plan = generateInfiniteChunk('ELEVATION-DISTRICT-INVARIANT-AUDIT', {
-        x: index % 6 - 3,
-        z: Math.floor(index / 6) - 3,
+        x: (index % 6 - 3) * 3,
+        z: (Math.floor(index / 6) - 3) * 3,
         story: index % 3 - 1,
       });
       for (const feature of plan.features.filter(
@@ -584,8 +755,8 @@ describe('InfiniteWorld chunk contracts', () => {
     let inheritedCount = 0;
     for (let index = 0; index < 36; index += 1) {
       const inherited = inheritedShaftOpeningsForChunk('SHAFT-COALESCE-AUDIT', {
-        x: index % 6 - 3,
-        z: Math.floor(index / 6) - 3,
+        x: (index % 6 - 3) * 3,
+        z: (Math.floor(index / 6) - 3) * 3,
         story: index % 4 - 2,
       });
       inheritedCount += inherited.length;
@@ -605,8 +776,8 @@ describe('InfiniteWorld chunk contracts', () => {
     let shaft: PitHole | undefined;
     for (let index = 0; index < 900 && !shaft; index += 1) {
       const candidate: ChunkCoord = {
-        x: index % 9 - 4,
-        z: Math.floor(index / 9) % 9 - 4,
+        x: (index % 9 - 4) * 3,
+        z: (Math.floor(index / 9) % 9 - 4) * 3,
         story: -Math.floor(index / 81),
       };
       const key = createChunkKey(candidate);

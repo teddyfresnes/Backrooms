@@ -8,6 +8,10 @@ associés. Le voisinage normal est un 3×3 sur l’étage courant.
 - Au démarrage, jusqu’à trois workers temporaires préparent les voisins.
 - Ensuite, un worker persistant génère un chunk à la fois.
 - Les destinations verticales sont préchargées près des puits et escaliers.
+- Les volumes hauts des monuments épinglent leur story source au lieu de
+  remonter tous les 5,4 m. Pour `epic1`, cet épinglage dure aussi pendant la
+  chute : sa coque descend sous le seuil de mort et le sol de réapparition
+  reste monté.
 - Une transition d’étage est différée tant que le chunk cible n’est pas prêt.
 - Sans `Worker`, un fallback synchrone reste disponible.
 
@@ -15,11 +19,18 @@ Le worker (`src/world/infinite.worker.ts`) calcule à la fois le `WorldPlan` et 
 pixels de lightmap. `WorldStream.mountChunk()` applique l’offset monde au groupe
 Three.js et au lot de colliders. Le démontage doit retirer les deux.
 
+`/locate epic1` à `/locate epic8` cible les monuments déjà montés. Leur pavage
+garantit les huit commandes dès qu’un voisinage 3×3 est complet ; pendant le
+remplissage transitoire après un déplacement, certaines suggestions peuvent
+réapparaître au fil du montage des chunks manquants.
+
 ## Construction visuelle
 
 `WorldView` dans `src/render/WorldBuilder.ts` consomme un plan local :
 
 - géométries statiques fusionnées par matériau ;
+- volumes monumentaux dérivés de `EpicStructureFeature`, avec niveaux hauts
+  purement visuels et obstacles au sol partagés avec les colliders ;
 - éléments répétitifs en `InstancedMesh` ;
 - lightmaps de plafond et générales produites par `BakedLighting.ts` ;
 - graffitis procéduraux via `WallGraffiti.ts` ;

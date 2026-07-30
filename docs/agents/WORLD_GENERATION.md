@@ -6,6 +6,7 @@
 - `src/world/SeededRandom.ts` : unique source de hasard.
 - `src/world/generateWorld.ts` : plan local fini de 112 m.
 - `src/world/InfiniteWorld.ts` : adaptation du plan en chunk infini.
+- `src/world/EpicStructures.ts` : pavage et contrat des monuments `epic1…epic8`.
 - `src/world/StairLayout.ts` : géométrie partagée des escaliers.
 - `src/world/FeatureRegistry.ts` : proposition de features enregistrées.
 - `src/world/PropPlacement.ts` : props rares, après la topologie finale.
@@ -39,9 +40,10 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
 2. applique biome logique et biome visuel ;
 3. réconcilie puits, escaliers et ouvertures avec les étages voisins ;
 4. retire les landmarks réservés au monde fini ;
-5. recrée les limites et portes canoniques du chunk ;
-6. reconstruit les extensions affectées, place les props rares ;
-7. préfixe les IDs et attache les métadonnées runtime.
+5. remplace les résidus épiques par leur plan monumental canonique ;
+6. recrée les limites et portes canoniques du chunk ;
+7. reconstruit les extensions affectées, place les props rares hors monuments ;
+8. préfixe les IDs et attache les métadonnées runtime.
 
 ## Invariants
 
@@ -83,6 +85,11 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
   un puits profond. Leur aperçu local vient de `PassageHoleLayout.ts`.
 - Les ouvertures héritées sont dérivées de chunks canoniques voisins. Tester au
   moins une paire d’étages, pas uniquement un plan isolé.
+- Le pavage épique est horizontal et périodique modulo 3 : tout voisinage 3×3
+  complet contient un chunk ordinaire et exactement `epic1…epic8`. Le résidu ne
+  dépend pas de l’étage, afin que leurs volumes verticaux continuent pendant un
+  changement de story. `epic1` publie son vide comme ouverture canonique à
+  chaque étage.
 
 ### Identifiants et sérialisation
 
@@ -101,6 +108,7 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
 | Forme des salles/portes | `generateWorld.ts` près du BSP et des portails |
 | Frontières entre chunks | portes canoniques et `emitBoundary()` dans `InfiniteWorld.ts` |
 | Puits ou étages | `generateWorld.ts`, `InfiniteWorld.ts`, `StairLayout.ts` |
+| Monument `epicN` | `EpicStructures.ts`, puis `WorldBuilder.ts` et `WorldStream.ts` |
 | Biome/topologie régionale | `getInfiniteBiome()` / `applyBiome()` |
 | Palette de surfaces | `getInfiniteVisualBiome()` / `applyVisualBiome()` |
 | Props | `PropCatalog.ts` et `PropPlacement.ts`, après topologie héritée ; réserver les scènes aux grandes salles |

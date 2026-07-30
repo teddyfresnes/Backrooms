@@ -15,6 +15,7 @@ import { WorldDoorLayer } from './WorldDoors';
 import { WorldPropLayer } from './WorldProps';
 import type {
   DoorOpenMode,
+  EpicStructureFeature,
   GridPitFeature,
   LightSlot,
   RampSurface,
@@ -29,6 +30,10 @@ import type {
   SqueezeViewFeature,
   SurfaceStyle,
 } from '../world/types';
+import {
+  getEpicAbyssBottom,
+  getEpicGroundObstacles,
+} from '../world/EpicStructures';
 import { INFINITE_STORY_PITCH, getInfiniteChunkCeilingOpenings } from '../world/InfiniteWorld';
 import {
   getPassageHoleAbyssBottom,
@@ -744,6 +749,37 @@ const makeMesh = (
   return mesh;
 };
 
+type EpicFacadeSide = 'north' | 'south' | 'west' | 'east';
+
+const createEpicVerticalPanel = (
+  width: number,
+  height: number,
+  x: number,
+  bottom: number,
+  z: number,
+  side: EpicFacadeSide,
+): THREE.PlaneGeometry => {
+  const geometry = new THREE.PlaneGeometry(width, height);
+  if (side === 'south') geometry.rotateY(Math.PI);
+  else if (side === 'west') geometry.rotateY(Math.PI * 0.5);
+  else if (side === 'east') geometry.rotateY(-Math.PI * 0.5);
+  geometry.translate(x, bottom + height * 0.5, z);
+  return geometry;
+};
+
+const createEpicGlowPanel = (
+  width: number,
+  depth: number,
+  x: number,
+  y: number,
+  z: number,
+): THREE.PlaneGeometry => {
+  const geometry = new THREE.PlaneGeometry(width, depth);
+  geometry.rotateX(Math.PI * 0.5);
+  geometry.translate(x, y, z);
+  return geometry;
+};
+
 const createPreviewMaterial = (
   source: THREE.MeshStandardMaterial,
   name: string,
@@ -887,6 +923,7 @@ export class WorldView {
     );
     this.fixtureSlots = plan.lights;
     this.buildArchitecture();
+    this.buildEpicStructures();
     this.buildWallGraffiti();
     this.buildRaisedZones();
     this.buildLowPassages();
@@ -1399,6 +1436,720 @@ export class WorldView {
       this.materials.ceiling,
       'ceiling-lightmap-junction-repairs',
       this.group,
+    );
+  }
+
+  private buildEpicStructures(): void {
+    const features = this.plan.features.filter(
+      (feature): feature is EpicStructureFeature => feature.kind === 'epic-structure',
+    );
+    for (const feature of features) {
+      const group = new THREE.Group();
+      group.name = `epic-structure-${feature.index}-${feature.variant}`;
+      this.buildEpicUpperShell(feature, group);
+
+      if (feature.variant === 'endless-abyss') {
+        this.buildEpicEndlessAbyss(feature, group);
+      } else if (feature.variant === 'lost-ceiling') {
+        this.buildEpicLostCeiling(feature, group);
+      } else if (feature.variant === 'ascending-passages') {
+        this.buildEpicAscendingPassages(feature, group);
+      } else if (feature.variant === 'endless-pillars') {
+        this.buildEpicEndlessPillars(feature, group);
+      } else if (feature.variant === 'impossible-stairwell') {
+        this.buildEpicImpossibleStairwell(feature, group);
+      } else if (feature.variant === 'suspended-rooms') {
+        this.buildEpicSuspendedRooms(feature, group);
+      } else if (feature.variant === 'nested-gates') {
+        this.buildEpicNestedGates(feature, group);
+      } else {
+        this.buildEpicLightCathedral(feature, group);
+      }
+      this.group.add(group);
+    }
+  }
+
+  private buildEpicUpperShell(
+    feature: EpicStructureFeature,
+    group: THREE.Group,
+  ): void {
+    const center = rectCenter(feature.bounds);
+    const width = rectWidth(feature.bounds);
+    const depth = rectDepth(feature.bounds);
+    const thickness = 0.34;
+    // Neighbouring epic chunks build their own shell. Keeping each face just
+    // inside its chunk avoids coplanar double walls on the shared seam.
+    const seamInset = 0.24;
+    const bottom = this.plan.wallHeight - 0.04;
+    const height = feature.height - bottom + 0.03;
+    if (height <= 0.08) return;
+    const walls: WallSegment[] = [
+      {
+        id: `${feature.id}-upper-north`,
+        x: center.x,
+        z: feature.bounds.minZ + seamInset,
+        length: width - seamInset * 2 + thickness * 2,
+        orientation: 'x',
+        bottom,
+        height,
+        thickness,
+        tint: 0.9,
+        collision: false,
+        kind: 'wallpaper',
+      },
+      {
+        id: `${feature.id}-upper-south`,
+        x: center.x,
+        z: feature.bounds.maxZ - seamInset,
+        length: width - seamInset * 2 + thickness * 2,
+        orientation: 'x',
+        bottom,
+        height,
+        thickness,
+        tint: 0.92,
+        collision: false,
+        kind: 'wallpaper',
+      },
+      {
+        id: `${feature.id}-upper-west`,
+        x: feature.bounds.minX + seamInset,
+        z: center.z,
+        length: depth - seamInset * 2,
+        orientation: 'z',
+        bottom,
+        height,
+        thickness,
+        tint: 0.9,
+        collision: false,
+        kind: 'wallpaper',
+      },
+      {
+        id: `${feature.id}-upper-east`,
+        x: feature.bounds.maxX - seamInset,
+        z: center.z,
+        length: depth - seamInset * 2,
+        orientation: 'z',
+        bottom,
+        height,
+        thickness,
+        tint: 0.92,
+        collision: false,
+        kind: 'wallpaper',
+      },
+    ];
+    makeMesh(
+      mergeOrSingle(walls.map((wall) =>
+        createWallGeometry(
+          wall,
+          false,
+          this.surfaceStyle.wallPatternScale,
+          true,
+          wallpaperPhaseForWall(this.plan.seed, wall),
+        )
+      )),
+      this.materials.wall,
+      `epic-${feature.index}-upper-shell`,
+      group,
+    );
+  }
+
+  private buildEpicEndlessAbyss(
+    feature: EpicStructureFeature,
+    group: THREE.Group,
+  ): void {
+    if (!feature.voidBounds) return;
+    const width = rectWidth(feature.voidBounds);
+    const depth = rectDepth(feature.voidBounds);
+    const center = rectCenter(feature.voidBounds);
+    const abyssBottom = getEpicAbyssBottom(feature);
+    makeMesh(
+      mergeOrSingle(createOpenShaftWallGeometries(
+        feature.voidBounds,
+        abyssBottom,
+        -0.004,
+        0.64,
+        this.surfaceStyle.floorPatternScale,
+      )),
+      this.lowerMaterials.floor,
+      'epic-endless-abyss-shaft',
+      group,
+    );
+
+    const strata: THREE.BufferGeometry[] = [];
+    const ledgeDepth = Math.min(0.28, Math.min(width, depth) * 0.012);
+    for (let y = -5.4; y > abyssBottom + 2.7; y -= 5.4) {
+      const tint = 0.66 + ((Math.round(Math.abs(y) / 5.4) % 4) * 0.035);
+      strata.push(
+        createTexturedBoxGeometry(
+          width,
+          0.16,
+          ledgeDepth,
+          center.x,
+          y,
+          feature.voidBounds.minZ + ledgeDepth * 0.5,
+          tint,
+          this.surfaceStyle.floorPatternScale,
+        ),
+        createTexturedBoxGeometry(
+          width,
+          0.16,
+          ledgeDepth,
+          center.x,
+          y,
+          feature.voidBounds.maxZ - ledgeDepth * 0.5,
+          tint,
+          this.surfaceStyle.floorPatternScale,
+        ),
+        createTexturedBoxGeometry(
+          ledgeDepth,
+          0.16,
+          Math.max(0.05, depth - ledgeDepth * 2),
+          feature.voidBounds.minX + ledgeDepth * 0.5,
+          y,
+          center.z,
+          tint,
+          this.surfaceStyle.floorPatternScale,
+        ),
+        createTexturedBoxGeometry(
+          ledgeDepth,
+          0.16,
+          Math.max(0.05, depth - ledgeDepth * 2),
+          feature.voidBounds.maxX - ledgeDepth * 0.5,
+          y,
+          center.z,
+          tint,
+          this.surfaceStyle.floorPatternScale,
+        ),
+      );
+    }
+    makeMesh(
+      mergeOrSingle(strata),
+      this.lowerMaterials.floor,
+      'epic-endless-abyss-strata',
+      group,
+    );
+  }
+
+  private buildEpicLostCeiling(
+    feature: EpicStructureFeature,
+    group: THREE.Group,
+  ): void {
+    const rings: THREE.BufferGeometry[] = [];
+    const glows: THREE.BufferGeometry[] = [];
+    const tierCount = 6;
+    for (let tier = 0; tier < tierCount; tier += 1) {
+      const ratio = tier / Math.max(1, tierCount - 1);
+      const halfX = 46 - tier * 3.4;
+      const halfZ = 45 - tier * 3.1;
+      const y = 9 + ratio * Math.max(12, feature.height - 16);
+      const beam = 0.42;
+      rings.push(
+        createTexturedBoxGeometry(halfX * 2, 0.34, beam, 0, y, -halfZ, 0.86),
+        createTexturedBoxGeometry(halfX * 2, 0.34, beam, 0, y, halfZ, 0.86),
+        createTexturedBoxGeometry(beam, 0.34, halfZ * 2, -halfX, y, 0, 0.86),
+        createTexturedBoxGeometry(beam, 0.34, halfZ * 2, halfX, y, 0, 0.86),
+      );
+      for (const x of [-halfX * 0.55, halfX * 0.55]) {
+        glows.push(createEpicGlowPanel(2.8, 1.05, x, y - 0.012, 0));
+      }
+    }
+    makeMesh(
+      mergeOrSingle(rings),
+      this.materials.wall,
+      'epic-lost-ceiling-height-rings',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(glows),
+      this.materials.fixtureGlow,
+      'epic-lost-ceiling-distant-lights',
+      group,
+    );
+  }
+
+  private buildEpicAscendingPassages(
+    feature: EpicStructureFeature,
+    group: THREE.Group,
+  ): void {
+    const frames: THREE.BufferGeometry[] = [];
+    const voids: THREE.BufferGeometry[] = [];
+    const frameWidth = 0.34;
+    const facade = 48;
+    const portalWidth = 4.4;
+    const portalHeight = 3.5;
+    const addPortal = (
+      side: EpicFacadeSide,
+      along: number,
+      bottom: number,
+    ): void => {
+      const horizontalFacade = side === 'north' || side === 'south';
+      const fixed = side === 'north' || side === 'west' ? -facade : facade;
+      const inwardFixed = fixed + (
+        side === 'north' || side === 'west' ? 0.055 : -0.055
+      );
+      voids.push(createEpicVerticalPanel(
+        portalWidth,
+        portalHeight,
+        horizontalFacade ? along : inwardFixed,
+        bottom,
+        horizontalFacade ? inwardFixed : along,
+        side,
+      ));
+      if (horizontalFacade) {
+        frames.push(
+          createTexturedBoxGeometry(
+            frameWidth,
+            portalHeight + frameWidth,
+            0.46,
+            along - portalWidth * 0.5 - frameWidth * 0.5,
+            bottom,
+            fixed,
+            0.9,
+          ),
+          createTexturedBoxGeometry(
+            frameWidth,
+            portalHeight + frameWidth,
+            0.46,
+            along + portalWidth * 0.5 + frameWidth * 0.5,
+            bottom,
+            fixed,
+            0.9,
+          ),
+          createTexturedBoxGeometry(
+            portalWidth + frameWidth * 2,
+            frameWidth,
+            0.46,
+            along,
+            bottom + portalHeight,
+            fixed,
+            0.94,
+          ),
+          createTexturedBoxGeometry(
+            portalWidth + 1.05,
+            0.18,
+            1.15,
+            along,
+            bottom - 0.2,
+            fixed + (side === 'north' ? 0.4 : -0.4),
+            0.84,
+          ),
+        );
+      } else {
+        frames.push(
+          createTexturedBoxGeometry(
+            0.46,
+            portalHeight + frameWidth,
+            frameWidth,
+            fixed,
+            bottom,
+            along - portalWidth * 0.5 - frameWidth * 0.5,
+            0.9,
+          ),
+          createTexturedBoxGeometry(
+            0.46,
+            portalHeight + frameWidth,
+            frameWidth,
+            fixed,
+            bottom,
+            along + portalWidth * 0.5 + frameWidth * 0.5,
+            0.9,
+          ),
+          createTexturedBoxGeometry(
+            0.46,
+            frameWidth,
+            portalWidth + frameWidth * 2,
+            fixed,
+            bottom + portalHeight,
+            along,
+            0.94,
+          ),
+          createTexturedBoxGeometry(
+            1.15,
+            0.18,
+            portalWidth + 1.05,
+            fixed + (side === 'west' ? 0.4 : -0.4),
+            bottom - 0.2,
+            along,
+            0.84,
+          ),
+        );
+      }
+    };
+
+    const rowCount = Math.max(5, Math.min(8, Math.floor((feature.height - 8) / 8)));
+    for (let row = 0; row < rowCount; row += 1) {
+      const bottom = 5.2 + row * 8;
+      const shift = row % 2 === 0 ? -1.8 : 1.8;
+      for (const along of [-28 + shift, shift, 28 + shift]) {
+        addPortal('north', along, bottom);
+        addPortal('south', -along, bottom);
+        addPortal('west', -along, bottom);
+        addPortal('east', along, bottom);
+      }
+    }
+    makeMesh(
+      mergeOrSingle(frames),
+      this.materials.wall,
+      'epic-ascending-passages-facades',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(voids),
+      this.materials.void,
+      'epic-ascending-passages-dark-openings',
+      group,
+    );
+  }
+
+  private buildEpicEndlessPillars(
+    feature: EpicStructureFeature,
+    group: THREE.Group,
+  ): void {
+    const capitals: THREE.BufferGeometry[] = [];
+    const obstacles = getEpicGroundObstacles(feature);
+    for (const entry of obstacles) {
+      const center = rectCenter(entry.bounds);
+      for (let y = 8; y < feature.height - 3; y += 12) {
+        capitals.push(createTexturedBoxGeometry(
+          rectWidth(entry.bounds) + 0.72,
+          0.28,
+          rectDepth(entry.bounds) + 0.72,
+          center.x,
+          y,
+          center.z,
+          0.78 + ((Math.round(y / 12) % 3) * 0.04),
+        ));
+      }
+    }
+    makeMesh(
+      mergeOrSingle(capitals),
+      this.materials.baseboard,
+      'epic-endless-pillars-capital-bands',
+      group,
+    );
+  }
+
+  private buildEpicImpossibleStairwell(
+    feature: EpicStructureFeature,
+    group: THREE.Group,
+  ): void {
+    const treads: THREE.BufferGeometry[] = [];
+    const stepsPerFlight = 12;
+    const flightRise = 2.9;
+    const stepRise = 2.64 / stepsPerFlight;
+    const stepRun = 0.72;
+    const flightCount = Math.max(8, Math.floor((feature.height - 8) / flightRise));
+    for (let flight = 0; flight < flightCount; flight += 1) {
+      const side = flight % 4;
+      const flightBottom = 4.2 + flight * flightRise;
+      for (let step = 0; step < stepsPerFlight; step += 1) {
+        const along = -4 + stepRun * (step + 0.5);
+        const bottom = flightBottom + stepRise * step;
+        const x = side === 0 ? along : side === 1 ? 8.2 : side === 2 ? -along : -8.2;
+        const z = side === 0 ? -8.2 : side === 1 ? along : side === 2 ? 8.2 : -along;
+        treads.push(createTexturedBoxGeometry(
+          side % 2 === 0 ? stepRun + 0.025 : 2.9,
+          0.16,
+          side % 2 === 0 ? 2.9 : stepRun + 0.025,
+          x,
+          bottom,
+          z,
+          0.9 + ((flight + step) % 5) * 0.018,
+          this.surfaceStyle.floorPatternScale,
+        ));
+      }
+      const cornerX = side === 0 || side === 1 ? 8.2 : -8.2;
+      const cornerZ = side === 0 || side === 3 ? -8.2 : 8.2;
+      treads.push(createTexturedBoxGeometry(
+        3,
+        0.18,
+        3,
+        cornerX,
+        flightBottom + stepRise * stepsPerFlight,
+        cornerZ,
+        0.96,
+        this.surfaceStyle.floorPatternScale,
+      ));
+    }
+    makeMesh(
+      mergeOrSingle(treads),
+      this.materials.floor,
+      'epic-impossible-stairwell-floating-flights',
+      group,
+    );
+  }
+
+  private buildEpicSuspendedRooms(
+    feature: EpicStructureFeature,
+    group: THREE.Group,
+  ): void {
+    const floors: THREE.BufferGeometry[] = [];
+    const shells: THREE.BufferGeometry[] = [];
+    const voids: THREE.BufferGeometry[] = [];
+    const roomSpecs = [
+      { x: -29, z: -25, bottom: 10, width: 13, depth: 10 },
+      { x: 29, z: -25, bottom: 17, width: 14, depth: 10 },
+      { x: -29, z: 25, bottom: 24, width: 13, depth: 11 },
+      { x: 29, z: 25, bottom: 31, width: 14, depth: 11 },
+      { x: -10, z: -4, bottom: 39, width: 11, depth: 9 },
+      { x: 13, z: 5, bottom: 47, width: 12, depth: 9 },
+    ].filter((room) => room.bottom + 5 < feature.height);
+    const wallHeight = 4.8;
+    const thickness = 0.26;
+    const doorWidth = 2.25;
+    const doorHeight = 2.85;
+    for (const room of roomSpecs) {
+      floors.push(
+        createTexturedBoxGeometry(
+          room.width,
+          0.24,
+          room.depth,
+          room.x,
+          room.bottom,
+          room.z,
+          0.91,
+          this.surfaceStyle.floorPatternScale,
+        ),
+        createTexturedBoxGeometry(
+          room.width,
+          0.2,
+          room.depth,
+          room.x,
+          room.bottom + wallHeight,
+          room.z,
+          0.88,
+          this.surfaceStyle.ceilingPatternScale,
+        ),
+      );
+      const openAlongX = Math.abs(room.x) >= Math.abs(room.z);
+      const openSide: EpicFacadeSide = openAlongX
+        ? room.x > 0 ? 'west' : 'east'
+        : room.z > 0 ? 'north' : 'south';
+      const facadeAlongZ = openSide === 'north' || openSide === 'south';
+      const sideSpan = (
+        facadeAlongZ ? room.width : room.depth
+      ) - doorWidth;
+      const fixed = facadeAlongZ
+        ? room.z + (openSide === 'north' ? -room.depth * 0.5 : room.depth * 0.5)
+        : room.x + (openSide === 'west' ? -room.width * 0.5 : room.width * 0.5);
+      const along = facadeAlongZ ? room.x : room.z;
+
+      for (const side of ['north', 'south', 'west', 'east'] as const) {
+        if (side === openSide) continue;
+        if (side === 'north' || side === 'south') {
+          shells.push(createTexturedBoxGeometry(
+            room.width,
+            wallHeight,
+            thickness,
+            room.x,
+            room.bottom,
+            room.z + (side === 'north' ? -room.depth * 0.5 : room.depth * 0.5),
+            0.9,
+          ));
+        } else {
+          shells.push(createTexturedBoxGeometry(
+            thickness,
+            wallHeight,
+            room.depth,
+            room.x + (side === 'west' ? -room.width * 0.5 : room.width * 0.5),
+            room.bottom,
+            room.z,
+            0.9,
+          ));
+        }
+      }
+      if (facadeAlongZ) {
+        shells.push(
+          createTexturedBoxGeometry(
+            sideSpan * 0.5,
+            wallHeight,
+            thickness,
+            along - (doorWidth + sideSpan * 0.5) * 0.5,
+            room.bottom,
+            fixed,
+            0.94,
+          ),
+          createTexturedBoxGeometry(
+            sideSpan * 0.5,
+            wallHeight,
+            thickness,
+            along + (doorWidth + sideSpan * 0.5) * 0.5,
+            room.bottom,
+            fixed,
+            0.94,
+          ),
+          createTexturedBoxGeometry(
+            doorWidth,
+            wallHeight - doorHeight,
+            thickness,
+            along,
+            room.bottom + doorHeight,
+            fixed,
+            0.94,
+          ),
+        );
+        voids.push(createEpicVerticalPanel(
+          doorWidth,
+          doorHeight,
+          along,
+          room.bottom,
+          fixed + (openSide === 'north' ? 0.02 : -0.02),
+          openSide,
+        ));
+      } else {
+        shells.push(
+          createTexturedBoxGeometry(
+            thickness,
+            wallHeight,
+            sideSpan * 0.5,
+            fixed,
+            room.bottom,
+            along - (doorWidth + sideSpan * 0.5) * 0.5,
+            0.94,
+          ),
+          createTexturedBoxGeometry(
+            thickness,
+            wallHeight,
+            sideSpan * 0.5,
+            fixed,
+            room.bottom,
+            along + (doorWidth + sideSpan * 0.5) * 0.5,
+            0.94,
+          ),
+          createTexturedBoxGeometry(
+            thickness,
+            wallHeight - doorHeight,
+            doorWidth,
+            fixed,
+            room.bottom + doorHeight,
+            along,
+            0.94,
+          ),
+        );
+        voids.push(createEpicVerticalPanel(
+          doorWidth,
+          doorHeight,
+          fixed + (openSide === 'west' ? 0.02 : -0.02),
+          room.bottom,
+          along,
+          openSide,
+        ));
+      }
+    }
+    makeMesh(
+      mergeOrSingle(floors),
+      this.materials.floor,
+      'epic-suspended-room-slabs',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(shells),
+      this.materials.wall,
+      'epic-suspended-room-shells',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(voids),
+      this.materials.void,
+      'epic-suspended-room-dark-doors',
+      group,
+    );
+  }
+
+  private buildEpicNestedGates(
+    feature: EpicStructureFeature,
+    group: THREE.Group,
+  ): void {
+    const frames: THREE.BufferGeometry[] = [];
+    const glows: THREE.BufferGeometry[] = [];
+    for (const z of [-30, -12, 6, 24, 42]) {
+      const height = 11 + (z + 30) * 0.18;
+      frames.push(createTexturedBoxGeometry(
+        22.1,
+        0.82,
+        4.2,
+        0,
+        height - 0.82,
+        z,
+        0.92,
+      ));
+      for (let inset = 1; inset <= 2; inset += 1) {
+        const x = 10 - inset * 3.1;
+        const hangingHeight = 2.5 + inset * 1.05;
+        const bottom = height - 0.82 - hangingHeight;
+        frames.push(
+          createTexturedBoxGeometry(0.48, hangingHeight, 2.9, -x, bottom, z, 0.86),
+          createTexturedBoxGeometry(0.48, hangingHeight, 2.9, x, bottom, z, 0.86),
+          createTexturedBoxGeometry(x * 2, 0.4, 2.9, 0, bottom, z, 0.9),
+        );
+      }
+      glows.push(createEpicGlowPanel(
+        5.4,
+        1.15,
+        0,
+        Math.min(feature.height - 1, height - 0.84),
+        z,
+      ));
+    }
+    makeMesh(
+      mergeOrSingle(frames),
+      this.materials.wall,
+      'epic-nested-gates-receding-frames',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(glows),
+      this.materials.fixtureGlow,
+      'epic-nested-gates-threshold-lights',
+      group,
+    );
+  }
+
+  private buildEpicLightCathedral(
+    feature: EpicStructureFeature,
+    group: THREE.Group,
+  ): void {
+    const ribs: THREE.BufferGeometry[] = [];
+    const glows: THREE.BufferGeometry[] = [];
+    for (const z of [-30, 0, 30]) {
+      for (const y of [13, 29, 45, 61].filter((candidate) => candidate < feature.height - 2)) {
+        ribs.push(createTexturedBoxGeometry(70, 0.42, 1.05, 0, y, z, 0.94));
+      }
+    }
+    for (const x of [-34, -17, 17, 34]) {
+      ribs.push(createTexturedBoxGeometry(
+        0.72,
+        0.72,
+        66,
+        x,
+        feature.height - 7,
+        0,
+        0.96,
+      ));
+    }
+    const glowRows = [-38, -19, 0, 19, 38];
+    for (const [row, z] of glowRows.entries()) {
+      for (const [column, x] of [-24, 0, 24].entries()) {
+        glows.push(createEpicGlowPanel(
+          5.8,
+          1.55,
+          x,
+          11 + ((row + column) % 3) * 8,
+          z,
+        ));
+      }
+    }
+    makeMesh(
+      mergeOrSingle(ribs),
+      this.materials.wall,
+      'epic-light-cathedral-vault-ribs',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(glows),
+      this.materials.fixtureGlow,
+      'epic-light-cathedral-fluorescent-nave',
+      group,
     );
   }
 

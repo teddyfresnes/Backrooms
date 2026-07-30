@@ -35,6 +35,8 @@ const WALL_HEIGHT = 2.74;
 const WALL_THICKNESS = 0.22;
 const MAX_STRUCTURAL_WALL_THICKNESS = 2.8;
 const MIN_ROOM_SPAN = 7;
+const PARTITION_ENDPOINT_PORTAL_CLEARANCE = 1.45;
+const CORNER_PORTAL_JUNCTION_RATE = 0.025;
 const PIT_STORY_PITCH = 5.4;
 export const MAX_PIT_STORIES = 12;
 const PASSAGE_VOID_PRESENCE_RATE = 0.12;
@@ -338,6 +340,65 @@ const partitionGaps = (
   return gaps;
 };
 
+const partitionEndsNearPortal = (
+  plan: MutablePlan,
+  orientation: 'x' | 'z',
+  split: number,
+  bounds: Rect,
+): boolean => {
+  const endpointMin = orientation === 'z' ? bounds.minZ : bounds.minX;
+  const endpointMax = orientation === 'z' ? bounds.maxZ : bounds.maxX;
+  return plan.portals.some((portal) => {
+    if (portal.orientation === orientation) return false;
+    const fixed = portal.orientation === 'x' ? portal.z : portal.x;
+    if (
+      Math.abs(fixed - endpointMin) >= 0.08 &&
+      Math.abs(fixed - endpointMax) >= 0.08
+    ) return false;
+    const along = portal.orientation === 'x' ? portal.x : portal.z;
+    return Math.abs(split - along) < portal.width * 0.5 + PARTITION_ENDPOINT_PORTAL_CLEARANCE;
+  });
+};
+
+const moveSplitAwayFromPortalCorners = (
+  plan: MutablePlan,
+  orientation: 'x' | 'z',
+  tentativeSplit: number,
+  bounds: Rect,
+  splitMin: number,
+  splitMax: number,
+  rng: SeededRandom,
+): number => {
+  if (!partitionEndsNearPortal(plan, orientation, tentativeSplit, bounds)) {
+    return tentativeSplit;
+  }
+  // A few awkward T-junctions keep the layout from looking over-designed, but
+  // they should be an exception rather than the default result of BSP recursion.
+  if (rng.fork('corner-variation').chance(CORNER_PORTAL_JUNCTION_RATE)) {
+    return tentativeSplit;
+  }
+
+  const candidates: number[] = [];
+  for (
+    let candidate = Math.ceil(splitMin * 2) * 0.5;
+    candidate <= splitMax + 1e-6;
+    candidate += 0.5
+  ) {
+    if (!partitionEndsNearPortal(plan, orientation, candidate, bounds)) {
+      candidates.push(candidate);
+    }
+  }
+  if (candidates.length === 0) return tentativeSplit;
+
+  const nearestDistance = Math.min(
+    ...candidates.map((candidate) => Math.abs(candidate - tentativeSplit)),
+  );
+  const nearest = candidates.filter(
+    (candidate) => Math.abs(Math.abs(candidate - tentativeSplit) - nearestDistance) < 1e-6,
+  );
+  return rng.fork('safe-side').pick(nearest);
+};
+
 const splitPartitions = (
   bounds: Rect,
   depth: number,
@@ -384,13 +445,24 @@ const splitPartitions = (
   else splitX = rng.chance(0.5);
 
   if (splitX) {
-    const split = quantize(
+    const splitMin = bounds.minX + MIN_ROOM_SPAN;
+    const splitMax = bounds.maxX - MIN_ROOM_SPAN;
+    const tentativeSplit = quantize(
       clamp(
         bounds.minX + width * rng.float(0.3, 0.7),
-        bounds.minX + MIN_ROOM_SPAN,
-        bounds.maxX - MIN_ROOM_SPAN,
+        splitMin,
+        splitMax,
       ),
       0.5,
+    );
+    const split = moveSplitAwayFromPortalCorners(
+      plan,
+      'z',
+      tentativeSplit,
+      bounds,
+      splitMin,
+      splitMax,
+      rng.fork('split-clearance'),
     );
     const span = roomDepth;
     const gaps = partitionGaps(rng.fork('gaps'), bounds.minZ, bounds.maxZ);
@@ -408,13 +480,24 @@ const splitPartitions = (
     splitPartitions({ ...bounds, maxX: split }, depth + 1, `${path}L`, rootRng, plan);
     splitPartitions({ ...bounds, minX: split }, depth + 1, `${path}R`, rootRng, plan);
   } else {
-    const split = quantize(
+    const splitMin = bounds.minZ + MIN_ROOM_SPAN;
+    const splitMax = bounds.maxZ - MIN_ROOM_SPAN;
+    const tentativeSplit = quantize(
       clamp(
         bounds.minZ + roomDepth * rng.float(0.3, 0.7),
-        bounds.minZ + MIN_ROOM_SPAN,
-        bounds.maxZ - MIN_ROOM_SPAN,
+        splitMin,
+        splitMax,
       ),
       0.5,
+    );
+    const split = moveSplitAwayFromPortalCorners(
+      plan,
+      'x',
+      tentativeSplit,
+      bounds,
+      splitMin,
+      splitMax,
+      rng.fork('split-clearance'),
     );
     const span = width;
     const gaps = partitionGaps(rng.fork('gaps'), bounds.minX, bounds.maxX);

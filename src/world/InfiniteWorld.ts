@@ -6,6 +6,11 @@ import {
   rebuildSunkenArchitectureExtensions,
   worldMaxShaftStories,
 } from './generateWorld';
+import {
+  applyEpicStructure,
+  epicStructureIndexForCoord,
+  getEpicVoidBounds,
+} from './EpicStructures';
 import { populateRareProps } from './PropPlacement';
 import { SeededRandom } from './SeededRandom';
 import type {
@@ -29,7 +34,7 @@ export const INFINITE_STORY_PITCH = 5.4;
 
 const HALF_CHUNK_SIZE = INFINITE_CHUNK_SIZE * 0.5;
 const BOUNDARY_EPSILON = 0.075;
-const WRAPPER_VERSION = 1;
+const WRAPPER_VERSION = 2;
 
 export interface ChunkCoord {
   readonly x: number;
@@ -75,6 +80,12 @@ interface CanonicalEdgeAddress {
 }
 
 const metadataByPlan = new WeakMap<WorldPlan, InfiniteChunkMetadata>();
+
+const trimStringCache = <Value>(cache: Map<string, Value>, limit = 192): void => {
+  if (cache.size <= limit) return;
+  const oldest = cache.keys().next().value;
+  if (oldest !== undefined) cache.delete(oldest);
+};
 
 const quantize = (value: number, step: number): number =>
   Math.round(value / step) * step;
@@ -790,6 +801,15 @@ export const inheritedShaftOpeningsForChunk = (
   const cacheKey = `${seed}::inherited-shafts::${normalizedKey}`;
   const cached = inheritedShaftOpeningsCache.get(cacheKey);
   if (cached) return cached;
+  // Epic columns repeat on every logical story. Their local floor contract is
+  // therefore canonical on each story and never needs inherited base-plan
+  // shafts or stairs from the generator hidden underneath the landmark.
+  if (epicStructureIndexForCoord(coord) !== null) {
+    const empty = Object.freeze([]) as readonly InheritedShaftOpening[];
+    inheritedShaftOpeningsCache.set(cacheKey, empty);
+    trimStringCache(inheritedShaftOpeningsCache);
+    return empty;
+  }
   const openings: InheritedShaftOpening[] = [];
   for (let distance = 1; distance < MAX_PIT_STORIES; distance += 1) {
     const sourceCoord = { ...coord, story: coord.story + distance };
@@ -992,6 +1012,14 @@ const canonicalFloorOpeningsForChunk = (
   const cached = floorOpeningsCache.get(cacheKey);
   if (cached) return cached;
 
+  const epicIndex = epicStructureIndexForCoord(coord);
+  if (epicIndex !== null) {
+    const voidBounds = getEpicVoidBounds(epicIndex);
+    const openings = freezeRects(voidBounds ? [voidBounds] : []);
+    floorOpeningsCache.set(cacheKey, openings);
+    trimStringCache(floorOpeningsCache);
+    return openings;
+  }
   const plan = generateWorld(derivedChunkSeed(seed, normalizedKey));
   const inherited = inheritedShaftOpeningsForChunk(seed, coord);
   const localOpenings = extractLocalShaftHoles(plan);
@@ -1190,6 +1218,14 @@ const rawLocalFloorOpeningsForChunk = (
   const cacheKey = `${seed}::raw-local-floor-openings::${normalizedKey}`;
   const cached = rawLocalFloorOpeningsCache.get(cacheKey);
   if (cached) return cached;
+  const epicIndex = epicStructureIndexForCoord(coord);
+  if (epicIndex !== null) {
+    const voidBounds = getEpicVoidBounds(epicIndex);
+    const openings = freezeRects(voidBounds ? [voidBounds] : []);
+    rawLocalFloorOpeningsCache.set(cacheKey, openings);
+    trimStringCache(rawLocalFloorOpeningsCache);
+    return openings;
+  }
   const plan = generateWorld(derivedChunkSeed(seed, normalizedKey));
   const openings = freezeRects(plan.floorOpenings ?? []);
   rawLocalFloorOpeningsCache.set(cacheKey, openings);
@@ -1209,6 +1245,11 @@ export const inheritedStairForChunk = (
   const cacheKey = `${seed}::inherited-stair::${normalizedKey}`;
   const cached = inheritedStairCache.get(cacheKey);
   if (cached !== undefined) return cached ?? undefined;
+  if (epicStructureIndexForCoord(coord) !== null) {
+    inheritedStairCache.set(cacheKey, null);
+    trimStringCache(inheritedStairCache);
+    return undefined;
+  }
 
   const sourceCoord = { ...coord, story: coord.story - 1 };
   const sourceKey = createChunkKey(sourceCoord);
@@ -1550,7 +1591,7 @@ const emitBiomeBoundarySkin = (
 };
 
 const prefixFeature = (feature: WorldFeature, prefix: string): WorldFeature => {
-  if (feature.kind === 'grid-pit') {
+  if (feature.kind === 'grid-pit' || feature.kind === 'epic-structure') {
     return { ...feature, id: `${prefix}${feature.id}`, roomId: `${prefix}${feature.roomId}` };
   }
   if (
@@ -1723,6 +1764,8 @@ export const generateInfiniteChunk = (
   // regeneration when WorldView asks which ceiling cells to remove.
   plan.ceilingOpenings = ceilingOpenings.map(cloneRect);
   stripFiniteLandmarks(plan);
+  const epicIndex = epicStructureIndexForCoord(coord);
+  if (epicIndex !== null) applyEpicStructure(plan, epicIndex);
   const edgeGates = getInfiniteEdgeGates(seed, coord);
   // A chunk owns exactly one full story. The compact geometry below its holes
   // is only a local preview and must never receive a second 112 m boundary.
@@ -1736,7 +1779,9 @@ export const generateInfiniteChunk = (
   // finite plan was generated. Re-derive the sunken continuations from the
   // surviving final architecture so none of those walls can float at y=0.
   rebuildSunkenArchitectureExtensions(plan);
-  populateRareProps(plan, `${seed}:${normalizedKey}:rare-props`);
+  if (epicIndex === null) {
+    populateRareProps(plan, `${seed}:${normalizedKey}:rare-props`);
+  }
   prefixPlanIds(plan, normalizedKey);
 
   attachInfiniteChunkMetadata(seed, plan, coord, biome, edgeGates, visualBiome);

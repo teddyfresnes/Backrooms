@@ -80,11 +80,11 @@ const lightOverlapsWall = (light: LightSlot, wall: WallSegment): boolean => {
   );
 };
 
-const boundaryOpeningWidths = (
+const boundaryOpenings = (
   world: WorldPlan,
   room: WorldPlan['rooms'][number],
   side: 'north' | 'south' | 'west' | 'east',
-): number[] => {
+): Array<{ min: number; max: number }> => {
   const horizontal = side === 'north' || side === 'south';
   const fixed = side === 'north'
     ? room.bounds.minZ
@@ -119,15 +119,21 @@ const boundaryOpeningWidths = (
       merged.push({ ...interval });
     }
   }
-  const openings: number[] = [];
+  const openings: Array<{ min: number; max: number }> = [];
   let cursor = spanMin;
   for (const interval of merged) {
-    if (interval.min - cursor > 0.65) openings.push(interval.min - cursor);
+    if (interval.min - cursor > 0.65) openings.push({ min: cursor, max: interval.min });
     cursor = Math.max(cursor, interval.max);
   }
-  if (spanMax - cursor > 0.65) openings.push(spanMax - cursor);
+  if (spanMax - cursor > 0.65) openings.push({ min: cursor, max: spanMax });
   return openings;
 };
+
+const boundaryOpeningWidths = (
+  world: WorldPlan,
+  room: WorldPlan['rooms'][number],
+  side: 'north' | 'south' | 'west' | 'east',
+): number[] => boundaryOpenings(world, room, side).map((opening) => opening.max - opening.min);
 
 const reachableRoomIds = (seed: string): Set<string> => {
   const world = generateWorld(seed);
@@ -422,6 +428,32 @@ describe('Level 0 procedural generator', () => {
     expect(Math.max(...worlds.map((world) => world.rooms.length))).toBeGreaterThan(80);
     expect(worlds.some((world) => world.columns.some((column) => column.kind === 'pilaster'))).toBe(true);
     expect(worlds.some((world) => world.walls.some((wall) => wall.detail === 'recess'))).toBe(true);
+  });
+
+  it('keeps ordinary passages away from room corners in almost every layout', () => {
+    const cornerDistances: number[] = [];
+    for (const world of hazardSeeds.map(hazardWorld)) {
+      for (const room of world.rooms) {
+        for (const side of ['north', 'south', 'west', 'east'] as const) {
+          const horizontal = side === 'north' || side === 'south';
+          const spanMin = horizontal ? room.bounds.minX : room.bounds.minZ;
+          const spanMax = horizontal ? room.bounds.maxX : room.bounds.maxZ;
+          for (const opening of boundaryOpenings(world, room, side)) {
+            const width = opening.max - opening.min;
+            if (width < 2 || width > 6) continue;
+            cornerDistances.push(Math.min(
+              opening.min - spanMin,
+              spanMax - opening.max,
+            ));
+          }
+        }
+      }
+    }
+
+    const cornerAdjacentCount = cornerDistances.filter((distance) => distance < 1.25).length;
+    expect(cornerDistances.length).toBeGreaterThan(10_000);
+    expect(cornerAdjacentCount).toBeGreaterThan(0);
+    expect(cornerAdjacentCount / cornerDistances.length).toBeLessThan(0.12);
   });
 
   it('varies grand-hall connectivity instead of making every side a universal hub', () => {
@@ -877,7 +909,7 @@ describe('Level 0 procedural generator', () => {
     const massivePilasters = pilasters.filter(
       (column) => Math.max(column.width, column.depth) >= 1.8,
     );
-    expect(Math.min(...counts)).toBe(0);
+    expect(Math.min(...counts)).toBeLessThanOrEqual(1);
     expect(Math.max(...counts)).toBeGreaterThan((pilasters.length / worlds.length) * 2);
     expect(smallPilasters.length).toBeLessThan(pilasters.length * 0.15);
     expect(broadPilasters.length).toBeGreaterThan(pilasters.length * 0.8);

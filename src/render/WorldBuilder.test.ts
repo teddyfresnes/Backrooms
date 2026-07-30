@@ -1,9 +1,17 @@
 import * as THREE from 'three';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { MaterialSet } from './MaterialLibrary';
 import { WorldView, createOpenShaftWallGeometries } from './WorldBuilder';
-import type { GridPitFeature, RaisedZoneFeature, Rect, WorldPlan } from '../world/types';
+import type {
+  EpicStructureFeature,
+  EpicStructureIndex,
+  GridPitFeature,
+  RaisedZoneFeature,
+  Rect,
+  WorldPlan,
+} from '../world/types';
 import { rectCenter, rectWidth } from '../world/types';
+import { applyEpicStructure, getEpicGroundObstacles } from '../world/EpicStructures';
 
 const createTestMaterials = (): MaterialSet => {
   const wall = new THREE.MeshStandardMaterial();
@@ -1460,5 +1468,189 @@ describe('crouch passages and inter-storey stairs', () => {
 
     view.dispose();
     Object.values(materials).forEach((material) => material.dispose());
+  });
+});
+
+const createEpicPlan = (index: EpicStructureIndex): WorldPlan => {
+  const plan: WorldPlan = {
+    version: 1,
+    seed: `EPIC-${index}-RENDER-AUDIT`,
+    size: 112,
+    wallHeight: 2.74,
+    rooms: [],
+    walls: [],
+    columns: [],
+    solidMasses: [],
+    lights: [],
+    missingCeilingTiles: [],
+    features: [],
+    detailSockets: [],
+    colliders: [],
+    floorRects: [{ minX: -56, maxX: 56, minZ: -56, maxZ: 56 }],
+    spawn: { x: 0, y: 0.865, z: -45 },
+  };
+  applyEpicStructure(plan, index);
+  return plan;
+};
+
+const createEpicView = (
+  index: EpicStructureIndex,
+): { materials: MaterialSet; plan: WorldPlan; view: WorldView } => {
+  const plan = createEpicPlan(index);
+  const materials = createTestMaterials();
+  const whitePixel = Uint8Array.of(255, 255, 255, 255);
+  const view = new WorldView(plan, materials, {
+    bakedLightMaps: {
+      resolution: 1,
+      general: whitePixel,
+      ceiling: whitePixel,
+    },
+  });
+  return { materials, plan, view };
+};
+
+describe('epic structure rendering', () => {
+  it('renders epic1 as a 64m open abyss with strata below the fall-reset plane', () => {
+    const { materials, plan, view } = createEpicView(1);
+    const root = view.group.getObjectByName(
+      'epic-structure-1-endless-abyss',
+    ) as THREE.Group;
+    const upperShell = root.getObjectByName('epic-1-upper-shell') as THREE.Mesh;
+    const shaft = root.getObjectByName('epic-endless-abyss-shaft') as THREE.Mesh;
+    const strata = root.getObjectByName('epic-endless-abyss-strata') as THREE.Mesh;
+    expect(root).toBeDefined();
+    expect(upperShell).toBeDefined();
+    expect(shaft).toBeDefined();
+    expect(strata).toBeDefined();
+
+    upperShell.geometry.computeBoundingBox();
+    shaft.geometry.computeBoundingBox();
+    strata.geometry.computeBoundingBox();
+    expect(upperShell.geometry.boundingBox?.min.y).toBeCloseTo(plan.wallHeight - 0.04, 5);
+    expect(upperShell.geometry.boundingBox?.max.y).toBeCloseTo(54.03, 5);
+    expect(shaft.geometry.boundingBox?.min.x).toBeLessThanOrEqual(-32);
+    expect(shaft.geometry.boundingBox?.max.x).toBeGreaterThanOrEqual(32);
+    expect(shaft.geometry.boundingBox?.min.z).toBeLessThanOrEqual(-32);
+    expect(shaft.geometry.boundingBox?.max.z).toBeGreaterThanOrEqual(32);
+    expect(shaft.geometry.boundingBox?.min.y).toBeLessThanOrEqual(-72);
+    expect(shaft.geometry.boundingBox?.max.y).toBeCloseTo(-0.004, 5);
+    expect(strata.geometry.boundingBox?.min.y).toBeLessThan(-60);
+    expect(strata.geometry.boundingBox?.max.y).toBeLessThan(0);
+
+    const down = new THREE.Raycaster(
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(0, -1, 0),
+      0,
+      100,
+    );
+    expect(down.intersectObject(view.group, true)).toHaveLength(0);
+
+    const dispose = vi.spyOn(strata.geometry, 'dispose');
+    view.dispose();
+    expect(dispose).toHaveBeenCalledTimes(1);
+    Object.values(materials).forEach((material) => material.dispose());
+  });
+
+  it('builds seven distinct upper illusions without duplicating shared ground obstacles', () => {
+    const expectations: Array<{
+      index: EpicStructureIndex;
+      marker: string;
+      companion?: string;
+      minY: number;
+      maxY: number;
+    }> = [
+      {
+        index: 2,
+        marker: 'epic-lost-ceiling-height-rings',
+        companion: 'epic-lost-ceiling-distant-lights',
+        minY: 8.9,
+        maxY: 60,
+      },
+      {
+        index: 3,
+        marker: 'epic-ascending-passages-facades',
+        companion: 'epic-ascending-passages-dark-openings',
+        minY: 4.9,
+        maxY: 50,
+      },
+      {
+        index: 4,
+        marker: 'epic-endless-pillars-capital-bands',
+        minY: 7.9,
+        maxY: 50,
+      },
+      {
+        index: 5,
+        marker: 'epic-impossible-stairwell-floating-flights',
+        minY: 4.1,
+        maxY: 50,
+      },
+      {
+        index: 6,
+        marker: 'epic-suspended-room-shells',
+        companion: 'epic-suspended-room-dark-doors',
+        minY: 9.9,
+        maxY: 50,
+      },
+      {
+        index: 7,
+        marker: 'epic-nested-gates-receding-frames',
+        companion: 'epic-nested-gates-threshold-lights',
+        minY: 5,
+        maxY: 20,
+      },
+      {
+        index: 8,
+        marker: 'epic-light-cathedral-vault-ribs',
+        companion: 'epic-light-cathedral-fluorescent-nave',
+        minY: 12.9,
+        maxY: 60,
+      },
+    ];
+
+    for (const expected of expectations) {
+      const { materials, plan, view } = createEpicView(expected.index);
+      const feature = plan.features.find(
+        (candidate): candidate is EpicStructureFeature =>
+          candidate.kind === 'epic-structure',
+      )!;
+      const root = view.group.getObjectByName(
+        `epic-structure-${feature.index}-${feature.variant}`,
+      ) as THREE.Group;
+      const upperShell = root.getObjectByName(
+        `epic-${feature.index}-upper-shell`,
+      ) as THREE.Mesh;
+      const marker = root.getObjectByName(expected.marker) as THREE.Mesh;
+      expect(root, `epic${expected.index} root`).toBeDefined();
+      expect(upperShell, `epic${expected.index} upper shell`).toBeDefined();
+      expect(marker, `epic${expected.index} marker`).toBeDefined();
+      if (expected.companion) {
+        expect(
+          root.getObjectByName(expected.companion),
+          `epic${expected.index} companion`,
+        ).toBeDefined();
+      }
+      marker.geometry.computeBoundingBox();
+      upperShell.geometry.computeBoundingBox();
+      expect(marker.geometry.boundingBox!.min.y).toBeGreaterThan(expected.minY);
+      expect(marker.geometry.boundingBox!.max.y).toBeGreaterThan(expected.maxY);
+      expect(upperShell.geometry.boundingBox!.min.y)
+        .toBeCloseTo(plan.wallHeight - 0.04, 5);
+      expect(upperShell.geometry.boundingBox!.max.y)
+        .toBeCloseTo(feature.height + 0.03, 5);
+
+      const obstacles = getEpicGroundObstacles(feature);
+      const architecturalColumns = view.group.getObjectByName(
+        'merged-wallpaper-walls',
+      ) as THREE.Mesh;
+      expect(architecturalColumns).toBeDefined();
+      expect(architecturalColumns.geometry.getAttribute('position').count)
+        .toBe(obstacles.length * 24);
+      expect(root.getObjectByName(`epic-${expected.index}-ground-obstacles`))
+        .toBeUndefined();
+
+      view.dispose();
+      Object.values(materials).forEach((material) => material.dispose());
+    }
   });
 });

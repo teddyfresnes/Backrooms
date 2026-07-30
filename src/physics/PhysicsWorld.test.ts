@@ -5,6 +5,7 @@ vi.mock('@dimforge/rapier3d', async () =>
 );
 
 import { PhysicsWorld } from './PhysicsWorld';
+import { applyEpicStructure } from '../world/EpicStructures';
 import { getStairCollisionShapes } from '../world/StairLayout';
 import type { StairSocketFeature, StaticCollider, WorldPlan } from '../world/types';
 
@@ -71,6 +72,23 @@ afterEach(() => {
 });
 
 describe('PhysicsWorld chunk ownership', () => {
+  it('keeps a falling player inside the epic1 shaft below the death plane', async () => {
+    const plan = makePlan();
+    plan.size = 112;
+    applyEpicStructure(plan, 1);
+    const physics = await PhysicsWorld.create(plan);
+    activeWorlds.push(physics);
+
+    expect(castDownAt(physics, 0, 2)).toBeNull();
+    expect(castDownAt(physics, 40, 2)).not.toBeNull();
+    for (const y of [-2, -50]) {
+      physics.teleport({ x: 0, y, z: 0 });
+      const result = physics.move({ x: 40, y: -0.01, z: 0 });
+      expect(result.position.x).toBeGreaterThan(30);
+      expect(result.position.x).toBeLessThan(32);
+    }
+  });
+
   it('keeps create(plan) compatible through the origin chunk', async () => {
     const physics = await createPhysics([floorCollider('origin-floor', 50)]);
 

@@ -160,6 +160,35 @@ export interface VistaFeature {
   returnDestination: Vec3Data;
 }
 
+export type EpicStructureIndex = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
+export type EpicStructureVariant =
+  | 'endless-abyss'
+  | 'lost-ceiling'
+  | 'ascending-passages'
+  | 'endless-pillars'
+  | 'impossible-stairwell'
+  | 'suspended-rooms'
+  | 'nested-gates'
+  | 'light-cathedral';
+
+/**
+ * A chunk-scale landmark. Its repeated geometry is derived from this compact,
+ * serializable contract by EpicStructures and WorldBuilder.
+ */
+export interface EpicStructureFeature {
+  kind: 'epic-structure';
+  id: string;
+  roomId: string;
+  index: EpicStructureIndex;
+  variant: EpicStructureVariant;
+  bounds: Rect;
+  height: number;
+  destination: Vec3Data;
+  /** Only epic1 removes the canonical floor through every logical story. */
+  voidBounds?: Rect;
+}
+
 export interface StairSocketFeature {
   kind: 'stair-socket';
   id: string;
@@ -266,6 +295,7 @@ export interface CeilingZone {
 export type WorldFeature =
   | GridPitFeature
   | VistaFeature
+  | EpicStructureFeature
   | StairSocketFeature
   | SqueezeViewFeature
   | RaisedZoneFeature
