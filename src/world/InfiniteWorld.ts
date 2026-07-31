@@ -413,7 +413,9 @@ const addSymmetricGallery = (
       id: `symmetric-gallery-light-${index}`,
       x: alongX ? along : center.x,
       z: alongX ? center.z : along,
-      ceilingY: plan.wallHeight,
+      // The gallery can be carved into a raised-ceiling hall. Its panels must
+      // follow that actual ceiling plane rather than the standard wall cap.
+      ceilingY: hall.ceilingHeight,
       rotation: alongX ? 0 : Math.PI * 0.5,
       width: 1.9,
       intensity: 1.02,

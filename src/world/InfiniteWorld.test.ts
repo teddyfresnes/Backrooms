@@ -638,6 +638,7 @@ describe('InfiniteWorld chunk contracts', () => {
 
   it('keeps every surviving high ceiling fully shelled and clear of vertical openings', () => {
     let tallRoomCount = 0;
+    let elevatedGalleryLightCount = 0;
     for (let index = 0; index < 36; index += 1) {
       const coord = {
         x: index % 6 - 3,
@@ -694,12 +695,19 @@ describe('InfiniteWorld chunk contracts', () => {
             `incomplete upper shell in ${createChunkKey(coord)} room ${room.id}`,
           ).toBeGreaterThanOrEqual(side.max - 0.03);
         }
+        for (const light of plan.lights.filter((candidate) =>
+          candidate.roomId === room.id && candidate.id.includes('symmetric-gallery-light-')
+        )) {
+          elevatedGalleryLightCount += 1;
+          expect(light.ceilingY).toBe(room.ceilingHeight);
+        }
       }
       for (const feature of plan.features.filter((candidate) => candidate.kind === 'raised-zone')) {
         expect(openings.some((opening) => overlaps(feature.bounds, opening))).toBe(false);
       }
     }
     expect(tallRoomCount).toBeGreaterThan(0);
+    expect(elevatedGalleryLightCount).toBeGreaterThan(0);
   });
 
   it('preserves signed elevation districts without restoring the zero-height floor beneath them', () => {
