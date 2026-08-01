@@ -1,0 +1,37 @@
+{
+  "name": "backrooms-movement-lab",
+  "private": true,
+  "version": "0.3.85",
+  "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite --open \"/\"",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "check": "tsc -b",
+    "test": "node -e \"require('fs').rmSync('.movement-test-dist',{recursive:true,force:true})\" && tsc -p tsconfig.movement-test.json && node --test tests/*.test.mjs",
+    "assets:blood": "node scripts/fetch-blood-assets.mjs",
+    "predev": "node scripts/unpack-assets.mjs && npm run assets:all",
+    "prebuild": "node scripts/unpack-assets.mjs && npm run assets:all",
+    "assets:backrooms": "node scripts/fetch-backrooms-assets.mjs",
+    "assets:all": "npm run assets:blood && npm run assets:backrooms",
+    "start": "node scripts/serve-build.mjs --open",
+    "verify:delivery": "node scripts/verify-delivery.mjs",
+    "pretest": "node scripts/unpack-assets.mjs",
+    "assets:unpack": "node scripts/unpack-assets.mjs"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d": "0.19.3",
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
+    "@types/three": "0.185.1",
+    "esbuild": "^0.28.2",
+    "happy-dom": "^20.14.5",
+    "typescript": "6.0.3",
+    "vite": "8.1.5"
+  }
+}
