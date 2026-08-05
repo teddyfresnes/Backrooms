@@ -1,0 +1,53 @@
+html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #16191d; }
+body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.movement-lab { position: fixed; inset: 0; background: #16191d; color: #eef1f3; }
+.movement-lab__canvas { display: block; width: 100%; height: 100%; outline: none; }
+.movement-lab__panel {
+  position: fixed; top: 14px; right: 14px; z-index: 2; width: min(380px, calc(100vw - 28px));
+  box-sizing: border-box; padding: 12px 13px; border: 1px solid rgba(255,255,255,.14);
+  border-radius: 8px; background: rgba(10,12,14,.78); backdrop-filter: blur(8px); pointer-events: none;
+  box-shadow: 0 10px 36px rgba(0,0,0,.25); font-size: 11px; line-height: 1.35;
+}
+.movement-lab__title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.movement-lab__title strong { font-size: 13px; letter-spacing: .12em; }
+.movement-lab__title span { color: #aab2ba; font-size: 9px; }
+.movement-lab__stats { display: grid; grid-template-columns: 1fr auto; gap: 5px 14px; padding: 9px 0; border-top: 1px solid rgba(255,255,255,.09); border-bottom: 1px solid rgba(255,255,255,.09); }
+.movement-lab__stats span { color: #929ca5; letter-spacing: .06em; }
+.movement-lab__stats b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.movement-lab__zones { display: flex; flex-wrap: wrap; gap: 5px; padding-top: 9px; }
+.movement-lab__zones span { padding: 3px 5px; border-radius: 4px; background: rgba(255,255,255,.07); color: #c7cdd2; }
+.movement-lab__controls { margin: 9px 0 0; color: #9fa8b0; }
+.movement-lab__hint {
+  position: fixed; left: 50%; bottom: 7vh; z-index: 2; transform: translateX(-50%); display: grid; gap: 4px;
+  min-width: 260px; padding: 10px 14px; border-radius: 7px; text-align: center; background: rgba(10,12,14,.78);
+  border: 1px solid rgba(255,255,255,.13); pointer-events: none; transition: opacity .14s ease;
+}
+.movement-lab__hint strong { font-size: 12px; letter-spacing: .1em; }
+.movement-lab__hint span { color: #aab2ba; font-size: 10px; }
+.movement-lab__hint.is-hidden { opacity: 0; }
+.movement-lab__crosshair { position: fixed; left: 50%; top: 50%; z-index: 2; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: rgba(255,255,255,.72); pointer-events: none; }
+@media (max-width: 640px) { .movement-lab__panel { right: 8px; top: 8px; } .movement-lab__zones, .movement-lab__controls { display: none; } }
+.movement-lab__motion-fx {
+  --motion-blur: 0px;
+  --motion-opacity: 0;
+  position: fixed;
+  inset: -4px;
+  z-index: 1;
+  pointer-events: none;
+  opacity: var(--motion-opacity);
+  background: rgba(255,255,255,.002);
+  backdrop-filter: blur(var(--motion-blur));
+  -webkit-backdrop-filter: blur(var(--motion-blur));
+  mask-image: radial-gradient(circle at center, transparent 38%, rgba(0,0,0,.2) 62%, #000 100%);
+  -webkit-mask-image: radial-gradient(circle at center, transparent 38%, rgba(0,0,0,.2) 62%, #000 100%);
+  will-change: opacity, backdrop-filter;
+}
+
+.movement-lab__stats [data-stat="states"] { max-width: 235px; text-align: right; color: #d9e0e6; }
+
+.movement-lab__back {
+  position: fixed; left: 14px; top: 14px; z-index: 4; padding: 7px 9px; color: #b7c0c8; text-decoration: none;
+  border: 1px solid rgba(255,255,255,.14); border-radius: 6px; background: rgba(10,12,14,.72); font-size: 10px;
+  pointer-events: auto;
+}
+.movement-lab__back:hover { color: #fff; border-color: rgba(255,255,255,.3); }
