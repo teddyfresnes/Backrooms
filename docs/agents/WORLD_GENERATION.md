@@ -66,12 +66,17 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
 - Une `raised-zone` réserve aussi ses `approachRoomIds` : chaque rampe doit
   traverser une pièce simple et large, sans plafond bas, carrefour ni relief
   architectural ajouté par une passe ultérieure.
-- Une coque de plafond haut commence légèrement au-dessus du plafond bas, jamais
-  en dessous. Si le wrapper rabaisse ensuite la pièce à cause d’une ouverture
-  verticale ou d’une façade incomplète, il supprime aussi chaque fragment de
+- Une coque de plafond haut rejoint exactement le sommet du mur bas. Un linteau
+  de portail commence légèrement au-dessus pour ne pas superposer sa sous-face
+  au plafond bas voisin. Si le wrapper rabaisse ensuite la pièce à cause d’une
+  ouverture verticale ou d’une façade incomplète, il supprime aussi chaque fragment de
   `upper-shell` / `upper-portal-lintel` qui ne borde plus aucune pièce haute.
 - Après mutation de murs ou de zones verticales, appeler le helper de
   reconstruction prévu au bon endroit plutôt que patcher un seul tableau.
+- Le dégagement d’arrivée d’une ouverture de plafond s’applique après les
+  escaliers hérités et murs de bordure, afin qu’aucune géométrie
+  ajoutée tardivement ne puisse reboucher partiellement le passage. Les chunks
+  monumentaux conservent leur propre contrat vertical et ne sont pas retaillés.
 - Une `interactive-door` remplace un vrai segment de mur par deux jambages et
   un linteau. Son collider représente l’état fermé : les audits de topologie
   permanente doivent l’ignorer, puis le runtime le désactive pendant l’ouverture.

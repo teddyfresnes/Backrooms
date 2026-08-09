@@ -65,6 +65,24 @@ const colliderFootprint = (collider: StaticCollider): Rect => ({
   maxZ: collider.center.z + collider.halfExtents.z,
 });
 
+const wallFootprint = (wall: WallSegment): Rect => {
+  const halfLength = wall.length * 0.5;
+  const halfThickness = wall.thickness * 0.5;
+  return wall.orientation === 'x'
+    ? {
+        minX: wall.x - halfLength,
+        maxX: wall.x + halfLength,
+        minZ: wall.z - halfThickness,
+        maxZ: wall.z + halfThickness,
+      }
+    : {
+        minX: wall.x - halfThickness,
+        maxX: wall.x + halfThickness,
+        minZ: wall.z - halfLength,
+        maxZ: wall.z + halfLength,
+      };
+};
+
 const colliderContainsPoint = (
   collider: StaticCollider,
   point: { x: number; z: number },
@@ -880,6 +898,21 @@ describe('InfiniteWorld chunk contracts', () => {
         hole,
         kind === 'void' ? '/inherited-shaft-' : '/ceiling-shaft-collar-',
       )).toHaveLength(4);
+      const clearArrival: Rect = {
+        minX: hole.minX + 0.16,
+        maxX: hole.maxX - 0.16,
+        minZ: hole.minZ + 0.16,
+        maxZ: hole.maxZ - 0.16,
+      };
+      expect(destination.walls.some((wall) =>
+        wall.bottom < destination.wallHeight - 0.1 &&
+        overlaps(wallFootprint(wall), clearArrival)
+      )).toBe(false);
+      expect(destination.colliders.some((collider) =>
+        collider.kind !== 'floor' &&
+        collider.center.y > -0.5 &&
+        overlaps(colliderFootprint(collider), clearArrival)
+      )).toBe(false);
 
       if (kind === 'void') {
         const deeper = generateInfiniteChunk(seed, {

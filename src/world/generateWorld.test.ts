@@ -573,6 +573,11 @@ describe('Level 0 procedural generator', () => {
         wall.detail === 'upper-shell' || wall.detail === 'upper-portal-lintel'
       );
       expect(shells.every((wall) => wall.kind === 'wallpaper')).toBe(true);
+      expect(shells.every((wall) =>
+        wall.detail === 'upper-shell'
+          ? Math.abs(wall.bottom - world.wallHeight) < 0.001
+          : wall.bottom >= world.wallHeight + 0.008 && wall.bottom <= world.wallHeight + 0.02
+      )).toBe(true);
       for (const zone of world.ceilingZones ?? []) {
         const zoneRooms = zone.roomIds.map((roomId) =>
           world.rooms.find((room) => room.id === roomId)

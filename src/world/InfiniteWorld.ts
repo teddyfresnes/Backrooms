@@ -2134,15 +2134,7 @@ export const generateInfiniteChunk = (
   demoteTallRoomsIntersecting(plan, plan.floorOpenings ?? []);
   removeLocalStairsBlockedAbove(seed, coord, plan);
   const ceilingOpenings = ceilingOpeningsForChunk(seed, coord);
-  applyCeilingLandingClearance(plan, ceilingOpenings);
   applyInheritedStair(plan, inheritedStairForChunk(seed, coord));
-  plan.stairCeilingOpenings = plan.features
-    .filter(
-      (feature): feature is StairSocketFeature =>
-        feature.kind === 'stair-socket' && !feature.inherited && (feature.baseY ?? 0) === 0,
-    )
-    .map((feature) => cloneRect(feature.bounds));
-  enforceUnlitZones(plan);
   // WeakMap metadata is runtime-only and is lost through a worker's structured
   // clone. Keeping this tiny contract in the plan prevents main-thread world
   // regeneration when WorldView asks which ceiling cells to remove.
@@ -2161,6 +2153,17 @@ export const generateInfiniteChunk = (
     if (epicIndex === 3 && (edge === 'west' || edge === 'east')) continue;
     emitBiomeBoundarySkin(plan, seed, coord, edge, edgeGates[edge]);
   }
+  // Boundary skins, inherited stairs and epic replacements are all capable of
+  // adding geometry after the initial room generation. Clear the arrival last
+  // so a ceiling opening can never hand the player into a late-added wall.
+  if (epicIndex === null) applyCeilingLandingClearance(plan, ceilingOpenings);
+  plan.stairCeilingOpenings = plan.features
+    .filter(
+      (feature): feature is StairSocketFeature =>
+        feature.kind === 'stair-socket' && !feature.inherited && (feature.baseY ?? 0) === 0,
+    )
+    .map((feature) => cloneRect(feature.bounds));
+  enforceUnlitZones(plan);
   pruneInvalidInteractiveDoors(plan);
   // Biome and vertical-opening passes may remove or replace walls after the
   // finite plan was generated. Re-derive the sunken continuations from the

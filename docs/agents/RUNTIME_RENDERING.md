@@ -107,11 +107,17 @@ soustraction de rectangles et les réparations de jonction.
 - Tout plafond au-dessus de la ligne des murs utilise un matériau texturé sans
   fog, double face et légèrement émissif, sans réutiliser la lightmap 2D du
   plafond bas, pour ne pas se confondre avec le fond.
+  Les plafonds de preview verticale modulent aussi leur émission avec la texture
+  de dalles afin que le plafond reste lisible en regardant depuis l’étage bas.
   À partir de 18 m, la variante distante renforce ce traitement et réduit aussi
   l’échelle UV des dalles en fonction de la hauteur.
 - Les fragments de coque haute gardent leurs faces d’extrémité : leur retrait
-  produit des fentes verticales noires aux raccords. Leur base reste au-dessus
-  du plafond bas afin qu’aucune fine lame de papier peint ne le traverse.
+  produit des fentes verticales noires aux raccords. Leur base rejoint exactement
+  le sommet du mur bas pour ne laisser aucune fente horizontale ; le plafond bas
+  voisin se termine sur ce même plan et masque la jonction de son côté.
+- La sous-face d’un `upper-portal-lintel` reste légèrement au-dessus du plafond
+  bas : les deux plans ne doivent jamais être coplanaires, sinon leurs textures
+  clignotent à la frontière entre salle haute et salle normale.
 - Une géométrie visible depuis un étage voisin doit avoir les faces/caps
   nécessaires ; ne pas compter uniquement sur le back-face culling.
 - Toute nouvelle ressource détenue par `WorldView` doit être libérée dans

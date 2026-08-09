@@ -510,6 +510,9 @@ describe('open pit shaft rendering', () => {
       spawn: { x: 0, y: 0.9, z: 0 },
     };
     const materials = createTestMaterials();
+    const ceilingTexture = new THREE.DataTexture(Uint8Array.of(180, 170, 95, 255), 1, 1);
+    ceilingTexture.needsUpdate = true;
+    materials.ceiling.map = ceilingTexture;
     const whitePixel = Uint8Array.of(255, 255, 255, 255);
     const view = new WorldView(plan, materials, {
       bakedLightMaps: {
@@ -534,6 +537,12 @@ describe('open pit shaft rendering', () => {
       ((view.group.getObjectByName('upper-story-preview-wallpaper-walls') as THREE.Mesh)
         .material as THREE.Material).name,
     ).toBe('preview-wallpaper');
+    const previewCeilingMaterial = (view.group.getObjectByName(
+      'upper-story-preview-ceiling',
+    ) as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    expect(previewCeilingMaterial.map).toBe(ceilingTexture);
+    expect(previewCeilingMaterial.emissiveMap).toBe(ceilingTexture);
+    expect(previewCeilingMaterial.fog).toBe(false);
 
     raycaster.set(new THREE.Vector3(2, 1, 0), new THREE.Vector3(0, 1, 0));
     raycaster.far = 6;
@@ -542,6 +551,7 @@ describe('open pit shaft rendering', () => {
     expect(solidHits.some((hit) => hit.object.name === 'upper-story-floor-underside-preview')).toBe(true);
 
     view.dispose();
+    ceilingTexture.dispose();
     Object.values(materials).forEach((material) => material.dispose());
   });
 

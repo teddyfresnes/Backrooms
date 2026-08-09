@@ -1161,6 +1161,13 @@ const createPreviewMaterial = (
   material.lightMap = null;
   material.emissive.setHex(emissive);
   material.emissiveIntensity = Math.max(material.emissiveIntensity, emissiveIntensity);
+  if (name === 'preview-ceiling') {
+    // A uniform emissive lift washes the tile grid out when this surface is
+    // viewed through a shaft. Modulating it with the albedo keeps the preview
+    // bright while making the upper ceiling unmistakably readable.
+    if (material.map) material.emissiveMap = material.map;
+    material.fog = false;
+  }
   material.needsUpdate = true;
   return material;
 };

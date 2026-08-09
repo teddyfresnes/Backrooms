@@ -1453,10 +1453,12 @@ const addCeilingVariations = (
       const thickness = referenceWalls.length > 0
         ? referenceWalls.reduce((sum, wall) => sum + wall.thickness, 0) / referenceWalls.length
         : WALL_THICKNESS;
-      // The ordinary ceiling ends exactly at WALL_HEIGHT. Starting an upper
-      // continuation below that plane leaves a thin wallpaper blade visible
-      // through neighbouring low ceilings.
-      const shellBottom = WALL_HEIGHT + 0.006;
+      const supported = supportingWalls.length > 0;
+      // A true wall continuation must meet its lower wall exactly or it leaves
+      // a dark slit. A portal lintel is different: its wallpaper underside
+      // crosses the edge of the low ceiling, so keeping it slightly above that
+      // plane prevents the two textures from blinking without exposing a gap.
+      const shellBottom = supported ? WALL_HEIGHT : WALL_HEIGHT + 0.012;
       addWall(plan, rng.fork(`upper-shell:${shellIndex}`), {
         roomId: owner.roomId,
         x: owner.orientation === 'x' ? midpoint : owner.fixed,
@@ -1469,7 +1471,7 @@ const addCeilingVariations = (
         collision: true,
         tint,
         kind: 'wallpaper',
-        detail: supportingWalls.length > 0 ? 'upper-shell' : 'upper-portal-lintel',
+        detail: supported ? 'upper-shell' : 'upper-portal-lintel',
       }, 0.01);
       shellIndex += 1;
     }
