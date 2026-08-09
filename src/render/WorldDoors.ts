@@ -5,6 +5,8 @@ import type {
   InteractiveDoorFeature,
   WorldPlan,
 } from '../world/types';
+import { applyZonalLighting, createZonalLightingContext } from './ZonalLighting';
+import type { ZonalLightingContext } from './ZonalLighting';
 
 const ASSET_URL =
   '/assets/models/doors/kenney-modern-office-door/modern-office-door.glb';
@@ -90,14 +92,25 @@ const loadDoorTemplate = (): Promise<THREE.Group> => {
   return templatePromise;
 };
 
-const cloneDoorTemplate = (source: THREE.Group): THREE.Group => {
+const cloneDoorTemplate = (
+  source: THREE.Group,
+  lighting: ZonalLightingContext,
+): THREE.Group => {
   const clone = source.clone(true);
   clone.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
     child.geometry = child.geometry.clone();
+    const cloneMaterial = (sourceMaterial: THREE.Material): THREE.Material => {
+      const material = sourceMaterial.clone();
+      if (
+        material instanceof THREE.MeshStandardMaterial ||
+        material instanceof THREE.MeshBasicMaterial
+      ) applyZonalLighting(material, lighting);
+      return material;
+    };
     child.material = Array.isArray(child.material)
-      ? child.material.map((material) => material.clone())
-      : child.material.clone();
+      ? child.material.map(cloneMaterial)
+      : cloneMaterial(child.material);
   });
   return clone;
 };
@@ -118,7 +131,10 @@ export class WorldDoorLayer {
   private readonly passableColliderIds: string[] = [];
   private disposed = false;
 
-  constructor(plan: WorldPlan) {
+  constructor(
+    plan: WorldPlan,
+    lighting: ZonalLightingContext = createZonalLightingContext(plan),
+  ) {
     this.group.name = 'interactive-office-doors';
     const features = plan.features.filter(
       (feature): feature is InteractiveDoorFeature => feature.kind === 'interactive-door',
@@ -145,7 +161,7 @@ export class WorldDoorLayer {
     this.ready = loadDoorTemplate()
       .then((template) => {
         for (const runtime of this.runtimes.values()) {
-          const instance = cloneDoorTemplate(template);
+          const instance = cloneDoorTemplate(template, lighting);
           if (this.disposed) {
             disposeDoorObject(instance);
             continue;

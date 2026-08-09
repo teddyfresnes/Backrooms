@@ -643,7 +643,7 @@ describe('InfiniteWorld chunk contracts', () => {
     }
   });
 
-  it('serializes the visual biome and applies its fluorescent palette before baking', () => {
+  it('serializes the visual biome and applies its fluorescent palette before rendering', () => {
     const biomeSeed = 'VISUAL-BIOME-PALETTE-AUDIT';
     const findCoord = (target: 'red' | 'white'): ChunkCoord => {
       for (let x = -20; x <= 20; x += 2) {

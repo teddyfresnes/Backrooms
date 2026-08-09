@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import type { BiomeMaterialSets } from '../render/MaterialLibrary';
-import { bakeLightMapData } from '../render/BakedLighting';
-import type { BakedLightMapData } from '../render/BakedLighting';
+import { unlitZoneInfluence } from '../render/ZonalLighting';
 import { WorldView } from '../render/WorldBuilder';
 import type { DoorWorldInteraction, WorldInteraction } from '../render/WorldBuilder';
 import {
@@ -43,7 +42,6 @@ interface ActiveChunk {
   key: ChunkKey;
   coord: Readonly<ChunkCoord>;
   plan: WorldPlan;
-  lightMaps: BakedLightMapData;
   view: WorldView;
   offset: THREE.Vector3;
 }
@@ -52,13 +50,16 @@ interface WorkerResponse {
   id: number;
   key: ChunkKey;
   plan?: WorldPlan;
-  lightMaps?: BakedLightMapData;
   error?: string;
 }
 
 interface PreparedChunk {
   plan: WorldPlan;
-  lightMaps?: BakedLightMapData;
+}
+
+export interface WorldLightingContext {
+  readonly biome: VisualBiome;
+  readonly darkness: number;
 }
 
 export interface WorldStreamDebugCounts {
@@ -252,10 +253,6 @@ export class WorldStream {
     const workerPreparation = this.worker
       ? this.prepareInitialChunks(neighbourCoords)
       : Promise.resolve(new Map<ChunkKey, PreparedChunk>());
-    // Let the temporary workers run while the origin lightmap is baked. The
-    // loading screen remains opaque, but startup no longer serializes nine
-    // one-second light transports on the main thread.
-    const originLightMaps = bakeLightMapData(this.originPlan);
     let prepared = new Map<ChunkKey, PreparedChunk>();
     try {
       prepared = await workerPreparation;
@@ -273,11 +270,7 @@ export class WorldStream {
           const plan = key === originMetadata.key
             ? this.originPlan
             : ready?.plan ?? generateInfiniteChunk(this.seed, key);
-          this.mountChunk(
-            plan,
-            coord,
-            key === originMetadata.key ? originLightMaps : ready?.lightMaps,
-          );
+          this.mountChunk(plan, coord);
         }
       });
       this.centerCoord = { x: 0, z: 0, story: 0 };
@@ -345,8 +338,7 @@ export class WorldStream {
         const prepared = this.preparedChunks.get(centerKey);
         this.mountChunk(
           prepared?.plan ?? generateInfiniteChunk(this.seed, centerKey),
-          this.centerCoord,
-          prepared?.lightMaps,
+          this.centerCoord
         );
         this.preparedChunks.delete(centerKey);
         sourcesChanged = true;
@@ -365,7 +357,7 @@ export class WorldStream {
       const readyKey = createChunkKey(readyCoord);
       const ready = this.preparedChunks.get(readyKey)!;
       this.preparedChunks.delete(readyKey);
-      this.mountChunk(ready.plan, readyCoord, ready.lightMaps);
+      this.mountChunk(ready.plan, readyCoord);
       sourcesChanged = true;
       missing = desiredCoords.filter((coord) => !this.chunks.has(createChunkKey(coord)));
     }
@@ -495,8 +487,22 @@ export class WorldStream {
     );
   }
 
-  getVisualBiome(playerPosition: THREE.Vector3): VisualBiome {
-    return this.runtimeAt(playerPosition)?.plan.visualBiome ?? 'yellow';
+  getLightingContext(playerPosition: THREE.Vector3): WorldLightingContext {
+    const runtime = this.runtimeAt(playerPosition);
+    if (!runtime) return { biome: 'yellow', darkness: 0 };
+    const localY = playerPosition.y - runtime.offset.y;
+    const storyIsAffected = localY >= -0.55 && localY <= runtime.plan.wallHeight + 0.55;
+    return {
+      biome: runtime.plan.visualBiome ?? 'yellow',
+      darkness: storyIsAffected
+        ? unlitZoneInfluence(
+            runtime.plan.unlitZones ?? [],
+            playerPosition.x - runtime.offset.x,
+            playerPosition.z - runtime.offset.z,
+            1.35,
+          )
+        : 0,
+    };
   }
 
   /** Prepares and mounts the destination collider before Game teleports. */
@@ -512,7 +518,7 @@ export class WorldStream {
         ? await this.prepareChunkWithWorker(key)
         : (() => {
             const plan = generateInfiniteChunk(this.seed, key);
-            return { plan, lightMaps: bakeLightMapData(plan) };
+            return { plan };
           })();
       return { coord, key, prepared: generated };
     }));
@@ -520,7 +526,7 @@ export class WorldStream {
     this.physics.batchChunkChanges(() => {
       for (const ready of prepared) {
         if (!ready.prepared) continue;
-        this.mountChunk(ready.prepared.plan, ready.coord, ready.prepared.lightMaps);
+        this.mountChunk(ready.prepared.plan, ready.coord);
       }
     });
     for (const ready of prepared) this.preparedChunks.delete(ready.key);
@@ -548,11 +554,7 @@ export class WorldStream {
     if (this.chunks.has(key)) return;
     if (this.recoveryChunk?.key === key) {
       this.physics.batchChunkChanges(() => {
-        this.mountChunk(
-          this.recoveryChunk!.prepared.plan,
-          coord,
-          this.recoveryChunk!.prepared.lightMaps,
-        );
+        this.mountChunk(this.recoveryChunk!.prepared.plan, coord);
       });
       this.refreshLightSources();
       return;
@@ -565,7 +567,7 @@ export class WorldStream {
     }
     this.physics.batchChunkChanges(() => {
       const plan = prepared?.plan ?? generateInfiniteChunk(this.seed, key);
-      this.mountChunk(plan, coord, prepared?.lightMaps ?? bakeLightMapData(plan));
+      this.mountChunk(plan, coord);
     });
     this.preparedChunks.delete(key);
     this.refreshLightSources();
@@ -1001,7 +1003,6 @@ export class WorldStream {
   private mountChunk(
     plan: WorldPlan,
     coordOverride?: Readonly<ChunkCoord>,
-    bakedLightMaps?: BakedLightMapData,
   ): void {
     let metadata = getInfiniteChunkMetadata(plan);
     if (!metadata && coordOverride) {
@@ -1014,12 +1015,9 @@ export class WorldStream {
 
     const worldOffset = getChunkWorldOffset(coord);
     const offset = new THREE.Vector3(worldOffset.x, worldOffset.y, worldOffset.z);
-    const lightMaps = bakedLightMaps ?? bakeLightMapData(plan);
-    const view = new WorldView(plan, this.materials[plan.visualBiome ?? 'yellow'], {
-      createLightRig: false,
-      bakedLightMaps: lightMaps,
-    });
+    const view = new WorldView(plan, this.materials[plan.visualBiome ?? 'yellow']);
     view.group.position.copy(offset);
+    view.setWorldOffset(offset);
     try {
       this.physics.addChunk(key, plan.colliders, offset);
       this.scene.add(view.group);
@@ -1027,7 +1025,6 @@ export class WorldStream {
         key,
         coord,
         plan,
-        lightMaps,
         view,
         offset,
       });
@@ -1045,7 +1042,7 @@ export class WorldStream {
       // would overlap epic1's stacked previews with the real lower stories.
       this.recoveryChunk = {
         key,
-        prepared: { plan: runtime.plan, lightMaps: runtime.lightMaps },
+        prepared: { plan: runtime.plan },
       };
     }
     this.physics.removeChunk(key);
@@ -1124,7 +1121,6 @@ export class WorldStream {
       if (request.prefetch) {
         this.preparedChunks.set(request.key, {
           plan: event.data.plan,
-          lightMaps: event.data.lightMaps,
         });
         if (this.preparedChunks.size > 12) {
           const oldest = this.preparedChunks.keys().next().value;
@@ -1134,7 +1130,7 @@ export class WorldStream {
       this.pumpVerticalPrefetch();
       return;
     }
-    this.mountChunk(event.data.plan, request.coord, event.data.lightMaps);
+    this.mountChunk(event.data.plan, request.coord);
     this.refreshLightSources();
     this.pendingChunks = Math.max(0, this.pendingChunks - 1);
     this.pumpVerticalPrefetch();
@@ -1187,7 +1183,7 @@ export class WorldStream {
           if (response.error || !response.plan) {
             throw new Error(response.error ?? `Worker returned no plan for ${key}.`);
           }
-          prepared.set(key, { plan: response.plan, lightMaps: response.lightMaps });
+          prepared.set(key, { plan: response.plan });
         }
       } finally {
         worker.terminate();
@@ -1223,7 +1219,7 @@ export class WorldStream {
       if (response.error || !response.plan) {
         throw new Error(response.error ?? `Worker returned no plan for ${key}.`);
       }
-      return { plan: response.plan, lightMaps: response.lightMaps };
+      return { plan: response.plan };
     } finally {
       this.preparationWorkers.delete(worker);
       worker.terminate();

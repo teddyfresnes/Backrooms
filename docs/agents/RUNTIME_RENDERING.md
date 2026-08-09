@@ -18,20 +18,21 @@ associés. Le voisinage normal est un 3×3 sur l’étage courant.
   préchargée en priorité à l’approche du gouffre. Chaque story montée prépare la
   suivante, sans rafale de trois générations, puis utilise le même hand-off à
   mi-hauteur que les pits.
-  Au démontage, le dernier palier sûr conserve seulement son plan et sa lightmap
-  CPU ; le callback de chute le remonte immédiatement, sans régénération ni
+  Au démontage, le dernier palier sûr conserve seulement son plan CPU ; le
+  callback de chute le remonte immédiatement, sans régénération ni
   superposition des aperçus verticaux.
 - Une transition d’étage est différée tant que le chunk cible n’est pas prêt.
 - Sans `Worker`, un fallback synchrone reste disponible.
 
-Le worker (`src/world/infinite.worker.ts`) calcule à la fois le `WorldPlan` et les
-pixels de lightmap. `WorldStream.mountChunk()` applique l’offset monde au groupe
-Three.js et au lot de colliders. Le démontage doit retirer les deux.
+Le worker (`src/world/infinite.worker.ts`) calcule le `WorldPlan` sérialisable.
+`WorldStream.mountChunk()` crée les matériaux zonaux puis applique l’offset monde
+au groupe Three.js, au contexte shader et au lot de colliders. Le démontage doit
+retirer les ressources visuelles et physiques.
 
 `/locate epic1`, `/locate epic2`, `/locate epic3`, `/locate epic4` et
 `/locate epic5` résout analytiquement l’occurrence la plus proche, même hors du
-voisinage monté. Un worker auxiliaire prépare le plan et la lightmap hors du
-thread principal ; le chunk central, sa vue et ses colliders sont ensuite montés
+voisinage monté. Un worker auxiliaire prépare le plan hors du thread principal ;
+le chunk central, sa vue et ses colliders sont ensuite montés
 avant la téléportation. Pour `epic1`, le voisin nord visible depuis le point
 d’arrivée est monté dans le même warmup ; les autres voisins rejoignent le flux
 normal du streamer.
@@ -77,36 +78,36 @@ Pour `epic3`, seuls les voisins nord et sud restent montés pendant la visite.
 - plafonds bas des `squeeze-view` construits sur `passageRects` quand ce champ
   existe, afin qu’un passage en L ou en T ne couvre pas son rectangle englobant ;
 - éléments répétitifs en `InstancedMesh` ;
-- lightmaps de plafond et générales produites par `BakedLighting.ts` ;
+- éclairage fluorescent et blackouts spatiaux produits par `ZonalLighting.ts` ;
 - graffitis procéduraux via `WallGraffiti.ts` ;
 - portes de bureau articulées via `WorldDoors.ts` ;
 - props asynchrones via `WorldProps.ts`.
 
 Chercher la méthode `build…` correspondant à la feature. Ne pas lire tout
-`WorldBuilder.ts`. Les helpers du début du fichier gèrent notamment les caps, la
-soustraction de rectangles et les réparations de jonction.
+`WorldBuilder.ts`. Les helpers du début du fichier gèrent notamment les caps et
+la soustraction de rectangles.
 
 ### Règles de rendu
 
 - Préférer une géométrie fusionnée ou instanciée à un `Mesh` par module.
 - Réutiliser les `MaterialSet`; cloner seulement pour une variation réellement
   propre au chunk ou à la feature.
-- Appeler `ensureBakedLightUv()` pour une géométrie utilisant les matériaux
-  éclairés.
+- Tout matériau cloné pour une porte, un prop, un graffiti ou une preview doit
+  conserver ou recevoir le décorateur zonal du chunk.
 - Les plafonds et sols troués doivent être construits par soustraction de
   rectangles, sans faces coplanaires de réparation qui se chevauchent.
 - Les jupes latérales des rampes suivent la pente avec des rideaux verticaux,
   sans cap supérieur : le tapis déborde déjà sur la couture et deux surfaces à
   cet endroit provoquent du z-fighting.
-- Les volées hautes d’`epic4` ajoutent une sous-face en papier peint non baked,
+- Les volées hautes d’`epic4` ajoutent une sous-face en papier peint,
   décalée de 18 cm sous la pente. Leurs côtés sont de minces fascias suivant la
   pente, jamais des rideaux triangulaires descendant à la base de la volée. Un
   palier sépare obligatoirement sa moquette supérieure, sa tranche en papier
   peint et sa dalle de plafond inférieure ; un luminaire de palier s’attache à
   cette dalle et ne doit jamais apparaître sous une face en moquette.
-- Tout plafond au-dessus de la ligne des murs utilise un matériau texturé sans
-  fog, double face et légèrement émissif, sans réutiliser la lightmap 2D du
-  plafond bas, pour ne pas se confondre avec le fond.
+- Tout plafond au-dessus de la ligne des murs utilise un matériau texturé,
+  double face et légèrement émissif, tout en gardant le même fog léger et le
+  même décorateur zonal que les surfaces voisines.
   Les plafonds de preview verticale modulent aussi leur émission avec la texture
   de dalles afin que le plafond reste lisible en regardant depuis l’étage bas.
   À partir de 18 m, la variante distante renforce ce traitement et réduit aussi
@@ -125,13 +126,24 @@ soustraction de rectangles et les réparations de jonction.
 
 ## Lumière
 
-`LightSlot` est une donnée de génération, pas une lumière Three.js. Le baker
-calcule un champ stable par chunk avant le montage. Les champs général et plafond
-sont séparés parce que les occluders pertinents ne sont pas identiques.
+`LightSlot` est une donnée de génération, pas une lumière Three.js. Les panneaux
+non morts restent des émetteurs visuels ; le rendu des surfaces utilise un champ
+fluorescent dans `ZonalLighting.ts`. Une clé directionnelle douce, sans shadow
+map, révèle les normales et les coins sans réintroduire les bandes du bake.
+Chaque chunk dérive aussi de ses panneaux et volumes une texture RG8 de 96² :
+elle produit de larges nappes locales et une proximité structurelle très douce
+aux contacts, sans rayon ni visibilité murale. Le shader effectue une seule
+lecture par fragment et la texture doit être libérée avec le `WorldView`.
 
-Dans le streaming courant, `WorldView` est créé avec `createLightRig: false` :
-l’éclairage principal est baked. Ne pas ajouter de nombreuses lumières
-dynamiques pour corriger un problème de lightmap.
+`WorldPlan.unlitZones` reste en coordonnées locales. Le shader évalue ces
+rectangles depuis la position monde moins l’origine du chunk, avec un fondu aux
+seuils, une portée réduite seulement dans le blackout et une garde verticale sur
+la story active. Ne pas piloter une forte densité de fog depuis la seule position
+du joueur : cela recréerait une bulle visible pendant les transitions.
+
+Le post-traitement ne contient ni normal pass ni SSAO. Son pipeline bloom, tone
+mapping, grain, vignette et SMAA reste fixe ; seuls quelques uniforms d’ambiance
+évoluent sans recompilation.
 
 Les coordonnées de `LightSlot.ceilingY` sont absolues dans le plan local ;
 `WorldBuilder` applique ses petits offsets visuels une seule fois.
@@ -183,15 +195,15 @@ séparation.
 | Objet décalé dans les chunks voisins | offset appliqué deux fois ou coordonnées non locales |
 | Collision fantôme après déplacement | `unmountChunk()` / propriété du collider |
 | Trou noir ou face manquante vue d’en dessous | caps, normales et matériau du puits/plafond |
-| Halo ou couture lumineuse | occluders et soustraction dans `BakedLighting.ts` |
+| Halo ou couture lumineuse | origine monde et rectangles dans `ZonalLighting.ts` |
 | Stutter à l’approche d’un étage | file de préfetch et données worker sérialisées |
-| Mémoire qui monte en explorant | `dispose()` du `WorldView`, des props et lightmaps |
+| Mémoire qui monte en explorant | `dispose()` du `WorldView`, des props et matériaux clonés |
 | Prop dans un mur/trou | ordre de `populateRareProps()` et empreinte de placement |
 
 ## Tests associés
 
 - rendu architectural : `src/render/WorldBuilder.test.ts`
-- lumière baked : `src/render/BakedLighting.test.ts`
+- lumière zonale : `src/render/ZonalLighting.test.ts`
 - graffiti : `src/render/WallGraffiti.test.ts`
 - streaming : `src/core/WorldStream.test.ts`
 - physique : `src/physics/PhysicsWorld.test.ts`

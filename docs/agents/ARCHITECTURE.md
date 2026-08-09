@@ -28,7 +28,7 @@ crée que des données. Le rendu et la physique consomment ces données séparé
 |---|---|---|
 | `src/core` | orchestration, boucle, streaming | `Game`, `WorldStream` |
 | `src/world` | plan déterministe, topologie, chunks, props | `generateWorld`, `generateInfiniteChunk` |
-| `src/render` | géométrie Three.js, matériaux, lumière, post-FX | `WorldView`, `MaterialLibrary`, `bakeLightMapData` |
+| `src/render` | géométrie Three.js, matériaux, lumière, post-FX | `WorldView`, `MaterialLibrary`, `ZonalLighting` |
 | `src/physics` | personnage Rapier et colliders par chunk | `PhysicsWorld` |
 | `src/player` | entrée FPS, déplacement, chute, noclip | `PlayerController` |
 | `src/ui` | chargement, HUD, console locale | `ExperienceUI` |
@@ -61,15 +61,15 @@ Une nouvelle prop implique plutôt `PropCatalog.ts` → `PropPlacement.ts` →
 `WorldProps.ts`, plus la licence dans `public/assets/licenses.json`.
 
 Une modification de streaming implique souvent `InfiniteWorld.ts`,
-`infinite.worker.ts`, `WorldStream.ts` et `PhysicsWorld.ts`. Le worker renvoie le
-plan et les pixels des lightmaps par transfert d’`ArrayBuffer`.
+`infinite.worker.ts`, `WorldStream.ts` et `PhysicsWorld.ts`. Le worker renvoie
+uniquement le plan sérialisable ; le champ lumineux zonal est créé au montage.
 
 ## Propriété et nettoyage
 
 - `Game` possède les grands systèmes et les détruit dans `dispose()`.
 - `WorldStream` possède les `WorldView` montés et leurs entrées physiques.
-- `WorldView` possède sa géométrie, ses matériaux clonés, textures générées,
-  lightmaps et couche de props.
+- `WorldView` possède sa géométrie, ses matériaux zonaux clonés, textures
+  générées et couche de props.
 - Les matériaux partagés de `MaterialLibrary` restent la propriété de la
   bibliothèque ; ne pas les détruire depuis un chunk.
 

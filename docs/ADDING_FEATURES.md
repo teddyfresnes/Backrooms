@@ -71,7 +71,7 @@ leur `kind`.
 - fusionner les surfaces statiques par matériau ;
 - utiliser `InstancedMesh` pour les répétitions ;
 - réutiliser les matériaux existants ;
-- fournir les UV de lightmap attendus ;
+- conserver le décorateur zonal sur tout matériau cloné visible dans un blackout ;
 - construire les faces réellement visibles depuis les étages adjacents ;
 - libérer toute ressource possédée dans `dispose()`.
 
@@ -83,7 +83,7 @@ Ajouter seulement les tests qui protègent le risque introduit :
 - héritage, frontières et IDs dans `InfiniteWorld.test.ts` ;
 - surfaces/caps dans `WorldBuilder.test.ts` ;
 - franchissement et colliders dans `PhysicsWorld.test.ts` ;
-- lightmap dans `BakedLighting.test.ts`.
+- éclairage zonal dans `ZonalLighting.test.ts`.
 
 Itérer avec `npx vitest run <fichier> -t "nom du test"`, puis lancer le fichier
 complet et `npm run build`. Utiliser `npm run validate` si le contrat

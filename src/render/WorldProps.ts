@@ -3,6 +3,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { getPropAsset } from '../world/PropCatalog';
 import type { PropAssetDefinition } from '../world/PropCatalog';
 import type { PropPlacement, VisualBiome, WorldPlan } from '../world/types';
+import { applyZonalLighting, createZonalLightingContext } from './ZonalLighting';
+import type { ZonalLightingContext } from './ZonalLighting';
 
 const gltfLoader = new GLTFLoader();
 const normalizedAssetCache = new Map<string, Promise<THREE.Group>>();
@@ -74,6 +76,7 @@ const cloneMaterial = (
   source: THREE.Material,
   tone: number,
   biome: VisualBiome,
+  lighting: ZonalLightingContext,
 ): THREE.Material => {
   const material = source.clone();
   const colored = material as THREE.Material & { color?: THREE.Color };
@@ -81,6 +84,10 @@ const cloneMaterial = (
     const biomeTone = biome === 'red' ? 0.88 : biome === 'white' ? 1 : 0.96;
     colored.color.multiplyScalar(tone * biomeTone);
   }
+  if (
+    material instanceof THREE.MeshStandardMaterial ||
+    material instanceof THREE.MeshBasicMaterial
+  ) applyZonalLighting(material, lighting);
   return material;
 };
 
@@ -88,14 +95,15 @@ const cloneAsset = (
   source: THREE.Group,
   placement: PropPlacement,
   biome: VisualBiome,
+  lighting: ZonalLightingContext,
 ): THREE.Group => {
   const instance = source.clone(true);
   instance.name = `prop-model-${placement.assetId}`;
   instance.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
     child.material = Array.isArray(child.material)
-      ? child.material.map((material) => cloneMaterial(material, placement.tone, biome))
-      : cloneMaterial(child.material, placement.tone, biome);
+      ? child.material.map((material) => cloneMaterial(material, placement.tone, biome, lighting))
+      : cloneMaterial(child.material, placement.tone, biome, lighting);
     child.castShadow = false;
     child.receiveShadow = false;
   });
@@ -123,14 +131,17 @@ export class WorldPropLayer {
   readonly ready: Promise<void>;
   private disposed = false;
 
-  constructor(plan: WorldPlan) {
+  constructor(
+    plan: WorldPlan,
+    lighting: ZonalLightingContext = createZonalLightingContext(plan),
+  ) {
     this.group.name = 'rare-decorative-props';
     const biome = plan.visualBiome ?? 'yellow';
     this.ready = Promise.all(
       (plan.propPlacements ?? []).map(async (placement) => {
         try {
           const source = await loadAsset(getPropAsset(placement.assetId));
-          const instance = cloneAsset(source, placement, biome);
+          const instance = cloneAsset(source, placement, biome, lighting);
           if (this.disposed) {
             disposeObject(instance);
             return;

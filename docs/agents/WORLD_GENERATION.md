@@ -143,7 +143,7 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
   d’approche et garde un sol de chunk continu autour de cette tour compacte.
 - `epic5` construit ses longues cloisons et leurs linteaux avec
   `getEpicConcourseWalls`. Ces `WallSegment` standards alimentent directement le
-  rendu, la lightmap et les colliders ; ne pas recréer une seconde géométrie
+  rendu zonal et les colliders ; ne pas recréer une seconde géométrie
   décorative indépendante.
 
 ### Identifiants et sérialisation

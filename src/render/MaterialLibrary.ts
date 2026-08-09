@@ -107,10 +107,10 @@ export class MaterialLibrary {
       // The wallpaper albedo already carries most of the yellow. Keep the
       // material tint close to neutral so it reads as faded paper instead of
       // a second coat of saturated ochre.
-      color: 0xf1efc9,
-      emissive: 0x5c5826,
-      emissiveIntensity: 0.045,
-      normalScale: new THREE.Vector2(0.22, 0.22),
+      color: 0xf3e7b7,
+      emissive: 0x342f19,
+      emissiveIntensity: 0.008,
+      normalScale: new THREE.Vector2(0.3, 0.3),
       roughness: 0.94,
       metalness: 0,
       vertexColors: true,
@@ -122,9 +122,9 @@ export class MaterialLibrary {
       map: plasterColor,
       normalMap: plasterNormal,
       roughnessMap: plasterArm,
-      color: 0xeee8af,
-      emissive: 0x5c5920,
-      emissiveIntensity: 0.035,
+      color: 0xeee0aa,
+      emissive: 0x332e18,
+      emissiveIntensity: 0.007,
       normalScale: new THREE.Vector2(0.36, 0.36),
       roughness: 0.96,
       metalness: 0,
@@ -141,9 +141,9 @@ export class MaterialLibrary {
       aoMapIntensity: 0.14,
       // Lift the brown carpet albedo toward the same pale yellow family as
       // the walls while preserving all of its woven detail.
-      color: 0xfaf5cc,
-      emissive: 0x5d592f,
-      emissiveIntensity: 0.035,
+      color: 0xddd8c4,
+      emissive: 0x201f19,
+      emissiveIntensity: 0.003,
       normalScale: new THREE.Vector2(0.34, 0.34),
       roughness: 0.98,
       metalness: 0,
@@ -159,9 +159,9 @@ export class MaterialLibrary {
       aoMapIntensity: 0.46,
       // Unlike the wallpaper, the ceiling albedo is almost white, so its
       // yellowing has to come from the material itself.
-      color: 0xddd080,
-      emissive: 0x827a32,
-      emissiveIntensity: 0.04,
+      color: 0xd2c58f,
+      emissive: 0x3b371d,
+      emissiveIntensity: 0.01,
       normalScale: new THREE.Vector2(0.42, 0.42),
       roughness: 0.97,
       side: THREE.FrontSide,
@@ -172,9 +172,9 @@ export class MaterialLibrary {
       name: 'yellowed-baseboard',
       // With no albedo texture, a pale tint is washed almost white by the
       // fluorescent fill. Use the carpet/wall midtone directly instead.
-      color: 0xbeb574,
-      emissive: 0x45411e,
-      emissiveIntensity: 0.025,
+      color: 0xb9af7e,
+      emissive: 0x302d1b,
+      emissiveIntensity: 0.004,
       roughness: 0.9,
       metalness: 0,
       dithering: true,
@@ -208,9 +208,9 @@ export class MaterialLibrary {
     });
     const fixtureGlow = new THREE.MeshBasicMaterial({
       name: 'fluorescent-diffuser',
-      color: 0xfffee6,
-      toneMapped: false,
-      fog: false,
+      color: 0xfff4d1,
+      toneMapped: true,
+      fog: true,
       depthTest: true,
       depthWrite: true,
       side: THREE.DoubleSide,
@@ -236,7 +236,7 @@ export class MaterialLibrary {
     redFixtureFrame.color.setHex(0x8f554c);
     const redFixtureGlow = fixtureGlow.clone();
     redFixtureGlow.name = 'red-biome-fluorescent-diffuser';
-    redFixtureGlow.color.setHex(0xff1a0d);
+    redFixtureGlow.color.setHex(0xff6657);
     const redMaterials: MaterialSet = {
       ...yellowMaterials,
       fixtureFrame: redFixtureFrame,

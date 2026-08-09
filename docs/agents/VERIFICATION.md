@@ -35,7 +35,7 @@ blocage.
 | Frontière, biome, étage, héritage | `InfiniteWorld.test.ts` | `WorldBuilder.test.ts` si visible |
 | Sol, rampe, marche, collider | `PhysicsWorld.test.ts` | test génération + rendu concerné |
 | Géométrie ou caps | `WorldBuilder.test.ts` | `npm run build` |
-| Lightmap/occlusion | `BakedLighting.test.ts` | `WorldBuilder.test.ts` si UV/géométrie |
+| Champ zonal/blackout | `ZonalLighting.test.ts` | `WorldBuilder.test.ts` si matériaux/géométrie |
 | Streaming/offset/préfetch | `WorldStream.test.ts` | `InfiniteWorld.test.ts` |
 | Contrôleur joueur | `PlayerController.test.ts` | `PhysicsWorld.test.ts` si collision |
 | Props | `PropPlacement.test.ts` | build + contrôle visuel si nouvel asset |

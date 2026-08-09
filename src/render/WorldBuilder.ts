@@ -1,15 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { MaterialSet } from './MaterialLibrary';
-import type { RuntimeLightSource } from './LocalLightRig';
-import {
-  bakedLightMapJunctionNeedsRepair,
-  bakedLightMapTexelSize,
-  createBakedLightMaps,
-  createBakedMaterialSet,
-  ensureBakedLightUv,
-} from './BakedLighting';
-import type { BakedLightMapData, BakedLightMaps } from './BakedLighting';
+import { applyZonalLighting, createZonalMaterialSet } from './ZonalLighting';
+import type { ZonalLightingContext } from './ZonalLighting';
 import { createGraffitiMesh, selectWallGraffiti } from './WallGraffiti';
 import { WorldDoorLayer } from './WorldDoors';
 import { WorldPropLayer } from './WorldProps';
@@ -61,7 +54,13 @@ import { pointInRect, rectCenter, rectDepth, rectWidth } from '../world/types';
 
 const setGeometryTint = (geometry: THREE.BufferGeometry, tint: number): void => {
   const count = geometry.getAttribute('position').count;
-  const color = new THREE.Color().setRGB(tint, tint, tint);
+  // Generation keeps broad tint variation for authored features. Compress the
+  // ordinary wallpaper range at render time so adjacent merged segments read
+  // as one surface instead of looking like separate exposure zones.
+  const visualTint = tint >= 0.8
+    ? THREE.MathUtils.clamp(1 + (tint - 1) * 0.4, 0.925, 1.035)
+    : tint;
+  const color = new THREE.Color().setRGB(visualTint, visualTint, visualTint);
   const values = new Float32Array(count * 3);
   for (let index = 0; index < count; index += 1) {
     values[index * 3] = color.r;
@@ -657,137 +656,6 @@ const rectsTouchOrOverlap = (left: Rect, right: Rect): boolean =>
   left.minZ <= right.maxZ + 1e-4 &&
   left.maxZ >= right.minZ - 1e-4;
 
-/**
- * Covers only the rare half-texel junctions where an off-grid partition makes
- * the shared XZ lightmap sample the hidden space under the wall. The patch
- * keeps the visible texture coordinates unchanged, but projects its lightmap
- * lookup outward on each side so a bright room never borrows from a dark one.
- */
-const createHorizontalJunctionRepairGeometry = (
-  walls: readonly WallSegment[],
-  clipRects: readonly Rect[],
-  worldSize: number,
-  wallHeight: number,
-  surface: 'floor' | 'ceiling',
-  patternScale = 1,
-  floorQuarterTurn = false,
-): { geometry: THREE.BufferGeometry | null; patches: Rect[] } => {
-  const positions: number[] = [];
-  const normals: number[] = [];
-  const uvs: number[] = [];
-  const lightMapUvs: number[] = [];
-  const indices: number[] = [];
-  const halfWorld = worldSize * 0.5;
-  const texelSize = bakedLightMapTexelSize(worldSize);
-  const repairWidth = texelSize * 1.05;
-  const y = surface === 'floor' ? 0.002 : wallHeight;
-  const normalY = surface === 'floor' ? 1 : -1;
-  const occupiedPatches: Rect[] = [];
-
-  const addPatch = (rect: Rect, wall: WallSegment, side: -1 | 1): void => {
-    const offset = positions.length / 3;
-    const corners = [
-      [rect.minX, rect.minZ],
-      [rect.maxX, rect.minZ],
-      [rect.maxX, rect.maxZ],
-      [rect.minX, rect.maxZ],
-    ] as const;
-    const halfLength = wall.length * 0.5;
-    const alongMin = (wall.orientation === 'x' ? wall.x : wall.z) - halfLength;
-    const alongMax = (wall.orientation === 'x' ? wall.x : wall.z) + halfLength;
-    const endInset = Math.min(texelSize * 0.5, wall.length * 0.5);
-    const fixed = wall.orientation === 'x' ? wall.z : wall.x;
-    const sampleFixed = fixed + side * (wall.thickness * 0.5 + repairWidth);
-
-    for (const [x, z] of corners) {
-      positions.push(x, y, z);
-      normals.push(0, normalY, 0);
-      if (surface === 'floor') {
-        if (floorQuarterTurn) {
-          uvs.push((z / 2.15) * patternScale, (-x / 2.15) * patternScale);
-        } else {
-          uvs.push((x / 2.15) * patternScale, (z / 2.15) * patternScale);
-        }
-      } else {
-        uvs.push((x / 2.4) * patternScale, (z / 2.4) * patternScale);
-      }
-      const along = THREE.MathUtils.clamp(
-        wall.orientation === 'x' ? x : z,
-        alongMin + endInset,
-        alongMax - endInset,
-      );
-      const sampleX = wall.orientation === 'x' ? along : sampleFixed;
-      const sampleZ = wall.orientation === 'x' ? sampleFixed : along;
-      lightMapUvs.push(
-        THREE.MathUtils.clamp((sampleX + halfWorld) / worldSize, 0, 1),
-        THREE.MathUtils.clamp((sampleZ + halfWorld) / worldSize, 0, 1),
-      );
-    }
-    if (surface === 'floor') {
-      indices.push(offset, offset + 2, offset + 1, offset, offset + 3, offset + 2);
-    } else {
-      indices.push(offset, offset + 1, offset + 2, offset, offset + 2, offset + 3);
-    }
-  };
-
-  const addVisiblePatch = (rect: Rect, wall: WallSegment, side: -1 | 1): void => {
-    let visiblePieces = [rect];
-    for (const occupied of occupiedPatches) {
-      visiblePieces = visiblePieces.flatMap((piece) => subtractRect(piece, occupied));
-      if (visiblePieces.length === 0) return;
-    }
-    for (const piece of visiblePieces) {
-      addPatch(piece, wall, side);
-      occupiedPatches.push(piece);
-    }
-  };
-
-  for (const wall of walls) {
-    if (wall.bottom < -1 || wall.height <= 1.2) continue;
-    const touchesSurface = surface === 'floor'
-      ? wall.bottom <= 0.02
-      : wall.bottom + wall.height >= wallHeight - 0.02;
-    if (!touchesSurface) continue;
-    const fixed = wall.orientation === 'x' ? wall.z : wall.x;
-    if (!bakedLightMapJunctionNeedsRepair(fixed, wall.thickness, worldSize)) continue;
-
-    const halfLength = wall.length * 0.5;
-    const halfThickness = wall.thickness * 0.5;
-    for (const side of [-1, 1] as const) {
-      const inner = fixed + side * halfThickness;
-      const outer = inner + side * repairWidth;
-      const strip: Rect = wall.orientation === 'x'
-        ? {
-            minX: wall.x - halfLength,
-            maxX: wall.x + halfLength,
-            minZ: Math.min(inner, outer),
-            maxZ: Math.max(inner, outer),
-          }
-        : {
-            minX: Math.min(inner, outer),
-            maxX: Math.max(inner, outer),
-            minZ: wall.z - halfLength,
-            maxZ: wall.z + halfLength,
-          };
-      for (const clip of clipRects) {
-        const clipped = intersectRects(strip, clip);
-        if (clipped) addVisiblePatch(clipped, wall, side);
-      }
-    }
-  }
-
-  if (positions.length === 0) return { geometry: null, patches: [] };
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geometry.setAttribute('uv1', new THREE.Float32BufferAttribute(lightMapUvs, 2));
-  geometry.setIndex(indices);
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
-  return { geometry, patches: occupiedPatches };
-};
-
 const createCeilingGeometry = (
   rect: Rect,
   y: number,
@@ -958,7 +826,6 @@ const makeMesh = (
   parent: THREE.Object3D,
 ): THREE.Mesh | null => {
   if (!geometry) return null;
-  ensureBakedLightUv(geometry, material);
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = name;
   mesh.matrixAutoUpdate = false;
@@ -1166,22 +1033,22 @@ const createPreviewMaterial = (
     // viewed through a shaft. Modulating it with the albedo keeps the preview
     // bright while making the upper ceiling unmistakably readable.
     if (material.map) material.emissiveMap = material.map;
-    material.fog = false;
   }
+  material.onBeforeCompile = source.onBeforeCompile;
+  material.customProgramCacheKey = source.customProgramCacheKey;
   material.needsUpdate = true;
   return material;
 };
 
-const createUnbakedMaterial = (
+const createLowerStoreyMaterial = (
   source: THREE.MeshStandardMaterial,
   name: string,
 ): THREE.MeshStandardMaterial => {
   const material = source.clone();
   material.name = name;
-  // Lower and intermediate storeys are lit by their actual runtime fixtures.
-  // Reusing the upper storey's baked light map gives incorrect illumination,
-  // while the old preview emissive made these surfaces look fullbright.
   material.lightMap = null;
+  material.onBeforeCompile = source.onBeforeCompile;
+  material.customProgramCacheKey = source.customProgramCacheKey;
   material.needsUpdate = true;
   return material;
 };
@@ -1200,13 +1067,9 @@ const createElevatedCeilingMaterial = (
 ): THREE.MeshStandardMaterial => {
   const material = source.clone();
   material.name = name;
-  // Any ceiling above the ordinary wall line can inherit a nearly black baked
-  // lightmap and converge toward the fog/background colour. That 2D bake was
-  // authored for the ordinary wall cap, so do not reuse it on another plane.
-  // Preserve the real tile albedo; giant ceilings use a stronger version of
-  // this lift so the grid remains readable at distance.
+  // Preserve the real tile albedo; giant ceilings use a stronger emissive lift
+  // so the grid remains readable at distance.
   material.lightMap = null;
-  material.fog = false;
   material.side = THREE.DoubleSide;
   if (material.map) material.emissiveMap = material.map;
   if (material.emissive.getHex() === 0) material.emissive.setHex(0x8a823c);
@@ -1219,11 +1082,6 @@ const createElevatedCeilingMaterial = (
   material.needsUpdate = true;
   return material;
 };
-
-export interface WorldViewOptions {
-  createLightRig?: boolean;
-  bakedLightMaps?: BakedLightMapData;
-}
 
 export interface TraversalWorldInteraction {
   kind: 'traversal';
@@ -1268,7 +1126,7 @@ export class WorldView {
   private readonly materials: MaterialSet;
   private readonly elevatedCeilingMaterial: THREE.MeshStandardMaterial;
   private readonly distantCeilingMaterial: THREE.MeshStandardMaterial;
-  private readonly bakedLightMaps: BakedLightMaps;
+  private readonly lightingContext: ZonalLightingContext;
   private readonly ownedMaterials: THREE.Material[];
   private readonly graffitiTextures: THREE.CanvasTexture[] = [];
   private readonly graffitiMaterials: THREE.MeshBasicMaterial[] = [];
@@ -1279,13 +1137,12 @@ export class WorldView {
   constructor(
     readonly plan: WorldPlan,
     sourceMaterials: MaterialSet,
-    options: WorldViewOptions = {},
   ) {
     this.group.name = `world-${plan.seed}`;
-    this.bakedLightMaps = createBakedLightMaps(plan, options.bakedLightMaps);
-    const baked = createBakedMaterialSet(sourceMaterials, this.bakedLightMaps, plan.size);
-    this.materials = baked.materials;
-    this.ownedMaterials = baked.ownedMaterials;
+    const zonal = createZonalMaterialSet(sourceMaterials, plan);
+    this.materials = zonal.materials;
+    this.lightingContext = zonal.context;
+    this.ownedMaterials = zonal.ownedMaterials;
     this.surfaceStyle = plan.surfaceStyle ?? DEFAULT_SURFACE_STYLE;
     this.materials.wall.color.multiplyScalar(this.surfaceStyle.wallTint);
     this.materials.plaster.color.multiplyScalar(this.surfaceStyle.wallTint);
@@ -1306,10 +1163,10 @@ export class WorldView {
     );
     this.ownedMaterials.push(this.elevatedCeilingMaterial, this.distantCeilingMaterial);
     this.lowerMaterials = {
-      wall: createUnbakedMaterial(this.materials.wall, 'lower-storey-wallpaper'),
-      floor: createUnbakedMaterial(this.materials.floor, 'lower-storey-carpet'),
-      ceiling: createUnbakedMaterial(this.materials.ceiling, 'lower-storey-ceiling'),
-      baseboard: createUnbakedMaterial(this.materials.baseboard, 'lower-storey-baseboard'),
+      wall: createLowerStoreyMaterial(this.materials.wall, 'lower-storey-wallpaper'),
+      floor: createLowerStoreyMaterial(this.materials.floor, 'lower-storey-carpet'),
+      ceiling: createLowerStoreyMaterial(this.materials.ceiling, 'lower-storey-ceiling'),
+      baseboard: createLowerStoreyMaterial(this.materials.baseboard, 'lower-storey-baseboard'),
     };
     const previewGlow = plan.visualBiome === 'red'
       ? {
@@ -1332,10 +1189,10 @@ export class WorldView {
             baseboard: 0x5f592b,
           };
     this.previewMaterials = {
-      wall: createPreviewMaterial(sourceMaterials.wall, 'preview-wallpaper', previewGlow.wall, 0.13),
-      floor: createPreviewMaterial(sourceMaterials.floor, 'preview-carpet', previewGlow.floor, 0.09),
-      ceiling: createPreviewMaterial(sourceMaterials.ceiling, 'preview-ceiling', previewGlow.ceiling, 0.16),
-      baseboard: createPreviewMaterial(sourceMaterials.baseboard, 'preview-baseboard', previewGlow.baseboard, 0.1),
+      wall: createPreviewMaterial(this.materials.wall, 'preview-wallpaper', previewGlow.wall, 0.13),
+      floor: createPreviewMaterial(this.materials.floor, 'preview-carpet', previewGlow.floor, 0.09),
+      ceiling: createPreviewMaterial(this.materials.ceiling, 'preview-ceiling', previewGlow.ceiling, 0.16),
+      baseboard: createPreviewMaterial(this.materials.baseboard, 'preview-baseboard', previewGlow.baseboard, 0.1),
     };
     this.previewMaterials.wall.color.multiplyScalar(this.surfaceStyle.wallTint);
     this.previewMaterials.floor.color.multiplyScalar(this.surfaceStyle.floorTint);
@@ -1360,12 +1217,11 @@ export class WorldView {
     this.buildStairs();
     this.buildCeilingDamage();
     this.buildImpossibleVista();
-    this.doorLayer = new WorldDoorLayer(plan);
+    this.doorLayer = new WorldDoorLayer(plan, this.lightingContext);
     this.group.add(this.doorLayer.group);
-    this.propLayer = new WorldPropLayer(plan);
+    this.propLayer = new WorldPropLayer(plan, this.lightingContext);
     this.group.add(this.propLayer.group);
     this.ready = Promise.all([this.doorLayer.ready, this.propLayer.ready]).then(() => undefined);
-    void options;
   }
 
   private buildWallGraffiti(): void {
@@ -1376,6 +1232,7 @@ export class WorldView {
     for (const placement of placements) {
       const created = createGraffitiMesh(placement);
       if (!created) continue;
+      applyZonalLighting(created.mesh.material, this.lightingContext);
       group.add(created.mesh);
       this.graffitiTextures.push(created.texture);
       this.graffitiMaterials.push(created.mesh.material);
@@ -1490,7 +1347,6 @@ export class WorldView {
       } else if (isLowerStoreyWall) {
         lowerWallGeometries.push(geometry);
       } else {
-        ensureBakedLightUv(geometry, wallMaterial, 0.42);
         (wall.kind === 'plaster' ? plasterGeometries : wallGeometries).push(geometry);
       }
 
@@ -1556,7 +1412,6 @@ export class WorldView {
           if (lowerStorey) {
             lowerBaseboardGeometries.push(trim);
           } else {
-            ensureBakedLightUv(trim, this.materials.baseboard, 0.36);
             baseboardGeometries.push(trim);
           }
         };
@@ -1592,7 +1447,6 @@ export class WorldView {
         column.tint,
         this.surfaceStyle.wallPatternScale,
       );
-      ensureBakedLightUv(geometry, this.materials.wall, 0.32);
       wallGeometries.push(geometry);
       const columnBounds: Rect = {
         minX: column.x - column.width * 0.5,
@@ -1603,7 +1457,6 @@ export class WorldView {
       if (!touchesBaseboardlessZone(columnBounds)) {
         const trim = new THREE.BoxGeometry(column.width + 0.055, 0.115, column.depth + 0.055);
         trim.translate(column.x, columnBottom + 0.0575, column.z);
-        ensureBakedLightUv(trim, this.materials.baseboard, 0.26);
         baseboardGeometries.push(trim);
       }
     }
@@ -1622,7 +1475,6 @@ export class WorldView {
         mass.tint,
         this.surfaceStyle.wallPatternScale,
       );
-      ensureBakedLightUv(massGeometry, this.materials.wall, 0.36);
       wallGeometries.push(massGeometry);
       if (!touchesBaseboardlessZone(mass.bounds)) {
         const trimHeight = 0.115;
@@ -1648,7 +1500,6 @@ export class WorldView {
             center.z,
           ),
         ];
-        for (const trim of massTrims) ensureBakedLightUv(trim, this.materials.baseboard, 0.28);
         baseboardGeometries.push(...massTrims);
       }
     }
@@ -1681,7 +1532,6 @@ export class WorldView {
       this.surfaceStyle.floorPatternScale,
       this.surfaceStyle.floorQuarterTurn,
     );
-    ensureBakedLightUv(floorGeometry, this.materials.floor);
     const floor = new THREE.Mesh(floorGeometry, this.materials.floor);
     floor.name = 'continuous-carpet-floor';
     floor.matrixAutoUpdate = false;
@@ -1716,17 +1566,8 @@ export class WorldView {
     const ceilingRects = ceilingOpenings.length > 0
       ? cellsAroundHoles(worldBounds, ceilingOpenings)
       : [worldBounds];
-    const ceilingJunctionRepair = createHorizontalJunctionRepairGeometry(
-      this.plan.walls,
-      ceilingRects,
-      this.plan.size,
-      this.plan.wallHeight,
-      'ceiling',
-      this.surfaceStyle.ceilingPatternScale,
-    );
-    const visibleCeilingRects = subtractRects(ceilingRects, ceilingJunctionRepair.patches);
     makeMesh(
-      mergeOrSingle(visibleCeilingRects.map((rect) =>
+      mergeOrSingle(ceilingRects.map((rect) =>
         createCeilingGeometry(rect, this.plan.wallHeight, this.surfaceStyle.ceilingPatternScale)
       )),
       this.materials.ceiling,
@@ -1886,27 +1727,6 @@ export class WorldView {
         this.group,
       );
     }
-    const floorJunctionRepair = createHorizontalJunctionRepairGeometry(
-        this.plan.walls,
-        this.plan.floorRects,
-        this.plan.size,
-        this.plan.wallHeight,
-        'floor',
-        this.surfaceStyle.floorPatternScale,
-        this.surfaceStyle.floorQuarterTurn,
-      );
-    makeMesh(
-      floorJunctionRepair.geometry,
-      this.materials.floor,
-      'floor-lightmap-junction-repairs',
-      this.group,
-    );
-    makeMesh(
-      ceilingJunctionRepair.geometry,
-      this.materials.ceiling,
-      'ceiling-lightmap-junction-repairs',
-      this.group,
-    );
   }
 
   private buildEpicStructures(): void {
@@ -3019,7 +2839,7 @@ export class WorldView {
       quaternion.setFromAxisAngle(axis, slot.rotation);
       position.set(slot.x, slot.ceilingY - 0.036, slot.z);
       // A dead slot represents a missing fluorescent panel, not a bright
-      // white rectangle that merely stopped contributing to the lightmap.
+      // white rectangle that merely stopped illuminating the room.
       scale.set(
         slot.dead ? 0 : slot.width / 2.24,
         slot.dead ? 0 : 1,
@@ -3510,7 +3330,6 @@ export class WorldView {
       this.surfaceStyle.floorPatternScale,
       this.surfaceStyle.floorQuarterTurn,
     );
-    ensureBakedLightUv(vistaFloorGeometry, this.materials.floor);
     const floor = new THREE.Mesh(vistaFloorGeometry, this.materials.floor);
     floor.name = 'vista-carpet-floor';
     floor.matrixAutoUpdate = false;
@@ -3689,72 +3508,8 @@ export class WorldView {
     this.doorLayer.update(delta);
   }
 
-  getRuntimeLightSources(offset = new THREE.Vector3()): RuntimeLightSource[] {
-    return this.fixtureSlots
-      .filter((slot) => !slot.dead)
-      .map((slot) => ({
-        id: `${this.plan.seed}:${slot.id}`,
-        x: slot.x + offset.x,
-        y: slot.ceilingY - 0.052 + offset.y,
-        z: slot.z + offset.z,
-        rotation: slot.rotation,
-        width: slot.width,
-        intensity: slot.intensity,
-        color: slot.color,
-        level: slot.level,
-        zoneId: `${this.plan.seed}:${slot.roomId}`,
-      }));
-  }
-
-  findZoneIdAt(x: number, y: number, z: number): string {
-    const lower = this.plan.features.find(
-      (feature): feature is GridPitFeature => feature.kind === 'grid-pit',
-    );
-    if (lower && y < -1.4 && pointInRect(x, z, lower.lowerBounds)) return `${this.plan.seed}:${lower.id}`;
-    const vista = this.plan.features.find(
-      (feature): feature is VistaFeature => feature.kind === 'impossible-vista',
-    );
-    if (vista && pointInRect(x, z, vista.bounds)) return `${this.plan.seed}:${vista.id}`;
-    const room = this.plan.rooms.find((candidate) => pointInRect(x, z, candidate.bounds));
-    return `${this.plan.seed}:${room?.id ?? 'unclassified'}`;
-  }
-
-  private isLightOccluded(player: THREE.Vector3, source: RuntimeLightSource): boolean {
-    const intersects = (minX: number, maxX: number, minZ: number, maxZ: number): boolean => {
-      const dx = source.x - player.x;
-      const dz = source.z - player.z;
-      let enter = 0;
-      let exit = 1;
-      for (const [origin, direction, min, max] of [
-        [player.x, dx, minX, maxX],
-        [player.z, dz, minZ, maxZ],
-      ] as const) {
-        if (Math.abs(direction) < 1e-6) {
-          if (origin < min || origin > max) return false;
-          continue;
-        }
-        const first = (min - origin) / direction;
-        const second = (max - origin) / direction;
-        enter = Math.max(enter, Math.min(first, second));
-        exit = Math.min(exit, Math.max(first, second));
-        if (enter > exit) return false;
-      }
-      return exit > 0.04 && enter < 0.96;
-    };
-    const lower = source.level < 0;
-    if (this.plan.walls.some((wall) => {
-      if ((wall.bottom < -1) !== lower) return false;
-      const halfX = wall.orientation === 'x' ? wall.length * 0.5 : wall.thickness * 0.5;
-      const halfZ = wall.orientation === 'z' ? wall.length * 0.5 : wall.thickness * 0.5;
-      return intersects(wall.x - halfX, wall.x + halfX, wall.z - halfZ, wall.z + halfZ);
-    })) return true;
-    if (!lower && this.plan.solidMasses.some((mass) => intersects(
-      mass.bounds.minX,
-      mass.bounds.maxX,
-      mass.bounds.minZ,
-      mass.bounds.maxZ,
-    ))) return true;
-    return false;
+  setWorldOffset(offset: Readonly<THREE.Vector3>): void {
+    this.lightingContext.worldOffset.copy(offset);
   }
 
   getInteraction(
@@ -3829,8 +3584,7 @@ export class WorldView {
     this.ownedMaterials.forEach((material) => material.dispose());
     this.graffitiMaterials.forEach((material) => material.dispose());
     this.graffitiTextures.forEach((texture) => texture.dispose());
-    this.bakedLightMaps.general.dispose();
-    this.bakedLightMaps.ceiling.dispose();
+    this.lightingContext.lightField.dispose();
     this.group.removeFromParent();
   }
 }

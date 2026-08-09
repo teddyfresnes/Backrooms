@@ -469,7 +469,7 @@ const obstacle = (
   tint,
 });
 
-/** Ground-touching masses shared by rendering, baking and physics. */
+/** Ground-touching masses shared by rendering and physics. */
 export const getEpicGroundObstacles = (
   feature: EpicStructureFeature,
 ): EpicObstacle[] => {

@@ -7,7 +7,6 @@ import type {
   EpicStructureIndex,
   GridPitFeature,
   RaisedZoneFeature,
-  Rect,
   WorldPlan,
 } from '../world/types';
 import { rectCenter, rectDepth, rectWidth } from '../world/types';
@@ -42,23 +41,6 @@ const createTestMaterials = (): MaterialSet => {
     fixtureGlow: new THREE.MeshBasicMaterial(),
     void: new THREE.MeshBasicMaterial(),
   };
-};
-
-const horizontalQuadBounds = (geometry: THREE.BufferGeometry): Rect[] => {
-  const positions = geometry.getAttribute('position');
-  expect(positions.count % 4).toBe(0);
-  const bounds: Rect[] = [];
-  for (let offset = 0; offset < positions.count; offset += 4) {
-    const xValues = Array.from({ length: 4 }, (_, index) => positions.getX(offset + index));
-    const zValues = Array.from({ length: 4 }, (_, index) => positions.getZ(offset + index));
-    bounds.push({
-      minX: Math.min(...xValues),
-      maxX: Math.max(...xValues),
-      minZ: Math.min(...zValues),
-      maxZ: Math.max(...zValues),
-    });
-  }
-  return bounds;
 };
 
 const downwardTriangleHeights = (geometry: THREE.BufferGeometry): number[] => {
@@ -144,13 +126,7 @@ describe('wallpaper mapping', () => {
       spawn: { x: 0, y: 0.9, z: -4 },
     };
     const materials = createTestMaterials();
-    const view = new WorldView(plan, materials, {
-      bakedLightMaps: {
-        resolution: 1,
-        general: Uint8Array.of(255, 255, 255, 255),
-        ceiling: Uint8Array.of(255, 255, 255, 255),
-      },
-    });
+    const view = new WorldView(plan, materials);
     const walls = view.group.getObjectByName('merged-wallpaper-walls') as THREE.Mesh;
     const junctionUvs = vertexUvsAt(
       walls.geometry,
@@ -513,14 +489,7 @@ describe('open pit shaft rendering', () => {
     const ceilingTexture = new THREE.DataTexture(Uint8Array.of(180, 170, 95, 255), 1, 1);
     ceilingTexture.needsUpdate = true;
     materials.ceiling.map = ceilingTexture;
-    const whitePixel = Uint8Array.of(255, 255, 255, 255);
-    const view = new WorldView(plan, materials, {
-      bakedLightMaps: {
-        resolution: 1,
-        general: whitePixel,
-        ceiling: whitePixel,
-      },
-    });
+    const view = new WorldView(plan, materials);
     const raycaster = new THREE.Raycaster();
     raycaster.set(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 1, 0));
     raycaster.far = 10;
@@ -542,7 +511,7 @@ describe('open pit shaft rendering', () => {
     ) as THREE.Mesh).material as THREE.MeshStandardMaterial;
     expect(previewCeilingMaterial.map).toBe(ceilingTexture);
     expect(previewCeilingMaterial.emissiveMap).toBe(ceilingTexture);
-    expect(previewCeilingMaterial.fog).toBe(false);
+    expect(previewCeilingMaterial.fog).toBe(true);
 
     raycaster.set(new THREE.Vector3(2, 1, 0), new THREE.Vector3(0, 1, 0));
     raycaster.far = 6;
@@ -618,14 +587,7 @@ describe('open pit shaft rendering', () => {
     const ceilingMap = new THREE.DataTexture(Uint8Array.of(210, 198, 112, 255), 1, 1);
     ceilingMap.needsUpdate = true;
     materials.ceiling.map = ceilingMap;
-    const whitePixel = Uint8Array.of(255, 255, 255, 255);
-    const view = new WorldView(plan, materials, {
-      bakedLightMaps: {
-        resolution: 1,
-        general: whitePixel,
-        ceiling: whitePixel,
-      },
-    });
+    const view = new WorldView(plan, materials);
     const elevatedCeiling = view.group.getObjectByName(
       'elevated-atrium-ceilings',
     ) as THREE.Mesh;
@@ -637,7 +599,7 @@ describe('open pit shaft rendering', () => {
     expect(elevatedMaterial.emissive.getHex()).not.toBe(0);
     expect(elevatedMaterial.emissiveIntensity).toBeGreaterThanOrEqual(0.22);
     expect(elevatedMaterial.side).toBe(THREE.DoubleSide);
-    expect(elevatedMaterial.fog).toBe(false);
+    expect(elevatedMaterial.fog).toBe(true);
     const raycaster = new THREE.Raycaster();
     raycaster.far = 2.2;
     raycaster.set(new THREE.Vector3(0, 3, 0), new THREE.Vector3(0, 1, 0));
@@ -859,14 +821,7 @@ describe('high-ceiling passage closures', () => {
       spawn: { x: 3, y: 0.9, z: 3 },
     };
     const materials = createTestMaterials();
-    const whitePixel = Uint8Array.of(255, 255, 255, 255);
-    const view = new WorldView(plan, materials, {
-      bakedLightMaps: {
-        resolution: 1,
-        general: whitePixel,
-        ceiling: whitePixel,
-      },
-    });
+    const view = new WorldView(plan, materials);
     const walls = view.group.getObjectByName('merged-wallpaper-walls') as THREE.Mesh;
     for (const x of [0, 3.5]) {
       const raycaster = new THREE.Raycaster(
@@ -975,8 +930,8 @@ describe('biome transition passage joins', () => {
   });
 });
 
-describe('coplanar ceiling repair prevention', () => {
-  it('cuts crossing lightmap repair strips into non-overlapping ceiling patches', () => {
+describe('lightmap-free ceiling rendering', () => {
+  it('keeps one continuous ceiling without coplanar lighting repair meshes', () => {
     const plan: WorldPlan = {
       version: 1,
       seed: 'CEILING-Z-FIGHT-RENDER-AUDIT',
@@ -1031,44 +986,17 @@ describe('coplanar ceiling repair prevention', () => {
       },
     };
     const materials = createTestMaterials();
-    const whitePixel = Uint8Array.of(255, 255, 255, 255);
-    const view = new WorldView(plan, materials, {
-      bakedLightMaps: {
-        resolution: 1,
-        general: whitePixel,
-        ceiling: whitePixel,
-      },
-    });
-    const repairs = view.group.getObjectByName('ceiling-lightmap-junction-repairs') as THREE.Mesh;
+    const view = new WorldView(plan, materials);
     const ceiling = view.group.getObjectByName('office-drop-ceiling') as THREE.Mesh;
-    expect(repairs).toBeDefined();
+    expect(view.group.getObjectByName('ceiling-lightmap-junction-repairs')).toBeUndefined();
+    expect(view.group.getObjectByName('floor-lightmap-junction-repairs')).toBeUndefined();
     expect(ceiling).toBeDefined();
-    const patches = horizontalQuadBounds(repairs.geometry);
-    const ceilingPatches = horizontalQuadBounds(ceiling.geometry);
-    expect(patches.length).toBeGreaterThan(2);
-    const positions = repairs.geometry.getAttribute('position');
-    const uvs = repairs.geometry.getAttribute('uv');
+    const positions = ceiling.geometry.getAttribute('position');
+    const uvs = ceiling.geometry.getAttribute('uv');
     for (let index = 0; index < positions.count; index += 1) {
       expect(positions.getY(index)).toBeCloseTo(plan.wallHeight, 6);
       expect(uvs.getX(index)).toBeCloseTo((positions.getX(index) / 2.4) * 1.23, 5);
       expect(uvs.getY(index)).toBeCloseTo((positions.getZ(index) / 2.4) * 1.23, 5);
-    }
-    for (let left = 0; left < patches.length; left += 1) {
-      for (let right = left + 1; right < patches.length; right += 1) {
-        const first = patches[left]!;
-        const second = patches[right]!;
-        const overlapX = Math.min(first.maxX, second.maxX) - Math.max(first.minX, second.minX);
-        const overlapZ = Math.min(first.maxZ, second.maxZ) - Math.max(first.minZ, second.minZ);
-        expect(overlapX > 1e-5 && overlapZ > 1e-5).toBe(false);
-      }
-      for (const ceilingPatch of ceilingPatches) {
-        const repair = patches[left]!;
-        const overlapX = Math.min(repair.maxX, ceilingPatch.maxX)
-          - Math.max(repair.minX, ceilingPatch.minX);
-        const overlapZ = Math.min(repair.maxZ, ceilingPatch.maxZ)
-          - Math.max(repair.minZ, ceilingPatch.minZ);
-        expect(overlapX > 1e-5 && overlapZ > 1e-5).toBe(false);
-      }
     }
 
     view.dispose();
@@ -1423,14 +1351,7 @@ describe('crouch passages and inter-storey stairs', () => {
     const stairCeilingTexture = new THREE.DataTexture(Uint8Array.of(120, 110, 60, 255), 1, 1);
     stairCeilingTexture.needsUpdate = true;
     materials.ceiling.map = stairCeilingTexture;
-    const whitePixel = Uint8Array.of(255, 255, 255, 255);
-    const view = new WorldView(plan, materials, {
-      bakedLightMaps: {
-        resolution: 1,
-        general: whitePixel,
-        ceiling: whitePixel,
-      },
-    });
+    const view = new WorldView(plan, materials);
     const roof = view.group.getObjectByName('low-passage-ceiling-masses') as THREE.Mesh;
     const passageShaft = view.group.getObjectByName('low-passage-hole-walls') as THREE.Mesh;
     const passageLowerFloor = view.group.getObjectByName(
@@ -1478,10 +1399,10 @@ describe('crouch passages and inter-storey stairs', () => {
     expect(upperWalls).toBeDefined();
     expect(upperCeiling).toBeDefined();
     expect(upperLightFrames).toBeDefined();
-    expect((roof.material as THREE.Material).name).toBe('test-wall-baked');
+    expect((roof.material as THREE.Material).name).toBe('test-wall-zonal');
     expect((passageShaft.material as THREE.Material).name).toBe('lower-storey-wallpaper');
     expect((passageLowerFloor.material as THREE.Material).name).toBe('lower-storey-carpet');
-    expect((stairBodies.material as THREE.Material).name).toBe('test-wall-baked');
+    expect((stairBodies.material as THREE.Material).name).toBe('test-wall-zonal');
     expect((stairUndersides.material as THREE.MeshStandardMaterial).map)
       .toBe(stairCeilingTexture);
     expect((upperFloor.material as THREE.Material).name).toBe('preview-carpet');
@@ -1728,14 +1649,7 @@ const createEpicView = (
     texture.needsUpdate = true;
     materials.ceiling.map = texture;
   }
-  const whitePixel = Uint8Array.of(255, 255, 255, 255);
-  const view = new WorldView(plan, materials, {
-    bakedLightMaps: {
-      resolution: 1,
-      general: whitePixel,
-      ceiling: whitePixel,
-    },
-  });
+  const view = new WorldView(plan, materials);
   return { materials, plan, view };
 };
 
@@ -2022,7 +1936,7 @@ describe('epic structure rendering', () => {
     expect(distantMaterial.emissiveMap).toBe(materials.ceiling.map);
     expect(distantMaterial.lightMap).toBeNull();
     expect(distantMaterial.side).toBe(THREE.DoubleSide);
-    expect(distantMaterial.fog).toBe(false);
+    expect(distantMaterial.fog).toBe(true);
     expect(distantMaterial.emissiveIntensity).toBeGreaterThanOrEqual(0.2);
 
     distantCeiling.geometry.computeBoundingBox();

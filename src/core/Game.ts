@@ -30,6 +30,7 @@ export interface DebugExperience {
   chunks: number;
   pendingChunks: number;
   noclip: boolean;
+  darkness: number;
 }
 
 declare global {
@@ -58,31 +59,31 @@ const ATMOSPHERE: Record<VisualBiome, {
   hemisphereSky: number;
   hemisphereGround: number;
   ambient: number;
-  directional: number;
+  key: number;
 }> = {
   yellow: {
-    background: 0x45452d,
-    fog: 0x77754b,
-    hemisphereSky: 0xfff7d8,
-    hemisphereGround: 0x282619,
-    ambient: 0xfff0c4,
-    directional: 0xfff5d8,
+    background: 0x282820,
+    fog: 0x555548,
+    hemisphereSky: 0xfffbef,
+    hemisphereGround: 0x53534c,
+    ambient: 0xfff9ec,
+    key: 0xfff2d2,
   },
   red: {
-    background: 0x270503,
-    fog: 0x5c0906,
-    hemisphereSky: 0xff2114,
-    hemisphereGround: 0x190201,
-    ambient: 0xff160d,
-    directional: 0xff301d,
+    background: 0x170706,
+    fog: 0x431512,
+    hemisphereSky: 0xffe9e2,
+    hemisphereGround: 0x6f5f5c,
+    ambient: 0xffeee9,
+    key: 0xffc8bc,
   },
   white: {
     background: 0x62696a,
     fog: 0xaeb6b6,
     hemisphereSky: 0xf7fbff,
-    hemisphereGround: 0x303738,
-    ambient: 0xeaf3ff,
-    directional: 0xf5fbff,
+    hemisphereGround: 0x6d7678,
+    ambient: 0xf0f6fb,
+    key: 0xe9f5ff,
   },
 };
 
@@ -92,19 +93,16 @@ export class Game {
   private readonly root: HTMLElement;
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(72, 1, 0.04, 150);
+  private readonly camera = new THREE.PerspectiveCamera(72, 1, 0.04, 180);
   private readonly backgroundColor = new THREE.Color(ATMOSPHERE.yellow.background);
-  private readonly fog = new THREE.FogExp2(ATMOSPHERE.yellow.fog, 0.0042);
+  private readonly fog = new THREE.FogExp2(ATMOSPHERE.yellow.fog, 0.0015);
   private readonly hemisphere = new THREE.HemisphereLight(
     ATMOSPHERE.yellow.hemisphereSky,
     ATMOSPHERE.yellow.hemisphereGround,
-    0.17,
+    0.25,
   );
-  private readonly ambientFill = new THREE.AmbientLight(ATMOSPHERE.yellow.ambient, 0.018);
-  private readonly directionalFill = new THREE.DirectionalLight(
-    ATMOSPHERE.yellow.directional,
-    0.07,
-  );
+  private readonly ambientFill = new THREE.AmbientLight(ATMOSPHERE.yellow.ambient, 0.19);
+  private readonly directionalKey = new THREE.DirectionalLight(ATMOSPHERE.yellow.key, 0.34);
   private readonly atmosphereTargetColor = new THREE.Color();
   private readonly ui: ExperienceUI;
   private readonly audio = new AudioSystem();
@@ -120,6 +118,7 @@ export class Game {
   private fps = 60;
   private frameCounter = 0;
   private metricsTimer = 0;
+  private darkness = 0;
   private pixelRatio: number;
   private readonly adaptiveRenderScale: AdaptiveRenderScale;
   private locateRequestId = 0;
@@ -230,21 +229,23 @@ export class Game {
   private configureScene(): void {
     this.scene.background = this.backgroundColor;
     this.scene.fog = this.fog;
-    // Only the low-frequency bounced light is global. Direct fluorescent
-    // pools are baked per chunk so they remain spatially stable and cheap.
+    // Broad fill preserves visibility while a soft shadowless key lets PBR
+    // normals reveal corners. Spatial blackouts stay in each chunk's shader.
     this.hemisphere.name = 'liminal-ambient-field';
     this.scene.add(this.hemisphere);
     this.ambientFill.name = 'indirect-carpet-bounce';
     this.scene.add(this.ambientFill);
-    this.directionalFill.name = 'fluorescent-directional-fill';
-    this.directionalFill.position.set(3.5, 8, 2.5);
-    this.scene.add(this.directionalFill);
+    this.directionalKey.name = 'soft-fluorescent-key';
+    this.directionalKey.position.set(4.5, 7.5, 3.2);
+    this.directionalKey.castShadow = false;
+    this.scene.add(this.directionalKey);
   }
 
   private updateAtmosphere(delta: number): void {
     if (!this.worldStream || !this.player) return;
-    const target = ATMOSPHERE[this.worldStream.getVisualBiome(this.player.position)];
-    const blend = 1 - Math.exp(-Math.max(0, delta) * 2.8);
+    const context = this.worldStream.getLightingContext(this.player.position);
+    const target = ATMOSPHERE[context.biome];
+    const blend = 1 - Math.exp(-Math.max(0, delta) * 1.6);
     this.backgroundColor.lerp(this.atmosphereTargetColor.setHex(target.background), blend);
     this.fog.color.lerp(this.atmosphereTargetColor.setHex(target.fog), blend);
     this.hemisphere.color.lerp(this.atmosphereTargetColor.setHex(target.hemisphereSky), blend);
@@ -253,10 +254,14 @@ export class Game {
       blend,
     );
     this.ambientFill.color.lerp(this.atmosphereTargetColor.setHex(target.ambient), blend);
-    this.directionalFill.color.lerp(
-      this.atmosphereTargetColor.setHex(target.directional),
-      blend,
-    );
+    this.directionalKey.color.lerp(this.atmosphereTargetColor.setHex(target.key), blend);
+    const darknessRate = context.darkness > this.darkness ? 1.25 : 2;
+    const darknessBlend = 1 - Math.exp(-Math.max(0, delta) * darknessRate);
+    this.darkness = THREE.MathUtils.lerp(this.darkness, context.darkness, darknessBlend);
+    this.hemisphere.intensity = THREE.MathUtils.lerp(0.25, 0.15, this.darkness);
+    this.ambientFill.intensity = THREE.MathUtils.lerp(0.19, 0.08, this.darkness);
+    this.directionalKey.intensity = THREE.MathUtils.lerp(0.34, 0.14, this.darkness);
+    this.postFX?.setDarkness(this.darkness);
   }
 
   private async warmupPostFX(): Promise<void> {
@@ -594,6 +599,7 @@ export class Game {
       chunks: stream?.chunks ?? 1,
       pendingChunks: stream?.pendingChunks ?? 0,
       noclip: this.player?.isNoclipEnabled ?? false,
+      darkness: this.darkness,
     };
   }
 
