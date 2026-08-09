@@ -398,6 +398,56 @@ export const getEpicStructureVoidBounds = (
 export const getEpicAbyssBottom = (feature: EpicStructureFeature): number =>
   -Math.max(EPIC_ABYSS_PREVIEW_STORIES * STORY_PITCH, feature.height + 18);
 
+export interface Epic1FunnelStoryBounds {
+  readonly facadeBounds: Rect;
+  readonly voidBounds: Rect;
+  readonly ledgeDepth: number;
+}
+
+/**
+ * Epic1 narrows in deliberate steps below the active story. Each ledge reaches
+ * slightly past the support wall above it while keeping the final opening wide.
+ */
+export const getEpic1FunnelStoryBounds = (
+  feature: Pick<
+    EpicStructureFeature,
+    'passageFacadeBounds' | 'voidBounds' | 'funnelStoryOffset'
+  >,
+  levelY: number,
+): Epic1FunnelStoryBounds => {
+  const baseFacade = feature.passageFacadeBounds ?? feature.voidBounds;
+  if (!baseFacade || !feature.voidBounds) {
+    throw new Error('Epic1 funnel bounds require facade and void rectangles.');
+  }
+  const storyOffset = (feature.funnelStoryOffset ?? 0) + Math.round(levelY / STORY_PITCH);
+  const facadeDelta = Math.min(0.8, Math.max(
+    -6.3,
+    storyOffset >= 0 ? storyOffset * 0.18 : storyOffset * 0.34,
+  ));
+  const ledgeDepth = Math.min(1.18, Math.max(0.48,
+    EPIC1_LEDGE_DEPTH + (storyOffset >= 0 ? storyOffset * 0.025 : storyOffset * 0.035)
+  ));
+  const center = rectCenter(baseFacade);
+  const facadeHalfWidth = rectWidth(baseFacade) * 0.5 + facadeDelta;
+  const facadeHalfDepth = rectDepth(baseFacade) * 0.5 + facadeDelta;
+  const facadeBounds: Rect = {
+    minX: center.x - facadeHalfWidth,
+    maxX: center.x + facadeHalfWidth,
+    minZ: center.z - facadeHalfDepth,
+    maxZ: center.z + facadeHalfDepth,
+  };
+  return {
+    facadeBounds,
+    voidBounds: {
+      minX: center.x - (facadeHalfWidth - ledgeDepth),
+      maxX: center.x + (facadeHalfWidth - ledgeDepth),
+      minZ: center.z - (facadeHalfDepth - ledgeDepth),
+      maxZ: center.z + (facadeHalfDepth - ledgeDepth),
+    },
+    ledgeDepth,
+  };
+};
+
 export const isInsideEpicAbyssFall = (
   feature: EpicStructureFeature,
   position: { x: number; y: number; z: number },
@@ -1556,6 +1606,7 @@ const createFeature = (
     ...(voidBounds ? { voidBounds: { ...voidBounds } } : {}),
     ...(passageFacadeBounds ? { passageFacadeBounds } : {}),
     ...(passageLevels ? { passageLevels } : {}),
+    ...(index === 1 ? { funnelStoryOffset: context?.coord.story ?? 0 } : {}),
     ...(ascending
       ? {
         entryLevel: ascending.entryLevel,
@@ -1621,7 +1672,8 @@ export const applyEpicStructure = (
   );
 
   if (feature.variant === 'endless-abyss' && feature.voidBounds) {
-    const facadeBounds = feature.passageFacadeBounds ?? feature.voidBounds;
+    const currentShell = getEpic1FunnelStoryBounds(feature, 0);
+    const facadeBounds = currentShell.facadeBounds;
     const currentLevel = feature.passageLevels?.find((level) => level.y === 0);
     for (const [passageIndex, passage] of (currentLevel?.passages ?? []).entries()) {
       colliders.push(...abyssPassageColliders(
@@ -1645,9 +1697,10 @@ export const applyEpicStructure = (
     const lowerPreview = feature.passageLevels?.find(
       (level) => Math.abs(level.y + STORY_PITCH) < 0.01,
     );
+    const lowerShell = getEpic1FunnelStoryBounds(feature, -STORY_PITCH);
     for (const [ledgeIndex, ledge] of floorCellsAroundVoid(
-      facadeBounds,
-      feature.voidBounds,
+      lowerShell.facadeBounds,
+      lowerShell.voidBounds,
     ).entries()) {
       colliders.push(floorCollider(
         ledge,
@@ -1659,18 +1712,25 @@ export const applyEpicStructure = (
       colliders.push(
         ...abyssPassageColliders(
           passage,
-          facadeBounds,
+          lowerShell.facadeBounds,
           -STORY_PITCH,
           `epic1-lower-preview-passage-${passageIndex}`,
         ),
       );
     }
     colliders.push(...facadeWallColliders(
-      facadeBounds,
+      lowerShell.facadeBounds,
       lowerPreview?.passages ?? [],
       -STORY_PITCH,
       STORY_PITCH,
       'epic1-lower-preview-shaft-wall',
+    ));
+    colliders.push(...facadeWallColliders(
+      currentShell.voidBounds,
+      [],
+      -STORY_PITCH,
+      STORY_PITCH - 0.22,
+      'epic1-funnel-support-wall',
     ));
   }
 

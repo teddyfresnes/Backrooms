@@ -13,6 +13,7 @@ import { rectCenter, rectDepth, rectWidth } from '../world/types';
 import {
   EPIC1_PORTAL_HEIGHT,
   applyEpicStructure,
+  getEpic1FunnelStoryBounds,
   getEpicAbyssPassageLayout,
   getEpicAbyssRoomPreviewLayout,
   getEpic3BackroomsGalleryLayout,
@@ -1739,6 +1740,15 @@ describe('epic structure rendering', () => {
     const topCeiling = root.getObjectByName(
       'epic-endless-abyss-top-ceiling',
     ) as THREE.Mesh;
+    const funnelSupports = root.getObjectByName(
+      'epic-endless-abyss-funnel-support-walls',
+    ) as THREE.Mesh;
+    const currentPortalSoffits = root.getObjectByName(
+      'epic-endless-abyss-current-portal-soffits',
+    ) as THREE.Mesh;
+    const stackedPortalSoffits = root.getObjectByName(
+      'epic-endless-abyss-stacked-portal-soffits',
+    ) as THREE.Mesh;
     expect(root).toBeDefined();
     expect(upperShell).toBeDefined();
     expect(currentWalls).toBeDefined();
@@ -1751,6 +1761,9 @@ describe('epic structure rendering', () => {
     expect(distantEntryCaps).toBeDefined();
     expect(depthMist).toBeDefined();
     expect(topCeiling).toBeDefined();
+    expect(funnelSupports).toBeDefined();
+    expect(currentPortalSoffits).toBeDefined();
+    expect(stackedPortalSoffits).toBeDefined();
     expect(root.getObjectByName('epic-endless-abyss-shaft')).toBeUndefined();
     expect(root.getObjectByName('epic-endless-abyss-strata')).toBeUndefined();
 
@@ -1761,6 +1774,8 @@ describe('epic structure rendering', () => {
     currentCorridorWalls.geometry.computeBoundingBox();
     depthMist.geometry.computeBoundingBox();
     topCeiling.geometry.computeBoundingBox();
+    funnelSupports.geometry.computeBoundingBox();
+    currentPortalSoffits.geometry.computeBoundingBox();
     expect(upperShell.geometry.boundingBox?.min.y).toBeCloseTo(plan.wallHeight - 0.04, 5);
     expect(upperShell.geometry.boundingBox?.max.y).toBeCloseTo(5.43, 5);
     expect(stackedWalls.geometry.boundingBox?.min.x).toBeLessThanOrEqual(-54.4);
@@ -1771,10 +1786,10 @@ describe('epic structure rendering', () => {
     expect(stackedWalls.geometry.boundingBox?.max.y).toBeGreaterThan(20);
     expect(storyLedges.geometry.boundingBox?.min.y).toBeLessThan(-85);
     expect(storyLedges.geometry.boundingBox?.max.y).toBeGreaterThan(20);
-    expect(storyLedges.geometry.boundingBox?.min.x).toBeGreaterThanOrEqual(-54.401);
-    expect(storyLedges.geometry.boundingBox?.max.x).toBeLessThanOrEqual(54.401);
-    expect(storyLedges.geometry.boundingBox?.min.z).toBeGreaterThanOrEqual(-54.401);
-    expect(storyLedges.geometry.boundingBox?.max.z).toBeLessThanOrEqual(54.401);
+    expect(storyLedges.geometry.boundingBox?.min.x).toBeGreaterThanOrEqual(-55.13);
+    expect(storyLedges.geometry.boundingBox?.max.x).toBeLessThanOrEqual(55.13);
+    expect(storyLedges.geometry.boundingBox?.min.z).toBeGreaterThanOrEqual(-55.13);
+    expect(storyLedges.geometry.boundingBox?.max.z).toBeLessThanOrEqual(55.13);
     expect(corridorPreviews.geometry.boundingBox?.min.y).toBeLessThan(-15);
     expect(corridorPreviews.geometry.boundingBox?.max.y).toBeGreaterThan(15);
     expect(currentCorridorWalls.geometry.boundingBox?.min.y).toBeCloseTo(0, 5);
@@ -1783,9 +1798,29 @@ describe('epic structure rendering', () => {
     expect(horizontalTriangleHeights(stackedWalls.geometry)).toHaveLength(0);
     expect(horizontalTriangleHeights(currentCorridorWalls.geometry)).toHaveLength(0);
     expect(horizontalTriangleHeights(corridorPreviews.geometry)).toHaveLength(0);
+    expect(horizontalTriangleHeights(funnelSupports.geometry)).toHaveLength(0);
+    expect(downwardTriangleHeights(currentPortalSoffits.geometry).length).toBeGreaterThan(0);
+    expect((currentPortalSoffits.material as THREE.Material).name).toBe('test-wall-zonal');
+    expect(currentPortalSoffits.geometry.boundingBox?.min.y)
+      .toBeCloseTo(EPIC1_PORTAL_HEIGHT - 0.018, 5);
+    const currentFunnel = getEpic1FunnelStoryBounds(feature, 0);
+    const firstLowerFunnel = getEpic1FunnelStoryBounds(feature, -5.4);
+    const bottomFunnel = getEpic1FunnelStoryBounds(
+      feature,
+      Math.min(...feature.passageLevels!.map((level) => level.y)),
+    );
+    expect(firstLowerFunnel.ledgeDepth).toBeLessThan(currentFunnel.ledgeDepth);
+    expect(rectWidth(firstLowerFunnel.facadeBounds))
+      .toBeLessThan(rectWidth(currentFunnel.facadeBounds));
+    expect(rectWidth(firstLowerFunnel.voidBounds))
+      .toBeLessThan(rectWidth(currentFunnel.voidBounds));
+    expect(rectWidth(bottomFunnel.voidBounds))
+      .toBeLessThan(rectWidth(firstLowerFunnel.voidBounds));
+    expect(funnelSupports.geometry.boundingBox?.min.y)
+      .toBeCloseTo(Math.min(...feature.passageLevels!.map((level) => level.y)), 5);
     expect(depthMist.geometry.boundingBox?.min.y).toBeLessThan(-99);
-    expect(depthMist.geometry.boundingBox?.max.y).toBeCloseTo(-20.25, 4);
-    expect(depthMist.geometry.getAttribute('position').count).toBe(12 * 4);
+    expect(depthMist.geometry.boundingBox?.max.y).toBeCloseTo(-17.28, 4);
+    expect(depthMist.geometry.getAttribute('position').count).toBe(11 * 4);
     const topLevelY = Math.max(...feature.passageLevels!.map((level) => level.y));
     expect(topCeiling.geometry.boundingBox?.min.y)
       .toBeCloseTo(topLevelY + 5.4, 5);
@@ -1794,8 +1829,10 @@ describe('epic structure rendering', () => {
     expect(mistMaterial.transparent).toBe(true);
     expect(mistMaterial.depthWrite).toBe(false);
     expect(mistMaterial.fragmentShader).toContain('edgeFade');
-    expect(mistMaterial.fragmentShader).toContain('mix(0.06, 0.42');
-    expect(mistMaterial.vertexShader).toContain('mistTop');
+    expect(mistMaterial.fragmentShader).toContain('fogFbm');
+    expect(mistMaterial.fragmentShader).toContain('fogTime');
+    view.update(2.5, new THREE.Vector3());
+    expect(mistMaterial.uniforms.fogTime?.value).toBe(2.5);
     const roofRay = new THREE.Raycaster(
       new THREE.Vector3(0, 1, 0),
       new THREE.Vector3(0, 1, 0),
@@ -1840,16 +1877,17 @@ describe('epic structure rendering', () => {
     expect(view.group.getObjectByName('upper-story-floor-underside-preview')).toBeUndefined();
     expect(view.group.getObjectByName('upper-story-preview-ceiling')).toBeUndefined();
     if (feature.voidBounds && feature.passageFacadeBounds && lowerLevel && lowerPassage) {
+      const lowerShell = getEpic1FunnelStoryBounds(feature, lowerLevel.y);
       const previewLayout = getEpicAbyssPassageLayout(
         lowerPassage,
-        feature.passageFacadeBounds,
+        lowerShell.facadeBounds,
       );
       expect(previewLayout.floorRects).toHaveLength(2);
       expect(previewLayout.ceilingRects).toHaveLength(2);
       expect(previewLayout.wallRects).toHaveLength(5);
       const roomPreviewLayout = getEpicAbyssRoomPreviewLayout(
         lowerPassage,
-        feature.passageFacadeBounds,
+        lowerShell.facadeBounds,
       );
       expect(roomPreviewLayout.floorRects).toHaveLength(2);
       expect(roomPreviewLayout.wallRects).toHaveLength(6);
@@ -1868,13 +1906,13 @@ describe('epic structure rendering', () => {
       }
       for (const wall of previewLayout.wallRects) {
         if (lowerPassage.side === 'north') {
-          expect(wall.maxZ).toBeLessThanOrEqual(feature.passageFacadeBounds.minZ - 0.18 + 1e-5);
+          expect(wall.maxZ).toBeLessThanOrEqual(lowerShell.facadeBounds.minZ - 0.18 + 1e-5);
         } else if (lowerPassage.side === 'south') {
-          expect(wall.minZ).toBeGreaterThanOrEqual(feature.passageFacadeBounds.maxZ + 0.18 - 1e-5);
+          expect(wall.minZ).toBeGreaterThanOrEqual(lowerShell.facadeBounds.maxZ + 0.18 - 1e-5);
         } else if (lowerPassage.side === 'west') {
-          expect(wall.maxX).toBeLessThanOrEqual(feature.passageFacadeBounds.minX - 0.18 + 1e-5);
+          expect(wall.maxX).toBeLessThanOrEqual(lowerShell.facadeBounds.minX - 0.18 + 1e-5);
         } else {
-          expect(wall.minX).toBeGreaterThanOrEqual(feature.passageFacadeBounds.maxX + 0.18 - 1e-5);
+          expect(wall.minX).toBeGreaterThanOrEqual(lowerShell.facadeBounds.maxX + 0.18 - 1e-5);
         }
       }
       const shellInnerEdge = plan.size * 0.5;
@@ -1892,7 +1930,7 @@ describe('epic structure rendering', () => {
       const ledgeCenter = new THREE.Vector3(
         0,
         lowerLevel.y + 2,
-        (feature.voidBounds.minZ + feature.passageFacadeBounds.minZ) * 0.5,
+        (lowerShell.voidBounds.minZ + lowerShell.facadeBounds.minZ) * 0.5,
       );
       const ledgeRay = new THREE.Raycaster(
         ledgeCenter,
@@ -1905,12 +1943,12 @@ describe('epic structure rendering', () => {
       const horizontal = lowerPassage.side === 'north' || lowerPassage.side === 'south';
       const outward = lowerPassage.side === 'north' || lowerPassage.side === 'west' ? -1 : 1;
       const facadeFixed = lowerPassage.side === 'north'
-        ? feature.passageFacadeBounds.minZ
+        ? lowerShell.facadeBounds.minZ
         : lowerPassage.side === 'south'
-          ? feature.passageFacadeBounds.maxZ
+          ? lowerShell.facadeBounds.maxZ
           : lowerPassage.side === 'west'
-            ? feature.passageFacadeBounds.minX
-            : feature.passageFacadeBounds.maxX;
+            ? lowerShell.facadeBounds.minX
+            : lowerShell.facadeBounds.maxX;
       const outwardDirection = horizontal
         ? new THREE.Vector3(0, 0, outward)
         : new THREE.Vector3(outward, 0, 0);
@@ -2118,9 +2156,15 @@ describe('epic structure rendering', () => {
     expect(previews.geometry.boundingBox?.min.y).toBeCloseTo(0, 5);
     expect(lowerFog.geometry.boundingBox?.min.y).toBeLessThan(-58);
     expect(upperFog.geometry.boundingBox?.max.y).toBeGreaterThan(63);
-    expect((upperFog.material as THREE.MeshBasicMaterial).transparent).toBe(true);
-    expect((upperFog.material as THREE.MeshBasicMaterial).opacity)
-      .toBeGreaterThan((lowerFog.material as THREE.MeshBasicMaterial).opacity);
+    expect(upperFog.geometry.getAttribute('position').count).toBe(5 * 4);
+    expect(lowerFog.geometry.getAttribute('position').count).toBe(5 * 4);
+    const upperFogMaterial = upperFog.material as THREE.ShaderMaterial;
+    const lowerFogMaterial = lowerFog.material as THREE.ShaderMaterial;
+    expect(upperFogMaterial.transparent).toBe(true);
+    expect(upperFogMaterial.fragmentShader).toContain('fogFbm');
+    expect(lowerFogMaterial.fragmentShader).toContain('fogFbm');
+    expect(upperFogMaterial.uniforms.farOpacity?.value)
+      .toBeGreaterThan(lowerFogMaterial.uniforms.farOpacity?.value);
 
     const levels = feature.passageLevels ?? [];
     expect(levels).toHaveLength(23);

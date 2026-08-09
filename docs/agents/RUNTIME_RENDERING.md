@@ -56,11 +56,16 @@ Pour `epic3`, seuls les voisins nord et sud restent montés pendant la visite.
   couloirs à hauteur de bureau (2,66 m) jusqu’aux chunks
   voisins. Dans une fenêtre verticale de trois stories, seules quatre entrées
   latérales proches du point d’arrivée reçoivent une petite pièce, son plafond
-  et un luminaire ; les autres sont des panneaux en retrait. Les caps
+  et un luminaire ; les autres sont des panneaux en retrait. Une sous-face en
+  papier peint ferme le haut de chaque portail, légèrement sous le plafond de
+  dalles afin que les deux matériaux ne soient jamais coplanaires. Les caps
   horizontaux des murs sont supprimés pour ne jamais se superposer à
-  la corniche, au sol ou au plafond d’un couloir. Cette
-  corniche s’arrête à la façade et seul un aperçu détaillé ajoute du sol derrière
-  son ouverture. Les plafonds génériques de pit et de salle haute sont désactivés
+  la corniche, au sol ou au plafond d’un couloir. Les corniches et façades se
+  resserrent vers le bas ; quatre murs sans caps soutiennent chaque décroché et
+  la dernière rangée garde son ouverture. Seul un aperçu détaillé ajoute du sol
+  derrière son portail. La brume utilise des nappes fusionnées, un bruit FBM à
+  deux octaves et une dérive lente ancrée dans le monde. Les plafonds génériques
+  de pit et de salle haute sont désactivés
   dans ce chunk : les rangées propres à `epic1` restent visibles vers le haut ;
 - `epic3` relie toutes les ouvertures inspectables d’une même façade à une
   galerie Backrooms continue. Des cloisons partent du mur extérieur mais
@@ -71,7 +76,8 @@ Pour `epic3`, seuls les voisins nord et sud restent montés pendant la visite.
   seuils. Les luminaires restent hors du volume du gouffre et sont ancrés sous
   le plafond réel de la galerie. Hors de la fenêtre verticale inspectable, un
   panneau en retrait ferme les ouvertures lointaines. Deux nappes de brume
-  séparées masquent le haut et le fond du gouffre ;
+  procédurales séparées masquent le haut et le fond du gouffre. Chaque nappe
+  reste un mesh fusionné et le shader se limite à deux octaves de bruit ;
 - `epic5` reste sur le chemin de rendu ordinaire des murs et du plafond. Ses
   luminaires ont tous `ceilingY` sur le plafond réel, sans panneau lumineux
   décoratif ou hauteur aléatoire supplémentaire ;

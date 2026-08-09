@@ -212,6 +212,8 @@ export interface EpicStructureFeature {
   passageFacadeBounds?: Rect;
   /** Serializable layout shared by the renderer and collider builder. */
   passageLevels?: EpicPassageLevel[];
+  /** Absolute logical story used to keep epic1's stepped funnel stable at hand-off. */
+  funnelStoryOffset?: number;
   /** Logical row used by an elevated epic3 arrival. */
   entryLevel?: number;
   /** Distinguishes the occasional real epic3 abyss from its floored layouts. */

@@ -122,8 +122,14 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
 - `epic1.voidBounds` couvre un peu plus de 90 % du chunk. Sa
   `passageFacadeBounds`, légèrement plus grande, porte les ouvertures ; l’espace
   entre les deux forme la corniche continue sur laquelle une chute peut
-  atterrir. Seuls cette corniche, le court aperçu des couloirs et leurs murs ont
-  des colliders sur l’étage inférieur préchargé.
+  atterrir. `funnelStoryOffset` ancre le profil sur la story logique absolue :
+  l'aperçu à ±5,4 m et le chunk monté après hand-off gardent donc exactement la
+  même section. `getEpic1FunnelStoryBounds` réduit progressivement la façade,
+  la corniche et le vide des rangées inférieures. La corniche suivante dépasse
+  encore légèrement le mur de soutien de la rangée précédente ; la dernière
+  rangée ne reçoit aucun cap et conserve donc le trou. Sur l’étage inférieur
+  préchargé, corniche, façade, couloirs et premier mur de soutien publient des
+  colliders cohérents avec ce profil.
 - Sur l’étage actif d’`epic1`, `getEpicAbyssThroughPassageLayout` prolonge chaque
   entrée jusqu’à une porte canonique identique dans le chunk voisin. Ces
   passages utilisent la hauteur de bureau partagée `EPIC1_PORTAL_HEIGHT`

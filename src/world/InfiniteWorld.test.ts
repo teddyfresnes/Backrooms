@@ -31,6 +31,7 @@ import {
   EPIC1_PORTAL_HEIGHT,
   EPIC_STRUCTURE_DEFINITIONS,
   epicStructureIndexForCoord,
+  getEpic1FunnelStoryBounds,
   getEpicStairwellLayout,
   getEpicStructureSlotsForMacro,
 } from './EpicStructures';
@@ -485,6 +486,8 @@ describe('InfiniteWorld chunk contracts', () => {
       const lowerMarker = epicMarker(lowerPlan)!;
       const lowerCurrent = lowerMarker.passageLevels?.find((level) => level.y === 0);
       expect(lowerPreview?.passages).toEqual(lowerCurrent?.passages);
+      expect(getEpic1FunnelStoryBounds(marker, -INFINITE_STORY_PITCH))
+        .toEqual(getEpic1FunnelStoryBounds(lowerMarker, 0));
       const upperPreview = marker.passageLevels?.find(
         (level) => Math.abs(level.y - INFINITE_STORY_PITCH) < 0.01,
       );
@@ -495,16 +498,30 @@ describe('InfiniteWorld chunk contracts', () => {
       const upperCurrent = epicMarker(upperPlan)?.passageLevels
         ?.find((level) => level.y === 0);
       expect(upperPreview?.passages).toEqual(upperCurrent?.passages);
+      expect(getEpic1FunnelStoryBounds(marker, INFINITE_STORY_PITCH))
+        .toEqual(getEpic1FunnelStoryBounds(epicMarker(upperPlan)!, 0));
       expect(marker.passageLevels?.filter((level) => level.y > 0)).toHaveLength(4);
       const previewLedges = plan.colliders.filter((collider) =>
         collider.id.includes('/epic1-lower-preview-ledge-floor-')
       );
       expect(previewLedges).toHaveLength(4);
+      const lowerFunnel = getEpic1FunnelStoryBounds(marker, -INFINITE_STORY_PITCH);
       for (const collider of previewLedges) {
         expect(collider.center.y + collider.halfExtents.y)
           .toBeCloseTo(-INFINITE_STORY_PITCH, 5);
-        expect(overlaps(colliderFootprint(collider), voidInterior)).toBe(false);
+        expect(overlaps(colliderFootprint(collider), lowerFunnel.voidBounds)).toBe(false);
       }
+      expect(previewLedges.some((collider) =>
+        overlaps(colliderFootprint(collider), voidInterior)
+      )).toBe(true);
+      const funnelSupports = plan.colliders.filter((collider) =>
+        collider.id.includes('/epic1-funnel-support-wall-')
+      );
+      expect(funnelSupports).toHaveLength(4);
+      expect(funnelSupports.every((collider) =>
+        Math.abs(collider.center.y - collider.halfExtents.y + INFINITE_STORY_PITCH) < 1e-5 &&
+        Math.abs(collider.center.y + collider.halfExtents.y + 0.22) < 1e-5
+      )).toBe(true);
       const previewCorridors = plan.colliders.filter((collider) =>
         collider.id.includes('/epic1-lower-preview-corridor-floor-')
       );

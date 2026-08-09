@@ -30,6 +30,7 @@ import {
   getEpicAbyssPassageLayout,
   getEpicAbyssRoomPreviewLayout,
   getEpicAbyssThroughPassageLayout,
+  getEpic1FunnelStoryBounds,
   getEpic3BackroomsGalleryLayout,
   getEpicStairRoomWalls,
   getEpicStairwellLayout,
@@ -848,6 +849,97 @@ const createEpicGlowPanel = (
   return geometry;
 };
 
+interface EpicFogMaterialOptions {
+  readonly name: string;
+  readonly color: THREE.Color;
+  readonly nearY: number;
+  readonly farY: number;
+  readonly nearOpacity: number;
+  readonly farOpacity: number;
+}
+
+const createEpicFogMaterial = (
+  options: EpicFogMaterialOptions,
+): THREE.ShaderMaterial => new THREE.ShaderMaterial({
+  name: options.name,
+  transparent: true,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  fog: false,
+  toneMapped: false,
+  uniforms: {
+    fogColor: { value: options.color },
+    nearY: { value: options.nearY },
+    farY: { value: options.farY },
+    nearOpacity: { value: options.nearOpacity },
+    farOpacity: { value: options.farOpacity },
+    fogTime: { value: 0 },
+  },
+  vertexShader: `
+    uniform float nearY;
+    uniform float farY;
+    varying vec2 vFogUv;
+    varying vec2 vFogPosition;
+    varying float vFogDepth;
+    void main() {
+      vFogUv = uv;
+      vFogPosition = position.xz;
+      vFogDepth = clamp((position.y - nearY) / (farY - nearY), 0.0, 1.0);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 fogColor;
+    uniform float nearOpacity;
+    uniform float farOpacity;
+    uniform float fogTime;
+    varying vec2 vFogUv;
+    varying vec2 vFogPosition;
+    varying float vFogDepth;
+
+    float fogHash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+
+    float fogNoise(vec2 p) {
+      vec2 cell = floor(p);
+      vec2 local = fract(p);
+      local = local * local * (3.0 - 2.0 * local);
+      return mix(
+        mix(fogHash(cell), fogHash(cell + vec2(1.0, 0.0)), local.x),
+        mix(fogHash(cell + vec2(0.0, 1.0)), fogHash(cell + vec2(1.0)), local.x),
+        local.y
+      );
+    }
+
+    float fogFbm(vec2 p) {
+      float value = 0.0;
+      float amplitude = 0.55;
+      for (int octave = 0; octave < 2; octave++) {
+        value += amplitude * fogNoise(p);
+        p = p * 2.03 + vec2(7.13, 3.71);
+        amplitude *= 0.48;
+      }
+      return value;
+    }
+
+    void main() {
+      float border = min(
+        min(vFogUv.x, 1.0 - vFogUv.x),
+        min(vFogUv.y, 1.0 - vFogUv.y)
+      );
+      float edgeFade = smoothstep(0.0, 0.105, border);
+      vec2 drift = vec2(fogTime * 0.011, -fogTime * 0.007);
+      float body = fogFbm(vFogPosition * 0.052 + drift + vFogDepth * vec2(2.7, -1.9));
+      float detail = fogNoise(vFogPosition * 0.19 - drift * 1.7 + body * 2.4);
+      float density = mix(nearOpacity, farOpacity, smoothstep(0.0, 1.0, vFogDepth));
+      float wisps = mix(0.56, 1.22, clamp(body * 0.78 + detail * 0.22, 0.0, 1.0));
+      float alpha = clamp(edgeFade * density * wisps, 0.0, 0.82);
+      gl_FragColor = vec4(fogColor, alpha);
+    }
+  `,
+});
+
 const createEpicVerticalPreviewPanel = (
   width: number,
   height: number,
@@ -904,6 +996,39 @@ const createEpicPassagePreviewPanel = (
       : passage.along,
   );
   return geometry;
+};
+
+const createEpicPortalSoffit = (
+  passage: EpicPassagePreview,
+  facade: Rect,
+  floorY: number,
+  patternScale: number,
+): THREE.BufferGeometry => {
+  const halfWidth = passage.width * 0.5;
+  const revealDepth = 0.46;
+  const fixed = passage.side === 'north'
+    ? facade.minZ
+    : passage.side === 'south'
+      ? facade.maxZ
+      : passage.side === 'west'
+        ? facade.minX
+        : facade.maxX;
+  const rect: Rect = passage.side === 'north' || passage.side === 'south'
+    ? {
+        minX: passage.along - halfWidth,
+        maxX: passage.along + halfWidth,
+        minZ: fixed - revealDepth * 0.5,
+        maxZ: fixed + revealDepth * 0.5,
+      }
+    : {
+        minX: fixed - revealDepth * 0.5,
+        maxX: fixed + revealDepth * 0.5,
+        minZ: passage.along - halfWidth,
+        maxZ: passage.along + halfWidth,
+      };
+  // A real reveal sits below the tiled corridor ceiling. This is a separate
+  // construction layer, not a coplanar offset used to hide z-fighting.
+  return createCeilingGeometry(rect, floorY + EPIC1_PORTAL_HEIGHT - 0.018, patternScale);
 };
 
 const splitEpicFacadeIntervals = (
@@ -1128,6 +1253,7 @@ export class WorldView {
   private readonly distantCeilingMaterial: THREE.MeshStandardMaterial;
   private readonly lightingContext: ZonalLightingContext;
   private readonly ownedMaterials: THREE.Material[];
+  private readonly animatedFogMaterials: THREE.ShaderMaterial[] = [];
   private readonly graffitiTextures: THREE.CanvasTexture[] = [];
   private readonly graffitiMaterials: THREE.MeshBasicMaterial[] = [];
   private readonly surfaceStyle: SurfaceStyle;
@@ -1856,9 +1982,7 @@ export class WorldView {
     group: THREE.Group,
   ): void {
     if (!feature.voidBounds || !feature.passageLevels) return;
-    const voidBounds = feature.voidBounds;
     const abyssBottom = getEpicAbyssBottom(feature);
-    const facadeBounds = feature.passageFacadeBounds ?? voidBounds;
     const halfSize = this.plan.size * 0.5;
     const previewFloorBounds: Rect = {
       minX: -halfSize,
@@ -1869,6 +1993,9 @@ export class WorldView {
     const currentWalls: THREE.BufferGeometry[] = [];
     const lowerWalls: THREE.BufferGeometry[] = [];
     const lowerLedges: THREE.BufferGeometry[] = [];
+    const funnelSupportWalls: THREE.BufferGeometry[] = [];
+    const currentPortalSoffits: THREE.BufferGeometry[] = [];
+    const lowerPortalSoffits: THREE.BufferGeometry[] = [];
     const currentCorridorWalls: THREE.BufferGeometry[] = [];
     const lowerCorridorWalls: THREE.BufferGeometry[] = [];
     const currentCorridorCeilings: THREE.BufferGeometry[] = [];
@@ -1879,17 +2006,18 @@ export class WorldView {
     const detailedPassagesFor = (
       passages: readonly EpicPassagePreview[],
       levelY: number,
+      storyFacadeBounds: Rect,
     ): EpicPassagePreview[] => {
       if (Math.abs(levelY) > INFINITE_STORY_PITCH * 3 + 0.01) return [];
       const focus = feature.destination;
       const ranked = passages.map((passage) => {
         const portal = passage.side === 'north'
-          ? { x: passage.along, z: facadeBounds.minZ }
+          ? { x: passage.along, z: storyFacadeBounds.minZ }
           : passage.side === 'south'
-            ? { x: passage.along, z: facadeBounds.maxZ }
+            ? { x: passage.along, z: storyFacadeBounds.maxZ }
             : passage.side === 'west'
-              ? { x: facadeBounds.minX, z: passage.along }
-              : { x: facadeBounds.maxX, z: passage.along };
+              ? { x: storyFacadeBounds.minX, z: passage.along }
+              : { x: storyFacadeBounds.maxX, z: passage.along };
         const horizontalDistance = Math.hypot(portal.x - focus.x, portal.z - focus.z);
         const directlyBelow = levelY < 0 && horizontalDistance < 8;
         return {
@@ -1901,11 +2029,13 @@ export class WorldView {
         .slice(0, 4);
       return ranked.map(({ passage }) => passage);
     };
+    const levelYs = new Set(feature.passageLevels.map((level) => level.y.toFixed(3)));
     for (const [levelIndex, level] of feature.passageLevels.entries()) {
       if (level.y < abyssBottom - 0.1) continue;
       const tint = 0.71 + (levelIndex % 4) * 0.035;
+      const storyShell = getEpic1FunnelStoryBounds(feature, level.y);
       const facade = createEpicFacadeBandGeometries(
-        facadeBounds,
+        storyShell.facadeBounds,
         level.passages,
         level.y,
         INFINITE_STORY_PITCH,
@@ -1915,11 +2045,23 @@ export class WorldView {
         true,
       );
       (level.y === 0 ? currentWalls : lowerWalls).push(...facade);
+      if (levelYs.has((level.y - INFINITE_STORY_PITCH).toFixed(3))) {
+        funnelSupportWalls.push(...createOpenShaftWallGeometries(
+          storyShell.voidBounds,
+          level.y - INFINITE_STORY_PITCH,
+          level.y - 0.22,
+          Math.min(0.92, tint + 0.08),
+          this.surfaceStyle.wallPatternScale,
+        ));
+      }
       if (Math.abs(level.y) > 0.01) {
         // The ledge stops at the facade. Only entrances with a detailed preview
         // receive floor beyond it, so distant sealed openings cannot expose a
         // stray carpet tongue or a coplanar surface at the threshold.
-        for (const ledge of cellsAroundHoles(facadeBounds, [voidBounds])) {
+        for (const ledge of cellsAroundHoles(
+          storyShell.facadeBounds,
+          [storyShell.voidBounds],
+        )) {
           lowerLedges.push(createTexturedBoxGeometry(
             rectWidth(ledge),
             0.22,
@@ -1933,23 +2075,37 @@ export class WorldView {
         }
       }
       const detailedPassages = new Set(
-        Math.abs(level.y) <= 0.01 ? level.passages : detailedPassagesFor(level.passages, level.y),
+        Math.abs(level.y) <= 0.01
+          ? level.passages
+          : detailedPassagesFor(level.passages, level.y, storyShell.facadeBounds),
       );
       for (const passage of level.passages) {
+        (Math.abs(level.y) <= 0.01 ? currentPortalSoffits : lowerPortalSoffits).push(
+          createEpicPortalSoffit(
+            passage,
+            storyShell.facadeBounds,
+            level.y,
+            this.surfaceStyle.wallPatternScale,
+          ),
+        );
         if (Math.abs(level.y) > 0.01 && !detailedPassages.has(passage)) {
           distantPreviewCaps.push(createEpicPassagePreviewPanel(
             passage,
-            facadeBounds,
+            storyShell.facadeBounds,
             level.y,
           ));
           continue;
         }
         const layout = Math.abs(level.y) <= 0.01
-          ? getEpicAbyssThroughPassageLayout(passage, facadeBounds, previewFloorBounds)
-          : getEpicAbyssRoomPreviewLayout(passage, facadeBounds);
+          ? getEpicAbyssThroughPassageLayout(
+              passage,
+              storyShell.facadeBounds,
+              previewFloorBounds,
+            )
+          : getEpicAbyssRoomPreviewLayout(passage, storyShell.facadeBounds);
         const preview = createEpicCorridorPreviewGeometries(
           passage,
-          facadeBounds,
+          storyShell.facadeBounds,
           level.y,
           EPIC1_PORTAL_HEIGHT,
           layout,
@@ -1957,7 +2113,10 @@ export class WorldView {
         (level.y === 0 ? currentCorridorWalls : lowerCorridorWalls).push(...preview.walls);
         (level.y === 0 ? currentCorridorCeilings : lowerCorridorCeilings).push(...preview.ceilings);
         if (Math.abs(level.y) > 0.01) {
-          const visibleFloorRects = subtractRects(layout.floorRects, [facadeBounds]);
+          const visibleFloorRects = subtractRects(
+            layout.floorRects,
+            [storyShell.facadeBounds],
+          );
           if (visibleFloorRects.length > 0) {
             detailedPreviewFloors.push(createFloorGeometry(
               visibleFloorRects,
@@ -1970,12 +2129,12 @@ export class WorldView {
         const horizontal = passage.side === 'north' || passage.side === 'south';
         const outward = passage.side === 'north' || passage.side === 'west' ? -1 : 1;
         const fixed = passage.side === 'north'
-          ? facadeBounds.minZ
+          ? storyShell.facadeBounds.minZ
           : passage.side === 'south'
-            ? facadeBounds.maxZ
+            ? storyShell.facadeBounds.maxZ
             : passage.side === 'west'
-              ? facadeBounds.minX
-              : facadeBounds.maxX;
+              ? storyShell.facadeBounds.minX
+              : storyShell.facadeBounds.maxX;
         const lightFixed = fixed + outward * Math.max(0.42, passage.corridorDepth * 0.58);
         corridorLights.push(createEpicGlowPanel(
           horizontal ? Math.min(2.1, passage.width * 0.48) : 0.42,
@@ -2046,6 +2205,24 @@ export class WorldView {
       'epic-endless-abyss-corridor-lights',
       group,
     );
+    makeMesh(
+      mergeOrSingle(funnelSupportWalls),
+      this.previewMaterials.wall,
+      'epic-endless-abyss-funnel-support-walls',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(currentPortalSoffits),
+      this.materials.wall,
+      'epic-endless-abyss-current-portal-soffits',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(lowerPortalSoffits),
+      this.previewMaterials.wall,
+      'epic-endless-abyss-stacked-portal-soffits',
+      group,
+    );
     const topLevelY = Math.max(...feature.passageLevels.map((level) => level.y));
     const topCeilingY = topLevelY + INFINITE_STORY_PITCH;
     makeMesh(
@@ -2058,69 +2235,36 @@ export class WorldView {
       'epic-endless-abyss-top-ceiling',
       group,
     );
-    const mistTop = -3.75 * INFINITE_STORY_PITCH;
+    const mistTop = -3.2 * INFINITE_STORY_PITCH;
     const mistBottom = abyssBottom - 8;
-    const mistLayerCount = 12;
+    const mistLayerCount = 11;
     const mistTint = this.plan.visualBiome === 'red'
       ? new THREE.Color(0x170302)
       : this.plan.visualBiome === 'white'
         ? new THREE.Color(0x071016)
         : new THREE.Color(0x100f08);
-    const mistMaterial = new THREE.ShaderMaterial({
+    const mistMaterial = createEpicFogMaterial({
       name: 'epic-endless-abyss-depth-mist-material',
-      transparent: true,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-      fog: false,
-      toneMapped: false,
-      uniforms: {
-        mistColor: { value: mistTint },
-        mistTop: { value: mistTop },
-        mistBottom: { value: mistBottom },
-      },
-      vertexShader: `
-        uniform float mistTop;
-        uniform float mistBottom;
-        varying vec2 vMistUv;
-        varying float vMistDepth;
-        void main() {
-          vMistUv = uv;
-          vMistDepth = clamp(
-            (mistTop - position.y) / max(0.001, mistTop - mistBottom),
-            0.0,
-            1.0
-          );
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 mistColor;
-        varying vec2 vMistUv;
-        varying float vMistDepth;
-        void main() {
-          vec2 centered = (vMistUv - 0.5) * 2.0;
-          float border = min(min(vMistUv.x, 1.0 - vMistUv.x), min(vMistUv.y, 1.0 - vMistUv.y));
-          float edgeFade = smoothstep(0.0, 0.16, border);
-          float centerDepth = 1.0 - smoothstep(0.12, 1.18, length(centered));
-          float broadWisp = 0.82 + 0.18 * sin(
-            centered.x * 5.4 + sin(centered.y * 4.1) + vMistDepth * 7.0
-          );
-          float alpha = edgeFade * broadWisp * mix(0.06, 0.42, vMistDepth) * mix(0.72, 1.0, centerDepth);
-          gl_FragColor = vec4(mistColor, alpha);
-        }
-      `,
+      color: mistTint,
+      nearY: mistTop,
+      farY: mistBottom,
+      nearOpacity: 0.025,
+      farOpacity: 0.38,
     });
     this.ownedMaterials.push(mistMaterial);
-    const mistCenter = rectCenter(voidBounds);
+    this.animatedFogMaterials.push(mistMaterial);
     const mistPlanes = Array.from({ length: mistLayerCount }, (_, index) => {
       const progress = index / (mistLayerCount - 1);
-      const inset = 0.8 + progress * 7.2;
+      const y = THREE.MathUtils.lerp(mistBottom, mistTop, progress);
+      const fogShell = getEpic1FunnelStoryBounds(feature, y);
+      const fogCenter = rectCenter(fogShell.voidBounds);
+      const inset = 0.42 + (1 - progress) * 0.52;
       return createEpicGlowPanel(
-        rectWidth(voidBounds) - inset,
-        rectDepth(voidBounds) - inset,
-        mistCenter.x,
-        THREE.MathUtils.lerp(mistBottom, mistTop, progress),
-        mistCenter.z,
+        rectWidth(fogShell.voidBounds) - inset,
+        rectDepth(fogShell.voidBounds) - inset,
+        fogCenter.x,
+        y,
+        fogCenter.z,
       );
     });
     const mist = makeMesh(
@@ -2279,19 +2423,29 @@ export class WorldView {
       group,
     );
     const fogCenter = rectCenter(voidBounds);
+    const fogTint = this.plan.visualBiome === 'red'
+      ? new THREE.Color(0x160302)
+      : this.plan.visualBiome === 'white'
+        ? new THREE.Color(0x071016)
+        : new THREE.Color(0x0f0e08);
     const makeVerticalFog = (
       name: string,
       layers: readonly { y: number; inset: number }[],
-      opacity: number,
+      nearY: number,
+      farY: number,
+      nearOpacity: number,
+      farOpacity: number,
     ): void => {
-      const material = this.materials.void.clone();
-      material.name = name;
-      material.transparent = true;
-      material.opacity = opacity;
-      material.depthWrite = false;
-      material.side = THREE.DoubleSide;
-      material.fog = false;
+      const material = createEpicFogMaterial({
+        name: `${name}-material`,
+        color: fogTint.clone(),
+        nearY,
+        farY,
+        nearOpacity,
+        farOpacity,
+      });
       this.ownedMaterials.push(material);
+      this.animatedFogMaterials.push(material);
       const geometry = layers.map(({ y, inset }) => createEpicGlowPanel(
         rectWidth(voidBounds) - inset * 2,
         rectDepth(voidBounds) - inset * 2,
@@ -2302,18 +2456,35 @@ export class WorldView {
       const fog = makeMesh(mergeOrSingle(geometry), material, name, group);
       if (fog) fog.renderOrder = 4;
     };
-    makeVerticalFog('epic-ascending-passages-upper-fog', [
-      { y: feature.height - 15, inset: 0 },
-      { y: feature.height - 9, inset: 0.55 },
-      { y: feature.height - 4, inset: 1.05 },
-      { y: feature.height - 0.4, inset: 1.45 },
-    ], 0.38);
-    makeVerticalFog('epic-ascending-passages-lower-fog', [
-      { y: minimumY + 11, inset: 0 },
-      { y: minimumY + 6, inset: 0.55 },
-      { y: minimumY + 2, inset: 1.05 },
-      { y: minimumY + 0.4, inset: 1.45 },
-    ], 0.34);
+    const fogLayerCount = 5;
+    makeVerticalFog(
+      'epic-ascending-passages-upper-fog',
+      Array.from({ length: fogLayerCount }, (_, index) => {
+        const progress = index / (fogLayerCount - 1);
+        return {
+          y: THREE.MathUtils.lerp(feature.height - 0.45, feature.height - 16, progress),
+          inset: THREE.MathUtils.lerp(1.15, 0.22, progress),
+        };
+      }),
+      feature.height - 16,
+      feature.height,
+      0.035,
+      0.29,
+    );
+    makeVerticalFog(
+      'epic-ascending-passages-lower-fog',
+      Array.from({ length: fogLayerCount }, (_, index) => {
+        const progress = index / (fogLayerCount - 1);
+        return {
+          y: THREE.MathUtils.lerp(minimumY + 0.45, minimumY + 13, progress),
+          inset: THREE.MathUtils.lerp(1.15, 0.22, progress),
+        };
+      }),
+      minimumY + 13,
+      minimumY,
+      0.03,
+      0.27,
+    );
   }
 
   private buildEpicImpossibleStairwell(
@@ -3555,8 +3726,10 @@ export class WorldView {
   }
 
   update(time: number, playerPosition: THREE.Vector3, delta = 1 / 60): void {
-    void time;
     void playerPosition;
+    for (const material of this.animatedFogMaterials) {
+      material.uniforms.fogTime!.value = time;
+    }
     this.doorLayer.update(delta);
   }
 
