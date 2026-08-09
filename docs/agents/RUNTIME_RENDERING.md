@@ -50,23 +50,28 @@ Pour `epic3`, seuls les voisins nord et sud restent montés pendant la visite.
   previews de couloir, tandis que toute partie accessible partage ses mesures
   avec les colliders ;
 - `epic1` rend quatre stories au-dessus et une profondeur finie de stories sous
-  le joueur, puis masque leur terminaison par des couches de brume à bords
-  fondus sans collision. L’étage actif ouvre ses couloirs jusqu’aux chunks
+  le joueur. Un plafond ferme la rangée supérieure ; une brume spatiale apparaît
+  après quelques rangées puis devient opaque bien avant la terminaison finie du
+  décor, sans collision ni bulle centrée sur le joueur. L’étage actif ouvre ses
+  couloirs à hauteur de bureau (2,66 m) jusqu’aux chunks
   voisins. Dans une fenêtre verticale de trois stories, seules quatre entrées
   latérales proches du point d’arrivée reçoivent une petite pièce, son plafond
-  et un luminaire ; les autres sont des panneaux en retrait. Les faces basses
-  des murs sont supprimées pour ne jamais se superposer à la corniche. Cette
+  et un luminaire ; les autres sont des panneaux en retrait. Les caps
+  horizontaux des murs sont supprimés pour ne jamais se superposer à
+  la corniche, au sol ou au plafond d’un couloir. Cette
   corniche s’arrête à la façade et seul un aperçu détaillé ajoute du sol derrière
   son ouverture. Les plafonds génériques de pit et de salle haute sont désactivés
   dans ce chunk : les rangées propres à `epic1` restent visibles vers le haut ;
-- `epic3` construit les cellules de labyrinthe complètes près du point
-  d’arrivée dans une fenêtre de quatre stories sous le joueur et trois stories
-  au-dessus. Dans cette même fenêtre, les entrées latéralement plus éloignées
-  montrent un vestibule court mais entièrement fermé (sol, plafond, côtés et
-  fond). Hors de cette fenêtre, un panneau en retrait ferme toute la largeur de
-  l’ouverture ; aucun trou ne doit révéler la coque extérieure. Aucun mesh de
-  plateforme ne longe le vide. Deux nappes de brume séparées masquent le haut
-  et le fond du gouffre ;
+- `epic3` relie toutes les ouvertures inspectables d’une même façade à une
+  galerie Backrooms continue. Des cloisons partent du mur extérieur mais
+  conservent une voie longitudinale libre près des portails : aucune entrée
+  accessible ne se termine en cul-de-sac. À l’étage zéro, seul le sol principal
+  rend la moquette ; le builder ne le duplique jamais dans la preview. Les caps
+  horizontaux des façades et cloisons sont retirés pour éviter le blinking aux
+  seuils. Les luminaires restent hors du volume du gouffre et sont ancrés sous
+  le plafond réel de la galerie. Hors de la fenêtre verticale inspectable, un
+  panneau en retrait ferme les ouvertures lointaines. Deux nappes de brume
+  séparées masquent le haut et le fond du gouffre ;
 - `epic5` reste sur le chemin de rendu ordinaire des murs et du plafond. Ses
   luminaires ont tous `ceilingY` sur le plafond réel, sans panneau lumineux
   décoratif ou hauteur aléatoire supplémentaire ;
@@ -74,7 +79,8 @@ Pour `epic3`, seuls les voisins nord et sud restent montés pendant la visite.
   inclinée texturée, jamais des marches remplies jusqu’au sol. Les murs d’une
   preview s’arrêtent à son vrai plafond ; la cage réelle habille seule le
   plénum, et les luminaires de preview doivent rester entièrement hors de
-  l’ouverture ;
+  l’ouverture. Un plancher percé conserve une sous-face visible depuis la story
+  inférieure et les ouvertures d’escalier ferment les quatre chants de dalle ;
 - plafonds bas des `squeeze-view` construits sur `passageRects` quand ce champ
   existe, afin qu’un passage en L ou en T ne couvre pas son rectangle englobant ;
 - éléments répétitifs en `InstancedMesh` ;
@@ -86,6 +92,13 @@ Pour `epic3`, seuls les voisins nord et sud restent montés pendant la visite.
 Chercher la méthode `build…` correspondant à la feature. Ne pas lire tout
 `WorldBuilder.ts`. Les helpers du début du fichier gèrent notamment les caps et
 la soustraction de rectangles.
+
+### Diagnostic visuel
+
+Dans les retours du projet, **blinking** signifie **z-fighting** : deux faces
+coplanaires (par exemple un cap de mur et un sol) alternent à l’écran lorsque la
+caméra bouge. La correction attendue est de retirer ou soustraire la face
+redondante, pas de lui appliquer un décalage arbitraire.
 
 ### Règles de rendu
 

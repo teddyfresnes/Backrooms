@@ -310,6 +310,13 @@ describe('PhysicsWorld chunk ownership', () => {
     expect(arrivalSurfaceY + 2 - arrivalHit!.timeOfImpact).toBeCloseTo(arrivalSurfaceY, 3);
 
     physics.teleport(feature.destination);
+    for (let index = 0; index < 175; index += 1) {
+      physics.move({ x: 0.08, y: -0.015, z: 0 });
+    }
+    expect(physics.getPosition().x).toBeGreaterThan(12.5);
+    expect(physics.getPosition().y).toBeCloseTo(feature.destination.y, 1);
+
+    physics.teleport(feature.destination);
     for (let index = 0; index < 140; index += 1) {
       physics.move({ x: 0, y: -0.015, z: 0.04 });
     }

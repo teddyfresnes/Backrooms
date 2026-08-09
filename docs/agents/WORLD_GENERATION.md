@@ -125,7 +125,9 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
   atterrir. Seuls cette corniche, le court aperçu des couloirs et leurs murs ont
   des colliders sur l’étage inférieur préchargé.
 - Sur l’étage actif d’`epic1`, `getEpicAbyssThroughPassageLayout` prolonge chaque
-  entrée jusqu’à une porte canonique identique dans le chunk voisin. Les rares
+  entrée jusqu’à une porte canonique identique dans le chunk voisin. Ces
+  passages utilisent la hauteur de bureau partagée `EPIC1_PORTAL_HEIGHT`
+  (2,66 m), y compris pour les murs et plafonds physiques. Les rares
   entrées proches prévisualisées utilisent `getEpicAbyssRoomPreviewLayout` pour
   montrer une petite pièce fermée ; les entrées lointaines restent de simples
   panneaux en retrait. La couronne s’arrête à `passageFacadeBounds` ; au niveau
@@ -133,10 +135,13 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
   les niveaux prévisualisés seuls les aperçus détaillés reçoivent un sol.
 - `epic3` est une faille longue de 220 m : `passageFacadeBounds` place deux
   façades intérieures symétriques et `voidBounds` les rejoint, sans corniche
-  longitudinale ni rebord aux extrémités. Les seuls sols sont ceux des alcôves
-  indépendantes derrière les portails. Chaque story réutilise le même gabarit
-  face à face, y compris sous l’étage zéro ; `getEpic3PassagePreviewLayout`
-  ferme chaque cul-de-sac, virage ou embranchement sans galerie commune.
+  longitudinale ni rebord aux extrémités. Derrière chaque façade,
+  `getEpic3BackroomsGalleryLayout` construit une galerie commune de 8,5 m de
+  profondeur. Toutes les entrées d’une rangée partagent son sol praticable ;
+  les cloisons intermédiaires laissent une voie continue près de la façade.
+  L’étage zéro et l’étage d’arrivée publient les mêmes sols et murs dans les
+  colliders. Les luminaires de ces deux rangées sont obligatoirement hors de
+  `voidBounds` et utilisent le plafond de galerie à 3,35 m.
 - `epic4` dérive ses volées, paliers, ouverture sommitale et petit labyrinthe
   supérieur de `getEpicStairwellLayout`; le rendu et Rapier consomment ce même
   tracé. `applyEpicStructure` conserve le labyrinthe ordinaire hors de la zone

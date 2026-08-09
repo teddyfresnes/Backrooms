@@ -75,6 +75,15 @@ leur `kind`.
 - construire les faces réellement visibles depuis les étages adjacents ;
 - libérer toute ressource possédée dans `dispose()`.
 
+### « Blinking » dans les retours visuels
+
+Dans ce projet, **blinking** (ou texture qui clignote) désigne un **z-fighting** :
+deux faces coplanaires se disputent le même pixel et alternent quand la caméra
+bouge. L’exemple canonique est le cap horizontal d’un mur posé à `y = 0`
+superposé à la moquette d’une entrée d’`epic1`. Corriger la géométrie à la source
+en supprimant ou en découpant la face redondante ; ne pas masquer le problème
+avec un petit décalage arbitraire.
+
 ## 6. Tester au niveau du contrat
 
 Ajouter seulement les tests qui protègent le risque introduit :

@@ -28,6 +28,7 @@ import {
   worldMaxPitStories,
 } from './generateWorld';
 import {
+  EPIC1_PORTAL_HEIGHT,
   EPIC_STRUCTURE_DEFINITIONS,
   epicStructureIndexForCoord,
   getEpicStairwellLayout,
@@ -348,10 +349,19 @@ describe('InfiniteWorld chunk contracts', () => {
         wall.id.includes('/biome-transition-west-') ||
         wall.id.includes('/biome-transition-east-')
       )).toBe(false);
-      expect(plan.floorRects.every((floor) => rectWidth(floor) < 10)).toBe(true);
+      expect(plan.floorRects).toHaveLength(2);
+      expect(plan.floorRects.every((floor) =>
+        Math.abs(rectWidth(floor) - rectWidth(marker.bounds)) < 1e-5
+      )).toBe(true);
       expect(plan.colliders.some((collider) =>
         collider.id.includes('gallery-back') || collider.id.includes('ledge-floor')
       )).toBe(false);
+      expect(plan.colliders.some((collider) =>
+        collider.id.includes('epic3-ground-gallery-wall-')
+      )).toBe(true);
+      expect(plan.lights.every((light) =>
+        !marker.voidBounds || !containsPoint(marker.voidBounds, light)
+      )).toBe(true);
     });
 
     it('makes epic1 a 90% abyss with continuous story ledges and segmented entrances', () => {
@@ -427,6 +437,13 @@ describe('InfiniteWorld chunk contracts', () => {
         collider.id.includes('/epic1-passage-floor-')
       );
       expect(passageFloorColliders).toHaveLength(0);
+      const passageWallColliders = plan.colliders.filter((collider) =>
+        collider.id.includes('/epic1-passage-') && collider.kind === 'wall'
+      );
+      expect(passageWallColliders.length).toBeGreaterThan(0);
+      expect(passageWallColliders.every((collider) =>
+        Math.abs(collider.center.y + collider.halfExtents.y - EPIC1_PORTAL_HEIGHT) < 1e-5
+      )).toBe(true);
 
       const shaftWalls = plan.colliders.filter((collider) =>
         collider.id.includes('/epic1-shaft-wall-')

@@ -25,13 +25,12 @@ import type {
   SurfaceStyle,
 } from '../world/types';
 import {
+  EPIC1_PORTAL_HEIGHT,
   getEpicAbyssBottom,
   getEpicAbyssPassageLayout,
   getEpicAbyssRoomPreviewLayout,
   getEpicAbyssThroughPassageLayout,
-  getDetailedEpic3Passages,
-  getEpic3PassagePreviewLayout,
-  getEpic3ShallowPreviewLayout,
+  getEpic3BackroomsGalleryLayout,
   getEpicStairRoomWalls,
   getEpicStairwellLayout,
 } from '../world/EpicStructures';
@@ -883,13 +882,13 @@ const createEpicPassagePreviewPanel = (
       : passage.side === 'west'
         ? facade.minX
         : facade.maxX;
-  const geometry = new THREE.PlaneGeometry(passage.width, 3.35);
+  const geometry = new THREE.PlaneGeometry(passage.width, EPIC1_PORTAL_HEIGHT);
   const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
   for (let index = 0; index < uv.count; index += 1) {
     uv.setXY(
       index,
       (passage.along + (uv.getX(index) - 0.5) * passage.width) / 2.05,
-      (bottom + uv.getY(index) * 3.35) / 2.45,
+      (bottom + uv.getY(index) * EPIC1_PORTAL_HEIGHT) / 2.45,
     );
   }
   if (passage.side === 'south') geometry.rotateY(Math.PI);
@@ -899,7 +898,7 @@ const createEpicPassagePreviewPanel = (
     passage.side === 'west' || passage.side === 'east'
       ? fixed + outward * recess
       : passage.along,
-    bottom + 3.35 * 0.5,
+    bottom + EPIC1_PORTAL_HEIGHT * 0.5,
     passage.side === 'north' || passage.side === 'south'
       ? fixed + outward * recess
       : passage.along,
@@ -963,12 +962,12 @@ const createEpicFacadeBandGeometries = (
         horizontal ? fixed : along,
         tint,
       );
-      geometries.push(removeFloorCaps ? removeBottomCap(geometry) : geometry);
+      geometries.push(removeFloorCaps ? removeHorizontalCaps(geometry) : geometry);
     }
     const lintelHeight = bandHeight - portalHeight;
     if (lintelHeight <= 0.04) continue;
     for (const passage of sidePassages) {
-      geometries.push(createTexturedBoxGeometry(
+      const lintel = createTexturedBoxGeometry(
         horizontal ? passage.width : thickness,
         lintelHeight,
         horizontal ? thickness : passage.width,
@@ -976,7 +975,8 @@ const createEpicFacadeBandGeometries = (
         bottom + portalHeight,
         horizontal ? fixed : passage.along,
         Math.min(1, tint + 0.035),
-      ));
+      );
+      geometries.push(removeFloorCaps ? removeHorizontalCaps(lintel) : lintel);
     }
   }
   return geometries;
@@ -1009,7 +1009,7 @@ const createEpicCorridorPreviewGeometries = (
   return {
     floors: layout.floorRects.map((rect) => boxForRect(rect, 0.2, floorY - 0.2, 0.86)),
     walls: layout.wallRects.map((rect) =>
-      removeBottomCap(boxForRect(rect, portalHeight, floorY, 0.9))
+      removeHorizontalCaps(boxForRect(rect, portalHeight, floorY, 0.9))
     ),
     ceilings: layout.ceilingRects.map((rect) =>
       boxForRect(rect, 0.18, floorY + portalHeight, 0.91)
@@ -1325,6 +1325,10 @@ export class WorldView {
     for (const wall of this.plan.walls) {
       const isShaftLining = wallIsShaftLining(wall);
       const isLowerStoreyWall = wall.bottom < -INFINITE_STORY_PITCH * 0.55;
+      const restsOnWalkableFloor =
+        Math.abs(wall.bottom) < 0.12 ||
+        Math.abs(wall.bottom + INFINITE_STORY_PITCH) < 0.12 ||
+        districtFloorElevations.some((elevation) => Math.abs(wall.bottom - elevation) < 0.12);
       const geometry = createWallGeometry(
         wall,
         wallNeedsOpenVerticalShell(wall) ||
@@ -1341,6 +1345,7 @@ export class WorldView {
           ),
         wallpaperPhaseForWall(this.plan.seed, wall),
       );
+      if (restsOnWalkableFloor) removeBottomCap(geometry);
       const wallMaterial = wall.kind === 'plaster' ? this.materials.plaster : this.materials.wall;
       if (isShaftLining) {
         shaftCarpetGeometries.push(geometry);
@@ -1350,10 +1355,6 @@ export class WorldView {
         (wall.kind === 'plaster' ? plasterGeometries : wallGeometries).push(geometry);
       }
 
-      const restsOnWalkableFloor =
-        Math.abs(wall.bottom) < 0.12 ||
-        Math.abs(wall.bottom + INFINITE_STORY_PITCH) < 0.12 ||
-        districtFloorElevations.some((elevation) => Math.abs(wall.bottom - elevation) < 0.12);
       const halfLength = wall.length * 0.5;
       const halfThickness = wall.thickness * 0.5;
       const wallBounds: Rect = wall.orientation === 'x'
@@ -1537,6 +1538,16 @@ export class WorldView {
     floor.matrixAutoUpdate = false;
     floor.updateMatrix();
     this.group.add(floor);
+    if ((this.plan.floorOpenings?.length ?? 0) > 0) {
+      makeMesh(
+        mergeOrSingle(this.plan.floorRects.map((rect) =>
+          createCeilingGeometry(rect, -0.12, this.surfaceStyle.ceilingPatternScale)
+        )),
+        this.lowerMaterials.ceiling,
+        'current-floor-structural-underside',
+        this.group,
+      );
+    }
 
     const worldBounds: Rect = {
       minX: -this.plan.size * 0.5,
@@ -1898,7 +1909,7 @@ export class WorldView {
         level.passages,
         level.y,
         INFINITE_STORY_PITCH,
-        3.35,
+        EPIC1_PORTAL_HEIGHT,
         ['north', 'south', 'west', 'east'],
         tint,
         true,
@@ -1940,7 +1951,7 @@ export class WorldView {
           passage,
           facadeBounds,
           level.y,
-          3.35,
+          EPIC1_PORTAL_HEIGHT,
           layout,
         );
         (level.y === 0 ? currentCorridorWalls : lowerCorridorWalls).push(...preview.walls);
@@ -1970,7 +1981,7 @@ export class WorldView {
           horizontal ? Math.min(2.1, passage.width * 0.48) : 0.42,
           horizontal ? 0.42 : Math.min(2.1, passage.width * 0.48),
           horizontal ? passage.along : lightFixed,
-          level.y + 3.325,
+          level.y + EPIC1_PORTAL_HEIGHT - 0.025,
           horizontal ? lightFixed : passage.along,
         ));
       }
@@ -2035,6 +2046,21 @@ export class WorldView {
       'epic-endless-abyss-corridor-lights',
       group,
     );
+    const topLevelY = Math.max(...feature.passageLevels.map((level) => level.y));
+    const topCeilingY = topLevelY + INFINITE_STORY_PITCH;
+    makeMesh(
+      createCeilingGeometry(
+        feature.bounds,
+        topCeilingY,
+        distantCeilingPatternScale(this.surfaceStyle.ceilingPatternScale, topCeilingY),
+      ),
+      this.distantCeilingMaterial,
+      'epic-endless-abyss-top-ceiling',
+      group,
+    );
+    const mistTop = -3.75 * INFINITE_STORY_PITCH;
+    const mistBottom = abyssBottom - 8;
+    const mistLayerCount = 12;
     const mistTint = this.plan.visualBiome === 'red'
       ? new THREE.Color(0x170302)
       : this.plan.visualBiome === 'white'
@@ -2049,13 +2075,21 @@ export class WorldView {
       toneMapped: false,
       uniforms: {
         mistColor: { value: mistTint },
+        mistTop: { value: mistTop },
+        mistBottom: { value: mistBottom },
       },
       vertexShader: `
+        uniform float mistTop;
+        uniform float mistBottom;
         varying vec2 vMistUv;
         varying float vMistDepth;
         void main() {
           vMistUv = uv;
-          vMistDepth = clamp((-position.y - 48.0) / 49.0, 0.0, 1.0);
+          vMistDepth = clamp(
+            (mistTop - position.y) / max(0.001, mistTop - mistBottom),
+            0.0,
+            1.0
+          );
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
@@ -2071,16 +2105,13 @@ export class WorldView {
           float broadWisp = 0.82 + 0.18 * sin(
             centered.x * 5.4 + sin(centered.y * 4.1) + vMistDepth * 7.0
           );
-          float alpha = edgeFade * broadWisp * mix(0.045, 0.16, vMistDepth) * mix(0.72, 1.0, centerDepth);
+          float alpha = edgeFade * broadWisp * mix(0.06, 0.42, vMistDepth) * mix(0.72, 1.0, centerDepth);
           gl_FragColor = vec4(mistColor, alpha);
         }
       `,
     });
     this.ownedMaterials.push(mistMaterial);
     const mistCenter = rectCenter(voidBounds);
-    const mistTop = -9.25 * INFINITE_STORY_PITCH;
-    const mistBottom = abyssBottom - 5;
-    const mistLayerCount = 10;
     const mistPlanes = Array.from({ length: mistLayerCount }, (_, index) => {
       const progress = index / (mistLayerCount - 1);
       const inset = 0.8 + progress * 7.2;
@@ -2115,8 +2146,11 @@ export class WorldView {
     const previewCeilings: THREE.BufferGeometry[] = [];
     const entryY = (feature.entryLevel ?? 0) * INFINITE_STORY_PITCH;
     const nearbyPreviewBand = (y: number): boolean =>
-      y >= entryY - INFINITE_STORY_PITCH * 4 - 0.01 &&
-      y <= entryY + INFINITE_STORY_PITCH * 3 + 0.01;
+      Math.abs(y) < 0.01 ||
+      (
+        y >= entryY - INFINITE_STORY_PITCH * 4 - 0.01 &&
+        y <= entryY + INFINITE_STORY_PITCH * 3 + 0.01
+      );
     const boxForRect = (
       rect: Rect,
       height: number,
@@ -2145,53 +2179,42 @@ export class WorldView {
         3.35,
         ['north', 'south'],
         0.84 + (rowIndex % 4) * 0.025,
+        true,
       ));
-      const detailedPassages = nearbyPreviewBand(level.y)
-        ? getDetailedEpic3Passages(level.passages, feature.destination.x)
-        : [];
-      const detailedSet = new Set(detailedPassages);
-      for (const passage of detailedPassages) {
-          const layout = getEpic3PassagePreviewLayout(
-            passage,
+      if (nearbyPreviewBand(level.y)) {
+        for (const side of ['north', 'south'] as const) {
+          const layout = getEpic3BackroomsGalleryLayout(
+            level.passages,
             feature.bounds,
             facadeBounds,
+            side,
           );
-          previewFloors.push(...layout.floorRects.map((rect) =>
-            boxForRect(rect, 0.2, level.y - 0.2, 0.86)
-          ));
+          if (Math.abs(level.y) > 0.01) {
+            previewFloors.push(...layout.floorRects.map((rect) =>
+              boxForRect(rect, 0.2, level.y - 0.2, 0.86)
+            ));
+          }
           previewWalls.push(...layout.wallRects.map((rect) =>
-            removeBottomCap(boxForRect(rect, 3.35, level.y, 0.88))
+            removeHorizontalCaps(boxForRect(rect, 3.35, level.y, 0.88))
           ));
           previewCeilings.push(...layout.ceilingRects.map((rect) =>
             boxForRect(rect, 0.18, level.y + 3.35, 0.91)
           ));
+        }
+        continue;
       }
       for (const passage of level.passages) {
-          if (detailedSet.has(passage)) continue;
-          if (nearbyPreviewBand(level.y)) {
-            const layout = getEpic3ShallowPreviewLayout(passage, facadeBounds);
-            previewFloors.push(...layout.floorRects.map((rect) =>
-              boxForRect(rect, 0.2, level.y - 0.2, 0.86)
-            ));
-            previewWalls.push(...layout.wallRects.map((rect) =>
-              removeBottomCap(boxForRect(rect, 3.35, level.y, 0.88))
-            ));
-            previewCeilings.push(...layout.ceilingRects.map((rect) =>
-              boxForRect(rect, 0.18, level.y + 3.35, 0.91)
-            ));
-            continue;
-          }
-          const outward = passage.side === 'north' ? -1 : 1;
-          const fixed = passage.side === 'north' ? facadeBounds.minZ : facadeBounds.maxZ;
-          const capCenterZ = fixed + outward * 1.15;
-          distantPreviewCaps.push(createEpicVerticalPreviewPanel(
-            passage.width,
-            3.35,
-            passage.along,
-            level.y,
-            capCenterZ,
-            passage.side === 'north',
-          ));
+        const outward = passage.side === 'north' ? -1 : 1;
+        const fixed = passage.side === 'north' ? facadeBounds.minZ : facadeBounds.maxZ;
+        const capCenterZ = fixed + outward * 1.15;
+        distantPreviewCaps.push(createEpicVerticalPreviewPanel(
+          passage.width,
+          3.35,
+          passage.along,
+          level.y,
+          capCenterZ,
+          passage.side === 'north',
+        ));
       }
     }
     const minimumY = Math.min(...feature.passageLevels.map((level) => level.y));
@@ -2203,6 +2226,7 @@ export class WorldView {
       0,
       ['west', 'east'],
       0.88,
+      true,
     ));
     facades.push(...createEpicFacadeBandGeometries(
       feature.bounds,
@@ -2212,6 +2236,7 @@ export class WorldView {
       3.35,
       ['west', 'east'],
       0.88,
+      true,
     ));
     facades.push(...createEpicFacadeBandGeometries(
       feature.bounds,
@@ -2221,6 +2246,7 @@ export class WorldView {
       0,
       ['west', 'east'],
       0.88,
+      true,
     ));
     makeMesh(
       mergeOrSingle(facades),
@@ -2984,6 +3010,7 @@ export class WorldView {
     const cageGeometries: THREE.BufferGeometry[] = [];
     const upperFloorGeometries: THREE.BufferGeometry[] = [];
     const upperUndersideGeometries: THREE.BufferGeometry[] = [];
+    const upperFloorFasciaGeometries: THREE.BufferGeometry[] = [];
     const upperWallGeometries: THREE.BufferGeometry[] = [];
     const upperCeilingGeometries: THREE.BufferGeometry[] = [];
     const upperLightGeometries: THREE.BufferGeometry[] = [];
@@ -2991,6 +3018,7 @@ export class WorldView {
     const lowerFloorGeometries: THREE.BufferGeometry[] = [];
     const lowerWallGeometries: THREE.BufferGeometry[] = [];
     const lowerCeilingGeometries: THREE.BufferGeometry[] = [];
+    const lowerArrivalFasciaGeometries: THREE.BufferGeometry[] = [];
     const lowerLightGeometries: THREE.BufferGeometry[] = [];
     const lowerLightFrameGeometries: THREE.BufferGeometry[] = [];
     const worldHalf = this.plan.size * 0.5;
@@ -3130,6 +3158,12 @@ export class WorldView {
             this.surfaceStyle.ceilingPatternScale,
           )
         ));
+        upperFloorFasciaGeometries.push(createRectFasciaGeometry(
+          opening,
+          previewFloorY - 0.12,
+          previewFloorY,
+          this.surfaceStyle.wallPatternScale,
+        ));
         // The real cage already lines the shaft through the plenum. Preview
         // walls begin on the next floor; extending this large rectangle down
         // to the current ceiling produced the floating blank panel seen from
@@ -3184,6 +3218,12 @@ export class WorldView {
             this.surfaceStyle.ceilingPatternScale,
           )
         ));
+        lowerArrivalFasciaGeometries.push(createRectFasciaGeometry(
+          opening,
+          baseY + STAIR_STORY_RISE - 0.12,
+          baseY + STAIR_STORY_RISE,
+          this.surfaceStyle.wallPatternScale,
+        ));
         addPreviewLights(
           previewZone,
           previewCeilingY,
@@ -3222,6 +3262,12 @@ export class WorldView {
       mergeOrSingle(upperUndersideGeometries),
       this.previewMaterials.ceiling,
       'upper-stair-preview-floor-underside',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(upperFloorFasciaGeometries),
+      this.previewMaterials.wall,
+      'upper-stair-preview-floor-fascias',
       this.group,
     );
     makeMesh(
@@ -3264,6 +3310,12 @@ export class WorldView {
       mergeOrSingle(lowerCeilingGeometries),
       this.previewMaterials.ceiling,
       'lower-stair-preview-ceiling',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(lowerArrivalFasciaGeometries),
+      this.lowerMaterials.wall,
+      'lower-stair-arrival-floor-fascias',
       this.group,
     );
     makeMesh(
