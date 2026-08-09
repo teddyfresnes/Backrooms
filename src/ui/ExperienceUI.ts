@@ -347,6 +347,10 @@ export class ExperienceUI {
     this.fallFlash.classList.add('visible');
   }
 
+  showConsoleMessage(message: ConsoleMessage): void {
+    this.appendMessages([message]);
+  }
+
   showError(message: string): void {
     const error = this.query('[data-ui="error"]');
     error.textContent = message;

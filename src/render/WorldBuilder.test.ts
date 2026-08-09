@@ -10,8 +10,19 @@ import type {
   Rect,
   WorldPlan,
 } from '../world/types';
-import { rectCenter, rectWidth } from '../world/types';
-import { applyEpicStructure, getEpicGroundObstacles } from '../world/EpicStructures';
+import { rectCenter, rectDepth, rectWidth } from '../world/types';
+import {
+  applyEpicStructure,
+  getEpicAbyssPassageLayout,
+  getEpicAbyssRoomPreviewLayout,
+  getDetailedEpic3Passages,
+  getEpic3PassagePreviewLayout,
+  getEpic3ShallowPreviewLayout,
+  getEpicConcourseWalls,
+  getEpicGroundObstacles,
+  getEpicStairRoomWalls,
+  getEpicStairwellLayout,
+} from '../world/EpicStructures';
 
 const createTestMaterials = (): MaterialSet => {
   const wall = new THREE.MeshStandardMaterial();
@@ -48,6 +59,21 @@ const horizontalQuadBounds = (geometry: THREE.BufferGeometry): Rect[] => {
     });
   }
   return bounds;
+};
+
+const downwardTriangleHeights = (geometry: THREE.BufferGeometry): number[] => {
+  const positions = geometry.getAttribute('position');
+  const normals = geometry.getAttribute('normal');
+  const index = geometry.getIndex();
+  if (!index) return [];
+  const heights: number[] = [];
+  for (let offset = 0; offset < index.count; offset += 3) {
+    const indices = [index.getX(offset), index.getX(offset + 1), index.getX(offset + 2)];
+    if (indices.every((vertex) => normals.getY(vertex) < -0.9)) {
+      heights.push(indices.reduce((sum, vertex) => sum + positions.getY(vertex), 0) / 3);
+    }
+  }
+  return heights;
 };
 
 const vertexUvsAt = (
@@ -388,6 +414,20 @@ describe('open pit shaft rendering', () => {
           collision: true,
           kind: 'wallpaper',
         },
+        {
+          id: 'inherited-shaft-enclosure-0-east',
+          roomId: 'pit-room',
+          x: 4,
+          z: 0,
+          length: 8,
+          orientation: 'z',
+          bottom: 0,
+          height: 2.74,
+          thickness: 0.24,
+          tint: 1,
+          collision: true,
+          kind: 'wallpaper',
+        },
       ],
       columns: [],
       solidMasses: [],
@@ -403,6 +443,7 @@ describe('open pit shaft rendering', () => {
     const view = new WorldView(plan, materials);
     const firstShaft = view.group.getObjectByName('open-pit-shaft-walls') as THREE.Mesh;
     const throughShaft = view.group.getObjectByName('carpet-lined-through-shaft-walls') as THREE.Mesh;
+    const enclosureWalls = view.group.getObjectByName('merged-wallpaper-walls') as THREE.Mesh;
     const lowerWalls = view.group.getObjectByName('lower-storey-wallpaper-walls') as THREE.Mesh;
     const lowerFloor = view.group.getObjectByName('lower-carpet-deep-pit') as THREE.Mesh;
 
@@ -420,6 +461,11 @@ describe('open pit shaft rendering', () => {
     expect(lowerWallMaterial.lightMap).toBeNull();
     expect(lowerWallMaterial.emissive.getHex()).toBe(materials.wall.emissive.getHex());
     expect(lowerWallMaterial.emissiveIntensity).toBeCloseTo(materials.wall.emissiveIntensity);
+    const enclosureMaterial = enclosureWalls.material as THREE.MeshStandardMaterial;
+    expect(enclosureMaterial.map).toBe(wallpaperTexture);
+    expect(enclosureMaterial.map).not.toBe(carpetTexture);
+    expect(throughShaft.geometry.getAttribute('position').count).toBe(24);
+    expect(enclosureWalls.geometry.getAttribute('position').count).toBe(24);
     const shaftUvs = firstShaft.geometry.getAttribute('uv');
     expect(shaftUvs).toBeDefined();
     expect(shaftUvs.count).toBeGreaterThan(0);
@@ -559,6 +605,9 @@ describe('open pit shaft rendering', () => {
       spawn: { x: 0, y: 0.9, z: 0 },
     };
     const materials = createTestMaterials();
+    const ceilingMap = new THREE.DataTexture(Uint8Array.of(210, 198, 112, 255), 1, 1);
+    ceilingMap.needsUpdate = true;
+    materials.ceiling.map = ceilingMap;
     const whitePixel = Uint8Array.of(255, 255, 255, 255);
     const view = new WorldView(plan, materials, {
       bakedLightMaps: {
@@ -567,6 +616,18 @@ describe('open pit shaft rendering', () => {
         ceiling: whitePixel,
       },
     });
+    const elevatedCeiling = view.group.getObjectByName(
+      'elevated-atrium-ceilings',
+    ) as THREE.Mesh;
+    const elevatedMaterial = elevatedCeiling.material as THREE.MeshStandardMaterial;
+    expect(elevatedMaterial.name).toBe('elevated-tiled-ceiling');
+    expect(elevatedMaterial.map).toBe(ceilingMap);
+    expect(elevatedMaterial.emissiveMap).toBe(ceilingMap);
+    expect(elevatedMaterial.lightMap).toBeNull();
+    expect(elevatedMaterial.emissive.getHex()).not.toBe(0);
+    expect(elevatedMaterial.emissiveIntensity).toBeGreaterThanOrEqual(0.22);
+    expect(elevatedMaterial.side).toBe(THREE.DoubleSide);
+    expect(elevatedMaterial.fog).toBe(false);
     const raycaster = new THREE.Raycaster();
     raycaster.far = 2.2;
     raycaster.set(new THREE.Vector3(0, 3, 0), new THREE.Vector3(0, 1, 0));
@@ -577,6 +638,61 @@ describe('open pit shaft rendering', () => {
     expect(raycaster.intersectObject(view.group, true)
       .some((hit) => hit.object.name === 'elevated-atrium-ceilings')).toBe(true);
 
+    view.dispose();
+    ceilingMap.dispose();
+    Object.values(materials).forEach((material) => material.dispose());
+  });
+
+  it('keeps textured end caps on fragmented upper shells', () => {
+    const plan: WorldPlan = {
+      version: 1,
+      seed: 'UPPER-SHELL-END-CAP-AUDIT',
+      size: 12,
+      wallHeight: 2.74,
+      rooms: [{
+        id: 'high-room',
+        bounds: { minX: -3, maxX: 3, minZ: -3, maxZ: 3 },
+        kind: 'office',
+        level: 0,
+        ceilingHeight: 4.8,
+        detailDensity: 0,
+      }],
+      walls: [{
+        id: 'upper-fragment',
+        roomId: 'high-room',
+        x: 0,
+        z: 0,
+        length: 2,
+        orientation: 'x',
+        bottom: 2.746,
+        height: 2.06,
+        thickness: 0.22,
+        tint: 1,
+        collision: true,
+        kind: 'wallpaper',
+        detail: 'upper-shell',
+      }],
+      columns: [],
+      solidMasses: [],
+      lights: [],
+      missingCeilingTiles: [],
+      features: [],
+      detailSockets: [],
+      colliders: [],
+      floorRects: [{ minX: -6, maxX: 6, minZ: -6, maxZ: 6 }],
+      floorOpenings: [],
+      spawn: { x: 0, y: 0.865, z: 0 },
+    };
+    const materials = createTestMaterials();
+    const view = new WorldView(plan, materials);
+    const walls = view.group.getObjectByName('merged-wallpaper-walls') as THREE.Mesh;
+    const ray = new THREE.Raycaster(
+      new THREE.Vector3(1.5, 3.5, 0),
+      new THREE.Vector3(-1, 0, 0),
+      0,
+      1,
+    );
+    expect(ray.intersectObject(walls).length).toBeGreaterThan(0);
     view.dispose();
     Object.values(materials).forEach((material) => material.dispose());
   });
@@ -676,7 +792,7 @@ describe('baseboard suppression', () => {
 });
 
 describe('high-ceiling passage closures', () => {
-  it('keeps a textured underside on unsupported upper portal lintels', () => {
+  it('keeps textured undersides and closes the ends of upper portal fragments', () => {
     const plan: WorldPlan = {
       version: 1,
       seed: 'HIGH-PORTAL-SOFFIT-RENDER-AUDIT',
@@ -757,10 +873,9 @@ describe('high-ceiling passage closures', () => {
     const wallNormals = walls.geometry.getAttribute('normal');
     expect(wallIndex).not.toBeNull();
     if (wallIndex) {
-      for (let offset = 0; offset < wallIndex.count; offset += 3) {
-        const first = wallIndex.getX(offset);
-        expect(Math.abs(wallNormals.getX(first))).toBeLessThan(0.5);
-      }
+      expect(Array.from({ length: wallIndex.count }, (_, offset) =>
+        Math.abs(wallNormals.getX(wallIndex.getX(offset)))
+      ).some((normalX) => normalX > 0.9)).toBe(true);
     }
 
     view.dispose();
@@ -1033,13 +1148,24 @@ describe('multi-room elevation districts', () => {
     expect(floors.geometry.boundingBox?.max.x).toBeGreaterThan(9.01);
     expect(retainingWalls.geometry.boundingBox?.min.y).toBeCloseTo(-1.25, 3);
     expect(retainingWalls.geometry.boundingBox?.max.y).toBeCloseTo(0, 3);
+    const retainingNormals = retainingWalls.geometry.getAttribute('normal');
+    for (let index = 0; index < retainingNormals.count; index += 1) {
+      expect(Math.abs(retainingNormals.getY(index))).toBeLessThan(1e-6);
+    }
     const retainingWallTopRay = new THREE.Raycaster(
       new THREE.Vector3(7.5, 1, ramp.bounds.maxZ),
       new THREE.Vector3(0, -1, 0),
       0,
       2,
     );
-    expect(retainingWallTopRay.intersectObject(retainingWalls).length).toBeGreaterThan(0);
+    expect(retainingWallTopRay.intersectObject(retainingWalls)).toHaveLength(0);
+    const retainingWallSideRay = new THREE.Raycaster(
+      new THREE.Vector3(7.5, -0.3, ramp.bounds.maxZ + 1),
+      new THREE.Vector3(0, 0, -1),
+      0,
+      2,
+    );
+    expect(retainingWallSideRay.intersectObject(retainingWalls).length).toBeGreaterThan(0);
     expect(supportWalls.geometry.boundingBox?.min.y).toBeLessThan(-1.25);
     expect(supportWalls.geometry.boundingBox?.max.y).toBeGreaterThan(0);
     expect(supportWalls.geometry.boundingBox?.min.x).toBeCloseTo(-8, 3);
@@ -1097,7 +1223,14 @@ describe('multi-room elevation districts', () => {
       0,
       2,
     );
-    expect(raisedRetainingWallTopRay.intersectObject(raisedRetainingWalls).length)
+    expect(raisedRetainingWallTopRay.intersectObject(raisedRetainingWalls)).toHaveLength(0);
+    const raisedRetainingWallSideRay = new THREE.Raycaster(
+      new THREE.Vector3(7.5, 0.3, ramp.bounds.maxZ + 1),
+      new THREE.Vector3(0, 0, -1),
+      0,
+      2,
+    );
+    expect(raisedRetainingWallSideRay.intersectObject(raisedRetainingWalls).length)
       .toBeGreaterThan(0);
     const underRampRay = new THREE.Raycaster(
       new THREE.Vector3(8, 0.6, 0),
@@ -1234,8 +1367,14 @@ describe('crouch passages and inter-storey stairs', () => {
           bounds: { minX: -8, maxX: -3, minZ: -2, maxZ: 2 },
           axis: 'x',
           apertureWidth: 1.2,
-          layout: 'dead-end',
-          exitCount: 0,
+          passageStyle: 'wall-breach',
+          breachProfile: 'flush',
+          passageRects: [
+            { minX: -8, maxX: -5, minZ: -0.75, maxZ: 0.75 },
+            { minX: -5, maxX: -3, minZ: -2, maxZ: 2 },
+          ],
+          layout: 'left-turn',
+          exitCount: 1,
           clearanceHeight: 1.4,
           holes: [passageHole],
         },
@@ -1271,6 +1410,9 @@ describe('crouch passages and inter-storey stairs', () => {
       spawn: { x: -5, y: 0.865, z: 0 },
     };
     const materials = createTestMaterials();
+    const stairCeilingTexture = new THREE.DataTexture(Uint8Array.of(120, 110, 60, 255), 1, 1);
+    stairCeilingTexture.needsUpdate = true;
+    materials.ceiling.map = stairCeilingTexture;
     const whitePixel = Uint8Array.of(255, 255, 255, 255);
     const view = new WorldView(plan, materials, {
       bakedLightMaps: {
@@ -1292,6 +1434,9 @@ describe('crouch passages and inter-storey stairs', () => {
     ) as THREE.Mesh;
     const stairs = view.group.getObjectByName('inter-storey-stair-flights') as THREE.Mesh;
     const stairBodies = view.group.getObjectByName('inter-storey-stair-bodies') as THREE.Mesh;
+    const stairUndersides = view.group.getObjectByName(
+      'inter-storey-stair-textured-undersides',
+    ) as THREE.Mesh;
     const stairCage = view.group.getObjectByName('inter-storey-stair-cages') as THREE.Mesh;
     const stairLights = view.group.getObjectByName('inter-storey-stair-lights');
     const upperFloor = view.group.getObjectByName('upper-stair-preview-floor') as THREE.Mesh;
@@ -1304,6 +1449,9 @@ describe('crouch passages and inter-storey stairs', () => {
     const upperCeiling = view.group.getObjectByName(
       'upper-stair-preview-ceiling',
     ) as THREE.Mesh;
+    const upperLightFrames = view.group.getObjectByName(
+      'upper-stair-preview-light-frames',
+    ) as THREE.Mesh;
     expect(roof).toBeDefined();
     expect(passageShaft).toBeDefined();
     expect(passageLowerFloor).toBeDefined();
@@ -1312,16 +1460,20 @@ describe('crouch passages and inter-storey stairs', () => {
     expect(view.group.getObjectByName('low-passage-hole-bottoms')).toBeUndefined();
     expect(stairs).toBeDefined();
     expect(stairBodies).toBeDefined();
+    expect(stairUndersides).toBeDefined();
     expect(stairCage).toBeDefined();
     expect(stairLights).toBeUndefined();
     expect(upperFloor).toBeDefined();
     expect(upperUnderside).toBeDefined();
     expect(upperWalls).toBeDefined();
     expect(upperCeiling).toBeDefined();
+    expect(upperLightFrames).toBeDefined();
     expect((roof.material as THREE.Material).name).toBe('test-wall-baked');
     expect((passageShaft.material as THREE.Material).name).toBe('lower-storey-wallpaper');
     expect((passageLowerFloor.material as THREE.Material).name).toBe('lower-storey-carpet');
     expect((stairBodies.material as THREE.Material).name).toBe('test-wall-baked');
+    expect((stairUndersides.material as THREE.MeshStandardMaterial).map)
+      .toBe(stairCeilingTexture);
     expect((upperFloor.material as THREE.Material).name).toBe('preview-carpet');
     expect((upperWalls.material as THREE.Material).name).toBe('preview-wallpaper');
     roof.geometry.computeBoundingBox();
@@ -1330,6 +1482,7 @@ describe('crouch passages and inter-storey stairs', () => {
     passageLowerWalls.geometry.computeBoundingBox();
     passageLowerCeiling.geometry.computeBoundingBox();
     stairs.geometry.computeBoundingBox();
+    stairUndersides.geometry.computeBoundingBox();
     stairCage.geometry.computeBoundingBox();
     upperFloor.geometry.computeBoundingBox();
     upperUnderside.geometry.computeBoundingBox();
@@ -1340,6 +1493,20 @@ describe('crouch passages and inter-storey stairs', () => {
     expect(roof.geometry.boundingBox?.max.x).toBeGreaterThan(-2.99);
     expect(roof.geometry.boundingBox?.min.z).toBeLessThan(-2.01);
     expect(roof.geometry.boundingBox?.max.z).toBeGreaterThan(2.01);
+    const roofLegRay = new THREE.Raycaster(
+      new THREE.Vector3(-7, 1, 0),
+      new THREE.Vector3(0, 1, 0),
+      0,
+      1,
+    );
+    const emptyBoundingCornerRay = new THREE.Raycaster(
+      new THREE.Vector3(-7, 1, 1.5),
+      new THREE.Vector3(0, 1, 0),
+      0,
+      1,
+    );
+    expect(roofLegRay.intersectObject(roof)).not.toHaveLength(0);
+    expect(emptyBoundingCornerRay.intersectObject(roof)).toHaveLength(0);
     expect(passageShaft.geometry.boundingBox?.min.y).toBeCloseTo(-2.72, 5);
     expect(passageShaft.geometry.boundingBox?.max.y).toBeCloseTo(0.012, 5);
     expect(passageLowerFloor.geometry.boundingBox?.min.y).toBeCloseTo(-5.4, 5);
@@ -1355,12 +1522,29 @@ describe('crouch passages and inter-storey stairs', () => {
     );
     expect(topSeamRay.intersectObject(passageShaft).length).toBeGreaterThan(0);
     expect(stairs.geometry.boundingBox?.max.y).toBeCloseTo(5.4012, 5);
+    expect(stairUndersides.geometry.boundingBox?.min.y).toBeLessThan(0);
+    expect(stairUndersides.geometry.boundingBox?.max.y).toBeGreaterThan(5.2);
     expect(stairCage.geometry.boundingBox?.max.x).toBeGreaterThan(8.15);
     expect(upperFloor.geometry.boundingBox?.min.y).toBeCloseTo(5.4, 5);
     expect(upperUnderside.geometry.boundingBox?.min.y).toBeCloseTo(5.28, 5);
-    expect(upperWalls.geometry.boundingBox?.min.y).toBeCloseTo(2.74, 5);
+    expect(upperWalls.geometry.boundingBox?.min.y).toBeCloseTo(5.4, 5);
     expect(upperWalls.geometry.boundingBox?.max.y).toBeCloseTo(8.14, 5);
     expect(upperCeiling.geometry.boundingBox?.min.y).toBeCloseTo(8.14, 5);
+    const unsupportedUpperPreviewWallRay = new THREE.Raycaster(
+      new THREE.Vector3(-5.5, 4, 0),
+      new THREE.Vector3(-1, 0, 0),
+      0,
+      1,
+    );
+    expect(unsupportedUpperPreviewWallRay.intersectObject(upperWalls)).toHaveLength(0);
+    const bodyIndex = stairBodies.geometry.getIndex();
+    const bodyNormals = stairBodies.geometry.getAttribute('normal');
+    expect(bodyIndex).not.toBeNull();
+    if (bodyIndex) {
+      for (let offset = 0; offset < bodyIndex.count; offset += 3) {
+        expect(Math.abs(bodyNormals.getY(bodyIndex.getX(offset)))).toBeLessThan(0.5);
+      }
+    }
     const cageIndex = stairCage.geometry.getIndex();
     const cageNormals = stairCage.geometry.getAttribute('normal');
     expect(cageIndex).not.toBeNull();
@@ -1371,6 +1555,7 @@ describe('crouch passages and inter-storey stairs', () => {
     }
 
     view.dispose();
+    stairCeilingTexture.dispose();
     Object.values(materials).forEach((material) => material.dispose());
 
     const voidHole = {
@@ -1436,6 +1621,9 @@ describe('crouch passages and inter-storey stairs', () => {
       spawn: { x: 7, y: 0.865, z: 0 },
     };
     const materials = createTestMaterials();
+    const lowerCeilingTexture = new THREE.DataTexture(Uint8Array.of(120, 110, 60, 255), 1, 1);
+    lowerCeilingTexture.needsUpdate = true;
+    materials.ceiling.map = lowerCeilingTexture;
     const view = new WorldView(plan, materials);
     const stairs = view.group.getObjectByName('inter-storey-stair-flights') as THREE.Mesh;
     const lowerFloor = view.group.getObjectByName('lower-stair-preview-floor') as THREE.Mesh;
@@ -1448,13 +1636,20 @@ describe('crouch passages and inter-storey stairs', () => {
     const lowerLights = view.group.getObjectByName(
       'lower-stair-preview-lights',
     ) as THREE.Mesh;
+    const lowerLightFrames = view.group.getObjectByName(
+      'lower-stair-preview-light-frames',
+    ) as THREE.Mesh;
 
     expect(lowerFloor).toBeDefined();
     expect(lowerWalls).toBeDefined();
     expect(lowerCeiling).toBeDefined();
     expect(lowerLights).toBeDefined();
+    expect(lowerLightFrames).toBeDefined();
     expect((lowerFloor.material as THREE.Material).name).toBe('preview-carpet');
     expect((lowerWalls.material as THREE.Material).name).toBe('preview-wallpaper');
+    expect((lowerCeiling.material as THREE.MeshStandardMaterial).map)
+      .toBe(lowerCeilingTexture);
+    expect((lowerCeiling.material as THREE.MeshStandardMaterial).side).toBe(THREE.DoubleSide);
     stairs.geometry.computeBoundingBox();
     lowerFloor.geometry.computeBoundingBox();
     lowerWalls.geometry.computeBoundingBox();
@@ -1463,18 +1658,36 @@ describe('crouch passages and inter-storey stairs', () => {
     expect(stairs.geometry.boundingBox?.max.y).toBeCloseTo(0.0012, 5);
     expect(lowerFloor.geometry.boundingBox?.min.y).toBeCloseTo(-5.4, 5);
     expect(lowerWalls.geometry.boundingBox?.min.y).toBeCloseTo(-5.4, 5);
-    expect(lowerWalls.geometry.boundingBox?.max.y).toBeCloseTo(0, 5);
+    expect(lowerWalls.geometry.boundingBox?.max.y).toBeCloseTo(-2.66, 5);
     expect(lowerCeiling.geometry.boundingBox?.min.y).toBeCloseTo(-2.66, 5);
+    const unsupportedLowerPreviewWallRay = new THREE.Raycaster(
+      new THREE.Vector3(0, -1, 8),
+      new THREE.Vector3(0, 0, 1),
+      0,
+      1,
+    );
+    expect(unsupportedLowerPreviewWallRay.intersectObject(lowerWalls)).toHaveLength(0);
+    const openingLightRay = new THREE.Raycaster(
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, -1, 0),
+      0,
+      4,
+    );
+    expect(openingLightRay.intersectObject(lowerLights)).toHaveLength(0);
 
     view.dispose();
+    lowerCeilingTexture.dispose();
     Object.values(materials).forEach((material) => material.dispose());
   });
 });
 
-const createEpicPlan = (index: EpicStructureIndex): WorldPlan => {
+const createEpicPlan = (
+  index: EpicStructureIndex,
+  seed = `EPIC-${index}-RENDER-AUDIT`,
+): WorldPlan => {
   const plan: WorldPlan = {
     version: 1,
-    seed: `EPIC-${index}-RENDER-AUDIT`,
+    seed,
     size: 112,
     wallHeight: 2.74,
     rooms: [],
@@ -1495,9 +1708,16 @@ const createEpicPlan = (index: EpicStructureIndex): WorldPlan => {
 
 const createEpicView = (
   index: EpicStructureIndex,
+  seed?: string,
+  texturedCeiling = false,
 ): { materials: MaterialSet; plan: WorldPlan; view: WorldView } => {
-  const plan = createEpicPlan(index);
+  const plan = createEpicPlan(index, seed);
   const materials = createTestMaterials();
+  if (texturedCeiling) {
+    const texture = new THREE.DataTexture(Uint8Array.of(255, 255, 255, 255), 1, 1);
+    texture.needsUpdate = true;
+    materials.ceiling.map = texture;
+  }
   const whitePixel = Uint8Array.of(255, 255, 255, 255);
   const view = new WorldView(plan, materials, {
     bakedLightMaps: {
@@ -1510,32 +1730,220 @@ const createEpicView = (
 };
 
 describe('epic structure rendering', () => {
-  it('renders epic1 as a 64m open abyss with strata below the fall-reset plane', () => {
+  it('renders epic1 with selective room previews, visible upper stories and layered depth mist', () => {
     const { materials, plan, view } = createEpicView(1);
+    const feature = plan.features.find(
+      (candidate): candidate is EpicStructureFeature =>
+        candidate.kind === 'epic-structure',
+    )!;
     const root = view.group.getObjectByName(
       'epic-structure-1-endless-abyss',
     ) as THREE.Group;
     const upperShell = root.getObjectByName('epic-1-upper-shell') as THREE.Mesh;
-    const shaft = root.getObjectByName('epic-endless-abyss-shaft') as THREE.Mesh;
-    const strata = root.getObjectByName('epic-endless-abyss-strata') as THREE.Mesh;
+    const stackedWalls = root.getObjectByName(
+      'epic-endless-abyss-stacked-passage-walls',
+    ) as THREE.Mesh;
+    const storyLedges = root.getObjectByName(
+      'epic-endless-abyss-story-ledges',
+    ) as THREE.Mesh;
+    const corridorPreviews = root.getObjectByName(
+      'epic-endless-abyss-corridor-previews',
+    ) as THREE.Mesh;
+    const currentCorridorWalls = root.getObjectByName(
+      'epic-endless-abyss-current-corridor-walls',
+    ) as THREE.Mesh;
+    const corridorLights = root.getObjectByName(
+      'epic-endless-abyss-corridor-lights',
+    ) as THREE.Mesh;
+    const detailedPreviewFloors = root.getObjectByName(
+      'epic-endless-abyss-detailed-preview-floors',
+    ) as THREE.Mesh;
+    const distantEntryCaps = root.getObjectByName(
+      'epic-endless-abyss-distant-entry-caps',
+    ) as THREE.Mesh;
+    const depthMist = root.getObjectByName(
+      'epic-endless-abyss-depth-mist',
+    ) as THREE.Mesh;
     expect(root).toBeDefined();
     expect(upperShell).toBeDefined();
-    expect(shaft).toBeDefined();
-    expect(strata).toBeDefined();
+    expect(stackedWalls).toBeDefined();
+    expect(storyLedges).toBeDefined();
+    expect(corridorPreviews).toBeDefined();
+    expect(currentCorridorWalls).toBeDefined();
+    expect(corridorLights).toBeDefined();
+    expect(detailedPreviewFloors).toBeDefined();
+    expect(distantEntryCaps).toBeDefined();
+    expect(depthMist).toBeDefined();
+    expect(root.getObjectByName('epic-endless-abyss-shaft')).toBeUndefined();
+    expect(root.getObjectByName('epic-endless-abyss-strata')).toBeUndefined();
 
     upperShell.geometry.computeBoundingBox();
-    shaft.geometry.computeBoundingBox();
-    strata.geometry.computeBoundingBox();
+    stackedWalls.geometry.computeBoundingBox();
+    storyLedges.geometry.computeBoundingBox();
+    corridorPreviews.geometry.computeBoundingBox();
+    currentCorridorWalls.geometry.computeBoundingBox();
+    depthMist.geometry.computeBoundingBox();
     expect(upperShell.geometry.boundingBox?.min.y).toBeCloseTo(plan.wallHeight - 0.04, 5);
-    expect(upperShell.geometry.boundingBox?.max.y).toBeCloseTo(54.03, 5);
-    expect(shaft.geometry.boundingBox?.min.x).toBeLessThanOrEqual(-32);
-    expect(shaft.geometry.boundingBox?.max.x).toBeGreaterThanOrEqual(32);
-    expect(shaft.geometry.boundingBox?.min.z).toBeLessThanOrEqual(-32);
-    expect(shaft.geometry.boundingBox?.max.z).toBeGreaterThanOrEqual(32);
-    expect(shaft.geometry.boundingBox?.min.y).toBeLessThanOrEqual(-72);
-    expect(shaft.geometry.boundingBox?.max.y).toBeCloseTo(-0.004, 5);
-    expect(strata.geometry.boundingBox?.min.y).toBeLessThan(-60);
-    expect(strata.geometry.boundingBox?.max.y).toBeLessThan(0);
+    expect(upperShell.geometry.boundingBox?.max.y).toBeCloseTo(5.43, 5);
+    expect(stackedWalls.geometry.boundingBox?.min.x).toBeLessThanOrEqual(-54.4);
+    expect(stackedWalls.geometry.boundingBox?.max.x).toBeGreaterThanOrEqual(54.4);
+    expect(stackedWalls.geometry.boundingBox?.min.z).toBeLessThanOrEqual(-54.4);
+    expect(stackedWalls.geometry.boundingBox?.max.z).toBeGreaterThanOrEqual(54.4);
+    expect(stackedWalls.geometry.boundingBox?.min.y).toBeLessThan(-85);
+    expect(stackedWalls.geometry.boundingBox?.max.y).toBeGreaterThan(20);
+    expect(storyLedges.geometry.boundingBox?.min.y).toBeLessThan(-85);
+    expect(storyLedges.geometry.boundingBox?.max.y).toBeGreaterThan(20);
+    expect(storyLedges.geometry.boundingBox?.min.x).toBeGreaterThanOrEqual(-54.401);
+    expect(storyLedges.geometry.boundingBox?.max.x).toBeLessThanOrEqual(54.401);
+    expect(storyLedges.geometry.boundingBox?.min.z).toBeGreaterThanOrEqual(-54.401);
+    expect(storyLedges.geometry.boundingBox?.max.z).toBeLessThanOrEqual(54.401);
+    expect(corridorPreviews.geometry.boundingBox?.min.y).toBeLessThan(-15);
+    expect(corridorPreviews.geometry.boundingBox?.max.y).toBeGreaterThan(15);
+    expect(currentCorridorWalls.geometry.boundingBox?.min.y).toBeCloseTo(0, 5);
+    expect(currentCorridorWalls.geometry.boundingBox?.max.y).toBeGreaterThan(3);
+    expect(depthMist.geometry.boundingBox?.min.y).toBeLessThan(-96);
+    expect(depthMist.geometry.boundingBox?.max.y).toBeCloseTo(-49.95, 4);
+    expect(depthMist.geometry.getAttribute('position').count).toBe(10 * 4);
+    const mistMaterial = depthMist.material as THREE.ShaderMaterial;
+    expect(mistMaterial.name).toBe('epic-endless-abyss-depth-mist-material');
+    expect(mistMaterial.transparent).toBe(true);
+    expect(mistMaterial.depthWrite).toBe(false);
+    expect(mistMaterial.fragmentShader).toContain('edgeFade');
+
+    const lowerLevel = feature.passageLevels?.find((level) => level.y < 0);
+    const lowerPassage = lowerLevel && feature.passageFacadeBounds
+      ? [...lowerLevel.passages].sort((left, right) => {
+          const distance = (passage: typeof left): number => {
+            const portal = passage.side === 'north'
+              ? { x: passage.along, z: feature.passageFacadeBounds!.minZ }
+              : passage.side === 'south'
+                ? { x: passage.along, z: feature.passageFacadeBounds!.maxZ }
+                : passage.side === 'west'
+                  ? { x: feature.passageFacadeBounds!.minX, z: passage.along }
+                  : { x: feature.passageFacadeBounds!.maxX, z: passage.along };
+            const horizontal = Math.hypot(
+              portal.x - feature.destination.x,
+              portal.z - feature.destination.z,
+            );
+            return horizontal + (horizontal < 8 ? 80 : 0);
+          };
+          return distance(left) - distance(right);
+        })[0]
+      : undefined;
+    expect(feature.voidBounds).toBeDefined();
+    expect(feature.passageFacadeBounds).toBeDefined();
+    expect(lowerLevel).toBeDefined();
+    expect(lowerPassage).toBeDefined();
+    expect(feature.passageLevels?.some((level) => level.y > 20)).toBe(true);
+    expect(feature.voidBounds && rectWidth(feature.voidBounds) * rectDepth(feature.voidBounds) / (plan.size * plan.size))
+      .toBeGreaterThan(0.9);
+    expect(feature.passageLevels?.flatMap((level) => level.passages).every(
+      (passage) => passage.width >= 3.4 && passage.corridorDepth <= 1.22,
+    )).toBe(true);
+    expect(root.getObjectByName('epic-endless-abyss-corridor-floors')).toBeUndefined();
+    expect(view.group.getObjectByName('office-drop-ceiling')).toBeUndefined();
+    expect(view.group.getObjectByName('elevated-atrium-ceilings')).toBeUndefined();
+    expect(view.group.getObjectByName('upper-story-floor-underside-preview')).toBeUndefined();
+    expect(view.group.getObjectByName('upper-story-preview-ceiling')).toBeUndefined();
+    if (feature.voidBounds && feature.passageFacadeBounds && lowerLevel && lowerPassage) {
+      const previewLayout = getEpicAbyssPassageLayout(
+        lowerPassage,
+        feature.passageFacadeBounds,
+      );
+      expect(previewLayout.floorRects).toHaveLength(2);
+      expect(previewLayout.ceilingRects).toHaveLength(2);
+      expect(previewLayout.wallRects).toHaveLength(5);
+      const roomPreviewLayout = getEpicAbyssRoomPreviewLayout(
+        lowerPassage,
+        feature.passageFacadeBounds,
+      );
+      expect(roomPreviewLayout.floorRects).toHaveLength(2);
+      expect(roomPreviewLayout.wallRects).toHaveLength(6);
+      expect(roomPreviewLayout.floorRects.some((rect) =>
+        rect.minX < -plan.size * 0.5 || rect.maxX > plan.size * 0.5 ||
+        rect.minZ < -plan.size * 0.5 || rect.maxZ > plan.size * 0.5
+      )).toBe(true);
+      for (let first = 0; first < previewLayout.wallRects.length; first += 1) {
+        for (let second = first + 1; second < previewLayout.wallRects.length; second += 1) {
+          const left = previewLayout.wallRects[first]!;
+          const right = previewLayout.wallRects[second]!;
+          const overlapX = Math.min(left.maxX, right.maxX) - Math.max(left.minX, right.minX);
+          const overlapZ = Math.min(left.maxZ, right.maxZ) - Math.max(left.minZ, right.minZ);
+          expect(overlapX > 1e-5 && overlapZ > 1e-5).toBe(false);
+        }
+      }
+      for (const wall of previewLayout.wallRects) {
+        if (lowerPassage.side === 'north') {
+          expect(wall.maxZ).toBeLessThanOrEqual(feature.passageFacadeBounds.minZ - 0.18 + 1e-5);
+        } else if (lowerPassage.side === 'south') {
+          expect(wall.minZ).toBeGreaterThanOrEqual(feature.passageFacadeBounds.maxZ + 0.18 - 1e-5);
+        } else if (lowerPassage.side === 'west') {
+          expect(wall.maxX).toBeLessThanOrEqual(feature.passageFacadeBounds.minX - 0.18 + 1e-5);
+        } else {
+          expect(wall.minX).toBeGreaterThanOrEqual(feature.passageFacadeBounds.maxX + 0.18 - 1e-5);
+        }
+      }
+      const shellInnerEdge = plan.size * 0.5;
+      expect(previewLayout.wallRects.every((wall) =>
+        wall.minX >= -shellInnerEdge && wall.maxX <= shellInnerEdge &&
+        wall.minZ >= -shellInnerEdge && wall.maxZ <= shellInnerEdge
+      )).toBe(true);
+      const entryFloor = previewLayout.floorRects[0]!;
+      const branchFloor = previewLayout.floorRects[1]!;
+      if (lowerPassage.side === 'north' || lowerPassage.side === 'south') {
+        expect(branchFloor.minX < entryFloor.minX || branchFloor.maxX > entryFloor.maxX).toBe(true);
+      } else {
+        expect(branchFloor.minZ < entryFloor.minZ || branchFloor.maxZ > entryFloor.maxZ).toBe(true);
+      }
+      const ledgeCenter = new THREE.Vector3(
+        0,
+        lowerLevel.y + 2,
+        (feature.voidBounds.minZ + feature.passageFacadeBounds.minZ) * 0.5,
+      );
+      const ledgeRay = new THREE.Raycaster(
+        ledgeCenter,
+        new THREE.Vector3(0, -1, 0),
+        0,
+        4,
+      );
+      expect(ledgeRay.intersectObject(storyLedges).length).toBeGreaterThan(0);
+
+      const horizontal = lowerPassage.side === 'north' || lowerPassage.side === 'south';
+      const outward = lowerPassage.side === 'north' || lowerPassage.side === 'west' ? -1 : 1;
+      const facadeFixed = lowerPassage.side === 'north'
+        ? feature.passageFacadeBounds.minZ
+        : lowerPassage.side === 'south'
+          ? feature.passageFacadeBounds.maxZ
+          : lowerPassage.side === 'west'
+            ? feature.passageFacadeBounds.minX
+            : feature.passageFacadeBounds.maxX;
+      const outwardDirection = horizontal
+        ? new THREE.Vector3(0, 0, outward)
+        : new THREE.Vector3(outward, 0, 0);
+      for (const offset of [-lowerPassage.width * 0.24, lowerPassage.width * 0.24]) {
+        const previewRay = new THREE.Raycaster(
+          horizontal
+            ? new THREE.Vector3(lowerPassage.along + offset, lowerLevel.y + 1.6, facadeFixed - outward * 0.42)
+            : new THREE.Vector3(facadeFixed - outward * 0.42, lowerLevel.y + 1.6, lowerPassage.along + offset),
+          outwardDirection,
+          0,
+          10,
+        );
+        expect(previewRay.intersectObject(corridorPreviews).length).toBeGreaterThan(0);
+      }
+      const corridorFloorRay = new THREE.Raycaster(
+        horizontal
+          ? new THREE.Vector3(lowerPassage.along, lowerLevel.y + 1, facadeFixed + outward * 0.62)
+          : new THREE.Vector3(facadeFixed + outward * 0.62, lowerLevel.y + 1, lowerPassage.along),
+        new THREE.Vector3(0, -1, 0),
+        0,
+        2,
+      );
+      const floorHits = corridorFloorRay.intersectObject(detailedPreviewFloors);
+      expect(floorHits.length).toBeGreaterThan(0);
+      expect(new Set(floorHits.map((hit) => hit.object.name)))
+        .toEqual(new Set(['epic-endless-abyss-detailed-preview-floors']));
+    }
 
     const down = new THREE.Raycaster(
       new THREE.Vector3(0, 1, 0),
@@ -1543,114 +1951,547 @@ describe('epic structure rendering', () => {
       0,
       100,
     );
-    expect(down.intersectObject(view.group, true)).toHaveLength(0);
+    const centralHits = down.intersectObject(view.group, true);
+    expect(centralHits.some((hit) => hit.object === depthMist)).toBe(true);
+    expect(centralHits.every((hit) => hit.object === depthMist)).toBe(true);
 
-    const dispose = vi.spyOn(strata.geometry, 'dispose');
+    const passageCount = feature.passageLevels
+      ?.reduce((total, level) => total + level.passages.length, 0) ?? 0;
+    const currentPassageCount = feature.passageLevels
+      ?.find((level) => Math.abs(level.y) < 0.01)?.passages.length ?? 0;
+    expect(corridorLights.geometry.getAttribute('position').count)
+      .toBeGreaterThan(currentPassageCount * 4);
+    expect(corridorLights.geometry.getAttribute('position').count).toBeLessThan(passageCount * 4);
+    expect(distantEntryCaps.geometry.getAttribute('position').count).toBeGreaterThan(passageCount * 2);
+    expect(downwardTriangleHeights(currentCorridorWalls.geometry)).toHaveLength(0);
+    expect(downwardTriangleHeights(corridorPreviews.geometry)).toHaveLength(0);
+    const storyFloorYs = new Set(feature.passageLevels?.map((level) => level.y.toFixed(4)));
+    expect(downwardTriangleHeights(stackedWalls.geometry).every(
+      (height) => !storyFloorYs.has(height.toFixed(4)),
+    )).toBe(true);
+    expect((corridorPreviews.material as THREE.Material).name).toBe('preview-wallpaper');
+
+    const dispose = vi.spyOn(corridorPreviews.geometry, 'dispose');
     view.dispose();
     expect(dispose).toHaveBeenCalledTimes(1);
     Object.values(materials).forEach((material) => material.dispose());
   });
 
-  it('builds seven distinct upper illusions without duplicating shared ground obstacles', () => {
-    const expectations: Array<{
-      index: EpicStructureIndex;
-      marker: string;
-      companion?: string;
-      minY: number;
-      maxY: number;
-    }> = [
-      {
-        index: 2,
-        marker: 'epic-lost-ceiling-height-rings',
-        companion: 'epic-lost-ceiling-distant-lights',
-        minY: 8.9,
-        maxY: 60,
-      },
-      {
-        index: 3,
-        marker: 'epic-ascending-passages-facades',
-        companion: 'epic-ascending-passages-dark-openings',
-        minY: 4.9,
-        maxY: 50,
-      },
-      {
-        index: 4,
-        marker: 'epic-endless-pillars-capital-bands',
-        minY: 7.9,
-        maxY: 50,
-      },
-      {
-        index: 5,
-        marker: 'epic-impossible-stairwell-floating-flights',
-        minY: 4.1,
-        maxY: 50,
-      },
-      {
-        index: 6,
-        marker: 'epic-suspended-room-shells',
-        companion: 'epic-suspended-room-dark-doors',
-        minY: 9.9,
-        maxY: 50,
-      },
-      {
-        index: 7,
-        marker: 'epic-nested-gates-receding-frames',
-        companion: 'epic-nested-gates-threshold-lights',
-        minY: 5,
-        maxY: 20,
-      },
-      {
-        index: 8,
-        marker: 'epic-light-cathedral-vault-ribs',
-        companion: 'epic-light-cathedral-fluorescent-nave',
-        minY: 12.9,
-        maxY: 60,
-      },
-    ];
+  it('renders epic2 as 54 simple pillars under fixtures attached to the giant ceiling', () => {
+    const { materials, plan, view } = createEpicView(2, undefined, true);
+    const feature = plan.features.find(
+      (candidate): candidate is EpicStructureFeature =>
+        candidate.kind === 'epic-structure',
+    )!;
+    const root = view.group.getObjectByName('epic-structure-2-lost-ceiling') as THREE.Group;
+    const upperShell = root.getObjectByName('epic-2-upper-shell') as THREE.Mesh;
+    const distantCeiling = view.group.getObjectByName(
+      'distant-elevated-tiled-ceilings',
+    ) as THREE.Mesh;
+    const architecturalColumns = view.group.getObjectByName(
+      'merged-wallpaper-walls',
+    ) as THREE.Mesh;
 
-    for (const expected of expectations) {
-      const { materials, plan, view } = createEpicView(expected.index);
-      const feature = plan.features.find(
-        (candidate): candidate is EpicStructureFeature =>
-          candidate.kind === 'epic-structure',
-      )!;
-      const root = view.group.getObjectByName(
-        `epic-structure-${feature.index}-${feature.variant}`,
-      ) as THREE.Group;
-      const upperShell = root.getObjectByName(
-        `epic-${feature.index}-upper-shell`,
-      ) as THREE.Mesh;
-      const marker = root.getObjectByName(expected.marker) as THREE.Mesh;
-      expect(root, `epic${expected.index} root`).toBeDefined();
-      expect(upperShell, `epic${expected.index} upper shell`).toBeDefined();
-      expect(marker, `epic${expected.index} marker`).toBeDefined();
-      if (expected.companion) {
-        expect(
-          root.getObjectByName(expected.companion),
-          `epic${expected.index} companion`,
-        ).toBeDefined();
-      }
-      marker.geometry.computeBoundingBox();
-      upperShell.geometry.computeBoundingBox();
-      expect(marker.geometry.boundingBox!.min.y).toBeGreaterThan(expected.minY);
-      expect(marker.geometry.boundingBox!.max.y).toBeGreaterThan(expected.maxY);
-      expect(upperShell.geometry.boundingBox!.min.y)
-        .toBeCloseTo(plan.wallHeight - 0.04, 5);
-      expect(upperShell.geometry.boundingBox!.max.y)
-        .toBeCloseTo(feature.height + 0.03, 5);
+    expect(root).toBeDefined();
+    expect(upperShell).toBeDefined();
+    expect(distantCeiling).toBeDefined();
+    expect(root.getObjectByName('epic-lost-ceiling-height-rings')).toBeUndefined();
+    expect(root.getObjectByName('epic-lost-ceiling-distant-lights')).toBeUndefined();
+    expect(getEpicGroundObstacles(feature)).toHaveLength(54);
+    expect(plan.columns).toHaveLength(54);
+    expect(architecturalColumns.geometry.getAttribute('position').count).toBe(54 * 24);
+    expect(plan.lights).toHaveLength(25);
+    expect(plan.lights.every((light) => Math.abs(light.ceilingY - 71.965) < 1e-6))
+      .toBe(true);
+    expect([...new Set(plan.lights.map((light) => light.x))].sort((left, right) => left - right))
+      .toEqual([-42, -18, 0, 18, 42]);
 
-      const obstacles = getEpicGroundObstacles(feature);
-      const architecturalColumns = view.group.getObjectByName(
-        'merged-wallpaper-walls',
-      ) as THREE.Mesh;
-      expect(architecturalColumns).toBeDefined();
-      expect(architecturalColumns.geometry.getAttribute('position').count)
-        .toBe(obstacles.length * 24);
-      expect(root.getObjectByName(`epic-${expected.index}-ground-obstacles`))
-        .toBeUndefined();
+    const distantMaterial = distantCeiling.material as THREE.MeshStandardMaterial;
+    expect(distantMaterial.name).toBe('distant-tiled-ceiling');
+    expect(distantMaterial.map).toBe(materials.ceiling.map);
+    expect(distantMaterial.emissiveMap).toBe(materials.ceiling.map);
+    expect(distantMaterial.lightMap).toBeNull();
+    expect(distantMaterial.side).toBe(THREE.DoubleSide);
+    expect(distantMaterial.fog).toBe(false);
+    expect(distantMaterial.emissiveIntensity).toBeGreaterThanOrEqual(0.2);
 
-      view.dispose();
-      Object.values(materials).forEach((material) => material.dispose());
+    distantCeiling.geometry.computeBoundingBox();
+    expect(distantCeiling.geometry.boundingBox?.min.y).toBeCloseTo(feature.height, 5);
+    expect(distantCeiling.geometry.boundingBox?.max.y).toBeCloseTo(feature.height, 5);
+    const ceilingUvs = distantCeiling.geometry.getAttribute('uv');
+    const uValues = Array.from({ length: ceilingUvs.count }, (_, index) => ceilingUvs.getX(index));
+    const visibleRepeatSpan = Math.max(...uValues) - Math.min(...uValues);
+    const ordinaryRepeatSpan = rectWidth(feature.bounds) / 2.4;
+    expect(visibleRepeatSpan).toBeGreaterThan(0);
+    expect(visibleRepeatSpan).toBeLessThan(ordinaryRepeatSpan * 0.3);
+
+    const rayOrigin = new THREE.Vector3(plan.spawn.x, plan.spawn.y, plan.spawn.z);
+    const ceilingCenter = new THREE.Vector3(
+      rectCenter(feature.bounds).x,
+      feature.height,
+      rectCenter(feature.bounds).z,
+    );
+    const ceilingRay = new THREE.Raycaster(
+      rayOrigin,
+      ceilingCenter.clone().sub(rayOrigin).normalize(),
+      0,
+      180,
+    );
+    expect(ceilingRay.intersectObject(distantCeiling).length).toBeGreaterThan(0);
+
+    upperShell.geometry.computeBoundingBox();
+    expect(upperShell.geometry.boundingBox?.max.y).toBeCloseTo(72.03, 5);
+
+    view.dispose();
+    materials.ceiling.map?.dispose();
+    Object.values(materials).forEach((material) => material.dispose());
+  });
+
+  it('renders epic3 as a long narrow fissure with independent bounded maze previews', () => {
+    const { materials, plan, view } = createEpicView(3, 'EPIC3-HIGH-0');
+    const feature = plan.features.find(
+      (candidate): candidate is EpicStructureFeature =>
+        candidate.kind === 'epic-structure',
+    )!;
+    const root = view.group.getObjectByName(
+      'epic-structure-3-ascending-passages',
+    ) as THREE.Group;
+    const facades = root.getObjectByName('epic-ascending-passages-facades') as THREE.Mesh;
+    const previews = root.getObjectByName(
+      'epic-ascending-passages-corridor-previews',
+    ) as THREE.Mesh;
+    const previewFloors = root.getObjectByName(
+      'epic-ascending-passages-corridor-floors',
+    ) as THREE.Mesh;
+    const previewCeilings = root.getObjectByName(
+      'epic-ascending-passages-corridor-ceilings',
+    ) as THREE.Mesh;
+    const distantHints = root.getObjectByName(
+      'epic-ascending-passages-distant-maze-hints',
+    ) as THREE.Mesh;
+    const upperFog = root.getObjectByName(
+      'epic-ascending-passages-upper-fog',
+    ) as THREE.Mesh;
+    const lowerFog = root.getObjectByName(
+      'epic-ascending-passages-lower-fog',
+    ) as THREE.Mesh;
+
+    expect(root).toBeDefined();
+    expect(facades).toBeDefined();
+    expect(previews).toBeDefined();
+    expect(previewFloors).toBeDefined();
+    expect(previewCeilings).toBeDefined();
+    expect(distantHints).toBeDefined();
+    expect(upperFog).toBeDefined();
+    expect(lowerFog).toBeDefined();
+    expect(root.getObjectByName('epic-ascending-passages-platforms')).toBeUndefined();
+    expect(root.getObjectByName('epic-ascending-passages-distant-floor-slivers')).toBeUndefined();
+    expect(root.getObjectByName('epic-ascending-passages-dark-openings')).toBeUndefined();
+    expect(root.getObjectByName('epic-3-upper-shell')).toBeUndefined();
+    expect(view.group.getObjectByName('distant-elevated-tiled-ceilings')).toBeUndefined();
+    expect(plan.columns).toHaveLength(0);
+    expect(getEpicGroundObstacles(feature)).toHaveLength(0);
+    expect(rectWidth(feature.bounds) / rectDepth(feature.bounds)).toBeGreaterThan(7.5);
+    expect(rectWidth(feature.bounds)).toBeGreaterThan(220);
+    expect(rectDepth(feature.bounds)).toBeCloseTo(29, 5);
+    expect(feature.passageFacadeBounds).toBeDefined();
+    expect(feature.voidBounds).toBeDefined();
+    expect(rectDepth(feature.passageFacadeBounds!)).toBeCloseTo(12, 5);
+    expect(rectDepth(feature.voidBounds!)).toBeCloseTo(12, 5);
+    expect(plan.floorRects.every((floor) =>
+      floor.minX >= feature.bounds.minX - 1e-6 &&
+      floor.maxX <= feature.bounds.maxX + 1e-6 &&
+      floor.minZ >= feature.bounds.minZ - 1e-6 &&
+      floor.maxZ <= feature.bounds.maxZ + 1e-6
+    )).toBe(true);
+    expect(plan.floorRects.every((floor) =>
+      floor.maxZ <= feature.voidBounds!.minZ + 1e-6 ||
+      floor.minZ >= feature.voidBounds!.maxZ - 1e-6
+    )).toBe(true);
+    expect(plan.floorRects.every((floor) => rectWidth(floor) < 10)).toBe(true);
+
+    facades.geometry.computeBoundingBox();
+    previews.geometry.computeBoundingBox();
+    upperFog.geometry.computeBoundingBox();
+    lowerFog.geometry.computeBoundingBox();
+    expect(facades.geometry.boundingBox?.max.y).toBeCloseTo(feature.height, 5);
+    expect(facades.geometry.boundingBox?.min.y).toBeLessThan(-59);
+    expect(previews.geometry.boundingBox?.max.y).toBeLessThan(feature.height);
+    expect(previews.geometry.boundingBox?.min.y).toBeCloseTo(
+      ((feature.entryLevel ?? 0) - 4) * 5.4,
+      5,
+    );
+    expect(lowerFog.geometry.boundingBox?.min.y).toBeLessThan(-58);
+    expect(upperFog.geometry.boundingBox?.max.y).toBeGreaterThan(63);
+    expect((upperFog.material as THREE.MeshBasicMaterial).transparent).toBe(true);
+    expect((upperFog.material as THREE.MeshBasicMaterial).opacity)
+      .toBeGreaterThan((lowerFog.material as THREE.MeshBasicMaterial).opacity);
+
+    const levels = feature.passageLevels ?? [];
+    expect(levels).toHaveLength(23);
+    expect(levels[0]?.y).toBeCloseTo(-59.4, 5);
+    expect(levels.at(-1)?.y).toBeCloseTo(59.4, 5);
+    const template = levels[0]?.passages;
+    expect(template).toHaveLength(34);
+    for (const level of levels) {
+      expect(level.passages).toEqual(template);
+      const north = level.passages.filter((passage) => passage.side === 'north');
+      const south = level.passages.filter((passage) => passage.side === 'south');
+      expect(north).toHaveLength(17);
+      expect(south).toHaveLength(17);
+      expect(south.map(({ along, width }) => ({ along, width })))
+        .toEqual(north.map(({ along, width }) => ({ along, width })));
+      expect(south.map(({ previewStyle }) => previewStyle))
+        .toEqual(north.map(({ previewStyle }) => previewStyle));
+      expect(level.passages.every((passage) => {
+        const outwardEdge = passage.side === 'north'
+          ? feature.passageFacadeBounds!.minZ - passage.corridorDepth
+          : feature.passageFacadeBounds!.maxZ + passage.corridorDepth;
+        return outwardEdge >= feature.bounds.minZ - 1e-6 &&
+          outwardEdge <= feature.bounds.maxZ + 1e-6;
+      })).toBe(true);
     }
+
+    const entryY = (feature.entryLevel ?? 0) * 5.4;
+    const detailedLevels = levels.filter((level) =>
+      level.y >= entryY - 4 * 5.4 - 0.01 &&
+      level.y <= entryY + 3 * 5.4 + 0.01
+    );
+    expect(detailedLevels).toHaveLength(8);
+    const templateLayouts = (template ?? []).map((passage) =>
+      getEpic3PassagePreviewLayout(passage, feature.bounds, feature.passageFacadeBounds!)
+    );
+    expect(new Set(template?.map((passage) => passage.previewStyle))).toEqual(
+      new Set(['dead-end', 'left-turn', 'right-turn', 'split']),
+    );
+    for (const [passageIndex, layout] of templateLayouts.entries()) {
+      expect(layout.floorRects.length).toBeGreaterThanOrEqual(1);
+      for (const rect of [...layout.floorRects, ...layout.ceilingRects, ...layout.wallRects]) {
+        expect(rect.minX).toBeGreaterThanOrEqual(feature.bounds.minX - 1e-6);
+        expect(rect.maxX).toBeLessThanOrEqual(feature.bounds.maxX + 1e-6);
+        expect(rect.minZ).toBeGreaterThanOrEqual(feature.bounds.minZ - 1e-6);
+        expect(rect.maxZ).toBeLessThanOrEqual(feature.bounds.maxZ + 1e-6);
+      }
+      for (let otherIndex = passageIndex + 1; otherIndex < templateLayouts.length; otherIndex += 1) {
+        if (template?.[passageIndex]?.side !== template?.[otherIndex]?.side) continue;
+        for (const left of layout.floorRects) {
+          for (const right of templateLayouts[otherIndex]!.floorRects) {
+            const overlapX = Math.min(left.maxX, right.maxX) - Math.max(left.minX, right.minX);
+            const overlapZ = Math.min(left.maxZ, right.maxZ) - Math.max(left.minZ, right.minZ);
+            expect(overlapX > 1e-5 && overlapZ > 1e-5).toBe(false);
+          }
+        }
+      }
+    }
+    const shallowLayout = getEpic3ShallowPreviewLayout(
+      template![0]!,
+      feature.passageFacadeBounds!,
+    );
+    expect(shallowLayout.floorRects).toHaveLength(1);
+    expect(shallowLayout.ceilingRects).toHaveLength(1);
+    expect(shallowLayout.wallRects).toHaveLength(3);
+    expect(rectDepth(shallowLayout.floorRects[0]!)).toBeGreaterThan(1.8);
+    const detailedWallCount = detailedLevels.reduce((total, level) =>
+      total + getDetailedEpic3Passages(level.passages).reduce((passageTotal, passage) =>
+        passageTotal + getEpic3PassagePreviewLayout(
+          passage,
+          feature.bounds,
+          feature.passageFacadeBounds!,
+        ).wallRects.length, 0
+      ), 0
+    );
+    const detailedFloorCount = detailedLevels
+      .reduce((total, level) => total + getDetailedEpic3Passages(level.passages).reduce((passageTotal, passage) =>
+        passageTotal + getEpic3PassagePreviewLayout(
+          passage,
+          feature.bounds,
+          feature.passageFacadeBounds!,
+        ).floorRects.length, 0
+      ), 0);
+    const detailedCeilingCount = detailedLevels.reduce((total, level) =>
+      total + getDetailedEpic3Passages(level.passages).reduce((passageTotal, passage) =>
+        passageTotal + getEpic3PassagePreviewLayout(
+          passage,
+          feature.bounds,
+          feature.passageFacadeBounds!,
+        ).ceilingRects.length, 0
+      ), 0
+    );
+    const detailedPassageCount = detailedLevels.reduce(
+      (total, level) => total + getDetailedEpic3Passages(level.passages).length,
+      0,
+    );
+    const shallowPassageCount = detailedLevels.reduce(
+      (total, level) => total + level.passages.length - getDetailedEpic3Passages(level.passages).length,
+      0,
+    );
+    const distantPassageCount = levels
+      .filter((level) => !detailedLevels.includes(level))
+      .reduce((total, level) => total + level.passages.length, 0);
+    expect(previews.geometry.getAttribute('position').count)
+      .toBe((detailedWallCount + shallowPassageCount * 3) * 24);
+    expect(previewFloors.geometry.getAttribute('position').count)
+      .toBe((detailedFloorCount + shallowPassageCount) * 24);
+    expect(previewCeilings.geometry.getAttribute('position').count)
+      .toBe((detailedCeilingCount + shallowPassageCount) * 24);
+    expect(downwardTriangleHeights(previews.geometry)).toHaveLength(0);
+    expect(distantHints.geometry.getAttribute('position').count).toBe(distantPassageCount * 4);
+    expect((distantHints.material as THREE.Material).name).toBe('preview-wallpaper');
+    const distantLevel = levels.find((level) => !detailedLevels.includes(level))!;
+    const distantPassage = distantLevel.passages.find((passage) => passage.side === 'north')!;
+    for (const offset of [-distantPassage.width * 0.42, distantPassage.width * 0.42]) {
+      const ray = new THREE.Raycaster(
+        new THREE.Vector3(
+          distantPassage.along + offset,
+          distantLevel.y + 1.6,
+          feature.passageFacadeBounds!.minZ + 0.4,
+        ),
+        new THREE.Vector3(0, 0, -1),
+        0,
+        3,
+      );
+      expect(ray.intersectObject(distantHints).length).toBeGreaterThan(0);
+    }
+
+    expect(feature.destination.y).toBeGreaterThan(1);
+    const arrivalFloor = plan.colliders.find(
+      (collider) =>
+        collider.id.startsWith('epic3-elevated-gallery-floor-') &&
+        Math.abs(feature.destination.x - collider.center.x) <= collider.halfExtents.x &&
+        Math.abs(feature.destination.z - collider.center.z) <= collider.halfExtents.z,
+    );
+    const elevatedFacade = plan.colliders.filter((collider) =>
+      collider.id.startsWith('epic3-elevated-facade-')
+    );
+    expect(arrivalFloor).toBeDefined();
+    expect(plan.colliders.some((collider) =>
+      collider.id.includes('gallery-back') || collider.id.includes('ledge-floor')
+    )).toBe(false);
+    expect(elevatedFacade.length).toBeGreaterThan(0);
+    expect(elevatedFacade.every((collider) =>
+      collider.id.includes('-north-') || collider.id.includes('-south-')
+    )).toBe(true);
+    for (const collider of elevatedFacade) {
+      expect(collider.center.y - collider.halfExtents.y)
+        .toBeCloseTo((feature.entryLevel ?? 0) * 5.4, 5);
+    }
+    const northOpeningIsClear = elevatedFacade
+      .filter((collider) => collider.id.includes('-north-'))
+      .every((collider) =>
+        Math.abs(feature.destination.x - collider.center.x) > collider.halfExtents.x + 0.02 ||
+        Math.abs(feature.destination.y - collider.center.y) > collider.halfExtents.y + 0.02
+      );
+    expect(northOpeningIsClear).toBe(true);
+    if (arrivalFloor) {
+      expect(arrivalFloor.center.y + arrivalFloor.halfExtents.y)
+        .toBeCloseTo(feature.destination.y - 0.865, 5);
+      expect(Math.abs(feature.destination.x - arrivalFloor.center.x))
+        .toBeLessThan(arrivalFloor.halfExtents.x);
+      expect(Math.abs(feature.destination.z - arrivalFloor.center.z))
+        .toBeLessThan(arrivalFloor.halfExtents.z);
+    }
+
+    view.dispose();
+    Object.values(materials).forEach((material) => material.dispose());
+  });
+
+  it('keeps the infinite epic3 chasm physically enclosed without an opaque shaft mesh', () => {
+    const { materials, plan, view } = createEpicView(3, 'EPIC3-BOTTOMLESS');
+    const feature = plan.features.find(
+      (candidate): candidate is EpicStructureFeature =>
+        candidate.kind === 'epic-structure',
+    )!;
+    const root = view.group.getObjectByName(
+      'epic-structure-3-ascending-passages',
+    ) as THREE.Group;
+    const upperFog = root.getObjectByName('epic-ascending-passages-upper-fog') as THREE.Mesh;
+    const lowerFog = root.getObjectByName('epic-ascending-passages-lower-fog') as THREE.Mesh;
+    const shaftWalls = plan.colliders.filter((collider) =>
+      collider.id.startsWith('epic3-bottomless-shaft-wall-')
+    );
+
+    expect(feature.bottomless).toBe(true);
+    expect(feature.voidBounds).toBeDefined();
+    expect(upperFog).toBeDefined();
+    expect(lowerFog).toBeDefined();
+    expect(root.getObjectByName('epic-ascending-passages-bottomless-shaft')).toBeUndefined();
+    expect(shaftWalls).toHaveLength(4);
+    for (const collider of shaftWalls) {
+      expect(collider.center.y - collider.halfExtents.y).toBeCloseTo(-64.8, 5);
+      expect(collider.center.y + collider.halfExtents.y).toBeCloseTo(0, 5);
+    }
+
+    view.dispose();
+    Object.values(materials).forEach((material) => material.dispose());
+  });
+
+  it('builds epic4 as a compact, fully supported stair tower reaching its summit', () => {
+    const { materials, plan, view } = createEpicView(4);
+    const feature = plan.features.find(
+      (candidate): candidate is EpicStructureFeature =>
+        candidate.kind === 'epic-structure',
+    )!;
+    const layout = getEpicStairwellLayout(feature);
+    const root = view.group.getObjectByName('epic-structure-4-impossible-stairwell') as THREE.Group;
+    const upperShell = root.getObjectByName('epic-4-upper-shell') as THREE.Mesh;
+    const treads = root.getObjectByName('epic4-stair-treads') as THREE.Mesh;
+    const slopes = root.getObjectByName('epic4-stair-walkable-slopes') as THREE.Mesh;
+    const undersides = root.getObjectByName('epic4-stair-textured-undersides') as THREE.Mesh;
+    const stairFascias = root.getObjectByName('epic4-stair-support-skirts') as THREE.Mesh;
+    const landingUndersides = root.getObjectByName('epic4-stair-landing-undersides') as THREE.Mesh;
+    const landingFascias = root.getObjectByName('epic4-stair-landing-fascias') as THREE.Mesh;
+    expect(root).toBeDefined();
+    expect(upperShell).toBeDefined();
+    expect(treads).toBeDefined();
+    expect(slopes).toBeDefined();
+    expect(stairFascias).toBeDefined();
+    expect(undersides).toBeDefined();
+    expect(landingUndersides).toBeDefined();
+    expect(landingFascias).toBeDefined();
+    expect(root.getObjectByName('epic4-stair-textured-balustrades')).toBeDefined();
+    expect(root.getObjectByName('epic4-stair-landings-and-summit')).toBeDefined();
+    expect(root.getObjectByName('epic4-stair-guardrails')).toBeDefined();
+    expect(root.getObjectByName('epic4-upper-maze-walls')).toBeDefined();
+    expect(root.getObjectByName('epic4-upper-maze-ceiling')).toBeDefined();
+    expect(root.getObjectByName('epic-impossible-stairwell-floating-flights')).toBeUndefined();
+
+    treads.geometry.computeBoundingBox();
+    slopes.geometry.computeBoundingBox();
+    upperShell.geometry.computeBoundingBox();
+    expect(treads.geometry.boundingBox!.min.y).toBeLessThan(0.1);
+    expect(treads.geometry.boundingBox!.max.y).toBeCloseTo(layout.summitY, 5);
+    expect(slopes.geometry.boundingBox!.min.y).toBeCloseTo(0.004, 5);
+    expect(slopes.geometry.boundingBox!.max.y).toBeCloseTo(layout.summitY + 0.004, 5);
+    undersides.geometry.computeBoundingBox();
+    expect(undersides.geometry.boundingBox!.min.y).toBeCloseTo(-0.18, 5);
+    expect(undersides.geometry.boundingBox!.max.y).toBeCloseTo(layout.summitY - 0.18, 5);
+    expect((undersides.material as THREE.Material).name).toBe('lower-storey-wallpaper');
+    const fasciaPositions = stairFascias.geometry.getAttribute('position');
+    expect(fasciaPositions.count).toBe(layout.flights.length * 2 * 4);
+    for (let offset = 0; offset < fasciaPositions.count; offset += 4) {
+      expect(fasciaPositions.getY(offset + 2) - fasciaPositions.getY(offset + 1))
+        .toBeCloseTo(0.188, 5);
+      expect(fasciaPositions.getY(offset + 3) - fasciaPositions.getY(offset))
+        .toBeCloseTo(0.188, 5);
+    }
+    expect((stairFascias.material as THREE.Material).name).toBe('lower-storey-wallpaper');
+    const landingNormals = landingUndersides.geometry.getAttribute('normal');
+    expect(Array.from({ length: landingNormals.count }, (_, index) => landingNormals.getY(index))
+      .every((normalY) => normalY < -0.9)).toBe(true);
+    expect((landingUndersides.material as THREE.Material).name).toBe('lower-storey-ceiling');
+    expect(downwardTriangleHeights(landingFascias.geometry)).toHaveLength(0);
+    expect((landingFascias.material as THREE.Material).name).toBe('lower-storey-wallpaper');
+    expect(upperShell.geometry.boundingBox!.min.y).toBeCloseTo(0, 5);
+    expect(upperShell.geometry.boundingBox!.max.y).toBeCloseTo(feature.height, 5);
+
+    expect(rectWidth(feature.bounds)).toBeCloseTo(19.2, 5);
+    expect(rectDepth(feature.bounds)).toBeCloseTo(19.2, 5);
+    expect(plan.floorRects).toEqual([{ minX: -56, maxX: 56, minZ: -56, maxZ: 56 }]);
+    expect(layout.flights).toHaveLength(24);
+    expect(layout.summitY).toBeCloseTo(57.6, 5);
+    expect(layout.summitRects.some((rect) =>
+      rect.minX < layout.summitOpening.maxX &&
+      rect.maxX > layout.summitOpening.minX &&
+      rect.minZ < layout.summitOpening.maxZ &&
+      rect.maxZ > layout.summitOpening.minZ
+    )).toBe(false);
+    expect(layout.upperFloorRects).toHaveLength(2);
+    expect(layout.upperWalls).toHaveLength(6);
+    const shellWalls = getEpicStairRoomWalls(feature);
+    expect(shellWalls.filter((wall) => wall.bottom === 0).length).toBeGreaterThanOrEqual(8);
+    expect(shellWalls.some((wall) => wall.bottom >= layout.summitY)).toBe(true);
+    expect(plan.colliders.filter((collider) => collider.id.startsWith('epic4-stair-flight-') && !collider.id.endsWith('guard')))
+      .toHaveLength(layout.flights.length);
+    expect(plan.colliders.filter((collider) => collider.id.startsWith('epic4-stair-flight-') && collider.rotation))
+      .toHaveLength(layout.flights.length);
+
+    const obstacles = getEpicGroundObstacles(feature);
+    expect(obstacles.map((obstacle) => obstacle.id)).toEqual(['stairwell-core']);
+    const architecturalColumns = view.group.getObjectByName(
+      'merged-wallpaper-walls',
+    ) as THREE.Mesh;
+    expect(architecturalColumns.geometry.getAttribute('position').count)
+      .toBe(obstacles.length * 24);
+    expect(root.getObjectByName('epic-4-ground-obstacles'))
+      .toBeUndefined();
+
+    view.dispose();
+    Object.values(materials).forEach((material) => material.dispose());
+  });
+
+  it('builds epic5 as a clean liminal concourse with aligned thresholds and attached lights', () => {
+    const { materials, plan, view } = createEpicView(5, 'EPIC5-CONCOURSE-AUDIT', true);
+    const feature = plan.features.find(
+      (candidate): candidate is EpicStructureFeature => candidate.kind === 'epic-structure',
+    )!;
+    const root = view.group.getObjectByName('epic-structure-5-vanishing-concourse') as THREE.Group;
+    const upperShell = root.getObjectByName('epic-5-upper-shell') as THREE.Mesh;
+    const architecturalWalls = view.group.getObjectByName('merged-wallpaper-walls') as THREE.Mesh;
+    const ceiling = view.group.getObjectByName('elevated-atrium-ceilings') as THREE.Mesh;
+    const fixtures = view.group.getObjectByName('instanced-luminous-ceiling-tiles') as THREE.InstancedMesh;
+    expect(root).toBeDefined();
+    expect(upperShell).toBeDefined();
+    expect(architecturalWalls).toBeDefined();
+    expect(ceiling).toBeDefined();
+    expect(fixtures).toBeDefined();
+    expect(root.getObjectByName('epic-light-cathedral-vault-ribs')).toBeUndefined();
+    expect(root.getObjectByName('epic-light-cathedral-fluorescent-nave')).toBeUndefined();
+
+    architecturalWalls.geometry.computeBoundingBox();
+    ceiling.geometry.computeBoundingBox();
+    upperShell.geometry.computeBoundingBox();
+    expect(architecturalWalls.geometry.boundingBox!.min.y).toBeCloseTo(0, 5);
+    expect(architecturalWalls.geometry.boundingBox!.max.y).toBeCloseTo(feature.height, 5);
+    expect(ceiling.geometry.boundingBox!.min.y).toBeCloseTo(feature.height, 5);
+    expect(ceiling.geometry.boundingBox!.max.y).toBeCloseTo(feature.height, 5);
+    expect(upperShell.geometry.boundingBox!.min.y).toBeCloseTo(plan.wallHeight - 0.04, 5);
+    expect(upperShell.geometry.boundingBox!.max.y).toBeCloseTo(feature.height + 0.03, 5);
+
+    const walls = getEpicConcourseWalls(feature);
+    expect(walls).toHaveLength(28);
+    const fullHeightPiers = walls.filter((wall) => wall.bottom === 0);
+    for (const x of [-33, -11, 11, 33]) {
+      const line = fullHeightPiers.filter((wall) => wall.x === x);
+      expect(Math.min(...line.map((wall) => wall.z - wall.length * 0.5)))
+        .toBeCloseTo(feature.bounds.minZ + 0.24, 5);
+      expect(Math.max(...line.map((wall) => wall.z + wall.length * 0.5)))
+        .toBeCloseTo(feature.bounds.maxZ - 0.24, 5);
+    }
+    expect(plan.walls).toEqual(walls);
+    expect(plan.columns).toHaveLength(0);
+    const obstacles = getEpicGroundObstacles(feature);
+    expect(obstacles).toHaveLength(0);
+    expect(architecturalWalls.geometry.getAttribute('position').count).toBe(walls.length * 24);
+    expect(plan.colliders.filter((collider) => collider.id.startsWith('collider-epic5-concourse-')))
+      .toHaveLength(walls.length);
+
+    for (const x of [-33, -11, 11, 33]) {
+      for (const z of [-28, 0, 28]) {
+        expect(plan.colliders.some((collider) =>
+          collider.id.startsWith('collider-epic5-concourse-') &&
+          Math.abs(x - collider.center.x) <= collider.halfExtents.x &&
+          Math.abs(1.8 - collider.center.y) <= collider.halfExtents.y &&
+          Math.abs(z - collider.center.z) <= collider.halfExtents.z
+        )).toBe(false);
+      }
+    }
+
+    expect(plan.lights).toHaveLength(25);
+    expect(plan.lights.every((light) =>
+      light.ceilingY === feature.height - 0.035 &&
+      !light.dead &&
+      !light.unstable
+    )).toBe(true);
+    const fixtureMatrix = new THREE.Matrix4();
+    const fixturePosition = new THREE.Vector3();
+    for (let index = 0; index < fixtures.count; index += 1) {
+      fixtures.getMatrixAt(index, fixtureMatrix);
+      fixturePosition.setFromMatrixPosition(fixtureMatrix);
+      expect(fixturePosition.y).toBeCloseTo(feature.height - 0.071, 5);
+    }
+
+    view.dispose();
+    materials.ceiling.map?.dispose();
+    Object.values(materials).forEach((material) => material.dispose());
   });
 });

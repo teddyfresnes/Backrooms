@@ -40,6 +40,7 @@ const CORNER_PORTAL_JUNCTION_RATE = 0.025;
 const PIT_STORY_PITCH = 5.4;
 export const MAX_PIT_STORIES = 12;
 const PASSAGE_VOID_PRESENCE_RATE = 0.12;
+const WALL_BREACH_VOID_PRESENCE_RATE = 0.07;
 export const PIT_PRESENCE_RATE = 0.12;
 export const UNLIT_ZONE_PRESENCE_RATE = 0.09;
 const VISTA_LENGTH = 58;
@@ -95,7 +96,10 @@ export const worldMaxPitStories = (seed: string): number => {
 
 const worldMayHavePassageVoid = (seed: string): boolean => {
   const rootRng = new SeededRandom(`${seed}:v${GENERATOR_VERSION}`);
-  return rootRng.fork('feature:squeeze-hole:void').chance(PASSAGE_VOID_PRESENCE_RATE);
+  return (
+    rootRng.fork('feature:squeeze-hole:void').chance(PASSAGE_VOID_PRESENCE_RATE) ||
+    rootRng.fork('feature:wall-breach-hole:void').chance(WALL_BREACH_VOID_PRESENCE_RATE)
+  );
 };
 
 export const worldMaxShaftStories = (seed: string): number =>
@@ -1449,7 +1453,10 @@ const addCeilingVariations = (
       const thickness = referenceWalls.length > 0
         ? referenceWalls.reduce((sum, wall) => sum + wall.thickness, 0) / referenceWalls.length
         : WALL_THICKNESS;
-      const shellBottom = WALL_HEIGHT - 0.04;
+      // The ordinary ceiling ends exactly at WALL_HEIGHT. Starting an upper
+      // continuation below that plane leaves a thin wallpaper blade visible
+      // through neighbouring low ceilings.
+      const shellBottom = WALL_HEIGHT + 0.006;
       addWall(plan, rng.fork(`upper-shell:${shellIndex}`), {
         roomId: owner.roomId,
         x: owner.orientation === 'x' ? midpoint : owner.fixed,
@@ -1457,7 +1464,7 @@ const addCeilingVariations = (
         length: max - min,
         orientation: owner.orientation,
         bottom: shellBottom,
-        height: owner.height - shellBottom + 0.03,
+        height: owner.height - shellBottom + 0.006,
         thickness: clamp(thickness, WALL_THICKNESS, MAX_STRUCTURAL_WALL_THICKNESS),
         collision: true,
         tint,
@@ -1557,12 +1564,34 @@ const addRaisedZones = (
       const availableRun = Math.abs(outerLimit - fixed) - 1;
       return { edge, zoneIsFirst, outerRoom, availableRun };
     });
-    const viable = transitions.filter(({ outerRoom, availableRun, edge }) =>
-      !reservedRoomIds.has(outerRoom.id) &&
-      !roomIsRestricted(outerRoom) &&
-      availableRun >= 3 &&
-      edge.portal.width >= 1.5
-    );
+    const viableByApproachRoom = new Map<string, (typeof transitions)[number]>();
+    for (const transition of transitions) {
+      const { outerRoom, availableRun, edge } = transition;
+      const neighbors = adjacency.get(outerRoom.id) ?? new Set<string>();
+      const outsideNeighborCount = [...neighbors].filter((neighborId) => !roomIds.has(neighborId)).length;
+      const crossSpan = edge.portal.orientation === 'x'
+        ? rectWidth(outerRoom.bounds)
+        : rectDepth(outerRoom.bounds);
+      const rampWidth = clamp(edge.portal.width - 0.26, 1.2, 3.4);
+      if (
+        reservedRoomIds.has(outerRoom.id) ||
+        roomIsRestricted(outerRoom) ||
+        outerRoom.kind === 'corridor' ||
+        availableRun < 4.2 ||
+        edge.portal.width < 1.5 ||
+        crossSpan < rampWidth + 2.6 ||
+        neighbors.size > 2 ||
+        outsideNeighborCount !== 1
+      ) continue;
+
+      // A single approach room must never host two ramps. Apart from looking
+      // like a junction, the overlapping slopes would also fight for the same
+      // later architectural clearance.
+      if (!viableByApproachRoom.has(outerRoom.id)) {
+        viableByApproachRoom.set(outerRoom.id, transition);
+      }
+    }
+    const viable = [...viableByApproachRoom.values()];
     if (viable.length === 0) {
       availableIds.delete(anchor.id);
       zoneIndex -= 1;
@@ -1588,7 +1617,8 @@ const addRaisedZones = (
       continue;
     }
     const elevation = (zoneRng.chance(0.42) ? -1 : 1) * magnitude;
-    const ramps: RaisedZoneFeature['ramps'] = viable.slice(0, 4).map((transition, rampIndex) => {
+    const selectedTransitions = viable.slice(0, 4);
+    const ramps: RaisedZoneFeature['ramps'] = selectedTransitions.map((transition, rampIndex) => {
       const rampRng = zoneRng.fork(`ramp:${rampIndex}`);
       const angle = rampRng.float(7, 31) * Math.PI / 180;
       const minimumRun = magnitude / Math.tan(34 * Math.PI / 180);
@@ -1634,6 +1664,7 @@ const addRaisedZones = (
       id: featureId,
       roomId: anchor.id,
       roomIds: rooms.map((room) => room.id),
+      approachRoomIds: selectedTransitions.map(({ outerRoom }) => outerRoom.id),
       bounds,
       platformBounds: platformRects[0]!,
       platformRects,
@@ -1720,7 +1751,7 @@ const addRaisedZones = (
       }
     }
 
-    const viableKeys = new Set(viable.slice(0, 4).map(({ edge }) =>
+    const viableKeys = new Set(selectedTransitions.map(({ edge }) =>
       `${edge.portal.orientation}:${edge.portal.x.toFixed(2)}:${edge.portal.z.toFixed(2)}`
     ));
     for (const [sealIndex, transition] of transitions.entries()) {
@@ -1745,6 +1776,13 @@ const addRaisedZones = (
     for (const room of rooms) {
       reservedRoomIds.add(room.id);
       availableIds.delete(room.id);
+    }
+    for (const { outerRoom } of selectedTransitions) {
+      // The complete run-up belongs to the elevation feature. Keeping it out
+      // of every later room pass prevents low ceilings, return walls, columns,
+      // solid masses and a second raised district from occupying the slope.
+      reservedRoomIds.add(outerRoom.id);
+      availableIds.delete(outerRoom.id);
     }
   }
 };
@@ -3467,10 +3505,13 @@ const addInteractiveDoors = (
   const spawnRoom = world.rooms.find((room) =>
     pointInRect(world.spawn.x, world.spawn.z, room.bounds)
   );
-  const elevatedRoomIds = new Set(
+  const elevationClearanceRoomIds = new Set(
     world.features
       .filter((feature): feature is RaisedZoneFeature => feature.kind === 'raised-zone')
-      .flatMap((feature) => feature.roomIds ?? [feature.roomId]),
+      .flatMap((feature) => [
+        ...(feature.roomIds ?? [feature.roomId]),
+        ...(feature.approachRoomIds ?? []),
+      ]),
   );
   const candidates = rng.shuffle(boundaryWallCandidates(
     plan,
@@ -3482,8 +3523,8 @@ const addInteractiveDoors = (
       second.level === 0 &&
       first.access !== 'sealed' &&
       second.access !== 'sealed' &&
-      !elevatedRoomIds.has(first.id) &&
-      !elevatedRoomIds.has(second.id) &&
+      !elevationClearanceRoomIds.has(first.id) &&
+      !elevationClearanceRoomIds.has(second.id) &&
       !roomInZones(first, world.symmetryZones) &&
       !roomInZones(second, world.symmetryZones),
   ));
@@ -3701,18 +3742,384 @@ const addInteractiveDoorColliders = (
   }
 };
 
+interface PassageBoundarySegment {
+  orientation: 'x' | 'z';
+  fixed: number;
+  min: number;
+  max: number;
+}
+
+type PassageBoundaryOpening = PassageBoundarySegment;
+
+const subtractPassageInterval = (
+  intervals: Array<{ min: number; max: number }>,
+  cutMin: number,
+  cutMax: number,
+): Array<{ min: number; max: number }> =>
+  intervals.flatMap((interval) => {
+    if (cutMax <= interval.min + 1e-4 || cutMin >= interval.max - 1e-4) return [interval];
+    const pieces: Array<{ min: number; max: number }> = [];
+    if (cutMin > interval.min + 1e-4) {
+      pieces.push({ min: interval.min, max: Math.min(interval.max, cutMin) });
+    }
+    if (cutMax < interval.max - 1e-4) {
+      pieces.push({ min: Math.max(interval.min, cutMax), max: interval.max });
+    }
+    return pieces;
+  });
+
+const exposedPassageBoundaries = (rects: readonly Rect[]): PassageBoundarySegment[] => {
+  const result: PassageBoundarySegment[] = [];
+  for (const [rectIndex, rect] of rects.entries()) {
+    const sides = [
+      {
+        orientation: 'x' as const,
+        fixed: rect.minZ,
+        min: rect.minX,
+        max: rect.maxX,
+        adjacent: (other: Rect) => Math.abs(other.maxZ - rect.minZ) < 0.02,
+        overlap: (other: Rect) => ({ min: other.minX, max: other.maxX }),
+      },
+      {
+        orientation: 'x' as const,
+        fixed: rect.maxZ,
+        min: rect.minX,
+        max: rect.maxX,
+        adjacent: (other: Rect) => Math.abs(other.minZ - rect.maxZ) < 0.02,
+        overlap: (other: Rect) => ({ min: other.minX, max: other.maxX }),
+      },
+      {
+        orientation: 'z' as const,
+        fixed: rect.minX,
+        min: rect.minZ,
+        max: rect.maxZ,
+        adjacent: (other: Rect) => Math.abs(other.maxX - rect.minX) < 0.02,
+        overlap: (other: Rect) => ({ min: other.minZ, max: other.maxZ }),
+      },
+      {
+        orientation: 'z' as const,
+        fixed: rect.maxX,
+        min: rect.minZ,
+        max: rect.maxZ,
+        adjacent: (other: Rect) => Math.abs(other.minX - rect.maxX) < 0.02,
+        overlap: (other: Rect) => ({ min: other.minZ, max: other.maxZ }),
+      },
+    ];
+    for (const side of sides) {
+      let intervals = [{ min: side.min, max: side.max }];
+      for (const [otherIndex, other] of rects.entries()) {
+        if (otherIndex === rectIndex || !side.adjacent(other)) continue;
+        const overlap = side.overlap(other);
+        intervals = subtractPassageInterval(intervals, overlap.min, overlap.max);
+      }
+      for (const interval of intervals) {
+        if (interval.max - interval.min > 1e-4) {
+          result.push({
+            orientation: side.orientation,
+            fixed: side.fixed,
+            min: interval.min,
+            max: interval.max,
+          });
+        }
+      }
+    }
+  }
+  return result;
+};
+
+const passageBounds = (rects: readonly Rect[]): Rect => ({
+  minX: Math.min(...rects.map((rect) => rect.minX)),
+  maxX: Math.max(...rects.map((rect) => rect.maxX)),
+  minZ: Math.min(...rects.map((rect) => rect.minZ)),
+  maxZ: Math.max(...rects.map((rect) => rect.maxZ)),
+});
+
+const addPassageHoleColliders = (
+  colliders: StaticCollider[],
+  worldSize: number,
+  featureId: string,
+  hole: PassageHole,
+): void => {
+  const shaftThickness = 0.12;
+  const shaftTop = 0;
+  const shaftBottom = hole.kind === 'void'
+    ? getPassageHoleAbyssBottom(hole)
+    : PASSAGE_HOLE_LOWER_CEILING_Y - 0.06;
+  const shaftHeight = shaftTop - shaftBottom;
+  for (const [side, collider] of [
+    ['north', {
+      x: rectCenter(hole).x,
+      z: hole.minZ,
+      halfX: rectWidth(hole) * 0.5 + shaftThickness,
+      halfZ: shaftThickness * 0.5,
+    }],
+    ['south', {
+      x: rectCenter(hole).x,
+      z: hole.maxZ,
+      halfX: rectWidth(hole) * 0.5 + shaftThickness,
+      halfZ: shaftThickness * 0.5,
+    }],
+    ['west', {
+      x: hole.minX,
+      z: rectCenter(hole).z,
+      halfX: shaftThickness * 0.5,
+      halfZ: rectDepth(hole) * 0.5 + shaftThickness,
+    }],
+    ['east', {
+      x: hole.maxX,
+      z: rectCenter(hole).z,
+      halfX: shaftThickness * 0.5,
+      halfZ: rectDepth(hole) * 0.5 + shaftThickness,
+    }],
+  ] as const) {
+    colliders.push({
+      id: `${featureId}-hole-${side}`,
+      center: {
+        x: collider.x,
+        y: shaftBottom + shaftHeight * 0.5,
+        z: collider.z,
+      },
+      halfExtents: {
+        x: collider.halfX,
+        y: shaftHeight * 0.5,
+        z: collider.halfZ,
+      },
+      kind: 'wall',
+    });
+  }
+  if (hole.kind === 'void') return;
+
+  const previewBounds = getPassageHolePreviewBounds(hole, worldSize);
+  colliders.push({
+    id: `${featureId}-hole-bottom`,
+    center: {
+      x: rectCenter(previewBounds).x,
+      y: PASSAGE_HOLE_LOWER_FLOOR_Y - 0.12,
+      z: rectCenter(previewBounds).z,
+    },
+    halfExtents: {
+      x: rectWidth(previewBounds) * 0.5,
+      y: 0.12,
+      z: rectDepth(previewBounds) * 0.5,
+    },
+    kind: 'floor',
+  });
+  const lowerWallHeight = PASSAGE_HOLE_LOWER_CEILING_Y - PASSAGE_HOLE_LOWER_FLOOR_Y;
+  const lowerWallY = PASSAGE_HOLE_LOWER_FLOOR_Y + lowerWallHeight * 0.5;
+  for (const [side, collider] of [
+    ['north', {
+      x: rectCenter(previewBounds).x,
+      z: previewBounds.minZ,
+      halfX: rectWidth(previewBounds) * 0.5 + shaftThickness,
+      halfZ: shaftThickness * 0.5,
+    }],
+    ['south', {
+      x: rectCenter(previewBounds).x,
+      z: previewBounds.maxZ,
+      halfX: rectWidth(previewBounds) * 0.5 + shaftThickness,
+      halfZ: shaftThickness * 0.5,
+    }],
+    ['west', {
+      x: previewBounds.minX,
+      z: rectCenter(previewBounds).z,
+      halfX: shaftThickness * 0.5,
+      halfZ: rectDepth(previewBounds) * 0.5 + shaftThickness,
+    }],
+    ['east', {
+      x: previewBounds.maxX,
+      z: rectCenter(previewBounds).z,
+      halfX: shaftThickness * 0.5,
+      halfZ: rectDepth(previewBounds) * 0.5 + shaftThickness,
+    }],
+  ] as const) {
+    colliders.push({
+      id: `${featureId}-lower-preview-${side}`,
+      center: { x: collider.x, y: lowerWallY, z: collider.z },
+      halfExtents: {
+        x: collider.halfX,
+        y: lowerWallHeight * 0.5,
+        z: collider.halfZ,
+      },
+      kind: 'wall',
+    });
+  }
+};
+
+interface FlushWallBreachPlan {
+  room: RoomRecord;
+  layout: 'through' | 'dead-end' | 'left-turn' | 'right-turn' | 't-junction';
+  exitCount: number;
+  rects: Rect[];
+  openings: PassageBoundaryOpening[];
+  hole?: PassageHole;
+}
+
+const planFlushWallBreach = (
+  candidate: BoundaryWallCandidate,
+  rng: SeededRandom,
+  alongCenter: number,
+  apertureWidth: number,
+  forceVoid: boolean,
+): FlushWallBreachPlan | undefined => {
+  const source = candidate.wall;
+  const fixed = source.orientation === 'x' ? source.z : source.x;
+  const hostOptions = [
+    { room: candidate.firstRoom, travelSign: -1 as const },
+    { room: candidate.secondRoom, travelSign: 1 as const },
+  ].filter(({ room, travelSign }) => {
+    const availableDepth = source.orientation === 'x'
+      ? travelSign < 0 ? fixed - room.bounds.minZ : room.bounds.maxZ - fixed
+      : travelSign < 0 ? fixed - room.bounds.minX : room.bounds.maxX - fixed;
+    const alongMin = source.orientation === 'x' ? room.bounds.minX : room.bounds.minZ;
+    const alongMax = source.orientation === 'x' ? room.bounds.maxX : room.bounds.maxZ;
+    return (
+      availableDepth >= Math.max(5.85, apertureWidth * 2.75 + 0.62) &&
+      alongCenter - alongMin >= apertureWidth * 0.5 + 0.5 &&
+      alongMax - alongCenter >= apertureWidth * 0.5 + 0.5
+    );
+  });
+  if (hostOptions.length === 0) return undefined;
+  const host = rng.pick(hostOptions);
+  const room = host.room;
+  const travelSign = host.travelSign;
+  const availableDepth = source.orientation === 'x'
+    ? travelSign < 0 ? fixed - room.bounds.minZ : room.bounds.maxZ - fixed
+    : travelSign < 0 ? fixed - room.bounds.minX : room.bounds.maxX - fixed;
+  const alongMin = source.orientation === 'x' ? room.bounds.minX : room.bounds.minZ;
+  const alongMax = source.orientation === 'x' ? room.bounds.maxX : room.bounds.maxZ;
+  const negativeTurnSpace = alongCenter - alongMin - 0.62;
+  const positiveTurnSpace = alongMax - alongCenter - 0.62;
+  const minimumTurn = Math.max(3.1, apertureWidth * 1.75);
+  const layoutOptions: Array<{
+    value: FlushWallBreachPlan['layout'];
+    weight: number;
+  }> = [
+    { value: 'through', weight: 0.15 },
+    { value: 'dead-end', weight: 0.3 },
+  ];
+  if (negativeTurnSpace >= minimumTurn) layoutOptions.push({ value: 'left-turn', weight: 0.22 });
+  if (positiveTurnSpace >= minimumTurn) layoutOptions.push({ value: 'right-turn', weight: 0.22 });
+  if (negativeTurnSpace >= minimumTurn && positiveTurnSpace >= minimumTurn) {
+    layoutOptions.push({ value: 't-junction', weight: 0.16 });
+  }
+  const layout = forceVoid ? 'dead-end' : rng.weighted(layoutOptions);
+  const minimumDepth = Math.max(5.2, apertureWidth * 2.75);
+  const depth = quantize(
+    rng.float(minimumDepth, Math.max(minimumDepth, Math.min(11.5, availableDepth - 0.62))),
+    0.05,
+  );
+  const entryV = -source.thickness * 0.5;
+  const halfWidth = apertureWidth * 0.5;
+  const localRect = (minU: number, maxU: number, minV: number, maxV: number): Rect => {
+    const worldV1 = fixed + travelSign * minV;
+    const worldV2 = fixed + travelSign * maxV;
+    return source.orientation === 'x'
+      ? {
+          minX: alongCenter + minU,
+          maxX: alongCenter + maxU,
+          minZ: Math.min(worldV1, worldV2),
+          maxZ: Math.max(worldV1, worldV2),
+        }
+      : {
+          minX: Math.min(worldV1, worldV2),
+          maxX: Math.max(worldV1, worldV2),
+          minZ: alongCenter + minU,
+          maxZ: alongCenter + maxU,
+        };
+  };
+  const crossBoundary = (
+    v: number,
+    minU = -halfWidth,
+    maxU = halfWidth,
+  ): PassageBoundaryOpening => ({
+    orientation: source.orientation,
+    fixed: fixed + travelSign * v,
+    min: alongCenter + minU,
+    max: alongCenter + maxU,
+  });
+  const turnBoundary = (
+    u: number,
+    minV: number,
+    maxV: number,
+  ): PassageBoundaryOpening => {
+    const worldV1 = fixed + travelSign * minV;
+    const worldV2 = fixed + travelSign * maxV;
+    return {
+      orientation: source.orientation === 'x' ? 'z' : 'x',
+      fixed: alongCenter + u,
+      min: Math.min(worldV1, worldV2),
+      max: Math.max(worldV1, worldV2),
+    };
+  };
+
+  const openings: PassageBoundaryOpening[] = [crossBoundary(entryV)];
+  const rects: Rect[] = [];
+  let exitCount = 0;
+  if (layout === 'left-turn' || layout === 'right-turn' || layout === 't-junction') {
+    const turnStart = depth - apertureWidth;
+    rects.push(localRect(-halfWidth, halfWidth, entryV, turnStart));
+    const leftLength = negativeTurnSpace >= minimumTurn
+      ? quantize(rng.float(minimumTurn, Math.min(8.4, negativeTurnSpace)), 0.05)
+      : halfWidth;
+    const rightLength = positiveTurnSpace >= minimumTurn
+      ? quantize(rng.float(minimumTurn, Math.min(8.4, positiveTurnSpace)), 0.05)
+      : halfWidth;
+    const minU = layout === 'right-turn' ? -halfWidth : -leftLength;
+    const maxU = layout === 'left-turn' ? halfWidth : rightLength;
+    rects.push(localRect(minU, maxU, turnStart, depth));
+    if (layout !== 'right-turn') {
+      openings.push(turnBoundary(-leftLength, turnStart, depth));
+      exitCount += 1;
+    }
+    if (layout !== 'left-turn') {
+      openings.push(turnBoundary(rightLength, turnStart, depth));
+      exitCount += 1;
+    }
+  } else {
+    rects.push(localRect(-halfWidth, halfWidth, entryV, depth));
+    if (layout === 'through') {
+      openings.push(crossBoundary(depth));
+      exitCount = 1;
+    }
+  }
+
+  let hole: PassageHole | undefined;
+  if (layout === 'dead-end' && (forceVoid || rng.chance(0.66))) {
+    const holeLength = quantize(rng.float(1.25, Math.min(2.45, depth * 0.34)), 0.05);
+    const kind = forceVoid ? 'void' as const : 'drop' as const;
+    const stories = kind === 'void' ? MAX_PIT_STORIES : 1;
+    hole = {
+      ...localRect(-halfWidth, halfWidth, depth - holeLength, depth),
+      depth: stories * PIT_STORY_PITCH,
+      kind,
+      stories,
+    };
+  }
+  return { room, layout, exitCount, rects, openings, hole };
+};
+
 const carveWallBreach = (
   plan: MutablePlan,
   world: WorldPlan,
   candidate: BoundaryWallCandidate,
   rng: SeededRandom,
   secretRoom?: RoomRecord,
+  forceVoid = false,
 ): boolean => {
   const source = candidate.wall;
   if (!plan.walls.includes(source)) return false;
-  const maximumWidth = Math.min(1.42, candidate.max - candidate.min - 1.35);
+  const breachProfile = secretRoom || (!forceVoid && !rng.chance(0.62))
+    ? 'projecting' as const
+    : 'flush' as const;
+  const maximumWidth = Math.min(
+    breachProfile === 'flush' ? 1.95 : 1.42,
+    candidate.max - candidate.min - 1.35,
+  );
   if (maximumWidth < 1.02) return false;
-  const apertureWidth = quantize(rng.float(1.02, maximumWidth), 0.01);
+  const apertureWidth = quantize(rng.float(
+    breachProfile === 'flush' ? Math.min(1.2, maximumWidth) : 1.02,
+    maximumWidth,
+  ), 0.01);
   const centerMin = candidate.min + apertureWidth * 0.5 + 0.62;
   const centerMax = candidate.max - apertureWidth * 0.5 - 0.62;
   if (centerMax < centerMin) return false;
@@ -3733,7 +4140,25 @@ const carveWallBreach = (
   const sourceCenter = source.orientation === 'x' ? source.x : source.z;
   const sourceMin = sourceCenter - source.length * 0.5;
   const sourceMax = sourceCenter + source.length * 0.5;
-  const roomId = secretRoom?.id ?? candidate.secondRoom.id;
+  const featureId = `wall-breach-${world.features.filter(
+    (feature) => feature.kind === 'squeeze-view' && feature.passageStyle === 'wall-breach',
+  ).length}`;
+  const flushPlan = breachProfile === 'flush'
+    ? planFlushWallBreach(candidate, rng.fork('flush-layout'), alongCenter, apertureWidth, forceVoid)
+    : undefined;
+  if (breachProfile === 'flush' && !flushPlan) return false;
+  if (flushPlan && plan.walls.some((wall) => {
+    if (wall === source || wall.bottom >= source.height - 0.08) return false;
+    const halfX = wall.orientation === 'x' ? wall.length * 0.5 : wall.thickness * 0.5;
+    const halfZ = wall.orientation === 'z' ? wall.length * 0.5 : wall.thickness * 0.5;
+    return flushPlan.rects.some((rect) =>
+      rect.minX < wall.x + halfX + 0.24 &&
+      rect.maxX > wall.x - halfX - 0.24 &&
+      rect.minZ < wall.z + halfZ + 0.24 &&
+      rect.maxZ > wall.z - halfZ - 0.24
+    );
+  })) return false;
+  const roomId = flushPlan?.room.id ?? secretRoom?.id ?? candidate.secondRoom.id;
 
   plan.walls = plan.walls.filter((wall) => wall !== source);
   plan.colliders = plan.colliders.filter(
@@ -3761,7 +4186,10 @@ const carveWallBreach = (
   fragment(sourceMin, openingMin, 'left-jamb');
   fragment(openingMax, sourceMax, 'right-jamb');
 
-  const clearanceHeight = quantize(rng.float(1.36, 1.47), 0.01);
+  const clearanceHeight = quantize(
+    breachProfile === 'flush' ? rng.float(1.58, 2.12) : rng.float(1.36, 1.47),
+    0.01,
+  );
   addWall(plan, rng.fork('lintel'), {
     roomId,
     x: source.orientation === 'x' ? alongCenter : source.x,
@@ -3776,6 +4204,98 @@ const carveWallBreach = (
     kind: 'wallpaper',
     detail: 'crawl-lintel',
   });
+
+  if (flushPlan) {
+    for (const [boundaryIndex, boundary] of exposedPassageBoundaries(flushPlan.rects).entries()) {
+      let intervals = [{ min: boundary.min, max: boundary.max }];
+      for (const opening of flushPlan.openings) {
+        if (
+          opening.orientation === boundary.orientation &&
+          Math.abs(opening.fixed - boundary.fixed) < 0.02
+        ) {
+          intervals = subtractPassageInterval(intervals, opening.min, opening.max);
+        }
+      }
+      for (const [intervalIndex, interval] of intervals.entries()) {
+        if (interval.max - interval.min <= 0.18) continue;
+        addWall(plan, rng.fork(`flush-wall:${boundaryIndex}:${intervalIndex}`), {
+          roomId,
+          x: boundary.orientation === 'x'
+            ? (interval.min + interval.max) * 0.5
+            : boundary.fixed,
+          z: boundary.orientation === 'z'
+            ? (interval.min + interval.max) * 0.5
+            : boundary.fixed,
+          length: interval.max - interval.min,
+          orientation: boundary.orientation,
+          bottom: 0,
+          height: flushPlan.room.ceilingHeight,
+          thickness: 0.18,
+          tint: source.tint,
+          collision: true,
+          kind: 'wallpaper',
+          detail: 'crawl-flush-wall',
+        });
+      }
+    }
+    const bounds = passageBounds(flushPlan.rects);
+    const removedColumns = world.columns.filter((column) =>
+      flushPlan.rects.some((rect) =>
+        column.x + column.width * 0.5 > rect.minX - 0.08 &&
+        column.x - column.width * 0.5 < rect.maxX + 0.08 &&
+        column.z + column.depth * 0.5 > rect.minZ - 0.08 &&
+        column.z - column.depth * 0.5 < rect.maxZ + 0.08
+      )
+    );
+    if (removedColumns.length > 0) {
+      world.columns = world.columns.filter((column) => !removedColumns.includes(column));
+      plan.colliders = plan.colliders.filter((collider) =>
+        collider.kind !== 'column' ||
+        !removedColumns.some((column) =>
+          Math.abs(collider.center.x - column.x) < 0.02 &&
+          Math.abs(collider.center.z - column.z) < 0.02
+        )
+      );
+    }
+    const holes = flushPlan.hole ? [flushPlan.hole] : [];
+    world.features.push({
+      kind: 'squeeze-view',
+      id: featureId,
+      roomId,
+      bounds,
+      axis: source.orientation === 'x' ? 'z' : 'x',
+      apertureWidth,
+      passageStyle: 'wall-breach',
+      breachProfile: 'flush',
+      passageRects: flushPlan.rects,
+      layout: flushPlan.layout,
+      exitCount: flushPlan.exitCount,
+      clearanceHeight,
+      holes,
+    });
+    for (const [rectIndex, rect] of flushPlan.rects.entries()) {
+      plan.colliders.push({
+        id: rectIndex === 0
+          ? `${featureId}-low-ceiling`
+          : `${featureId}-low-ceiling-${rectIndex}`,
+        center: {
+          x: rectCenter(rect).x,
+          y: clearanceHeight + (flushPlan.room.ceilingHeight - clearanceHeight) * 0.5,
+          z: rectCenter(rect).z,
+        },
+        halfExtents: {
+          x: rectWidth(rect) * 0.5,
+          y: (flushPlan.room.ceilingHeight - clearanceHeight) * 0.5,
+          z: rectDepth(rect) * 0.5,
+        },
+        kind: 'barrier',
+      });
+    }
+    if (flushPlan.hole) {
+      addPassageHoleColliders(plan.colliders, world.size, featureId, flushPlan.hole);
+    }
+    return true;
+  }
 
   const deepTunnel = secretRoom !== undefined || rng.chance(0.42);
   const sampledTunnelDepth = secretRoom
@@ -3858,9 +4378,6 @@ const carveWallBreach = (
     });
   }
 
-  const featureId = `wall-breach-${world.features.filter(
-    (feature) => feature.kind === 'squeeze-view' && feature.passageStyle === 'wall-breach',
-  ).length}`;
   world.features.push({
     kind: 'squeeze-view',
     id: featureId,
@@ -3869,6 +4386,7 @@ const carveWallBreach = (
     axis: source.orientation === 'x' ? 'z' : 'x',
     apertureWidth,
     passageStyle: 'wall-breach',
+    breachProfile: 'projecting',
     layout: 'through',
     exitCount: 1,
     clearanceHeight,
@@ -3897,11 +4415,25 @@ const addWallBreaches = (
   rootRng: SeededRandom,
 ): void => {
   const rng = rootRng.fork('feature:wall-breaches');
-  const elevationRoomIds = new Set(
+  const voidPassageEnabled = rootRng
+    .fork('feature:wall-breach-hole:void')
+    .chance(WALL_BREACH_VOID_PRESENCE_RATE);
+  let voidPassageAssigned = false;
+  const elevationClearanceRoomIds = new Set(
     world.features
       .filter((feature): feature is RaisedZoneFeature => feature.kind === 'raised-zone')
-      .flatMap((feature) => feature.roomIds ?? [feature.roomId]),
+      .flatMap((feature) => [
+        ...(feature.roomIds ?? [feature.roomId]),
+        ...(feature.approachRoomIds ?? []),
+      ]),
   );
+  const featureRoomIds = new Set(world.features.flatMap((feature) =>
+    'roomId' in feature ? [feature.roomId] : []
+  ));
+  const acceptsWallBreachRoom = (room: RoomRecord): boolean =>
+    !featureRoomIds.has(room.id) &&
+    room.kind !== 'open-hall' &&
+    room.kind !== 'pit-gallery';
   const secretRooms = world.rooms.filter((room) => room.access === 'secret');
   const usedRooms = new Set<string>();
   for (const secretRoom of secretRooms) {
@@ -3911,8 +4443,10 @@ const addWallBreaches = (
       (first, second) =>
         !roomInZones(first, world.symmetryZones) &&
         !roomInZones(second, world.symmetryZones) &&
-        !elevationRoomIds.has(first.id) &&
-        !elevationRoomIds.has(second.id) &&
+        acceptsWallBreachRoom(first) &&
+        acceptsWallBreachRoom(second) &&
+        !elevationClearanceRoomIds.has(first.id) &&
+        !elevationClearanceRoomIds.has(second.id) &&
         (
           (first.id === secretRoom.id && !roomIsRestricted(second)) ||
           (second.id === secretRoom.id && !roomIsRestricted(first))
@@ -3933,15 +4467,26 @@ const addWallBreaches = (
     (first, second) =>
       !roomIsRestricted(first) &&
       !roomIsRestricted(second) &&
-      !elevationRoomIds.has(first.id) &&
-      !elevationRoomIds.has(second.id) &&
+      acceptsWallBreachRoom(first) &&
+      acceptsWallBreachRoom(second) &&
+      !elevationClearanceRoomIds.has(first.id) &&
+      !elevationClearanceRoomIds.has(second.id) &&
       !roomInZones(first, world.symmetryZones) &&
       !roomInZones(second, world.symmetryZones),
   ));
   for (const [index, candidate] of candidates.entries()) {
     if (placed >= desired) break;
     if (usedRooms.has(candidate.firstRoom.id) || usedRooms.has(candidate.secondRoom.id)) continue;
-    if (!carveWallBreach(plan, world, candidate, rng.fork(`ordinary:${index}`))) continue;
+    const forceVoid = voidPassageEnabled && !voidPassageAssigned;
+    if (!carveWallBreach(
+      plan,
+      world,
+      candidate,
+      rng.fork(`ordinary:${index}`),
+      undefined,
+      forceVoid,
+    )) continue;
+    if (forceVoid) voidPassageAssigned = true;
     usedRooms.add(candidate.firstRoom.id);
     usedRooms.add(candidate.secondRoom.id);
     placed += 1;
@@ -4523,15 +5068,14 @@ export const addStepColliders = (world: WorldPlan, stairs: StairSocketFeature): 
   }
 };
 
-export const generateWorld = (seed: string): WorldPlan => {
-  const rootRng = new SeededRandom(`${seed}:v${GENERATOR_VERSION}`);
-  const surfaceRng = rootRng.fork('surface-style');
+export const generateSurfaceStyle = (seed: string): SurfaceStyle => {
+  const surfaceRng = new SeededRandom(`${seed}:v${GENERATOR_VERSION}`).fork('surface-style');
   const surfaceProfile = surfaceRng.weighted([
     { value: 'balanced' as const, weight: 0.7 },
     { value: 'faded' as const, weight: 0.16 },
     { value: 'dense' as const, weight: 0.14 },
   ]);
-  const surfaceStyle: SurfaceStyle = {
+  return {
     wallTint: surfaceProfile === 'faded'
       ? surfaceRng.float(0.9, 0.98)
       : surfaceProfile === 'dense'
@@ -4548,6 +5092,11 @@ export const generateWorld = (seed: string): WorldPlan => {
     ceilingPatternScale: surfaceRng.float(0.78, 1.32),
     floorQuarterTurn: surfaceRng.chance(0.5),
   };
+};
+
+export const generateWorld = (seed: string): WorldPlan => {
+  const rootRng = new SeededRandom(`${seed}:v${GENERATOR_VERSION}`);
+  const surfaceStyle = generateSurfaceStyle(seed);
   const half = WORLD_SIZE * 0.5;
   const worldBounds: Rect = { minX: -half, minZ: -half, maxX: half, maxZ: half };
   const mutable: MutablePlan = { walls: [], rooms: [], colliders: [], portals: [], wallIndex: 0 };
@@ -4744,11 +5293,13 @@ export const fingerprintWorld = (world: WorldPlan): string => {
       .join('|'),
     world.features.map((feature) =>
       feature.kind === 'squeeze-view'
-        ? `${feature.id}:${feature.passageStyle ?? 'room-network'}:${(feature.holes ?? [])
+        ? `${feature.id}:${feature.passageStyle ?? 'room-network'}:${feature.breachProfile ?? 'none'}:${feature.layout ?? 'through'}:${(feature.passageRects ?? [feature.bounds])
+            .map((rect) => `${rect.minX.toFixed(2)},${rect.minZ.toFixed(2)},${rect.maxX.toFixed(2)},${rect.maxZ.toFixed(2)}`)
+            .join(';')}:${(feature.holes ?? [])
             .map((hole) => `${hole.kind ?? 'drop'}-${hole.stories ?? 1}`)
             .join(',')}`
         : feature.kind === 'raised-zone'
-          ? `${feature.id}:${feature.elevation}:${(feature.roomIds ?? [feature.roomId]).join(',')}:${(feature.ramps ?? [feature.ramp]).length}`
+          ? `${feature.id}:${feature.elevation}:${(feature.roomIds ?? [feature.roomId]).join(',')}:${(feature.approachRoomIds ?? []).join(',')}:${(feature.ramps ?? [feature.ramp]).length}`
           : feature.kind === 'stair-socket'
             ? `${feature.id}:${feature.layout ?? 'switchback'}:${feature.switchbackJoin ?? 'joined'}`
           : feature.id

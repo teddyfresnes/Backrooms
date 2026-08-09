@@ -1,5 +1,6 @@
 import {
   addStepColliders,
+  generateSurfaceStyle,
   generateWorld,
   lightPanelOverlapsRect,
   MAX_PIT_STORIES,
@@ -9,7 +10,8 @@ import {
 import {
   applyEpicStructure,
   epicStructureIndexForCoord,
-  getEpicVoidBounds,
+  getEpicAbyssPassagesForStory,
+  getEpicStructureVoidBounds,
 } from './EpicStructures';
 import { populateRareProps } from './PropPlacement';
 import { SeededRandom } from './SeededRandom';
@@ -215,13 +217,42 @@ const gatesForAddress = (seed: string, address: CanonicalEdgeAddress): readonly 
   );
 };
 
+const oppositeEdge = (edge: ChunkEdge): ChunkEdge => edge === 'north'
+  ? 'south'
+  : edge === 'south'
+    ? 'north'
+    : edge === 'west' ? 'east' : 'west';
+
+const epicAbyssGatesForEdge = (
+  seed: string,
+  coord: Readonly<ChunkCoord>,
+  edge: ChunkEdge,
+): readonly EdgeGate[] | undefined => {
+  const neighbor = parseChunkKey(getNeighborChunkKey(coord, edge));
+  const source = epicStructureIndexForCoord(seed, coord) === 1
+    ? { coord, side: edge }
+    : epicStructureIndexForCoord(seed, neighbor) === 1
+      ? { coord: neighbor, side: oppositeEdge(edge) }
+      : undefined;
+  if (!source) return undefined;
+  return Object.freeze(
+    getEpicAbyssPassagesForStory(seed, source.coord)
+      .filter((passage) => passage.side === source.side)
+      .map((passage) => Object.freeze({
+        offset: passage.along,
+        width: passage.width,
+      })),
+  );
+};
+
 export const getCanonicalEdgeGates = (
   seed: string,
   key: ChunkKey | ChunkCoord,
   edge: ChunkEdge,
 ): readonly EdgeGate[] => {
   const coord = resolveCoord(key);
-  return gatesForAddress(seed, canonicalEdgeAddress(coord, edge));
+  return epicAbyssGatesForEdge(seed, coord, edge) ??
+    gatesForAddress(seed, canonicalEdgeAddress(coord, edge));
 };
 
 export const getInfiniteEdgeGates = (
@@ -230,10 +261,10 @@ export const getInfiniteEdgeGates = (
 ): InfiniteEdgeGates => {
   const coord = resolveCoord(key);
   return Object.freeze({
-    north: gatesForAddress(seed, canonicalEdgeAddress(coord, 'north')),
-    east: gatesForAddress(seed, canonicalEdgeAddress(coord, 'east')),
-    south: gatesForAddress(seed, canonicalEdgeAddress(coord, 'south')),
-    west: gatesForAddress(seed, canonicalEdgeAddress(coord, 'west')),
+    north: getCanonicalEdgeGates(seed, coord, 'north'),
+    east: getCanonicalEdgeGates(seed, coord, 'east'),
+    south: getCanonicalEdgeGates(seed, coord, 'south'),
+    west: getCanonicalEdgeGates(seed, coord, 'west'),
   });
 };
 
@@ -265,9 +296,9 @@ export const getInfiniteVisualBiome = (
   const coord = resolveCoord(key);
   const macroX = Math.floor(coord.x / 2);
   const macroZ = Math.floor(coord.z / 2);
-  if (macroX === 0 && macroZ === 0 && coord.story === 0) return 'yellow';
+  if (macroX === 0 && macroZ === 0) return 'yellow';
   const roll = new SeededRandom(
-    `${seed}::infinite-visual-biome:v${WRAPPER_VERSION}:${macroX}:${macroZ}:${coord.story}`,
+    `${seed}::infinite-visual-biome:v${WRAPPER_VERSION}:${macroX}:${macroZ}`,
   ).float(0, 1);
   if (roll < 0.8) return 'yellow';
   return roll < 0.9 ? 'red' : 'white';
@@ -519,6 +550,92 @@ const addTightThresholds = (
   }
 };
 
+const rebuildPillarHallLights = (
+  plan: WorldPlan,
+  hall: WorldPlan['rooms'][number],
+  pillars: readonly WorldPlan['columns'][number][],
+  hallPit: GridPitFeature | undefined,
+  rng: SeededRandom,
+): void => {
+  plan.lights = plan.lights.filter((light) => light.roomId !== hall.id);
+
+  const width = rectWidth(hall.bounds);
+  const depth = rectDepth(hall.bounds);
+  const columns = Math.max(2, Math.min(9, Math.floor((width - 3) / 7.8)));
+  const rows = Math.max(2, Math.min(9, Math.floor((depth - 3) / 7.8)));
+  const cellWidth = width / columns;
+  const cellDepth = depth / rows;
+  const panelWidth = Math.min(3.2, Math.max(2.05, hall.ceilingHeight * 0.18));
+  const panelRotation = width >= depth ? 0 : Math.PI * 0.5;
+  const halfPanelX = panelRotation === 0 ? panelWidth * 0.5 : 0.64;
+  const halfPanelZ = panelRotation === 0 ? 0.64 : panelWidth * 0.5;
+  const offsets = [
+    [0, 0],
+    [0.27, 0],
+    [-0.27, 0],
+    [0, 0.27],
+    [0, -0.27],
+    [0.24, 0.24],
+    [-0.24, 0.24],
+    [0.24, -0.24],
+    [-0.24, -0.24],
+  ] as const;
+  const blocked = (x: number, z: number): boolean =>
+    pillars.some(
+      (pillar) =>
+        Math.abs(x - pillar.x) <= pillar.width * 0.5 + halfPanelX + 0.28 &&
+        Math.abs(z - pillar.z) <= pillar.depth * 0.5 + halfPanelZ + 0.28,
+    ) ||
+    (hallPit?.holes.some(
+      (hole) =>
+        x + halfPanelX >= hole.minX &&
+        x - halfPanelX <= hole.maxX &&
+        z + halfPanelZ >= hole.minZ &&
+        z - halfPanelZ <= hole.maxZ,
+    ) ?? false) ||
+    plan.solidMasses.some(
+      (mass) =>
+        x + halfPanelX >= mass.bounds.minX &&
+        x - halfPanelX <= mass.bounds.maxX &&
+        z + halfPanelZ >= mass.bounds.minZ &&
+        z - halfPanelZ <= mass.bounds.maxZ,
+    );
+
+  let lightIndex = 0;
+  for (let xIndex = 0; xIndex < columns; xIndex += 1) {
+    for (let zIndex = 0; zIndex < rows; zIndex += 1) {
+      const baseX = hall.bounds.minX + (xIndex + 0.5) * cellWidth;
+      const baseZ = hall.bounds.minZ + (zIndex + 0.5) * cellDepth;
+      const position = offsets
+        .map(([offsetX, offsetZ]) => ({
+          x: quantize(baseX + offsetX * cellWidth, 0.05),
+          z: quantize(baseZ + offsetZ * cellDepth, 0.05),
+        }))
+        .find(({ x, z }) =>
+          pointInRect(x, z, hall.bounds, Math.max(halfPanelX, halfPanelZ) + 0.28) &&
+          !blocked(x, z)
+        );
+      if (!position) continue;
+      plan.lights.push({
+        id: `pillar-hall-light-${lightIndex}`,
+        x: position.x,
+        z: position.z,
+        ceilingY: hall.ceilingHeight,
+        rotation: panelRotation,
+        width: panelWidth,
+        intensity: rng.float(1.12, 1.32),
+        color: 0xfff8ce,
+        dead: false,
+        unstable: false,
+        phase: rng.float(0, Math.PI * 2),
+        roomId: hall.id,
+        level: 0,
+      });
+      lightIndex += 1;
+    }
+  }
+};
+
 const applyBiome = (plan: WorldPlan, biome: InfiniteBiome, seed: string): void => {
   const hall = [...plan.rooms]
     .filter((room) => room.kind === 'open-hall')
@@ -623,9 +740,7 @@ const applyBiome = (plan: WorldPlan, biome: InfiniteBiome, seed: string): void =
         kind: 'column',
       });
     }
-    plan.lights = plan.lights.filter((light) => !added.some(
-      (column) => Math.abs(light.x - column.x) < column.width * 0.5 + 0.55 && Math.abs(light.z - column.z) < column.depth * 0.5 + 0.55,
-    ));
+    rebuildPillarHallLights(plan, hall, added, hallPit, rng.fork('ceiling-lights'));
   }
 };
 
@@ -640,20 +755,10 @@ const rectsOverlap = (left: Rect, right: Rect, padding = 0): boolean =>
  * part of an upper shell made whole wall sections disappear; normalising the
  * complete room before any clipping preserves a continuous, textured shell.
  */
-const demoteTallRoomsIntersecting = (
+const demoteTallRoomsById = (
   plan: WorldPlan,
-  openings: readonly Readonly<Rect>[],
+  roomIds: ReadonlySet<string>,
 ): void => {
-  if (openings.length === 0) return;
-  const roomIds = new Set(
-    plan.rooms
-      .filter(
-        (room) =>
-          room.ceilingHeight > plan.wallHeight + 0.1 &&
-          openings.some((opening) => rectsOverlap(room.bounds, opening, 0.08)),
-      )
-      .map((room) => room.id),
-  );
   if (roomIds.size === 0) return;
 
   for (const room of plan.rooms) {
@@ -668,6 +773,118 @@ const demoteTallRoomsIntersecting = (
       roomIds: zone.roomIds.filter((roomId) => !roomIds.has(roomId)),
     }))
     .filter((zone) => zone.roomIds.length > 0);
+
+  const survivingTallRooms = plan.rooms.filter(
+    (room) => room.ceilingHeight > plan.wallHeight + 0.1,
+  );
+  const upperWallSupportsRoom = (wall: WallSegment): boolean => {
+    const fixed = wall.orientation === 'x' ? wall.z : wall.x;
+    const along = wall.orientation === 'x' ? wall.x : wall.z;
+    const wallMin = along - wall.length * 0.5;
+    const wallMax = along + wall.length * 0.5;
+    return survivingTallRooms.some((room) => {
+      if (wall.bottom + wall.height < room.ceilingHeight - 0.03) return false;
+      const sides = wall.orientation === 'x'
+        ? [room.bounds.minZ, room.bounds.maxZ]
+        : [room.bounds.minX, room.bounds.maxX];
+      const roomMin = wall.orientation === 'x' ? room.bounds.minX : room.bounds.minZ;
+      const roomMax = wall.orientation === 'x' ? room.bounds.maxX : room.bounds.maxZ;
+      return sides.some((sideFixed) => Math.abs(sideFixed - fixed) < 0.12) &&
+        Math.min(wallMax, roomMax) - Math.max(wallMin, roomMin) > 0.02;
+    });
+  };
+  const removedUpperWallIds = new Set<string>();
+  plan.walls = plan.walls.filter((wall) => {
+    if (
+      wall.detail !== 'upper-shell' &&
+      wall.detail !== 'upper-portal-lintel'
+    ) return true;
+    const keep = upperWallSupportsRoom(wall);
+    if (!keep) removedUpperWallIds.add(wall.id);
+    return keep;
+  });
+  if (removedUpperWallIds.size > 0) {
+    const removedColliderIds = new Set(
+      [...removedUpperWallIds].map((wallId) => `collider-${wallId}`),
+    );
+    plan.colliders = plan.colliders.filter((collider) => !removedColliderIds.has(collider.id));
+  }
+};
+
+const demoteTallRoomsIntersecting = (
+  plan: WorldPlan,
+  openings: readonly Readonly<Rect>[],
+): void => {
+  if (openings.length === 0) return;
+  const roomIds = new Set(
+    plan.rooms
+      .filter(
+        (room) =>
+          room.ceilingHeight > plan.wallHeight + 0.1 &&
+          openings.some((opening) => rectsOverlap(room.bounds, opening, 0.08)),
+      )
+      .map((room) => room.id),
+  );
+  demoteTallRoomsById(plan, roomIds);
+};
+
+/**
+ * Wrapper passes can expose or remove shared walls after the finite generator
+ * built a raised ceiling. Keep only high rooms whose four wallpaper facades
+ * still form a complete shell; an ordinary ceiling is safer than a sky crack.
+ */
+const demoteIncompleteTallRooms = (plan: WorldPlan): void => {
+  const candidates = plan.rooms.filter(
+    (room) => room.ceilingHeight > plan.wallHeight + 0.1,
+  );
+  if (candidates.length === 0) return;
+  const shellsByPlane = new Map<string, WallSegment[]>();
+  for (const wall of plan.walls) {
+    if (
+      wall.detail !== 'upper-shell' &&
+      wall.detail !== 'upper-portal-lintel'
+    ) continue;
+    if (
+      wall.kind !== 'wallpaper' ||
+      wall.bottom > plan.wallHeight + 0.02
+    ) continue;
+    const fixed = wall.orientation === 'x' ? wall.z : wall.x;
+    const key = `${wall.orientation}:${Math.round(fixed * 20)}`;
+    const bucket = shellsByPlane.get(key);
+    if (bucket) bucket.push(wall);
+    else shellsByPlane.set(key, [wall]);
+  }
+  const incomplete = new Set<string>();
+  for (const room of candidates) {
+    const sides = [
+      { orientation: 'x' as const, fixed: room.bounds.minZ, min: room.bounds.minX, max: room.bounds.maxX },
+      { orientation: 'x' as const, fixed: room.bounds.maxZ, min: room.bounds.minX, max: room.bounds.maxX },
+      { orientation: 'z' as const, fixed: room.bounds.minX, min: room.bounds.minZ, max: room.bounds.maxZ },
+      { orientation: 'z' as const, fixed: room.bounds.maxX, min: room.bounds.minZ, max: room.bounds.maxZ },
+    ];
+    const complete = sides.every((side) => {
+      const planeKey = `${side.orientation}:${Math.round(side.fixed * 20)}`;
+      const intervals = (shellsByPlane.get(planeKey) ?? [])
+        .filter((wall) => wall.bottom + wall.height >= room.ceilingHeight - 0.03)
+        .map((wall) => {
+          const along = wall.orientation === 'x' ? wall.x : wall.z;
+          return {
+            min: Math.max(side.min, along - wall.length * 0.5),
+            max: Math.min(side.max, along + wall.length * 0.5),
+          };
+        })
+        .filter((interval) => interval.max > interval.min)
+        .sort((left, right) => left.min - right.min);
+      let coveredUntil = side.min;
+      for (const interval of intervals) {
+        if (interval.min > coveredUntil + 0.03) return false;
+        coveredUntil = Math.max(coveredUntil, interval.max);
+      }
+      return coveredUntil >= side.max - 0.03;
+    });
+    if (!complete) incomplete.add(room.id);
+  }
+  demoteTallRoomsById(plan, incomplete);
 };
 
 const floorCellsOutsideOpenings = (worldSize: number, openings: readonly Rect[]): Rect[] => {
@@ -762,6 +979,150 @@ export interface InheritedShaftOpening extends Rect {
   readonly remainingStories: number;
 }
 
+interface InheritedShaftEnclosure {
+  readonly bounds: Rect;
+  readonly roomId: string;
+}
+
+const inheritedShaftEnclosuresForPlan = (
+  plan: WorldPlan,
+  openings: readonly InheritedShaftOpening[],
+): InheritedShaftEnclosure[] => {
+  const openingGroups = new Map<
+    string,
+    { roomId: string; openings: InheritedShaftOpening[] }
+  >();
+  for (const opening of openings) {
+    const center = rectCenter(opening);
+    const containingRooms = plan.rooms
+      .filter((room) =>
+        room.level >= 0 && pointInRect(center.x, center.z, room.bounds, 0.02)
+      )
+      .sort((left, right) => rectArea(left.bounds) - rectArea(right.bounds));
+    const host = containingRooms[0] ?? [...plan.rooms]
+      .filter((room) => room.level >= 0)
+      .sort((left, right) => {
+        const leftCenter = rectCenter(left.bounds);
+        const rightCenter = rectCenter(right.bounds);
+        return (
+          Math.hypot(center.x - leftCenter.x, center.z - leftCenter.z) -
+          Math.hypot(center.x - rightCenter.x, center.z - rightCenter.z)
+        );
+      })[0];
+    if (!host) continue;
+    const groupKey = `${host.id}:${opening.sourceStory}`;
+    const group = openingGroups.get(groupKey) ?? { roomId: host.id, openings: [] };
+    group.openings.push(opening);
+    openingGroups.set(groupKey, group);
+  }
+
+  const half = plan.size * 0.5;
+  const wallInset = 0.32;
+  const shaftClearance = 0.9;
+  const enclosures: InheritedShaftEnclosure[] = [];
+  for (const { roomId, openings: roomOpenings } of openingGroups.values()) {
+    const room = plan.rooms.find((candidate) => candidate.id === roomId);
+    if (!room) continue;
+    const union: Rect = {
+      minX: Math.min(...roomOpenings.map((opening) => opening.minX)),
+      maxX: Math.max(...roomOpenings.map((opening) => opening.maxX)),
+      minZ: Math.min(...roomOpenings.map((opening) => opening.minZ)),
+      maxZ: Math.max(...roomOpenings.map((opening) => opening.maxZ)),
+    };
+    const axisChoices = (
+      roomMin: number,
+      roomMax: number,
+      unionMin: number,
+      unionMax: number,
+    ): Array<{ min: number; max: number }> => {
+      const choices: Array<{ min: number; max: number }> = [];
+      const insetMin = Math.max(-half + wallInset, roomMin + wallInset);
+      const insetMax = Math.min(half - wallInset, roomMax - wallInset);
+      if (insetMin <= unionMin - 0.35) {
+        choices.push({
+          min: insetMin,
+          max: Math.min(half - wallInset, unionMax + shaftClearance),
+        });
+      }
+      if (insetMax >= unionMax + 0.35) {
+        choices.push({
+          min: Math.max(-half + wallInset, unionMin - shaftClearance),
+          max: insetMax,
+        });
+      }
+      // A coalesced opening can exceptionally span the complete host room.
+      // Keep a closed shell around it even when no room corner has clearance.
+      if (choices.length === 0) {
+        choices.push({
+          min: Math.max(-half + wallInset, unionMin - shaftClearance),
+          max: Math.min(half - wallInset, unionMax + shaftClearance),
+        });
+      }
+      return choices;
+    };
+    const xChoices = axisChoices(
+      room.bounds.minX,
+      room.bounds.maxX,
+      union.minX,
+      union.maxX,
+    );
+    const zChoices = axisChoices(
+      room.bounds.minZ,
+      room.bounds.maxZ,
+      union.minZ,
+      union.maxZ,
+    );
+    const candidates = xChoices.flatMap((x) => zChoices.map((z): Rect => ({
+      minX: x.min,
+      maxX: x.max,
+      minZ: z.min,
+      maxZ: z.max,
+    }))).filter((bounds) =>
+      bounds.minX <= union.minX - 0.35 &&
+      bounds.maxX >= union.maxX + 0.35 &&
+      bounds.minZ <= union.minZ - 0.35 &&
+      bounds.maxZ >= union.maxZ + 0.35
+    );
+    const bounds = candidates.sort((left, right) => rectArea(left) - rectArea(right))[0];
+    if (bounds) enclosures.push({ bounds, roomId });
+  }
+  return enclosures;
+};
+
+const addInheritedShaftEnclosures = (
+  plan: WorldPlan,
+  enclosures: readonly InheritedShaftEnclosure[],
+): void => {
+  for (const [enclosureIndex, enclosure] of enclosures.entries()) {
+    const center = rectCenter(enclosure.bounds);
+    const thickness = 0.24;
+    const sides = [
+      { suffix: 'north', x: center.x, z: enclosure.bounds.minZ, length: rectWidth(enclosure.bounds) + thickness * 2, orientation: 'x' as const },
+      { suffix: 'south', x: center.x, z: enclosure.bounds.maxZ, length: rectWidth(enclosure.bounds) + thickness * 2, orientation: 'x' as const },
+      { suffix: 'west', x: enclosure.bounds.minX, z: center.z, length: rectDepth(enclosure.bounds) + thickness * 2, orientation: 'z' as const },
+      { suffix: 'east', x: enclosure.bounds.maxX, z: center.z, length: rectDepth(enclosure.bounds) + thickness * 2, orientation: 'z' as const },
+    ];
+    for (const side of sides) {
+      const wall: WallSegment = {
+        id: `inherited-shaft-enclosure-${enclosureIndex}-${side.suffix}`,
+        roomId: enclosure.roomId,
+        x: side.x,
+        z: side.z,
+        length: side.length,
+        orientation: side.orientation,
+        bottom: 0,
+        height: plan.wallHeight,
+        thickness,
+        tint: 0.98,
+        collision: true,
+        kind: 'wallpaper',
+      };
+      plan.walls.push(wall);
+      plan.colliders.push(colliderForWall(wall));
+    }
+  }
+};
+
 const coalesceInheritedShaftOpenings = (
   claims: readonly InheritedShaftOpening[],
 ): InheritedShaftOpening[] => {
@@ -806,7 +1167,7 @@ export const inheritedShaftOpeningsForChunk = (
   // Epic columns repeat on every logical story. Their local floor contract is
   // therefore canonical on each story and never needs inherited base-plan
   // shafts or stairs from the generator hidden underneath the landmark.
-  if (epicStructureIndexForCoord(coord) !== null) {
+  if (epicStructureIndexForCoord(seed, coord) !== null) {
     const empty = Object.freeze([]) as readonly InheritedShaftOpening[];
     inheritedShaftOpeningsCache.set(cacheKey, empty);
     trimStringCache(inheritedShaftOpeningsCache);
@@ -869,6 +1230,7 @@ const applyInheritedShaftOpenings = (
       ]
     : [...inherited];
   const canonicalInherited = coalesceInheritedShaftOpenings(combinedClaims);
+  const shaftEnclosures = inheritedShaftEnclosuresForPlan(plan, canonicalInherited);
   const openings = canonicalInherited.map(cloneRect);
   demoteTallRoomsIntersecting(plan, openings);
   const continuingOpenings = canonicalInherited
@@ -919,10 +1281,16 @@ const applyInheritedShaftOpenings = (
   }, 0.15));
   plan.solidMasses = plan.solidMasses.filter((mass) => !intersectsOpening(mass.bounds, 0.15));
   plan.lights = plan.lights.filter(
-    (light) => !openings.some((opening) => lightPanelOverlapsRect(light, opening)),
+    (light) =>
+      !openings.some((opening) => lightPanelOverlapsRect(light, opening)) &&
+      !shaftEnclosures.some((enclosure) => pointInRect(light.x, light.z, enclosure.bounds)),
   );
   plan.detailSockets = plan.detailSockets.filter(
-    (socket) => !openings.some((opening) => pointInRect(socket.position.x, socket.position.z, opening, -0.6)),
+    (socket) =>
+      !openings.some((opening) => pointInRect(socket.position.x, socket.position.z, opening, -0.6)) &&
+      !shaftEnclosures.some((enclosure) =>
+        pointInRect(socket.position.x, socket.position.z, enclosure.bounds)
+      ),
   );
   const removedElevationZones = plan.features.filter(
     (feature): feature is RaisedZoneFeature =>
@@ -988,6 +1356,7 @@ const applyInheritedShaftOpenings = (
       plan.colliders.push(colliderForWall(wall));
     }
   }
+  addInheritedShaftEnclosures(plan, shaftEnclosures);
 };
 
 const extractLocalShaftHoles = (plan: WorldPlan): Rect[] =>
@@ -1014,9 +1383,9 @@ const canonicalFloorOpeningsForChunk = (
   const cached = floorOpeningsCache.get(cacheKey);
   if (cached) return cached;
 
-  const epicIndex = epicStructureIndexForCoord(coord);
+  const epicIndex = epicStructureIndexForCoord(seed, coord);
   if (epicIndex !== null) {
-    const voidBounds = getEpicVoidBounds(epicIndex);
+    const voidBounds = getEpicStructureVoidBounds(seed, coord, epicIndex);
     const openings = freezeRects(voidBounds ? [voidBounds] : []);
     floorOpeningsCache.set(cacheKey, openings);
     trimStringCache(floorOpeningsCache);
@@ -1220,9 +1589,9 @@ const rawLocalFloorOpeningsForChunk = (
   const cacheKey = `${seed}::raw-local-floor-openings::${normalizedKey}`;
   const cached = rawLocalFloorOpeningsCache.get(cacheKey);
   if (cached) return cached;
-  const epicIndex = epicStructureIndexForCoord(coord);
+  const epicIndex = epicStructureIndexForCoord(seed, coord);
   if (epicIndex !== null) {
-    const voidBounds = getEpicVoidBounds(epicIndex);
+    const voidBounds = getEpicStructureVoidBounds(seed, coord, epicIndex);
     const openings = freezeRects(voidBounds ? [voidBounds] : []);
     rawLocalFloorOpeningsCache.set(cacheKey, openings);
     trimStringCache(rawLocalFloorOpeningsCache);
@@ -1247,7 +1616,7 @@ export const inheritedStairForChunk = (
   const cacheKey = `${seed}::inherited-stair::${normalizedKey}`;
   const cached = inheritedStairCache.get(cacheKey);
   if (cached !== undefined) return cached ?? undefined;
-  if (epicStructureIndexForCoord(coord) !== null) {
+  if (epicStructureIndexForCoord(seed, coord) !== null) {
     inheritedStairCache.set(cacheKey, null);
     trimStringCache(inheritedStairCache);
     return undefined;
@@ -1608,6 +1977,9 @@ const prefixFeature = (feature: WorldFeature, prefix: string): WorldFeature => {
       ...(feature.kind === 'raised-zone' && feature.roomIds
         ? { roomIds: feature.roomIds.map((roomId) => `${prefix}${roomId}`) }
         : {}),
+      ...(feature.kind === 'raised-zone' && feature.approachRoomIds
+        ? { approachRoomIds: feature.approachRoomIds.map((roomId) => `${prefix}${roomId}`) }
+        : {}),
     };
   }
   if (feature.kind === 'interactive-door') {
@@ -1739,6 +2111,12 @@ export const generateInfiniteChunk = (
   const coord = resolveCoord(key);
   const normalizedKey = createChunkKey(coord);
   const plan = generateWorld(derivedChunkSeed(seed, normalizedKey));
+  // Topology may vary from story to story, but a vertical connection must not
+  // swap wallpaper/carpet scale or tint while both floors are visible. Derive
+  // the repeated surface treatment from the horizontal column only.
+  plan.surfaceStyle = generateSurfaceStyle(
+    `${seed}::infinite-surface-column:v${WRAPPER_VERSION}:${coord.x}:${coord.z}`,
+  );
   if (Math.abs(plan.size - INFINITE_CHUNK_SIZE) > BOUNDARY_EPSILON) {
     throw new Error(
       `InfiniteWorld expects ${INFINITE_CHUNK_SIZE}m plans; generator returned ${plan.size}m.`,
@@ -1750,6 +2128,10 @@ export const generateInfiniteChunk = (
   applyBiome(plan, biome, derivedChunkSeed(seed, normalizedKey));
   applyVisualBiome(plan, visualBiome, derivedChunkSeed(seed, normalizedKey));
   applyInheritedShaftOpenings(plan, inheritedShaftOpeningsForChunk(seed, coord));
+  // Sparse epics expose many more ordinary coordinates than the old dense
+  // paving. A local pit must win over a tall-room shell just like an inherited
+  // shaft, otherwise the opening pierces a supposedly closed upper volume.
+  demoteTallRoomsIntersecting(plan, plan.floorOpenings ?? []);
   removeLocalStairsBlockedAbove(seed, coord, plan);
   const ceilingOpenings = ceilingOpeningsForChunk(seed, coord);
   applyCeilingLandingClearance(plan, ceilingOpenings);
@@ -1766,14 +2148,17 @@ export const generateInfiniteChunk = (
   // regeneration when WorldView asks which ceiling cells to remove.
   plan.ceilingOpenings = ceilingOpenings.map(cloneRect);
   stripFiniteLandmarks(plan);
-  const epicIndex = epicStructureIndexForCoord(coord);
-  if (epicIndex !== null) applyEpicStructure(plan, epicIndex);
+  const epicIndex = epicStructureIndexForCoord(seed, coord);
+  if (epicIndex !== null) applyEpicStructure(plan, epicIndex, { worldSeed: seed, coord });
   const edgeGates = getInfiniteEdgeGates(seed, coord);
   // A chunk owns exactly one full story. The compact geometry below its holes
   // is only a local preview and must never receive a second 112 m boundary.
   emitBoundary(plan, seed, coord, 'north', edgeGates.north, 'upper');
-  emitBoundary(plan, seed, coord, 'west', edgeGates.west, 'upper');
+  // Epic3 is a 220 m longitudinal volume owned by this source plan. A normal
+  // seam at x=-56 would cut the fissure in half.
+  if (epicIndex !== 3) emitBoundary(plan, seed, coord, 'west', edgeGates.west, 'upper');
   for (const edge of ['north', 'east', 'south', 'west'] as const) {
+    if (epicIndex === 3 && (edge === 'west' || edge === 'east')) continue;
     emitBiomeBoundarySkin(plan, seed, coord, edge, edgeGates[edge]);
   }
   pruneInvalidInteractiveDoors(plan);
@@ -1782,6 +2167,7 @@ export const generateInfiniteChunk = (
   // surviving final architecture so none of those walls can float at y=0.
   rebuildSunkenArchitectureExtensions(plan);
   if (epicIndex === null) {
+    demoteIncompleteTallRooms(plan);
     populateRareProps(plan, `${seed}:${normalizedKey}:rare-props`);
   }
   prefixPlanIds(plan, normalizedKey);

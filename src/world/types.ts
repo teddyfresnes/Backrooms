@@ -49,6 +49,7 @@ export interface WallSegment {
     | 'sealed-boundary'
     | 'crawl-lintel'
     | 'crawl-tunnel'
+    | 'crawl-flush-wall'
     | 'lower-shell'
     | 'elevation-seal'
     | 'biome-boundary-skin'
@@ -160,17 +161,37 @@ export interface VistaFeature {
   returnDestination: Vec3Data;
 }
 
-export type EpicStructureIndex = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+export type EpicStructureIndex = 1 | 2 | 3 | 4 | 5;
 
 export type EpicStructureVariant =
   | 'endless-abyss'
   | 'lost-ceiling'
   | 'ascending-passages'
-  | 'endless-pillars'
   | 'impossible-stairwell'
-  | 'suspended-rooms'
-  | 'nested-gates'
-  | 'light-cathedral';
+  | 'vanishing-concourse';
+
+export type EpicPassageSide = 'north' | 'south' | 'west' | 'east';
+export type EpicPassagePreviewStyle = 'dead-end' | 'left-turn' | 'right-turn' | 'split';
+
+/** A short, deliberately incomplete corridor visible behind a real opening. */
+export interface EpicPassagePreview {
+  side: EpicPassageSide;
+  /** Horizontal coordinate along the owning facade. */
+  along: number;
+  width: number;
+  /** Walkable projection from the facade into the monumental room. */
+  platformDepth: number;
+  /** Visible depth behind the facade. Upper previews may be only one metre. */
+  corridorDepth: number;
+  /** Compact topology shown behind the opening without generating a full maze. */
+  previewStyle?: EpicPassagePreviewStyle;
+}
+
+export interface EpicPassageLevel {
+  /** Local floor height for this row of passages. */
+  y: number;
+  passages: EpicPassagePreview[];
+}
 
 /**
  * A chunk-scale landmark. Its repeated geometry is derived from this compact,
@@ -185,8 +206,16 @@ export interface EpicStructureFeature {
   bounds: Rect;
   height: number;
   destination: Vec3Data;
-  /** Only epic1 removes the canonical floor through every logical story. */
+  /** epic1 is always open; some epic3 layouts deliberately have no bottom. */
   voidBounds?: Rect;
+  /** Facade carrying the portals; its gap to voidBounds is the landing ledge. */
+  passageFacadeBounds?: Rect;
+  /** Serializable layout shared by the renderer and collider builder. */
+  passageLevels?: EpicPassageLevel[];
+  /** Logical row used by an elevated epic3 arrival. */
+  entryLevel?: number;
+  /** Distinguishes the occasional real epic3 abyss from its floored layouts. */
+  bottomless?: boolean;
 }
 
 export interface StairSocketFeature {
@@ -210,7 +239,10 @@ export type SqueezeLayout =
   | 'chambers'
   | 'dead-end'
   | 'loop'
-  | 'multi-exit';
+  | 'multi-exit'
+  | 'left-turn'
+  | 'right-turn'
+  | 't-junction';
 
 export interface PassageHump {
   platformBounds: Rect;
@@ -234,6 +266,10 @@ export interface SqueezeViewFeature {
   apertureWidth: number;
   /** Room networks sit inside a room; wall breaches are carved through a host partition. */
   passageStyle?: 'room-network' | 'wall-breach';
+  /** Older wall breaches project around the partition; flush breaches begin directly in it. */
+  breachProfile?: 'projecting' | 'flush';
+  /** Walkable footprint. Missing values in older plans are interpreted as `[bounds]`. */
+  passageRects?: Rect[];
   layout?: SqueezeLayout;
   exitCount?: number;
   clearanceHeight?: number;
@@ -254,6 +290,8 @@ export interface RaisedZoneFeature {
   roomId: string;
   /** Every connected room whose carpet shares this elevation. */
   roomIds?: string[];
+  /** Ordinary rooms kept clear for the complete run-up to each ramp. */
+  approachRoomIds?: string[];
   bounds: Rect;
   /** Legacy representative platform; platformRects describes the complete district. */
   platformBounds: Rect;

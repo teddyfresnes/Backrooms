@@ -9,6 +9,7 @@ export interface PlayerCallbacks {
   onFootstep(strength: number): void;
   onInteract(mode: DoorOpenMode): void;
   onLand(strength: number): void;
+  onSafePosition(position: Readonly<Vec3Data>): void;
   onFallReset(): void;
 }
 
@@ -88,7 +89,7 @@ export class PlayerController {
     this.physics.getPosition(this.position);
     this.previousPosition.copy(this.position);
     this.renderedPosition.copy(this.position);
-    this.lastSafePosition.copy(this.position);
+    this.anchorSafePosition(this.position);
     this.renderUpdate(0, 1);
     this.controls.addEventListener('lock', () => this.callbacks.onLockChange(true));
     this.controls.addEventListener('unlock', () => this.callbacks.onLockChange(false));
@@ -135,7 +136,7 @@ export class PlayerController {
     this.crouchRequested = false;
     this.crouching = false;
     this.targetStrafeLean = 0;
-    this.lastSafePosition.copy(this.position);
+    this.anchorSafePosition(this.position);
     this.physics.teleport(this.position);
     this.physics.getPosition(this.position);
     this.previousPosition.copy(this.position);
@@ -165,8 +166,13 @@ export class PlayerController {
     this.physics.getPosition(this.position);
     this.previousPosition.copy(this.position);
     this.renderedPosition.copy(this.position);
-    this.lastSafePosition.copy(this.position);
+    this.anchorSafePosition(this.position);
     this.renderUpdate(0, 1);
+  }
+
+  private anchorSafePosition(position: Readonly<Vec3Data>): void {
+    this.lastSafePosition.set(position.x, position.y, position.z);
+    this.callbacks.onSafePosition(this.lastSafePosition);
   }
 
   beginTraversal(
@@ -341,7 +347,9 @@ export class PlayerController {
       this.callbacks.onLand(strength);
     }
     if (this.grounded && this.verticalVelocity < 0) this.verticalVelocity = -0.9;
-    if (this.grounded) this.lastSafePosition.copy(this.position);
+    if (this.grounded) {
+      this.anchorSafePosition(this.position);
+    }
 
     const horizontalDistance = Math.hypot(result.moved.x, result.moved.z);
     this.moving = horizontalDistance > 0.00015 && this.grounded;
@@ -402,7 +410,7 @@ export class PlayerController {
     this.physics.getPosition(this.position);
     this.grounded = true;
     this.verticalVelocity = -0.5;
-    this.lastSafePosition.copy(this.position);
+    this.anchorSafePosition(this.position);
     this.moving = false;
     this.sprinting = false;
     this.crouching = false;

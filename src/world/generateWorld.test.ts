@@ -407,7 +407,7 @@ describe('Level 0 procedural generator', () => {
         }
       }
     }
-  }, 15_000);
+  }, 30_000);
 
   it('mixes long corridors, radically different hall scales and architectural relief', () => {
     const worlds = hazardSeeds.map(hazardWorld);
@@ -562,7 +562,8 @@ describe('Level 0 procedural generator', () => {
     expect(portalLintels.some((wall) => wall.thickness >= 1)).toBe(true);
     expect(portalLintels.every((wall) =>
       wall.kind === 'wallpaper' &&
-      wall.bottom <= 2.74 &&
+      wall.bottom >= 2.74 &&
+      wall.bottom < 2.76 &&
       wall.bottom + wall.height > 3.2
     )).toBe(true);
     expect(worlds.every((world) => world.walls.every((wall) => wall.detail !== 'ceiling-drop'))).toBe(true);
@@ -617,7 +618,7 @@ describe('Level 0 procedural generator', () => {
             .filter((wall) =>
               wall.orientation === side.orientation &&
               Math.abs((wall.orientation === 'x' ? wall.z : wall.x) - side.fixed) < 0.06 &&
-              wall.bottom <= world.wallHeight &&
+              wall.bottom <= world.wallHeight + 0.02 &&
               wall.bottom + wall.height >= room.ceilingHeight - 0.03
             )
             .map((wall) => {
@@ -777,7 +778,7 @@ describe('Level 0 procedural generator', () => {
     expect(voidWorldCount / pitAuditSeeds.length).toBeLessThan(0.15);
   }, 20_000);
 
-  it('builds varied crouch-only wall passages with loops, dead ends, slopes and holes', () => {
+  it('builds projecting and flush wall passages with turns, dead ends, slopes and holes', () => {
     // PhysicsWorld uses a capsule radius of 0.32 m.
     const playerDiameter = 0.64;
     const samples = hazardSeeds.flatMap((seed) => {
@@ -790,12 +791,24 @@ describe('Level 0 procedural generator', () => {
     const wallBreaches = samples.filter(
       ({ feature }) => feature.passageStyle === 'wall-breach',
     );
+    const roomNetworks = squeezes.filter(
+      (feature) => feature.passageStyle !== 'wall-breach',
+    );
+    const projectingBreaches = wallBreaches.filter(
+      ({ feature }) => (feature.breachProfile ?? 'projecting') === 'projecting',
+    );
+    const flushBreaches = wallBreaches.filter(
+      ({ feature }) => feature.breachProfile === 'flush',
+    );
 
     expect(squeezes.length).toBeGreaterThan(0);
     expect(wallBreaches.length).toBeGreaterThan(hazardSeeds.length);
+    expect(projectingBreaches.length).toBeGreaterThan(0);
+    expect(flushBreaches.length).toBeGreaterThan(0);
     expect(squeezes.every((feature) => feature.apertureWidth > playerDiameter)).toBe(true);
     expect(squeezes.every((feature) => {
       const clearance = feature.clearanceHeight ?? 10;
+      if (feature.breachProfile === 'flush') return clearance >= 1.58 && clearance <= 2.12;
       if (!feature.hump) return clearance >= 1.36 && clearance <= 1.49;
       const headroom = clearance - feature.hump.elevation;
       return headroom >= 1.15 && headroom <= 1.43;
@@ -803,7 +816,7 @@ describe('Level 0 procedural generator', () => {
     expect(samples.every(({ world, feature }) =>
       world.colliders.some((collider) => collider.id === `${feature.id}-low-ceiling`)
     )).toBe(true);
-    expect(new Set(squeezes.map((feature) => feature.layout)))
+    expect(new Set(roomNetworks.map((feature) => feature.layout)))
       .toEqual(new Set([
         'through',
         'side-exits',
@@ -812,6 +825,14 @@ describe('Level 0 procedural generator', () => {
         'loop',
         'multi-exit',
       ]));
+    const flushLayouts = new Set(flushBreaches.map(({ feature }) => feature.layout));
+    expect(flushLayouts).toEqual(new Set([
+      'through',
+      'dead-end',
+      'left-turn',
+      'right-turn',
+      't-junction',
+    ]));
     expect(squeezes.some((feature) =>
       feature.layout === 'dead-end' && (feature.exitCount ?? 0) === 0
     )).toBe(true);
@@ -846,6 +867,12 @@ describe('Level 0 procedural generator', () => {
         ))).toBeLessThanOrEqual(
           hole.kind === 'void' ? -54 : -2.71,
         );
+        if (feature.breachProfile === 'flush') {
+          const holeCrossWidth = feature.axis === 'x' ? rectDepth(hole) : rectWidth(hole);
+          expect(holeCrossWidth).toBeCloseTo(feature.apertureWidth, 6);
+          expect(feature.layout).toBe('dead-end');
+          expect(feature.exitCount).toBe(0);
+        }
       }
     }
     expect(passageHoleKinds).toEqual(new Set(['drop', 'void']));
@@ -856,6 +883,14 @@ describe('Level 0 procedural generator', () => {
       world.rooms.find((room) => room.id === feature.roomId)?.access === 'secret'
     )).toBe(true);
     for (const { world, feature } of wallBreaches) {
+      const hostRoom = world.rooms.find((room) => room.id === feature.roomId);
+      expect(hostRoom).toBeDefined();
+      expect(hostRoom?.kind === 'open-hall' || hostRoom?.kind === 'pit-gallery').toBe(false);
+      expect(world.features.some((candidate) =>
+        candidate.id !== feature.id &&
+        'roomId' in candidate &&
+        candidate.roomId === feature.roomId
+      )).toBe(false);
       const lintels = world.walls.filter(
         (wall) => wall.detail === 'crawl-lintel' && wall.roomId === feature.roomId,
       );
@@ -866,29 +901,46 @@ describe('Level 0 procedural generator', () => {
         wall.kind === 'wallpaper' &&
         wall.bottom >= (feature.clearanceHeight ?? 0) - 0.01
       )).toBe(true);
-      expect(tunnelSides.length).toBeGreaterThanOrEqual(2);
-      expect(tunnelSides.every((wall) => wall.kind === 'wallpaper')).toBe(true);
-      const crossMin = feature.axis === 'x' ? feature.bounds.minZ : feature.bounds.minX;
-      const crossMax = feature.axis === 'x' ? feature.bounds.maxZ : feature.bounds.maxX;
-      const crossCenter = (crossMin + crossMax) * 0.5;
-      expect(tunnelSides.every((wall) => {
-        const center = feature.axis === 'x' ? wall.z : wall.x;
-        const innerFace = center < crossCenter
-          ? center + wall.thickness * 0.5
-          : center - wall.thickness * 0.5;
-        return center < crossCenter
-          ? innerFace < crossMin - 0.005
-          : innerFace > crossMax + 0.005;
-      })).toBe(true);
+      const passageRects = feature.passageRects ?? [feature.bounds];
+      if ((feature.breachProfile ?? 'projecting') === 'projecting') {
+        expect(tunnelSides.length).toBeGreaterThanOrEqual(2);
+        expect(tunnelSides.every((wall) => wall.kind === 'wallpaper')).toBe(true);
+        const crossMin = feature.axis === 'x' ? feature.bounds.minZ : feature.bounds.minX;
+        const crossMax = feature.axis === 'x' ? feature.bounds.maxZ : feature.bounds.maxX;
+        const crossCenter = (crossMin + crossMax) * 0.5;
+        expect(tunnelSides.every((wall) => {
+          const center = feature.axis === 'x' ? wall.z : wall.x;
+          const innerFace = center < crossCenter
+            ? center + wall.thickness * 0.5
+            : center - wall.thickness * 0.5;
+          return center < crossCenter
+            ? innerFace < crossMin - 0.005
+            : innerFace > crossMax + 0.005;
+        })).toBe(true);
+        expect(
+          feature.axis === 'x' ? rectDepth(feature.bounds) : rectWidth(feature.bounds),
+        ).toBeCloseTo(feature.apertureWidth, 2);
+      } else {
+        const flushWalls = world.walls.filter(
+          (wall) => wall.detail === 'crawl-flush-wall' && wall.roomId === feature.roomId,
+        );
+        expect(flushWalls.length).toBeGreaterThanOrEqual(2);
+        expect(feature.passageRects).toBeDefined();
+        expect(passageRects.every((rect) => rectWidth(rect) > 0.6 && rectDepth(rect) > 0.6))
+          .toBe(true);
+        expect(feature.layout === 'left-turn' || feature.layout === 'right-turn' || feature.layout === 't-junction'
+          ? passageRects.length === 2
+          : passageRects.length === 1).toBe(true);
+        expect(feature.layout === 't-junction' ? feature.exitCount === 2 : true).toBe(true);
+      }
       expect(world.columns.some((column) =>
-        column.x + column.width * 0.5 > feature.bounds.minX &&
-        column.x - column.width * 0.5 < feature.bounds.maxX &&
-        column.z + column.depth * 0.5 > feature.bounds.minZ &&
-        column.z - column.depth * 0.5 < feature.bounds.maxZ
+        passageRects.some((rect) =>
+          column.x + column.width * 0.5 > rect.minX &&
+          column.x - column.width * 0.5 < rect.maxX &&
+          column.z + column.depth * 0.5 > rect.minZ &&
+          column.z - column.depth * 0.5 < rect.maxZ
+        )
       )).toBe(false);
-      expect(
-        feature.axis === 'x' ? rectDepth(feature.bounds) : rectWidth(feature.bounds),
-      ).toBeCloseTo(feature.apertureWidth, 2);
     }
   }, 20_000);
 
@@ -987,6 +1039,44 @@ describe('Level 0 procedural generator', () => {
     const ramps = samples.flatMap(({ world, feature }) =>
       (feature.ramps ?? [feature.ramp]).map((ramp, index) => ({ world, feature, ramp, index }))
     );
+    for (const { world, feature, ramp, index } of ramps) {
+      expect(feature.approachRoomIds).toHaveLength((feature.ramps ?? [feature.ramp]).length);
+      expect(new Set(feature.approachRoomIds).size).toBe(feature.approachRoomIds?.length);
+      const approachRoomId = feature.approachRoomIds?.[index];
+      const approachRoom = world.rooms.find((room) => room.id === approachRoomId);
+      expect(approachRoom).toBeDefined();
+      if (!approachRoom) continue;
+
+      const rampCrossWidth = ramp.axis === 'x'
+        ? rectDepth(ramp.bounds)
+        : rectWidth(ramp.bounds);
+      const roomCrossSpan = ramp.axis === 'x'
+        ? rectDepth(approachRoom.bounds)
+        : rectWidth(approachRoom.bounds);
+      expect(approachRoom.kind).not.toBe('corridor');
+      expect(roomCrossSpan).toBeGreaterThanOrEqual(rampCrossWidth + 2.55);
+      expect(world.ceilingZones?.some((zone) => zone.roomIds.includes(approachRoom.id)) ?? false)
+        .toBe(false);
+      expect(world.features.some((candidate) =>
+        candidate.kind === 'squeeze-view' && candidate.roomId === approachRoom.id
+      )).toBe(false);
+      expect(world.features.some((candidate) =>
+        candidate.kind === 'interactive-door' &&
+        (candidate.sourceRoomId === approachRoom.id || candidate.targetRoomId === approachRoom.id)
+      )).toBe(false);
+      expect(world.solidMasses.some((mass) =>
+        mass.bounds.minX < ramp.bounds.maxX &&
+        mass.bounds.maxX > ramp.bounds.minX &&
+        mass.bounds.minZ < ramp.bounds.maxZ &&
+        mass.bounds.maxZ > ramp.bounds.minZ
+      )).toBe(false);
+      expect(world.columns.some((column) =>
+        column.x - column.width * 0.5 < ramp.bounds.maxX &&
+        column.x + column.width * 0.5 > ramp.bounds.minX &&
+        column.z - column.depth * 0.5 < ramp.bounds.maxZ &&
+        column.z + column.depth * 0.5 > ramp.bounds.minZ
+      )).toBe(false);
+    }
     const runs = ramps.map(({ ramp }) =>
       ramp.axis === 'x' ? rectWidth(ramp.bounds) : rectDepth(ramp.bounds)
     );

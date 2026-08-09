@@ -30,13 +30,18 @@ import {
 import {
   EPIC_STRUCTURE_DEFINITIONS,
   epicStructureIndexForCoord,
+  getEpicStairwellLayout,
+  getEpicStructureSlotsForMacro,
 } from './EpicStructures';
 import type {
   EpicStructureFeature,
   PitHole,
   Rect,
   StairSocketFeature,
+  StaticCollider,
+  WallSegment,
 } from './types';
+import { rectArea, rectDepth, rectWidth } from './types';
 import { getStairFloorOpening, getStairSlabs } from './StairLayout';
 
 const overlaps = (left: Rect, right: Rect): boolean =>
@@ -52,6 +57,20 @@ const sameRect = (left: Rect, right: Rect): boolean =>
 const containsPoint = (rect: Rect, point: { x: number; z: number }): boolean =>
   point.x > rect.minX && point.x < rect.maxX &&
   point.z > rect.minZ && point.z < rect.maxZ;
+
+const colliderFootprint = (collider: StaticCollider): Rect => ({
+  minX: collider.center.x - collider.halfExtents.x,
+  maxX: collider.center.x + collider.halfExtents.x,
+  minZ: collider.center.z - collider.halfExtents.z,
+  maxZ: collider.center.z + collider.halfExtents.z,
+});
+
+const colliderContainsPoint = (
+  collider: StaticCollider,
+  point: { x: number; z: number },
+): boolean =>
+  Math.abs(point.x - collider.center.x) < collider.halfExtents.x &&
+  Math.abs(point.z - collider.center.z) < collider.halfExtents.z;
 
 const epicMarker = (
   plan: ReturnType<typeof generateInfiniteChunk>,
@@ -97,6 +116,35 @@ const wallsAround = (
     (Math.abs(wall.x - opening.minX) < 0.08 || Math.abs(wall.x - opening.maxX) < 0.08);
 });
 
+const inheritedShaftEnclosures = (
+  plan: ReturnType<typeof generateInfiniteChunk>,
+): Array<{ bounds: Rect; walls: WallSegment[] }> => {
+  const groups = new Map<string, WallSegment[]>();
+  for (const wall of plan.walls) {
+    const match = wall.id.match(/inherited-shaft-enclosure-(\d+)-(north|south|west|east)$/);
+    if (!match) continue;
+    const group = groups.get(match[1]!) ?? [];
+    group.push(wall);
+    groups.set(match[1]!, group);
+  }
+  return [...groups.values()].flatMap((walls) => {
+    const north = walls.find((wall) => wall.id.endsWith('-north'));
+    const south = walls.find((wall) => wall.id.endsWith('-south'));
+    const west = walls.find((wall) => wall.id.endsWith('-west'));
+    const east = walls.find((wall) => wall.id.endsWith('-east'));
+    if (!north || !south || !west || !east) return [];
+    return [{
+      bounds: {
+        minX: west.x,
+        maxX: east.x,
+        minZ: north.z,
+        maxZ: south.z,
+      },
+      walls,
+    }];
+  });
+};
+
 const seed = 'INFINITE-CONTRACT-AUDIT';
 const sampleCoords: ChunkCoord[] = [
   { x: 0, z: 0, story: 0 },
@@ -106,14 +154,24 @@ const sampleCoords: ChunkCoord[] = [
 ];
 
 const epicAuditSeed = 'EPIC-PAVING-AUDIT';
-const epicAuditCoords: ChunkCoord[] = Array.from(
-  { length: 9 },
-  (_, index): ChunkCoord => ({
-    x: -3 + index % 3,
-    z: -3 + Math.floor(index / 3),
-    story: -4,
-  }),
+const epicAuditMacro = { x: -2, z: 1 } as const;
+const epicAuditStory = -4;
+const epicAuditSlots = getEpicStructureSlotsForMacro(
+  epicAuditSeed,
+  epicAuditMacro.x,
+  epicAuditMacro.z,
 );
+const epicAuditStructureCoords: ChunkCoord[] = epicAuditSlots.map((slot) => ({
+  x: slot.x,
+  z: slot.z,
+  story: epicAuditStory,
+}));
+const epicAuditOrdinaryCoords: ChunkCoord[] = epicAuditSlots.slice(0, 3).map((slot) => ({
+  x: slot.x + 1,
+  z: slot.z + 1,
+  story: epicAuditStory,
+}));
+const epicAuditCoords = [...epicAuditStructureCoords, ...epicAuditOrdinaryCoords];
 const epicAuditPlans = new Map<string, ReturnType<typeof generateInfiniteChunk>>();
 const epicAuditPlan = (
   coord: ChunkCoord,
@@ -188,87 +246,304 @@ describe('InfiniteWorld chunk contracts', () => {
   });
 
   describe('epic structure paving', () => {
-    it('fills a negative-coordinate 3x3 story with one ordinary chunk and epic1 through epic8', () => {
-      const observedIndices: number[] = [];
-      let ordinaryCount = 0;
+    it('places exactly epic1 through epic5 in a deterministic sparse macro', () => {
+      const expectedIndices = [1, 2, 3, 4, 5];
+      expect(EPIC_STRUCTURE_DEFINITIONS.map((definition) => definition.index)).toEqual(
+        expectedIndices,
+      );
+      expect(getEpicStructureSlotsForMacro(
+        epicAuditSeed,
+        epicAuditMacro.x,
+        epicAuditMacro.z,
+      )).toEqual(epicAuditSlots);
+      expect(epicAuditSlots.map((slot) => slot.index).sort((left, right) => left - right))
+        .toEqual(expectedIndices);
 
-      for (const coord of epicAuditCoords) {
+      for (const coord of epicAuditStructureCoords) {
         const plan = epicAuditPlan(coord);
         const marker = epicMarker(plan);
-        const assignedIndex = epicStructureIndexForCoord(coord);
+        const assignedIndex = epicStructureIndexForCoord(epicAuditSeed, coord);
         expect(marker?.index ?? null).toBe(assignedIndex);
         expect(getInfiniteChunkMetadata(plan)?.coord).toEqual(coord);
-        if (marker) observedIndices.push(marker.index);
-        else ordinaryCount += 1;
       }
 
-      expect(ordinaryCount).toBe(1);
-      expect(observedIndices.sort((left, right) => left - right)).toEqual(
-        EPIC_STRUCTURE_DEFINITIONS.map((definition) => definition.index),
-      );
+      for (const coord of epicAuditOrdinaryCoords) {
+        expect(epicStructureIndexForCoord(epicAuditSeed, coord)).toBeNull();
+        expect(epicMarker(epicAuditPlan(coord))).toBeUndefined();
+      }
+    });
+
+    it('keeps every Chebyshev neighbour of an epic slot ordinary', () => {
+      for (const slot of epicAuditSlots) {
+        for (let deltaZ = -1; deltaZ <= 1; deltaZ += 1) {
+          for (let deltaX = -1; deltaX <= 1; deltaX += 1) {
+            if (deltaX === 0 && deltaZ === 0) continue;
+            expect(epicStructureIndexForCoord(epicAuditSeed, {
+              x: slot.x + deltaX,
+              z: slot.z + deltaZ,
+            })).toBeNull();
+          }
+        }
+      }
     });
 
     it('keeps every epic destination on walkable floor and outside floor openings', () => {
-      for (const coord of epicAuditCoords) {
+      for (const coord of epicAuditStructureCoords) {
         const plan = epicAuditPlan(coord);
-        const marker = epicMarker(plan);
-        if (!marker) continue;
-        expect(plan.floorRects.some((floor) =>
-          containsPoint(floor, marker.destination)
-        )).toBe(true);
+        const marker = epicMarker(plan)!;
+        if (marker.index === 3) {
+          expect(marker.entryLevel).toBeGreaterThan(0);
+          expect(marker.destination.y).toBeGreaterThan(0.865);
+          const supportingSurfaceY = marker.destination.y - 0.865;
+          expect(plan.colliders.some((collider) =>
+            collider.kind === 'floor' &&
+            colliderContainsPoint(collider, marker.destination) &&
+            Math.abs(
+              collider.center.y + collider.halfExtents.y - supportingSurfaceY,
+            ) < 0.02
+          )).toBe(true);
+        } else {
+          expect(plan.floorRects.some((floor) =>
+            containsPoint(floor, marker.destination)
+          )).toBe(true);
+        }
         expect(getFloorOpenings(plan).some((opening) =>
           containsPoint(opening, marker.destination)
         )).toBe(false);
       }
     });
 
-    it('leaves epic1 voidBounds free of every floor collider', () => {
+    it('lets epic3 cross horizontal chunk seams without rebuilding an outer rim', () => {
+      const coord = epicAuditStructureCoords.find(
+        (candidate) => epicStructureIndexForCoord(epicAuditSeed, candidate) === 3,
+      )!;
+      const plan = epicAuditPlan(coord);
+      const marker = epicMarker(plan)!;
+
+      expect(rectWidth(marker.bounds)).toBeGreaterThan(INFINITE_CHUNK_SIZE * 1.9);
+      expect(rectDepth(marker.passageFacadeBounds!)).toBeCloseTo(
+        rectDepth(marker.voidBounds!),
+        5,
+      );
+      expect(plan.walls.some((wall) =>
+        wall.id.includes('/infinite-boundary-west-upper-') ||
+        wall.id.includes('/biome-transition-west-') ||
+        wall.id.includes('/biome-transition-east-')
+      )).toBe(false);
+      expect(plan.floorRects.every((floor) => rectWidth(floor) < 10)).toBe(true);
+      expect(plan.colliders.some((collider) =>
+        collider.id.includes('gallery-back') || collider.id.includes('ledge-floor')
+      )).toBe(false);
+    });
+
+    it('makes epic1 a 90% abyss with continuous story ledges and segmented entrances', () => {
       const plan = epicAuditPlan(
-        epicAuditCoords.find((coord) => epicStructureIndexForCoord(coord) === 1)!,
+        epicAuditStructureCoords.find(
+          (coord) => epicStructureIndexForCoord(epicAuditSeed, coord) === 1,
+        )!,
       );
       const marker = epicMarker(plan);
       expect(marker?.index).toBe(1);
       expect(marker?.voidBounds).toBeDefined();
-      if (!marker?.voidBounds) return;
+      expect(marker?.passageFacadeBounds).toBeDefined();
+      if (!marker?.voidBounds || !marker.passageFacadeBounds) return;
+      const voidBounds = marker.voidBounds;
+      const facadeBounds = marker.passageFacadeBounds;
+      const voidInterior = {
+        minX: voidBounds.minX + 0.01,
+        minZ: voidBounds.minZ + 0.01,
+        maxX: voidBounds.maxX - 0.01,
+        maxZ: voidBounds.maxZ - 0.01,
+      };
 
-      const floorColliders = plan.colliders.filter((collider) => collider.kind === 'floor');
-      expect(floorColliders.length).toBeGreaterThan(0);
-      for (const collider of floorColliders) {
-        const footprint: Rect = {
-          minX: collider.center.x - collider.halfExtents.x,
-          maxX: collider.center.x + collider.halfExtents.x,
-          minZ: collider.center.z - collider.halfExtents.z,
-          maxZ: collider.center.z + collider.halfExtents.z,
-        };
-        expect(overlaps(footprint, marker.voidBounds)).toBe(false);
-      }
+      expect(rectWidth(voidBounds) * rectDepth(voidBounds) / (plan.size * plan.size))
+        .toBeGreaterThan(0.9);
+      expect(facadeBounds.minX - voidBounds.minX).toBeCloseTo(-1.05, 5);
+      expect(voidBounds.maxX - facadeBounds.maxX).toBeCloseTo(-1.05, 5);
 
-      const shaftColliders = plan.colliders.filter((collider) =>
-        collider.id.includes('/epic-abyss-shaft-')
+      expect(getFloorOpenings(plan).some((opening) => sameRect(opening, voidBounds)))
+        .toBe(true);
+      expect(getInfiniteChunkCeilingOpenings(plan).some(
+        (opening) => sameRect(opening, voidBounds),
+      )).toBe(true);
+      expect((plan.lowerPreviewOpenings ?? []).some(
+        (opening) => sameRect(opening, voidBounds),
+      )).toBe(true);
+
+      const currentLevel = marker.passageLevels?.find((level) => Math.abs(level.y) < 0.01);
+      const baseFloorColliders = plan.colliders.filter((collider) =>
+        collider.id.includes('/floor-epic-')
       );
-      expect(shaftColliders).toHaveLength(4);
-      for (const collider of shaftColliders) {
-        expect(collider.center.y + collider.halfExtents.y).toBeCloseTo(0, 5);
-        expect(collider.center.y - collider.halfExtents.y).toBeLessThanOrEqual(-72);
+      expect(baseFloorColliders).toHaveLength(4 + (currentLevel?.passages.length ?? 0));
+      for (const collider of baseFloorColliders) {
+        expect(overlaps(colliderFootprint(collider), voidInterior)).toBe(false);
       }
+
+      expect(currentLevel?.passages.length).toBeGreaterThanOrEqual(8);
+      expect(new Set(currentLevel?.passages.map((passage) => passage.side)))
+        .toEqual(new Set(['north', 'south', 'west', 'east']));
+      expect(currentLevel?.passages.every((passage) => passage.corridorDepth <= 1.22))
+        .toBe(true);
+      const northPassages = currentLevel?.passages.filter((passage) => passage.side === 'north') ?? [];
+      const uncutOuterFloorX = Array.from({ length: 105 }, (_, index) => -52 + index)
+        .find((x) => northPassages.every(
+          (passage) => Math.abs(x - passage.along) > passage.width * 0.5 + 0.05,
+        ));
+      expect(uncutOuterFloorX).toBeDefined();
+      expect(plan.floorRects.some((floor) =>
+        uncutOuterFloorX !== undefined &&
+        uncutOuterFloorX >= floor.minX && uncutOuterFloorX <= floor.maxX &&
+        -55.2 >= floor.minZ && -55.2 <= floor.maxZ
+      )).toBe(false);
+      const sourceCoord = getInfiniteChunkMetadata(plan)!.coord;
+      for (const side of ['north', 'south', 'west', 'east'] as const) {
+        const expectedGates = currentLevel?.passages
+          .filter((passage) => passage.side === side)
+          .map((passage) => ({ offset: passage.along, width: passage.width })) ?? [];
+        expect(getCanonicalEdgeGates(epicAuditSeed, sourceCoord, side)).toEqual(expectedGates);
+        const neighbor = parseChunkKey(getNeighborChunkKey(sourceCoord, side));
+        expect(getCanonicalEdgeGates(epicAuditSeed, neighbor, opposite[side]))
+          .toEqual(expectedGates);
+      }
+      const passageFloorColliders = plan.colliders.filter((collider) =>
+        collider.id.includes('/epic1-passage-floor-')
+      );
+      expect(passageFloorColliders).toHaveLength(0);
+
+      const shaftWalls = plan.colliders.filter((collider) =>
+        collider.id.includes('/epic1-shaft-wall-')
+      );
+      expect(shaftWalls.length).toBeGreaterThan(4);
+      for (const collider of shaftWalls) {
+        expect(collider.center.y - collider.halfExtents.y).toBeCloseTo(0, 5);
+        expect(collider.center.y + collider.halfExtents.y).toBeCloseTo(
+          INFINITE_STORY_PITCH,
+          5,
+        );
+      }
+
+      for (const passage of currentLevel?.passages ?? []) {
+        const portalCenter = passage.side === 'north'
+          ? { x: passage.along, z: facadeBounds.minZ }
+          : passage.side === 'south'
+            ? { x: passage.along, z: facadeBounds.maxZ }
+            : passage.side === 'west'
+              ? { x: facadeBounds.minX, z: passage.along }
+              : { x: facadeBounds.maxX, z: passage.along };
+        expect(shaftWalls.some((collider) => colliderContainsPoint(collider, portalCenter)))
+          .toBe(false);
+        const outward = passage.side === 'north' || passage.side === 'west' ? -1 : 1;
+        const corridorPoint = passage.side === 'north' || passage.side === 'south'
+          ? { x: passage.along, z: portalCenter.z + outward * 1.15 }
+          : { x: portalCenter.x + outward * 1.15, z: passage.along };
+        expect(baseFloorColliders.some((collider) => colliderContainsPoint(collider, corridorPoint)))
+          .toBe(true);
+      }
+
+      const lowerPreview = marker.passageLevels?.find(
+        (level) => Math.abs(level.y + INFINITE_STORY_PITCH) < 0.01,
+      );
+      const lowerPlan = generateInfiniteChunk(epicAuditSeed, {
+        ...sourceCoord,
+        story: sourceCoord.story - 1,
+      });
+      const lowerMarker = epicMarker(lowerPlan)!;
+      const lowerCurrent = lowerMarker.passageLevels?.find((level) => level.y === 0);
+      expect(lowerPreview?.passages).toEqual(lowerCurrent?.passages);
+      const upperPreview = marker.passageLevels?.find(
+        (level) => Math.abs(level.y - INFINITE_STORY_PITCH) < 0.01,
+      );
+      const upperPlan = generateInfiniteChunk(epicAuditSeed, {
+        ...sourceCoord,
+        story: sourceCoord.story + 1,
+      });
+      const upperCurrent = epicMarker(upperPlan)?.passageLevels
+        ?.find((level) => level.y === 0);
+      expect(upperPreview?.passages).toEqual(upperCurrent?.passages);
+      expect(marker.passageLevels?.filter((level) => level.y > 0)).toHaveLength(4);
+      const previewLedges = plan.colliders.filter((collider) =>
+        collider.id.includes('/epic1-lower-preview-ledge-floor-')
+      );
+      expect(previewLedges).toHaveLength(4);
+      for (const collider of previewLedges) {
+        expect(collider.center.y + collider.halfExtents.y)
+          .toBeCloseTo(-INFINITE_STORY_PITCH, 5);
+        expect(overlaps(colliderFootprint(collider), voidInterior)).toBe(false);
+      }
+      const previewCorridors = plan.colliders.filter((collider) =>
+        collider.id.includes('/epic1-lower-preview-corridor-floor-')
+      );
+      expect(previewCorridors).toHaveLength(0);
+      expect(plan.lights.every((light) => !lightPanelOverlapsRect(light, voidBounds))).toBe(true);
+      expect(plan.lights.every((light) => Math.abs(light.ceilingY - 5.2) < 1e-6)).toBe(true);
+    });
+
+    it('embeds epic4 in the ordinary maze and leaves a real opening to its upper continuation', () => {
+      const plan = epicAuditPlan(
+        epicAuditStructureCoords.find(
+          (coord) => epicStructureIndexForCoord(epicAuditSeed, coord) === 4,
+        )!,
+      );
+      const marker = epicMarker(plan)!;
+      const layout = getEpicStairwellLayout(marker);
+      const clearance = {
+        minX: marker.bounds.minX - 3.15,
+        maxX: marker.bounds.maxX + 3.15,
+        minZ: marker.bounds.minZ - 3.15,
+        maxZ: marker.bounds.maxZ + 3.15,
+      };
+      const retainedMazeWalls = plan.walls.filter((wall) =>
+        !wall.id.includes('infinite-boundary-') &&
+        !wall.id.includes('biome-boundary-')
+      );
+
+      expect(rectWidth(marker.bounds)).toBeCloseTo(19.2, 5);
+      expect(plan.floorRects).toEqual([{
+        minX: -INFINITE_CHUNK_SIZE * 0.5,
+        maxX: INFINITE_CHUNK_SIZE * 0.5,
+        minZ: -INFINITE_CHUNK_SIZE * 0.5,
+        maxZ: INFINITE_CHUNK_SIZE * 0.5,
+      }]);
+      expect(plan.rooms.length).toBeGreaterThan(1);
+      expect(retainedMazeWalls.length).toBeGreaterThan(0);
+      expect(retainedMazeWalls.every((wall) =>
+        !overlaps({
+          minX: wall.x - (wall.orientation === 'x' ? wall.length : wall.thickness) * 0.5,
+          maxX: wall.x + (wall.orientation === 'x' ? wall.length : wall.thickness) * 0.5,
+          minZ: wall.z - (wall.orientation === 'z' ? wall.length : wall.thickness) * 0.5,
+          maxZ: wall.z + (wall.orientation === 'z' ? wall.length : wall.thickness) * 0.5,
+        }, clearance)
+      )).toBe(true);
+      expect(plan.colliders.some((collider) =>
+        collider.id.includes('epic4-upper-maze-floor-')
+      )).toBe(true);
+      expect(plan.colliders.some((collider) =>
+        collider.id.includes('epic4-upper-maze-') && collider.kind === 'wall'
+      )).toBe(true);
+      expect(plan.colliders.filter((collider) =>
+        collider.id.includes('epic4-summit-floor-') &&
+        colliderContainsPoint(collider, { x: -5.9, z: 0 })
+      )).toHaveLength(0);
+      expect(layout.upperFloorRects.some((floor) => containsPoint(floor, { x: -5.9, z: -12 })))
+        .toBe(true);
     });
 
     it('prefixes epic IDs and preserves every serialized marker through structuredClone', () => {
-      for (const coord of epicAuditCoords) {
+      for (const coord of epicAuditStructureCoords) {
         const plan = epicAuditPlan(coord);
-        const marker = epicMarker(plan);
-        if (!marker) continue;
+        const marker = epicMarker(plan)!;
         const prefix = `chunk-${createChunkKey(coord)}/`;
         expect(marker.id.startsWith(prefix)).toBe(true);
         expect(marker.roomId.startsWith(prefix)).toBe(true);
         expect(plan.rooms.some((room) => room.id === marker.roomId)).toBe(true);
 
         const cloned = structuredClone(plan);
+        expect(cloned).toEqual(plan);
         expect(epicMarker(cloned)).toEqual(marker);
       }
     });
 
-    it('rebuilds the complete epic tile deterministically', () => {
+    it('rebuilds sparse epic and sampled ordinary chunks deterministically', () => {
       for (const coord of epicAuditCoords) {
         expect(generateInfiniteChunk(epicAuditSeed, coord)).toEqual(epicAuditPlan(coord));
       }
@@ -323,6 +598,10 @@ describe('InfiniteWorld chunk contracts', () => {
         }));
         const biomes = members.map((coord) => getInfiniteVisualBiome(biomeSeed, coord));
         expect(new Set(biomes).size).toBe(1);
+        for (const story of [-8, -1, 1, 9]) {
+          expect(getInfiniteVisualBiome(biomeSeed, { ...members[0]!, story }))
+            .toBe(biomes[0]);
+        }
         counts[biomes[0]!] += 1;
       }
     }
@@ -334,6 +613,16 @@ describe('InfiniteWorld chunk contracts', () => {
     expect(counts.white / total).toBeGreaterThan(0.075);
     expect(counts.white / total).toBeLessThan(0.125);
     expect(getInfiniteVisualBiome(biomeSeed, { x: 0, z: 0, story: 0 })).toBe('yellow');
+  });
+
+  it('keeps wall, floor and ceiling treatment stable through vertical connections', () => {
+    const columnSeed = 'VERTICAL-SURFACE-CONTINUITY-AUDIT';
+    const coords = [-7, -1, 0, 1, 8].map((story) => ({ x: 7, z: -11, story }));
+    const plans = coords.map((coord) => generateInfiniteChunk(columnSeed, coord));
+    expect(new Set(plans.map((plan) => plan.visualBiome)).size).toBe(1);
+    for (const plan of plans.slice(1)) {
+      expect(plan.surfaceStyle).toEqual(plans[0]!.surfaceStyle);
+    }
   });
 
   it('serializes the visual biome and applies its fluorescent palette before baking', () => {
@@ -402,6 +691,28 @@ describe('InfiniteWorld chunk contracts', () => {
     expect(pillarPlans.some(
       (plan) => plan.columns.filter((column) => column.kind === 'column').length > 12,
     )).toBe(true);
+    const ordinaryPillarPlans = pillarPlans.filter(
+      (plan) => !plan.features.some((feature) => feature.kind === 'epic-structure'),
+    );
+    expect(ordinaryPillarPlans.length).toBeGreaterThan(0);
+    for (const plan of ordinaryPillarPlans) {
+      const hall = [...plan.rooms]
+        .filter((room) => room.kind === 'open-hall')
+        .sort((left, right) => rectArea(right.bounds) - rectArea(left.bounds))[0]!;
+      const hallLights = plan.lights.filter((light) => light.roomId === hall.id);
+      expect(hallLights.length).toBeGreaterThanOrEqual(4);
+      expect(hallLights.every((light) => light.id.includes('pillar-hall-light-'))).toBe(true);
+      expect(hallLights.every((light) => light.ceilingY === hall.ceilingHeight)).toBe(true);
+      for (const light of hallLights) {
+        const halfPanelX = light.rotation === 0 ? light.width * 0.5 : 0.64;
+        const halfPanelZ = light.rotation === 0 ? 0.64 : light.width * 0.5;
+        expect(plan.columns.some(
+          (pillar) =>
+            Math.abs(light.x - pillar.x) <= pillar.width * 0.5 + halfPanelX + 0.28 &&
+            Math.abs(light.z - pillar.z) <= pillar.depth * 0.5 + halfPanelZ + 0.28,
+        )).toBe(false);
+      }
+    }
     const pillars = pillarPlans.flatMap((plan) =>
       plan.columns.filter((column) => column.kind === 'column')
     );
@@ -453,7 +764,10 @@ describe('InfiniteWorld chunk contracts', () => {
     expect(plan.features.every(
       (feature) =>
         feature.kind !== 'raised-zone' ||
-        (feature.roomIds ?? [feature.roomId]).every((roomId) =>
+        [
+          ...(feature.roomIds ?? [feature.roomId]),
+          ...(feature.approachRoomIds ?? []),
+        ].every((roomId) =>
           plan.rooms.some((room) => room.id === roomId)
         ),
     )).toBe(true);
@@ -534,8 +848,8 @@ describe('InfiniteWorld chunk contracts', () => {
       coord: ChunkCoord;
       kind: 'drop' | 'void';
     }> = [
-      { coord: { x: -21, z: -30, story: 1 }, kind: 'drop' },
-      { coord: { x: -6, z: -21, story: 1 }, kind: 'void' },
+      { coord: { x: -15, z: -27, story: 1 }, kind: 'drop' },
+      { coord: { x: -3, z: -21, story: 1 }, kind: 'void' },
     ];
     for (const { coord, kind } of cases) {
       const source = generateInfiniteChunk(seed, coord);
@@ -645,7 +959,7 @@ describe('InfiniteWorld chunk contracts', () => {
         z: Math.floor(index / 6) - 3,
         story: index % 3 - 1,
       };
-      if (epicStructureIndexForCoord(coord) !== null) continue;
+      if (epicStructureIndexForCoord('HIGH-CEILING-INVARIANT-AUDIT', coord) !== null) continue;
       const plan = generateInfiniteChunk('HIGH-CEILING-INVARIANT-AUDIT', coord);
       const openings = [
         ...getFloorOpenings(plan),
@@ -659,7 +973,7 @@ describe('InfiniteWorld chunk contracts', () => {
         const shells = plan.walls.filter((wall) =>
           (wall.detail === 'upper-shell' || wall.detail === 'upper-portal-lintel') &&
           wall.kind === 'wallpaper' &&
-          wall.bottom <= plan.wallHeight &&
+          wall.bottom <= plan.wallHeight + 0.02 &&
           wall.bottom + wall.height >= room.ceilingHeight - 0.03
         );
         for (const side of [
@@ -753,6 +1067,28 @@ describe('InfiniteWorld chunk contracts', () => {
             wall.bottom <= feature.elevation + 0.02
           )).toBe(true);
         }
+      }
+      for (const wall of plan.walls.filter((candidate) =>
+        candidate.detail === 'upper-shell' || candidate.detail === 'upper-portal-lintel'
+      )) {
+        expect(wall.bottom).toBeGreaterThanOrEqual(plan.wallHeight);
+        const fixed = wall.orientation === 'x' ? wall.z : wall.x;
+        const along = wall.orientation === 'x' ? wall.x : wall.z;
+        const wallMin = along - wall.length * 0.5;
+        const wallMax = along + wall.length * 0.5;
+        expect(plan.rooms.some((room) => {
+          if (
+            room.ceilingHeight <= plan.wallHeight + 0.1 ||
+            wall.bottom + wall.height < room.ceilingHeight - 0.03
+          ) return false;
+          const sides = wall.orientation === 'x'
+            ? [room.bounds.minZ, room.bounds.maxZ]
+            : [room.bounds.minX, room.bounds.maxX];
+          const roomMin = wall.orientation === 'x' ? room.bounds.minX : room.bounds.minZ;
+          const roomMax = wall.orientation === 'x' ? room.bounds.maxX : room.bounds.maxZ;
+          return sides.some((side) => Math.abs(side - fixed) < 0.12) &&
+            Math.min(wallMax, roomMax) - Math.max(wallMin, roomMin) > 0.02;
+        })).toBe(true);
       }
     }
     expect(districtCount).toBeGreaterThan(15);
@@ -849,6 +1185,48 @@ describe('InfiniteWorld chunk contracts', () => {
         Math.abs(wall.bottom - (plan.wallHeight - INFINITE_STORY_PITCH)) < 0.01 &&
         Math.abs(wall.bottom + wall.height - INFINITE_STORY_PITCH) < 0.01
       )).toBe(true);
+      const enclosureClaims = inheritedShaftEnclosures(plan);
+      const allActiveOpenings = inheritedShaftOpeningsForChunk(shaftSeed, coord);
+      expect(enclosureClaims.length).toBeGreaterThan(0);
+      for (const opening of allActiveOpenings) {
+        const enclosure = enclosureClaims.find(({ bounds }) =>
+          bounds.minX <= opening.minX - 0.34 &&
+          bounds.maxX >= opening.maxX + 0.34 &&
+          bounds.minZ <= opening.minZ - 0.34 &&
+          bounds.maxZ >= opening.maxZ + 0.34
+        );
+        expect(enclosure).toBeDefined();
+        if (!enclosure) continue;
+        expect(enclosure.walls).toHaveLength(4);
+        expect(enclosure.walls.every((wall) =>
+          wall.kind === 'wallpaper' &&
+          wall.collision &&
+          Math.abs(wall.bottom) < 0.01 &&
+          Math.abs(wall.height - plan.wallHeight) < 0.01
+        )).toBe(true);
+        const hostRoom = plan.rooms.find((room) => room.id === enclosure.walls[0]!.roomId);
+        expect(hostRoom).toBeDefined();
+        if (hostRoom) {
+          expect(
+            Math.min(
+              Math.abs(enclosure.bounds.minX - hostRoom.bounds.minX),
+              Math.abs(enclosure.bounds.maxX - hostRoom.bounds.maxX),
+            ),
+          ).toBeLessThan(0.4);
+          expect(
+            Math.min(
+              Math.abs(enclosure.bounds.minZ - hostRoom.bounds.minZ),
+              Math.abs(enclosure.bounds.maxZ - hostRoom.bounds.maxZ),
+            ),
+          ).toBeLessThan(0.4);
+        }
+        for (const wall of enclosure.walls) {
+          const localId = wall.id.slice(wall.id.lastIndexOf('/') + 1);
+          expect(plan.colliders.some((collider) =>
+            collider.id.endsWith(`/collider-${localId}`)
+          )).toBe(true);
+        }
+      }
       for (const wall of shells) {
         const expectedLength = wall.orientation === 'x'
           ? canonicalOpening.maxX - canonicalOpening.minX + wall.thickness * 2

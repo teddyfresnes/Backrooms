@@ -122,6 +122,7 @@ export class Game {
   private metricsTimer = 0;
   private pixelRatio: number;
   private readonly adaptiveRenderScale: AdaptiveRenderScale;
+  private locateRequestId = 0;
   private disposed = false;
 
   constructor(private readonly container: HTMLElement) {
@@ -200,7 +201,9 @@ export class Game {
       onFootstep: (strength) => this.audio.footstep(strength),
       onInteract: (mode) => this.tryInteract(mode),
       onLand: () => this.audio.impact(),
+      onSafePosition: (position) => this.worldStream?.protectRecoveryPosition(position),
       onFallReset: () => {
+        if (this.player) this.worldStream?.ensurePositionMounted(this.player.position);
         this.audio.impact();
         this.ui.showFall();
       },
@@ -315,7 +318,7 @@ export class Game {
     const commandSuggestions = [
       { value: '/help', label: '/help', detail: 'AFFICHE LES COMMANDES DISPONIBLES' },
       { value: '/noclip', label: '/noclip', detail: 'ACTIVE OU DESACTIVE LE VOL LIBRE' },
-      { value: '/locate ', label: '/locate <cible>', detail: 'TÉLÉPORTE VERS UNE CIBLE CHARGÉE' },
+      { value: '/locate ', label: '/locate <cible>', detail: 'TÉLÉPORTE VERS UNE CIBLE CONNUE' },
     ];
     if (!trimmed.includes(' ')) {
       const normalized = trimmed.toLowerCase();
@@ -331,7 +334,7 @@ export class Game {
     const matches = this.locateMatches(query);
     if (matches.length === 0) return null;
     return {
-      hint: `${matches.length} CIBLE(S) CHARGÉE(S) · TAB POUR PARCOURIR`,
+      hint: `${matches.length} CIBLE(S) CONNUE(S) · TAB POUR PARCOURIR`,
       suggestions: matches.map((target) => ({
         value: `/locate ${target.command}`,
         label: target.command,
@@ -404,7 +407,7 @@ export class Game {
       const commands = this.locateMatches('').map((target) => target.command).join(', ');
       const feedback = commands
         ? `ARGUMENT MANQUANT. SYNTAXE: /locate <cible>. CIBLES: ${commands}`
-        : 'AUCUNE CIBLE N’EST CHARGÉE';
+        : 'AUCUNE CIBLE N’EST DISPONIBLE';
       return {
         close: false,
         feedback,
@@ -423,8 +426,8 @@ export class Game {
         : `CIBLE INCONNUE: ${query}. UTILISE TAB APRÈS /locate.`;
       return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
     }
-    this.teleportToLocateTarget(target);
-    const feedback = `TÉLÉPORTATION: ${target.label.toUpperCase()} · ${Math.round(target.distance)} M`;
+    void this.teleportToLocateTarget(target);
+    const feedback = `PRÉPARATION: ${target.label.toUpperCase()} · ${Math.round(target.distance)} M`;
     return { close: true, feedback, messages: [echo, { kind: 'system', text: feedback }] };
   }
 
@@ -458,11 +461,34 @@ export class Game {
     return scored.map((entry) => entry.target);
   }
 
-  private teleportToLocateTarget(target: LocateTarget): void {
-    if (!this.player || !this.worldStream) return;
-    this.player.teleport(target.position);
-    this.worldStream.update(this.elapsed, 1 / 60, this.player.position);
-    this.updateDebugState(true);
+  private async teleportToLocateTarget(target: LocateTarget): Promise<void> {
+    const player = this.player;
+    const worldStream = this.worldStream;
+    if (!player || !worldStream) return;
+    const requestId = ++this.locateRequestId;
+    try {
+      const ready = await worldStream.prepareLocateTarget(target);
+      if (
+        !ready ||
+        this.disposed ||
+        requestId !== this.locateRequestId ||
+        player !== this.player ||
+        worldStream !== this.worldStream
+      ) return;
+      player.teleport(target.position);
+      worldStream.update(this.elapsed, 1 / 60, player.position);
+      this.updateDebugState(true);
+      this.ui.showConsoleMessage({
+        kind: 'system',
+        text: `TÉLÉPORTATION: ${target.label.toUpperCase()} · ${Math.round(target.distance)} M`,
+      });
+    } catch {
+      if (this.disposed || requestId !== this.locateRequestId) return;
+      this.ui.showConsoleMessage({
+        kind: 'error',
+        text: `ÉCHEC DU CHARGEMENT: ${target.label.toUpperCase()}`,
+      });
+    }
   }
 
   private readonly onConsoleHotkey = (event: KeyboardEvent): void => {

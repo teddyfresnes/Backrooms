@@ -121,6 +121,7 @@ const createController = (physics: FakePhysics) => {
     onFootstep: vi.fn(),
     onInteract: vi.fn(),
     onLand: vi.fn(),
+    onSafePosition: vi.fn(),
     onFallReset: vi.fn(),
   };
   const controller = new PlayerController(
@@ -258,6 +259,9 @@ describe('PlayerController infinite vertical recovery', () => {
 
     physics.queueMove({ x: 8, y: -20, z: 5 }, true);
     controller.fixedUpdate(1);
+    expect(callbacks.onSafePosition).toHaveBeenLastCalledWith(
+      expect.objectContaining({ x: 8, y: -20, z: 5 }),
+    );
     physics.queueMove({ x: 8, y: -60, z: 5 }, false);
     controller.fixedUpdate(1);
 
@@ -277,6 +281,9 @@ describe('PlayerController infinite vertical recovery', () => {
     const { callbacks, controller } = createController(physics);
 
     controller.teleport({ x: -6, y: -250, z: 11 });
+    expect(callbacks.onSafePosition).toHaveBeenLastCalledWith(
+      expect.objectContaining({ x: -6, y: -250, z: 11 }),
+    );
     physics.queueMove({ x: -6, y: -290, z: 11 }, false);
     controller.fixedUpdate(1);
     expect(callbacks.onFallReset).not.toHaveBeenCalled();

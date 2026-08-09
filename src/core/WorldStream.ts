@@ -6,7 +6,10 @@ import type { BakedLightMapData } from '../render/BakedLighting';
 import { WorldView } from '../render/WorldBuilder';
 import type { DoorWorldInteraction, WorldInteraction } from '../render/WorldBuilder';
 import {
+  EPIC_STRUCTURE_DEFINITIONS,
+  getEpicLocateDestination,
   getEpicStructureDefinition,
+  getNearestEpicStructureCoord,
   isInsideEpicStoryVolume,
 } from '../world/EpicStructures';
 import {
@@ -17,6 +20,7 @@ import {
   generateInfiniteChunk,
   getChunkWorldOffset,
   getInfiniteChunkMetadata,
+  parseChunkKey,
 } from '../world/InfiniteWorld';
 import type {
   ChunkCoord,
@@ -39,6 +43,7 @@ interface ActiveChunk {
   key: ChunkKey;
   coord: Readonly<ChunkCoord>;
   plan: WorldPlan;
+  lightMaps: BakedLightMapData;
   view: WorldView;
   offset: THREE.Vector3;
 }
@@ -77,6 +82,16 @@ export interface LocateTarget {
   chunkKey: ChunkKey;
 }
 
+/** Chunks that must already be visible when a locate teleport completes. */
+export const locateWarmupCoords = (target: Pick<LocateTarget, 'chunkKey' | 'command'>): ChunkCoord[] => {
+  const owner = parseChunkKey(target.chunkKey);
+  if (target.command !== 'epic1') return [owner];
+  // epic1's locate point faces the north entrance. Mounting that neighbour
+  // before teleporting turns the short through-corridor into a real maze view
+  // instead of exposing the scene background for one or more frames.
+  return [owner, { x: owner.x, z: owner.z - 1, story: owner.story }];
+};
+
 const stableFloor = (value: number): number => {
   const nearestInteger = Math.round(value);
   const tolerance = Number.EPSILON * Math.max(1, Math.abs(value)) * 8;
@@ -108,6 +123,10 @@ export const streamedCoordsAround = (center: ChunkCoord): ChunkCoord[] => {
   });
 };
 
+export const streamedCoordsAroundLongitudinalEpic = (
+  center: ChunkCoord,
+): ChunkCoord[] => streamedCoordsAround(center).filter((coord) => coord.x === center.x);
+
 export const shouldDeferStoryTransition = (
   current: ChunkCoord,
   observed: ChunkCoord,
@@ -115,6 +134,12 @@ export const shouldDeferStoryTransition = (
   workerAvailable: boolean,
 ): boolean =>
   workerAvailable && observed.story !== current.story && !destinationReady;
+
+export const nextEpicAbyssPrefetchCoord = (coord: ChunkCoord): ChunkCoord => ({
+  x: coord.x,
+  z: coord.z,
+  story: coord.story - 1,
+});
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
@@ -182,7 +207,11 @@ export class WorldStream {
   };
   private readonly preparedChunks = new Map<ChunkKey, PreparedChunk>();
   private readonly verticalPrefetchQueue: ChunkCoord[] = [];
+  private readonly priorityVerticalPrefetchKeys = new Set<ChunkKey>();
+  private readonly preparationWorkers = new Map<Worker, (reason?: unknown) => void>();
   private pendingStoryKey?: ChunkKey;
+  private recoveryChunkKey?: ChunkKey;
+  private recoveryChunk?: { key: ChunkKey; prepared: PreparedChunk };
   private initialized = false;
   private disposed = false;
 
@@ -276,14 +305,15 @@ export class WorldStream {
     if (!this.initialized || this.disposed) return;
 
     const observedCenter = streamChunkCoordAt(playerPosition);
-    const epicStoryPinned = this.isEpicStoryPinned(playerPosition);
+    const epicPinnedCoord = this.getEpicPinnedCoord(playerPosition);
+    const epicStoryPinned = epicPinnedCoord !== undefined;
     let nextCenter = observedCenter;
     const observedKey = createChunkKey(observedCenter);
     if (epicStoryPinned) {
-      // Epic upper levels are one tall visual volume rather than logical
-      // stories. Pinning its source keeps that illusion stable; for epic1 it
-      // also keeps the lethal shaft and last safe respawn surface mounted.
-      nextCenter = { ...observedCenter, story: this.centerCoord.story };
+      // Tall epic volumes belong to their mounted source plan even when their
+      // local height crosses many ordinary logical stories. epic1 is excluded
+      // by its feature contract so its passages use the normal pit hand-off.
+      nextCenter = { ...epicPinnedCoord };
       this.pendingStoryKey = undefined;
     } else if (shouldDeferStoryTransition(
       this.centerCoord,
@@ -303,7 +333,7 @@ export class WorldStream {
     }
     const storyChanged = nextCenter.story !== this.centerCoord.story;
     this.centerCoord = nextCenter;
-    const desiredCoords = streamedCoordsAround(this.centerCoord);
+    const desiredCoords = this.desiredCoordsAroundCenter();
     const desiredKeys = new Set(desiredCoords.map(createChunkKey));
     let sourcesChanged = false;
 
@@ -368,6 +398,17 @@ export class WorldStream {
               });
             }
           }
+        } else if (
+          feature.kind === 'epic-structure' &&
+          feature.variant === 'endless-abyss' &&
+          feature.voidBounds &&
+          distanceToRect(localX, localZ, feature.voidBounds) <= 22
+        ) {
+          // Only prepare the immediately reachable story. It is urgent enough
+          // to overtake horizontal background jobs; once mounted, that story
+          // schedules the next one. This avoids generating three complete
+          // epic chunks in one burst as the player crosses a ledge.
+          this.enqueueVerticalPrefetch(nextEpicAbyssPrefetchCoord(activeRuntime.coord), true);
         } else if (
           feature.kind === 'stair-socket' &&
           !feature.inherited &&
@@ -458,17 +499,88 @@ export class WorldStream {
     return this.runtimeAt(playerPosition)?.plan.visualBiome ?? 'yellow';
   }
 
+  /** Prepares and mounts the destination collider before Game teleports. */
+  async prepareLocateTarget(target: LocateTarget): Promise<boolean> {
+    if (!this.initialized || this.disposed) return false;
+    const warmupCoords = locateWarmupCoords(target);
+    const prepared = await Promise.all(warmupCoords.map(async (coord) => {
+      const key = createChunkKey(coord);
+      if (this.chunks.has(key)) return { coord, key, prepared: undefined };
+      const cached = this.preparedChunks.get(key);
+      if (cached) return { coord, key, prepared: cached };
+      const generated = typeof Worker !== 'undefined'
+        ? await this.prepareChunkWithWorker(key)
+        : (() => {
+            const plan = generateInfiniteChunk(this.seed, key);
+            return { plan, lightMaps: bakeLightMapData(plan) };
+          })();
+      return { coord, key, prepared: generated };
+    }));
+    if (this.disposed) return false;
+    this.physics.batchChunkChanges(() => {
+      for (const ready of prepared) {
+        if (!ready.prepared) continue;
+        this.mountChunk(ready.prepared.plan, ready.coord, ready.prepared.lightMaps);
+      }
+    });
+    for (const ready of prepared) this.preparedChunks.delete(ready.key);
+    this.refreshLightSources();
+    return warmupCoords.every((coord) => this.chunks.has(createChunkKey(coord)));
+  }
+
+  /** Marks the grounded chunk whose CPU snapshot must survive a later unmount. */
+  protectRecoveryPosition(position: Pick<THREE.Vector3, 'x' | 'y' | 'z'>): void {
+    if (!this.initialized || this.disposed) return;
+    this.runtimeOffset.set(position.x, position.y, position.z);
+    const owner = this.getEpicPinnedCoord(this.runtimeOffset) ?? streamChunkCoordAt(position);
+    const key = createChunkKey(owner);
+    if (key === this.recoveryChunkKey) return;
+    this.recoveryChunkKey = key;
+    if (this.recoveryChunk?.key !== key) this.recoveryChunk = undefined;
+  }
+
+  /** Restores a collider immediately when a deep-fall watchdog returns home. */
+  ensurePositionMounted(position: Pick<THREE.Vector3, 'x' | 'y' | 'z'>): void {
+    if (!this.initialized || this.disposed) return;
+    this.runtimeOffset.set(position.x, position.y, position.z);
+    const coord = this.getEpicPinnedCoord(this.runtimeOffset) ?? streamChunkCoordAt(position);
+    const key = createChunkKey(coord);
+    if (this.chunks.has(key)) return;
+    if (this.recoveryChunk?.key === key) {
+      this.physics.batchChunkChanges(() => {
+        this.mountChunk(
+          this.recoveryChunk!.prepared.plan,
+          coord,
+          this.recoveryChunk!.prepared.lightMaps,
+        );
+      });
+      this.refreshLightSources();
+      return;
+    }
+    const prepared = this.preparedChunks.get(key);
+    if (!prepared && this.worker) {
+      this.enqueueVerticalPrefetch(coord, true);
+      this.pumpVerticalPrefetch(true);
+      return;
+    }
+    this.physics.batchChunkChanges(() => {
+      const plan = prepared?.plan ?? generateInfiniteChunk(this.seed, key);
+      this.mountChunk(plan, coord, prepared?.lightMaps ?? bakeLightMapData(plan));
+    });
+    this.preparedChunks.delete(key);
+    this.refreshLightSources();
+  }
+
   getLocateTargets(playerPosition: THREE.Vector3): LocateTarget[] {
     if (!this.initialized || this.disposed) return [];
     const bestByCommand = new Map<string, LocateTarget>();
-    const addTarget = (
-      runtime: ActiveChunk,
+    const addWorldTarget = (
+      chunkKey: ChunkKey,
       command: string,
       label: string,
       aliases: readonly string[],
-      localPosition: Vec3Data,
+      position: Vec3Data,
     ): void => {
-      const position = worldPoint(localPosition, runtime.offset);
       const distance = Math.hypot(
         position.x - playerPosition.x,
         position.y - playerPosition.y,
@@ -482,9 +594,22 @@ export class WorldStream {
         aliases,
         position,
         distance,
-        chunkKey: runtime.key,
+        chunkKey,
       });
     };
+    const addTarget = (
+      runtime: ActiveChunk,
+      command: string,
+      label: string,
+      aliases: readonly string[],
+      localPosition: Vec3Data,
+    ): void => addWorldTarget(
+      runtime.key,
+      command,
+      label,
+      aliases,
+      worldPoint(localPosition, runtime.offset),
+    );
 
     for (const runtime of this.chunks.values()) {
       const propGroups = new Map<string, Rect>();
@@ -796,6 +921,26 @@ export class WorldStream {
       }
     }
 
+    // Ordinary targets remain local to mounted chunks. Epics are resolved
+    // analytically so /locate stays useful now that monuments are genuinely rare.
+    for (const definition of EPIC_STRUCTURE_DEFINITIONS) {
+      const coord = getNearestEpicStructureCoord(this.seed, definition.index, this.centerCoord);
+      const key = createChunkKey(coord);
+      const offset = getChunkWorldOffset(coord);
+      const local = getEpicLocateDestination(this.seed, coord, definition.index);
+      addWorldTarget(
+        key,
+        definition.command,
+        definition.label,
+        definition.aliases,
+        {
+          x: offset.x + local.x,
+          y: offset.y + local.y,
+          z: offset.z + local.z,
+        },
+      );
+    }
+
     return [...bestByCommand.values()].sort(
       (a, b) => a.distance - b.distance || a.command.localeCompare(b.command),
     );
@@ -833,9 +978,17 @@ export class WorldStream {
     this.worker?.terminate();
     this.worker = undefined;
     this.workerInFlight = undefined;
+    for (const [worker, reject] of this.preparationWorkers) {
+      reject(new Error('WorldStream disposed during chunk preparation.'));
+      worker.terminate();
+    }
+    this.preparationWorkers.clear();
     this.preparedChunks.clear();
     this.verticalPrefetchQueue.length = 0;
+    this.priorityVerticalPrefetchKeys.clear();
     this.pendingStoryKey = undefined;
+    this.recoveryChunkKey = undefined;
+    this.recoveryChunk = undefined;
     this.clearMountedChunks();
     this.sourceCount = 0;
     this.pendingChunks = 0;
@@ -861,9 +1014,10 @@ export class WorldStream {
 
     const worldOffset = getChunkWorldOffset(coord);
     const offset = new THREE.Vector3(worldOffset.x, worldOffset.y, worldOffset.z);
+    const lightMaps = bakedLightMaps ?? bakeLightMapData(plan);
     const view = new WorldView(plan, this.materials[plan.visualBiome ?? 'yellow'], {
       createLightRig: false,
-      bakedLightMaps,
+      bakedLightMaps: lightMaps,
     });
     view.group.position.copy(offset);
     try {
@@ -873,6 +1027,7 @@ export class WorldStream {
         key,
         coord,
         plan,
+        lightMaps,
         view,
         offset,
       });
@@ -885,6 +1040,14 @@ export class WorldStream {
   private unmountChunk(key: ChunkKey): void {
     const runtime = this.chunks.get(key);
     if (!runtime) return;
+    if (!this.disposed && key === this.recoveryChunkKey) {
+      // Retain CPU data only. Keeping the complete source WorldView mounted
+      // would overlap epic1's stacked previews with the real lower stories.
+      this.recoveryChunk = {
+        key,
+        prepared: { plan: runtime.plan, lightMaps: runtime.lightMaps },
+      };
+    }
     this.physics.removeChunk(key);
     runtime.view.dispose();
     this.chunks.delete(key);
@@ -906,6 +1069,8 @@ export class WorldStream {
   }
 
   private runtimeAt(position: THREE.Vector3): ActiveChunk | undefined {
+    const epicOwner = this.epicRuntimeAt(position);
+    if (epicOwner) return epicOwner;
     const observed = streamChunkCoordAt(position);
     const exact = this.chunks.get(createChunkKey(observed));
     if (exact) return exact;
@@ -914,15 +1079,36 @@ export class WorldStream {
     return this.chunks.get(createChunkKey({ ...observed, story: this.centerCoord.story }));
   }
 
-  private isEpicStoryPinned(playerPosition: THREE.Vector3): boolean {
-    const runtime = this.chunks.get(createChunkKey(this.centerCoord));
-    if (!runtime) return false;
-    this.localPlayer.copy(playerPosition).sub(runtime.offset);
-    return runtime.plan.features.some(
+  private getEpicPinnedCoord(playerPosition: THREE.Vector3): Readonly<ChunkCoord> | undefined {
+    return this.epicRuntimeAt(playerPosition)?.coord;
+  }
+
+  private epicRuntimeAt(playerPosition: THREE.Vector3): ActiveChunk | undefined {
+    for (const runtime of this.chunks.values()) {
+      this.localPlayer.copy(playerPosition).sub(runtime.offset);
+      if (runtime.plan.features.some(
+        (feature) =>
+          feature.kind === 'epic-structure' &&
+          isInsideEpicStoryVolume(feature, this.localPlayer),
+      )) return runtime;
+    }
+    return undefined;
+  }
+
+  private desiredCoordsAroundCenter(): ChunkCoord[] {
+    const coords = streamedCoordsAround(this.centerCoord);
+    const center = this.chunks.get(createChunkKey(this.centerCoord));
+    const ownsLongFissure = center?.plan.features.some(
       (feature) =>
         feature.kind === 'epic-structure' &&
-        isInsideEpicStoryVolume(feature, this.localPlayer),
-    );
+        feature.variant === 'ascending-passages' &&
+        rectWidth(feature.bounds) > INFINITE_CHUNK_SIZE,
+    ) ?? false;
+    // The source plan itself contains the whole longitudinal fissure. Loading
+    // x-neighbours would put ordinary walls and colliders through it at ±56 m.
+    return ownsLongFissure
+      ? streamedCoordsAroundLongitudinalEpic(this.centerCoord)
+      : coords;
   }
 
   private readonly onWorkerMessage = (event: MessageEvent<WorkerResponse>): void => {
@@ -933,7 +1119,7 @@ export class WorldStream {
       this.disableWorker();
       return;
     }
-    const desired = new Set(streamedCoordsAround(this.centerCoord).map(createChunkKey));
+    const desired = new Set(this.desiredCoordsAroundCenter().map(createChunkKey));
     if (!desired.has(request.key)) {
       if (request.prefetch) {
         this.preparedChunks.set(request.key, {
@@ -965,6 +1151,7 @@ export class WorldStream {
     this.worker?.terminate();
     this.worker = undefined;
     this.verticalPrefetchQueue.length = 0;
+    this.priorityVerticalPrefetchKeys.clear();
   }
 
   private async prepareInitialChunks(
@@ -1010,34 +1197,86 @@ export class WorldStream {
     return prepared;
   }
 
+  private async prepareChunkWithWorker(key: ChunkKey): Promise<PreparedChunk> {
+    const worker = new Worker(new URL('../world/infinite.worker.ts', import.meta.url), { type: 'module' });
+    const id = ++this.workerRequestId;
+    try {
+      const response = await new Promise<WorkerResponse>((resolve, reject) => {
+        this.preparationWorkers.set(worker, reject);
+        const onMessage = (event: MessageEvent<WorkerResponse>): void => {
+          if (event.data.id !== id) return;
+          worker.removeEventListener('message', onMessage);
+          worker.removeEventListener('error', onError);
+          this.preparationWorkers.delete(worker);
+          resolve(event.data);
+        };
+        const onError = (event: ErrorEvent): void => {
+          worker.removeEventListener('message', onMessage);
+          worker.removeEventListener('error', onError);
+          this.preparationWorkers.delete(worker);
+          reject(event.error ?? new Error(event.message));
+        };
+        worker.addEventListener('message', onMessage);
+        worker.addEventListener('error', onError);
+        worker.postMessage({ id, seed: this.seed, key });
+      });
+      if (response.error || !response.plan) {
+        throw new Error(response.error ?? `Worker returned no plan for ${key}.`);
+      }
+      return { plan: response.plan, lightMaps: response.lightMaps };
+    } finally {
+      this.preparationWorkers.delete(worker);
+      worker.terminate();
+    }
+  }
+
   private enqueueVerticalPrefetch(coord: ChunkCoord, priority = false): void {
     const key = createChunkKey(coord);
     if (
       this.chunks.has(key) ||
       this.preparedChunks.has(key) ||
-      this.workerInFlight?.key === key ||
-      this.verticalPrefetchQueue.some((candidate) => createChunkKey(candidate) === key)
+      this.workerInFlight?.key === key
     ) return;
-    if (priority) this.verticalPrefetchQueue.unshift(coord);
-    else this.verticalPrefetchQueue.push(coord);
+    const queuedIndex = this.verticalPrefetchQueue.findIndex(
+      (candidate) => createChunkKey(candidate) === key,
+    );
+    if (queuedIndex >= 0) {
+      if (priority) {
+        const [queued] = this.verticalPrefetchQueue.splice(queuedIndex, 1);
+        this.priorityVerticalPrefetchKeys.add(key);
+        this.verticalPrefetchQueue.unshift(queued!);
+      }
+      return;
+    }
+    if (priority) {
+      this.priorityVerticalPrefetchKeys.add(key);
+      this.verticalPrefetchQueue.unshift(coord);
+    } else {
+      this.verticalPrefetchQueue.push(coord);
+    }
   }
 
-  private pumpVerticalPrefetch(): void {
+  private pumpVerticalPrefetch(force = false): void {
     if (!this.worker || this.workerInFlight) return;
-    const horizontalNeighborhoodIncomplete = streamedCoordsAround(this.centerCoord).some((coord) => {
+    const horizontalNeighborhoodIncomplete = this.desiredCoordsAroundCenter().some((coord) => {
       const key = createChunkKey(coord);
       return !this.chunks.has(key) && !this.preparedChunks.has(key);
     });
     // Fill the visible neighborhood first. A real story hand-off remains
     // urgent and is allowed to overtake horizontal background work.
-    if (horizontalNeighborhoodIncomplete && !this.pendingStoryKey) return;
+    const priorityWaiting = this.verticalPrefetchQueue.some((coord) =>
+      this.priorityVerticalPrefetchKeys.has(createChunkKey(coord))
+    );
+    if (!force && horizontalNeighborhoodIncomplete && !this.pendingStoryKey && !priorityWaiting) return;
     while (this.verticalPrefetchQueue.length > 0) {
       const coord = this.verticalPrefetchQueue.shift()!;
+      const coordKey = createChunkKey(coord);
+      this.priorityVerticalPrefetchKeys.delete(coordKey);
       // A queued abyss or stair chain belongs to the horizontal column the
       // player was exploring. After a horizontal teleport/move, discard the
       // stale tail so it cannot starve the new 3x3 neighborhood.
       if (coord.x !== this.centerCoord.x || coord.z !== this.centerCoord.z) continue;
-      const key = createChunkKey(coord);
+      const key = coordKey;
       if (this.chunks.has(key) || this.preparedChunks.has(key)) continue;
       const id = ++this.workerRequestId;
       this.workerInFlight = { id, key, coord, prefetch: true };

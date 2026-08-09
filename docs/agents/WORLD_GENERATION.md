@@ -6,7 +6,7 @@
 - `src/world/SeededRandom.ts` : unique source de hasard.
 - `src/world/generateWorld.ts` : plan local fini de 112 m.
 - `src/world/InfiniteWorld.ts` : adaptation du plan en chunk infini.
-- `src/world/EpicStructures.ts` : pavage et contrat des monuments `epic1…epic8`.
+- `src/world/EpicStructures.ts` : pavage et contrat des monuments `epic1` à `epic5`.
 - `src/world/StairLayout.ts` : géométrie partagée des escaliers.
 - `src/world/FeatureRegistry.ts` : proposition de features enregistrées.
 - `src/world/PropPlacement.ts` : props rares, après la topologie finale.
@@ -40,7 +40,7 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
 2. applique biome logique et biome visuel ;
 3. réconcilie puits, escaliers et ouvertures avec les étages voisins ;
 4. retire les landmarks réservés au monde fini ;
-5. remplace les résidus épiques par leur plan monumental canonique ;
+5. remplace les rares slots épiques par leur plan monumental canonique ;
 6. recrée les limites et portes canoniques du chunk ;
 7. reconstruit les extensions affectées, place les props rares hors monuments ;
 8. préfixe les IDs et attache les métadonnées runtime.
@@ -63,11 +63,26 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
 - `floorRects` décrit le sol effectivement rendu et praticable.
 - Les rampes et marches ont une géométrie visuelle et des formes Rapier issues
   des mêmes dimensions.
+- Une `raised-zone` réserve aussi ses `approachRoomIds` : chaque rampe doit
+  traverser une pièce simple et large, sans plafond bas, carrefour ni relief
+  architectural ajouté par une passe ultérieure.
+- Une coque de plafond haut commence légèrement au-dessus du plafond bas, jamais
+  en dessous. Si le wrapper rabaisse ensuite la pièce à cause d’une ouverture
+  verticale ou d’une façade incomplète, il supprime aussi chaque fragment de
+  `upper-shell` / `upper-portal-lintel` qui ne borde plus aucune pièce haute.
 - Après mutation de murs ou de zones verticales, appeler le helper de
   reconstruction prévu au bon endroit plutôt que patcher un seul tableau.
 - Une `interactive-door` remplace un vrai segment de mur par deux jambages et
   un linteau. Son collider représente l’état fermé : les audits de topologie
   permanente doivent l’ignorer, puis le runtime le désactive pendant l’ouverture.
+- Un `wall-breach` conserve deux profils : `projecting` pour l’ancien tunnel
+  court et `flush` pour une ouverture directement découpée dans la cloison.
+  Les passages `flush` sérialisent leur empreinte réelle dans `passageRects` ;
+  `bounds` n’est que leur rectangle englobant et ne doit pas servir à remplir
+  les coins vides d’un coude ou d’un embranchement.
+- Les trous terminaux d’un cul-de-sac `flush` occupent toute la largeur du
+  passage. Leurs colliders doivent être ajoutés au plan mutable, avant
+  l’affectation finale de `world.colliders`.
 
 ### Topologie verticale
 
@@ -85,11 +100,46 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
   un puits profond. Leur aperçu local vient de `PassageHoleLayout.ts`.
 - Les ouvertures héritées sont dérivées de chunks canoniques voisins. Tester au
   moins une paire d’étages, pas uniquement un plan isolé.
-- Le pavage épique est horizontal et périodique modulo 3 : tout voisinage 3×3
-  complet contient un chunk ordinaire et exactement `epic1…epic8`. Le résidu ne
-  dépend pas de l’étage, afin que leurs volumes verticaux continuent pendant un
-  changement de story. `epic1` publie son vide comme ouverture canonique à
-  chaque étage.
+- Une gaine profonde ne doit rester exposée que dans son étage source et son
+  étage d’arrivée. Dans chaque étage seulement traversé, ses ouvertures actives
+  sont regroupées dans un enclos fermé, ancré à deux limites d’une salle ; les
+  profondeurs différentes d’un même pit partagent cet invariant.
+- Le pavage épique utilise des supercellules 32×32 dépendantes du seed. Chacune
+  contient exactement `epic1`, `epic2`, `epic3`, `epic4` et `epic5`, soit
+  5 chunks monumentaux sur 1024. Les huit slots candidats, leurs transformations
+  et leur marge garantissent qu’aucun epic ne touche un autre, même en diagonale
+  ou sur une couture de supercellule.
+- Le slot horizontal ne dépend pas de l’étage : les grands volumes restent
+  cohérents verticalement. Dans `epic1`, chaque story absolue dérive toutefois
+  sa propre rangée de passages. Le plan sérialise quatre rangées au-dessus et
+  dix-sept en dessous ; chaque rangée à ±5,4 m doit être identique au plan
+  réellement monté lors du hand-off vers cette story.
+- `epic1.voidBounds` couvre un peu plus de 90 % du chunk. Sa
+  `passageFacadeBounds`, légèrement plus grande, porte les ouvertures ; l’espace
+  entre les deux forme la corniche continue sur laquelle une chute peut
+  atterrir. Seuls cette corniche, le court aperçu des couloirs et leurs murs ont
+  des colliders sur l’étage inférieur préchargé.
+- Sur l’étage actif d’`epic1`, `getEpicAbyssThroughPassageLayout` prolonge chaque
+  entrée jusqu’à une porte canonique identique dans le chunk voisin. Les rares
+  entrées proches prévisualisées utilisent `getEpicAbyssRoomPreviewLayout` pour
+  montrer une petite pièce fermée ; les entrées lointaines restent de simples
+  panneaux en retrait. La couronne s’arrête à `passageFacadeBounds` ; au niveau
+  actif, seuls les vrais couloirs la prolongent jusqu’aux bords du chunk, et sur
+  les niveaux prévisualisés seuls les aperçus détaillés reçoivent un sol.
+- `epic3` est une faille longue de 220 m : `passageFacadeBounds` place deux
+  façades intérieures symétriques et `voidBounds` les rejoint, sans corniche
+  longitudinale ni rebord aux extrémités. Les seuls sols sont ceux des alcôves
+  indépendantes derrière les portails. Chaque story réutilise le même gabarit
+  face à face, y compris sous l’étage zéro ; `getEpic3PassagePreviewLayout`
+  ferme chaque cul-de-sac, virage ou embranchement sans galerie commune.
+- `epic4` dérive ses volées, paliers, ouverture sommitale et petit labyrinthe
+  supérieur de `getEpicStairwellLayout`; le rendu et Rapier consomment ce même
+  tracé. `applyEpicStructure` conserve le labyrinthe ordinaire hors de la zone
+  d’approche et garde un sol de chunk continu autour de cette tour compacte.
+- `epic5` construit ses longues cloisons et leurs linteaux avec
+  `getEpicConcourseWalls`. Ces `WallSegment` standards alimentent directement le
+  rendu, la lightmap et les colliders ; ne pas recréer une seconde géométrie
+  décorative indépendante.
 
 ### Identifiants et sérialisation
 
@@ -110,7 +160,7 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
 | Puits ou étages | `generateWorld.ts`, `InfiniteWorld.ts`, `StairLayout.ts` |
 | Monument `epicN` | `EpicStructures.ts`, puis `WorldBuilder.ts` et `WorldStream.ts` |
 | Biome/topologie régionale | `getInfiniteBiome()` / `applyBiome()` |
-| Palette de surfaces | `getInfiniteVisualBiome()` / `applyVisualBiome()` |
+| Palette de surfaces | `getInfiniteVisualBiome()` / `applyVisualBiome()` ; palette et `surfaceStyle` restent stables dans une même colonne verticale |
 | Props | `PropCatalog.ts` et `PropPlacement.ts`, après topologie héritée ; réserver les scènes aux grandes salles |
 
 ## Validation minimale

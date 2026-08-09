@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  EPIC_MACRO_SIZE,
   EPIC_STRUCTURE_DEFINITIONS,
   epicStructureIndexForCoord,
-  isInsideEpicAbyssFall,
+  getEpicLocateDestination,
+  getEpicStructureDefinition,
+  getEpicStructureSlotsForMacro,
+  getNearestEpicStructureCoord,
   isInsideEpicStoryVolume,
 } from '../world/EpicStructures';
 import type { EpicStructureFeature } from '../world/types';
@@ -12,9 +16,12 @@ import {
   INFINITE_STORY_PITCH,
 } from '../world/InfiniteWorld';
 import {
+  nextEpicAbyssPrefetchCoord,
+  locateWarmupCoords,
   shouldDeferStoryTransition,
   streamChunkCoordAt,
   streamedCoordsAround,
+  streamedCoordsAroundLongitudinalEpic,
 } from './WorldStream';
 
 describe('multi-storey world streaming coordinates', () => {
@@ -75,6 +82,14 @@ describe('multi-storey world streaming coordinates', () => {
     ]));
   });
 
+  it('keeps only the north/south column around a longitudinal epic owner', () => {
+    expect(streamedCoordsAroundLongitudinalEpic({ x: 8, z: -12, story: 4 })).toEqual([
+      { x: 8, z: -12, story: 4 },
+      { x: 8, z: -13, story: 4 },
+      { x: 8, z: -11, story: 4 },
+    ]);
+  });
+
   it('keeps the small preview active until the worker destination is ready', () => {
     const current = { x: 2, z: -4, story: 0 };
     const below = { ...current, story: -1 };
@@ -83,76 +98,119 @@ describe('multi-storey world streaming coordinates', () => {
     expect(shouldDeferStoryTransition(current, below, false, false)).toBe(false);
     expect(shouldDeferStoryTransition(current, current, false, true)).toBe(false);
   });
+
+  it('prepares epic1 one story at a time instead of generating a vertical burst', () => {
+    expect(nextEpicAbyssPrefetchCoord({ x: 8, z: -12, story: -7 })).toEqual({
+      x: 8,
+      z: -12,
+      story: -8,
+    });
+  });
+
+  it('warms the maze chunk behind epic1 before completing a locate teleport', () => {
+    expect(locateWarmupCoords({ command: 'epic1', chunkKey: '8:-12:-7' })).toEqual([
+      { x: 8, z: -12, story: -7 },
+      { x: 8, z: -13, story: -7 },
+    ]);
+    expect(locateWarmupCoords({ command: 'epic3', chunkKey: '8:-12:-7' })).toEqual([
+      { x: 8, z: -12, story: -7 },
+    ]);
+  });
 });
 
-describe('periodic epic structure slots', () => {
-  it('publishes the exact locate commands epic1 through epic8', () => {
+describe('sparse epic structure slots', () => {
+  const seed = 'SPARSE-EPIC-STREAM-AUDIT';
+  const activeIndices = [1, 2, 3, 4, 5] as const;
+
+  it('publishes only the active locate commands and resolves sparse definition indices', () => {
     expect(EPIC_STRUCTURE_DEFINITIONS.map((definition) => definition.command)).toEqual([
       'epic1',
       'epic2',
       'epic3',
       'epic4',
       'epic5',
-      'epic6',
-      'epic7',
-      'epic8',
     ]);
+    expect(getEpicStructureDefinition(4)).toMatchObject({
+      index: 4,
+      command: 'epic4',
+      variant: 'impossible-stairwell',
+    });
+    expect(getEpicStructureDefinition(5)).toMatchObject({
+      index: 5,
+      command: 'epic5',
+      variant: 'vanishing-concourse',
+    });
   });
 
-  it('uses Euclidean residues for negative chunk coordinates', () => {
-    const cases = [
-      { coord: { x: -3, z: -6 }, expected: null },
-      { coord: { x: -2, z: -3 }, expected: 1 },
-      { coord: { x: -1, z: -3 }, expected: 2 },
-      { coord: { x: -3, z: -2 }, expected: 3 },
-      { coord: { x: -2, z: -2 }, expected: 4 },
-      { coord: { x: -1, z: -2 }, expected: 5 },
-      { coord: { x: -3, z: -1 }, expected: 6 },
-      { coord: { x: -2, z: -1 }, expected: 7 },
-      { coord: { x: -1, z: -1 }, expected: 8 },
-    ] as const;
+  it('places exactly five epic chunks in every 32x32 macrocell', () => {
+    for (const [macroX, macroZ] of [[0, 0], [-1, -1], [3, -4]] as const) {
+      const slots = getEpicStructureSlotsForMacro(seed, macroX, macroZ);
+      expect(slots).toHaveLength(5);
+      expect(slots.map((slot) => slot.index).sort((left, right) => left - right))
+        .toEqual(activeIndices);
 
-    for (const { coord, expected } of cases) {
-      expect(epicStructureIndexForCoord(coord)).toBe(expected);
+      const observed: number[] = [];
+      for (let z = macroZ * EPIC_MACRO_SIZE; z < (macroZ + 1) * EPIC_MACRO_SIZE; z += 1) {
+        for (let x = macroX * EPIC_MACRO_SIZE; x < (macroX + 1) * EPIC_MACRO_SIZE; x += 1) {
+          const index = epicStructureIndexForCoord(seed, { x, z });
+          if (index !== null) observed.push(index);
+        }
+      }
+      expect(observed).toHaveLength(5);
+      expect(observed.sort((left, right) => left - right)).toEqual(activeIndices);
     }
   });
 
-  it('places one ordinary chunk and every epic index in any streamed 3x3', () => {
-    const centers = [
-      { x: 0, z: 0, story: 0 },
-      { x: 1, z: 2, story: 7 },
-      { x: -1, z: -1, story: -4 },
-      { x: -100, z: 37, story: 19 },
-    ];
+  it('keeps an empty Chebyshev halo around every epic, including macro seams', () => {
+    const slots = [];
+    for (let macroZ = -2; macroZ <= 2; macroZ += 1) {
+      for (let macroX = -2; macroX <= 2; macroX += 1) {
+        slots.push(...getEpicStructureSlotsForMacro(seed, macroX, macroZ));
+      }
+    }
 
-    for (const center of centers) {
-      const slots = streamedCoordsAround(center)
-        .map((coord) => epicStructureIndexForCoord(coord) ?? 0)
-        .sort((left, right) => left - right);
-      expect(slots).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    for (let leftIndex = 0; leftIndex < slots.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < slots.length; rightIndex += 1) {
+        const left = slots[leftIndex]!;
+        const right = slots[rightIndex]!;
+        const distance = Math.max(Math.abs(left.x - right.x), Math.abs(left.z - right.z));
+        expect(distance).toBeGreaterThan(1);
+      }
     }
   });
 
-  it('keeps every epic destination classified inside its owning chunk', () => {
-    const localDestination = { x: 0, y: 0.865, z: -45 };
-    const coords = [
-      ...streamedCoordsAround({ x: 0, z: 0, story: 0 }),
-      ...streamedCoordsAround({ x: -17, z: 24, story: -8 }),
-    ];
+  it('keeps horizontal epic addresses stable between stories', () => {
+    const lowerOrigin = { x: -71, z: 53, story: -12 };
+    const upperOrigin = { ...lowerOrigin, story: 19 };
+    for (const index of activeIndices) {
+      const lower = getNearestEpicStructureCoord(seed, index, lowerOrigin);
+      const upper = getNearestEpicStructureCoord(seed, index, upperOrigin);
+      expect({ x: upper.x, z: upper.z }).toEqual({ x: lower.x, z: lower.z });
+      expect(lower.story).toBe(lowerOrigin.story);
+      expect(upper.story).toBe(upperOrigin.story);
+      expect(epicStructureIndexForCoord(seed, lower)).toBe(index);
+      expect(epicStructureIndexForCoord(seed, upper)).toBe(index);
+    }
+  });
 
-    for (const coord of coords) {
-      if (epicStructureIndexForCoord(coord) === null) continue;
+  it('reclassifies every locate destination into the same epic column', () => {
+    const origin = { x: -71, z: 53, story: -8 };
+    for (const index of activeIndices) {
+      const coord = getNearestEpicStructureCoord(seed, index, origin);
+      const localDestination = getEpicLocateDestination(seed, coord, index);
       const offset = getChunkWorldOffset(coord);
-      expect(streamChunkCoordAt({
+      const classified = streamChunkCoordAt({
         x: offset.x + localDestination.x,
         y: offset.y + localDestination.y,
         z: offset.z + localDestination.z,
-      })).toEqual(coord);
+      });
+      expect({ x: classified.x, z: classified.z }).toEqual({ x: coord.x, z: coord.z });
+      expect(epicStructureIndexForCoord(seed, classified)).toBe(index);
     }
   });
 
-  it('pins the tall epic volume and a real fall inside the lethal opening', () => {
-    const feature: EpicStructureFeature = {
+  it('hands epic1 to normal story streaming but pins the high epic3 volume', () => {
+    const epic1: EpicStructureFeature = {
       kind: 'epic-structure',
       id: 'epic1-endless-abyss',
       roomId: 'epic1-room',
@@ -163,13 +221,19 @@ describe('periodic epic structure slots', () => {
       height: 54,
       destination: { x: 0, y: 0.865, z: -45 },
     };
+    const epic3: EpicStructureFeature = {
+      kind: 'epic-structure',
+      id: 'epic3-ascending-passages',
+      roomId: 'epic3-room',
+      index: 3,
+      variant: 'ascending-passages',
+      bounds: { minX: -52, minZ: -17, maxX: 52, maxZ: 17 },
+      height: 64,
+      destination: { x: 0, y: 0.865, z: -13.2 },
+    };
 
-    expect(isInsideEpicAbyssFall(feature, { x: 0, y: -3, z: 0 })).toBe(true);
-    expect(isInsideEpicAbyssFall(feature, { x: 0, y: -73, z: 0 })).toBe(false);
-    expect(isInsideEpicAbyssFall(feature, { x: 0, y: 0.865, z: 0 })).toBe(false);
-    expect(isInsideEpicAbyssFall(feature, { x: 35, y: -3, z: 0 })).toBe(false);
-    expect(isInsideEpicStoryVolume(feature, { x: 0, y: 30, z: 0 })).toBe(true);
-    expect(isInsideEpicStoryVolume(feature, { x: 0, y: 55, z: 0 })).toBe(false);
-    expect(isInsideEpicStoryVolume(feature, { x: 57, y: 20, z: 0 })).toBe(false);
+    expect(isInsideEpicStoryVolume(epic1, { x: 0, y: 30, z: 0 })).toBe(false);
+    expect(isInsideEpicStoryVolume(epic3, { x: 0, y: 30, z: 0 })).toBe(true);
+    expect(isInsideEpicStoryVolume(epic3, { x: 53, y: 30, z: 0 })).toBe(false);
   });
 });

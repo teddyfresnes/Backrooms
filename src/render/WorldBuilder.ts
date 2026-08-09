@@ -15,6 +15,7 @@ import { WorldDoorLayer } from './WorldDoors';
 import { WorldPropLayer } from './WorldProps';
 import type {
   DoorOpenMode,
+  EpicPassagePreview,
   EpicStructureFeature,
   GridPitFeature,
   LightSlot,
@@ -32,7 +33,14 @@ import type {
 } from '../world/types';
 import {
   getEpicAbyssBottom,
-  getEpicGroundObstacles,
+  getEpicAbyssPassageLayout,
+  getEpicAbyssRoomPreviewLayout,
+  getEpicAbyssThroughPassageLayout,
+  getDetailedEpic3Passages,
+  getEpic3PassagePreviewLayout,
+  getEpic3ShallowPreviewLayout,
+  getEpicStairRoomWalls,
+  getEpicStairwellLayout,
 } from '../world/EpicStructures';
 import { INFINITE_STORY_PITCH, getInfiniteChunkCeilingOpenings } from '../world/InfiniteWorld';
 import {
@@ -46,6 +54,7 @@ import {
   getStairCageWalls,
   getStairFloorOpening,
   getStairSlabs,
+  STAIR_STEPS_PER_FLIGHT,
   STAIR_STORY_RISE,
 } from '../world/StairLayout';
 import { pointInRect, rectCenter, rectDepth, rectWidth } from '../world/types';
@@ -74,6 +83,22 @@ const removeHorizontalCaps = <T extends THREE.BufferGeometry>(geometry: T): T =>
     }
   }
   geometry.setIndex(verticalFaceIndices);
+  geometry.clearGroups();
+  return geometry;
+};
+
+const removeBottomCap = <T extends THREE.BufferGeometry>(geometry: T): T => {
+  const index = geometry.getIndex();
+  const normals = geometry.getAttribute('normal');
+  if (!index || !normals) return geometry;
+  const retainedIndices: number[] = [];
+  for (let offset = 0; offset < index.count; offset += 3) {
+    const first = index.getX(offset);
+    if (normals.getY(first) > -0.5) {
+      retainedIndices.push(first, index.getX(offset + 1), index.getX(offset + 2));
+    }
+  }
+  geometry.setIndex(retainedIndices);
   geometry.clearGroups();
   return geometry;
 };
@@ -175,9 +200,14 @@ const wallpaperPhaseForWall = (
   };
 };
 
+const wallIsShaftLining = (wall: WallSegment): boolean =>
+  (
+    wall.id.includes('inherited-shaft-') &&
+    !wall.id.includes('inherited-shaft-enclosure-')
+  ) || wall.id.includes('ceiling-shaft-collar-');
+
 const wallNeedsOpenVerticalShell = (wall: WallSegment): boolean =>
-  wall.id.includes('inherited-shaft-') ||
-  wall.id.includes('ceiling-shaft-collar-');
+  wallIsShaftLining(wall);
 
 const createTexturedBoxGeometry = (
   width: number,
@@ -374,6 +404,194 @@ const createSlopedSurfaceGeometry = (
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   return geometry;
+};
+
+const createSlopedUndersideGeometry = (
+  elevation: number,
+  ramp: RaisedZoneFeature['ramp'],
+  patternScale = 1,
+  undersideOffset = -0.16,
+): THREE.BufferGeometry => {
+  const geometry = createSlopedSurfaceGeometry(
+    elevation,
+    ramp,
+    patternScale,
+    false,
+    undersideOffset,
+    0,
+  );
+  const sourceIndex = geometry.getIndex();
+  if (sourceIndex) {
+    const reversed: number[] = [];
+    for (let index = 0; index < sourceIndex.count; index += 3) {
+      reversed.push(
+        sourceIndex.getX(index),
+        sourceIndex.getX(index + 2),
+        sourceIndex.getX(index + 1),
+      );
+    }
+    geometry.setIndex(reversed);
+    geometry.computeVertexNormals();
+  }
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+};
+
+const createRampSkirtGeometry = (
+  elevation: number,
+  ramp: RampSurface,
+  side: -1 | 1,
+  thickness: number,
+  patternScale = 1,
+): THREE.BufferGeometry => {
+  const alongMin = ramp.axis === 'x' ? ramp.bounds.minX : ramp.bounds.minZ;
+  const alongMax = ramp.axis === 'x' ? ramp.bounds.maxX : ramp.bounds.maxZ;
+  const crossBoundary = ramp.axis === 'x'
+    ? side < 0 ? ramp.bounds.minZ : ramp.bounds.maxZ
+    : side < 0 ? ramp.bounds.minX : ramp.bounds.maxX;
+  const outerCross = crossBoundary + side * thickness * 0.5;
+  const innerCross = crossBoundary - side * thickness * 0.5;
+  const yAt = (along: number): number => {
+    const progress = THREE.MathUtils.clamp(
+      (along - alongMin) / Math.max(1e-6, alongMax - alongMin),
+      0,
+      1,
+    );
+    return elevation * (ramp.riseDirection > 0 ? progress : 1 - progress);
+  };
+  const point = (along: number, cross: number, y: number): THREE.Vector3 =>
+    ramp.axis === 'x'
+      ? new THREE.Vector3(along, y, cross)
+      : new THREE.Vector3(cross, y, along);
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const appendCurtain = (cross: number, normalSign: -1 | 1): void => {
+    const corners = [
+      point(alongMin, cross, 0),
+      point(alongMax, cross, 0),
+      point(alongMax, cross, yAt(alongMax)),
+      point(alongMin, cross, yAt(alongMin)),
+    ];
+    const desiredNormal = ramp.axis === 'x'
+      ? new THREE.Vector3(0, 0, normalSign)
+      : new THREE.Vector3(normalSign, 0, 0);
+    const first = positions.length / 3;
+    for (const corner of corners) {
+      positions.push(corner.x, corner.y, corner.z);
+      normals.push(desiredNormal.x, desiredNormal.y, desiredNormal.z);
+      const along = ramp.axis === 'x' ? corner.x : corner.z;
+      uvs.push(
+        (along / 2.05) * patternScale,
+        (corner.y / 2.45) * patternScale,
+      );
+    }
+    const rawNormal = new THREE.Vector3()
+      .subVectors(corners[1]!, corners[0]!)
+      .cross(new THREE.Vector3().subVectors(corners[2]!, corners[0]!));
+    if (rawNormal.lengthSq() < 1e-10) {
+      rawNormal
+        .subVectors(corners[2]!, corners[0]!)
+        .cross(new THREE.Vector3().subVectors(corners[3]!, corners[0]!));
+    }
+    if (rawNormal.dot(desiredNormal) >= 0) {
+      indices.push(first, first + 1, first + 2, first, first + 2, first + 3);
+    } else {
+      indices.push(first, first + 2, first + 1, first, first + 3, first + 2);
+    }
+  };
+
+  // Only the two vertical curtains are needed. A horizontal or sloped cap
+  // would overlap the carpet's seam extension and flicker through it.
+  appendCurtain(outerCross, side);
+  appendCurtain(innerCross, side < 0 ? 1 : -1);
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  setGeometryTint(geometry, 0.96);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+};
+
+/** Thin wall-papered edge joining an epic stair tread to its underside. */
+const createSlopedStairFasciaGeometry = (
+  elevation: number,
+  ramp: RampSurface,
+  side: -1 | 1,
+  depth = 0.184,
+  patternScale = 1,
+): THREE.BufferGeometry => {
+  const alongMin = ramp.axis === 'x' ? ramp.bounds.minX : ramp.bounds.minZ;
+  const alongMax = ramp.axis === 'x' ? ramp.bounds.maxX : ramp.bounds.maxZ;
+  const cross = ramp.axis === 'x'
+    ? side < 0 ? ramp.bounds.minZ : ramp.bounds.maxZ
+    : side < 0 ? ramp.bounds.minX : ramp.bounds.maxX;
+  const yAt = (along: number): number => {
+    const progress = (along - alongMin) / Math.max(1e-6, alongMax - alongMin);
+    return elevation * (ramp.riseDirection > 0 ? progress : 1 - progress);
+  };
+  const point = (along: number, y: number): THREE.Vector3 => ramp.axis === 'x'
+    ? new THREE.Vector3(along, y, cross)
+    : new THREE.Vector3(cross, y, along);
+  const topOffset = 0.004;
+  const corners = [
+    point(alongMin, yAt(alongMin) - depth),
+    point(alongMax, yAt(alongMax) - depth),
+    point(alongMax, yAt(alongMax) + topOffset),
+    point(alongMin, yAt(alongMin) + topOffset),
+  ];
+  const desiredNormal = ramp.axis === 'x'
+    ? new THREE.Vector3(0, 0, side)
+    : new THREE.Vector3(side, 0, 0);
+  const rawNormal = new THREE.Vector3()
+    .subVectors(corners[1]!, corners[0]!)
+    .cross(new THREE.Vector3().subVectors(corners[2]!, corners[0]!));
+  const indices = rawNormal.dot(desiredNormal) >= 0
+    ? [0, 1, 2, 0, 2, 3]
+    : [0, 2, 1, 0, 3, 2];
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(
+    corners.flatMap((corner) => [corner.x, corner.y, corner.z]),
+    3,
+  ));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(
+    corners.flatMap(() => [desiredNormal.x, desiredNormal.y, desiredNormal.z]),
+    3,
+  ));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(
+    corners.flatMap((corner) => {
+      const along = ramp.axis === 'x' ? corner.x : corner.z;
+      return [(along / 2.05) * patternScale, (corner.y / 2.45) * patternScale];
+    }),
+    2,
+  ));
+  geometry.setIndex(indices);
+  setGeometryTint(geometry, 0.96);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+};
+
+/** Four capless wallpaper faces around a landing slab. */
+const createRectFasciaGeometry = (
+  rect: Rect,
+  bottom: number,
+  top: number,
+  patternScale = 1,
+): THREE.BufferGeometry => {
+  const geometries = [
+    createTexturedBoxGeometry(rectWidth(rect), top - bottom, 0.02, rectCenter(rect).x, bottom, rect.minZ, 0.94, patternScale),
+    createTexturedBoxGeometry(rectWidth(rect), top - bottom, 0.02, rectCenter(rect).x, bottom, rect.maxZ, 0.94, patternScale),
+    createTexturedBoxGeometry(0.02, top - bottom, rectDepth(rect), rect.minX, bottom, rectCenter(rect).z, 0.94, patternScale),
+    createTexturedBoxGeometry(0.02, top - bottom, rectDepth(rect), rect.maxX, bottom, rectCenter(rect).z, 0.94, patternScale),
+  ].map(removeHorizontalCaps);
+  return mergeOrSingle(geometries)!;
 };
 
 const intersectRects = (left: Rect, right: Rect): Rect | null => {
@@ -751,22 +969,6 @@ const makeMesh = (
 
 type EpicFacadeSide = 'north' | 'south' | 'west' | 'east';
 
-const createEpicVerticalPanel = (
-  width: number,
-  height: number,
-  x: number,
-  bottom: number,
-  z: number,
-  side: EpicFacadeSide,
-): THREE.PlaneGeometry => {
-  const geometry = new THREE.PlaneGeometry(width, height);
-  if (side === 'south') geometry.rotateY(Math.PI);
-  else if (side === 'west') geometry.rotateY(Math.PI * 0.5);
-  else if (side === 'east') geometry.rotateY(-Math.PI * 0.5);
-  geometry.translate(x, bottom + height * 0.5, z);
-  return geometry;
-};
-
 const createEpicGlowPanel = (
   width: number,
   depth: number,
@@ -778,6 +980,174 @@ const createEpicGlowPanel = (
   geometry.rotateX(Math.PI * 0.5);
   geometry.translate(x, y, z);
   return geometry;
+};
+
+const createEpicVerticalPreviewPanel = (
+  width: number,
+  height: number,
+  x: number,
+  bottom: number,
+  z: number,
+  faceTowardPositiveZ: boolean,
+): THREE.PlaneGeometry => {
+  const geometry = new THREE.PlaneGeometry(width, height);
+  const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
+  for (let index = 0; index < uv.count; index += 1) {
+    const worldX = x + (uv.getX(index) - 0.5) * width;
+    const worldY = bottom + uv.getY(index) * height;
+    uv.setXY(index, worldX / 2.05, worldY / 2.45);
+  }
+  if (!faceTowardPositiveZ) geometry.rotateY(Math.PI);
+  geometry.translate(x, bottom + height * 0.5, z);
+  return geometry;
+};
+
+const createEpicPassagePreviewPanel = (
+  passage: EpicPassagePreview,
+  facade: Rect,
+  bottom: number,
+  recess = 0.78,
+): THREE.PlaneGeometry => {
+  const outward = passage.side === 'north' || passage.side === 'west' ? -1 : 1;
+  const fixed = passage.side === 'north'
+    ? facade.minZ
+    : passage.side === 'south'
+      ? facade.maxZ
+      : passage.side === 'west'
+        ? facade.minX
+        : facade.maxX;
+  const geometry = new THREE.PlaneGeometry(passage.width, 3.35);
+  const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
+  for (let index = 0; index < uv.count; index += 1) {
+    uv.setXY(
+      index,
+      (passage.along + (uv.getX(index) - 0.5) * passage.width) / 2.05,
+      (bottom + uv.getY(index) * 3.35) / 2.45,
+    );
+  }
+  if (passage.side === 'south') geometry.rotateY(Math.PI);
+  else if (passage.side === 'west') geometry.rotateY(Math.PI * 0.5);
+  else if (passage.side === 'east') geometry.rotateY(-Math.PI * 0.5);
+  geometry.translate(
+    passage.side === 'west' || passage.side === 'east'
+      ? fixed + outward * recess
+      : passage.along,
+    bottom + 3.35 * 0.5,
+    passage.side === 'north' || passage.side === 'south'
+      ? fixed + outward * recess
+      : passage.along,
+  );
+  return geometry;
+};
+
+const splitEpicFacadeIntervals = (
+  min: number,
+  max: number,
+  passages: readonly EpicPassagePreview[],
+): Array<{ min: number; max: number }> => {
+  let intervals = [{ min, max }];
+  for (const passage of passages) {
+    const openingMin = passage.along - passage.width * 0.5;
+    const openingMax = passage.along + passage.width * 0.5;
+    intervals = intervals.flatMap((interval) => {
+      if (openingMax <= interval.min || openingMin >= interval.max) return [interval];
+      const fragments: Array<{ min: number; max: number }> = [];
+      if (openingMin - interval.min > 0.04) fragments.push({ min: interval.min, max: openingMin });
+      if (interval.max - openingMax > 0.04) fragments.push({ min: openingMax, max: interval.max });
+      return fragments;
+    });
+  }
+  return intervals;
+};
+
+const createEpicFacadeBandGeometries = (
+  bounds: Rect,
+  passages: readonly EpicPassagePreview[],
+  bottom: number,
+  bandHeight: number,
+  portalHeight: number,
+  sides: readonly EpicFacadeSide[],
+  tint: number,
+  removeFloorCaps = false,
+): THREE.BufferGeometry[] => {
+  const geometries: THREE.BufferGeometry[] = [];
+  const thickness = 0.36;
+  for (const side of sides) {
+    const horizontal = side === 'north' || side === 'south';
+    const fixed = side === 'north'
+      ? bounds.minZ
+      : side === 'south'
+        ? bounds.maxZ
+        : side === 'west'
+          ? bounds.minX
+          : bounds.maxX;
+    const sidePassages = passages.filter((passage) => passage.side === side);
+    const min = horizontal ? bounds.minX : bounds.minZ;
+    const max = horizontal ? bounds.maxX : bounds.maxZ;
+    for (const interval of splitEpicFacadeIntervals(min, max, sidePassages)) {
+      const length = interval.max - interval.min;
+      const along = (interval.min + interval.max) * 0.5;
+      const geometry = createTexturedBoxGeometry(
+        horizontal ? length : thickness,
+        bandHeight,
+        horizontal ? thickness : length,
+        horizontal ? along : fixed,
+        bottom,
+        horizontal ? fixed : along,
+        tint,
+      );
+      geometries.push(removeFloorCaps ? removeBottomCap(geometry) : geometry);
+    }
+    const lintelHeight = bandHeight - portalHeight;
+    if (lintelHeight <= 0.04) continue;
+    for (const passage of sidePassages) {
+      geometries.push(createTexturedBoxGeometry(
+        horizontal ? passage.width : thickness,
+        lintelHeight,
+        horizontal ? thickness : passage.width,
+        horizontal ? passage.along : fixed,
+        bottom + portalHeight,
+        horizontal ? fixed : passage.along,
+        Math.min(1, tint + 0.035),
+      ));
+    }
+  }
+  return geometries;
+};
+
+const createEpicCorridorPreviewGeometries = (
+  passage: EpicPassagePreview,
+  facade: Rect,
+  floorY: number,
+  portalHeight: number,
+  layout = getEpicAbyssPassageLayout(passage, facade),
+): { floors: THREE.BufferGeometry[]; walls: THREE.BufferGeometry[]; ceilings: THREE.BufferGeometry[] } => {
+  const boxForRect = (
+    rect: Rect,
+    height: number,
+    bottom: number,
+    tint: number,
+  ): THREE.BufferGeometry => {
+    const center = rectCenter(rect);
+    return createTexturedBoxGeometry(
+      rectWidth(rect),
+      height,
+      rectDepth(rect),
+      center.x,
+      bottom,
+      center.z,
+      tint,
+    );
+  };
+  return {
+    floors: layout.floorRects.map((rect) => boxForRect(rect, 0.2, floorY - 0.2, 0.86)),
+    walls: layout.wallRects.map((rect) =>
+      removeBottomCap(boxForRect(rect, portalHeight, floorY, 0.9))
+    ),
+    ceilings: layout.ceilingRects.map((rect) =>
+      boxForRect(rect, 0.18, floorY + portalHeight, 0.91)
+    ),
+  };
 };
 
 const createPreviewMaterial = (
@@ -805,6 +1175,40 @@ const createUnbakedMaterial = (
   // Reusing the upper storey's baked light map gives incorrect illumination,
   // while the old preview emissive made these surfaces look fullbright.
   material.lightMap = null;
+  material.needsUpdate = true;
+  return material;
+};
+
+const DISTANT_CEILING_THRESHOLD = 18;
+
+const distantCeilingPatternScale = (
+  baseScale: number,
+  ceilingHeight: number,
+): number => baseScale * THREE.MathUtils.clamp(14 / ceilingHeight, 0.24, 1);
+
+const createElevatedCeilingMaterial = (
+  source: THREE.MeshStandardMaterial,
+  name: string,
+  minimumEmissiveIntensity: number,
+): THREE.MeshStandardMaterial => {
+  const material = source.clone();
+  material.name = name;
+  // Any ceiling above the ordinary wall line can inherit a nearly black baked
+  // lightmap and converge toward the fog/background colour. That 2D bake was
+  // authored for the ordinary wall cap, so do not reuse it on another plane.
+  // Preserve the real tile albedo; giant ceilings use a stronger version of
+  // this lift so the grid remains readable at distance.
+  material.lightMap = null;
+  material.fog = false;
+  material.side = THREE.DoubleSide;
+  if (material.map) material.emissiveMap = material.map;
+  if (material.emissive.getHex() === 0) material.emissive.setHex(0x8a823c);
+  material.emissiveIntensity = Math.max(
+    material.emissiveIntensity,
+    minimumEmissiveIntensity,
+  );
+  material.onBeforeCompile = source.onBeforeCompile;
+  material.customProgramCacheKey = source.customProgramCacheKey;
   material.needsUpdate = true;
   return material;
 };
@@ -855,8 +1259,10 @@ export class WorldView {
     'wall' | 'floor' | 'ceiling' | 'baseboard'
   >;
   private readonly materials: MaterialSet;
+  private readonly elevatedCeilingMaterial: THREE.MeshStandardMaterial;
+  private readonly distantCeilingMaterial: THREE.MeshStandardMaterial;
   private readonly bakedLightMaps: BakedLightMaps;
-  private readonly ownedMaterials: THREE.MeshStandardMaterial[];
+  private readonly ownedMaterials: THREE.Material[];
   private readonly graffitiTextures: THREE.CanvasTexture[] = [];
   private readonly graffitiMaterials: THREE.MeshBasicMaterial[] = [];
   private readonly surfaceStyle: SurfaceStyle;
@@ -881,6 +1287,17 @@ export class WorldView {
     this.materials.baseboard.color.multiplyScalar(
       (this.surfaceStyle.wallTint + this.surfaceStyle.floorTint) * 0.5,
     );
+    this.elevatedCeilingMaterial = createElevatedCeilingMaterial(
+      this.materials.ceiling,
+      'elevated-tiled-ceiling',
+      0.22,
+    );
+    this.distantCeilingMaterial = createElevatedCeilingMaterial(
+      this.materials.ceiling,
+      'distant-tiled-ceiling',
+      0.3,
+    );
+    this.ownedMaterials.push(this.elevatedCeilingMaterial, this.distantCeilingMaterial);
     this.lowerMaterials = {
       wall: createUnbakedMaterial(this.materials.wall, 'lower-storey-wallpaper'),
       floor: createUnbakedMaterial(this.materials.floor, 'lower-storey-carpet'),
@@ -916,6 +1333,10 @@ export class WorldView {
     this.previewMaterials.wall.color.multiplyScalar(this.surfaceStyle.wallTint);
     this.previewMaterials.floor.color.multiplyScalar(this.surfaceStyle.floorTint);
     this.previewMaterials.ceiling.color.multiplyScalar(this.surfaceStyle.ceilingTint);
+    // A lower-storey preview is also observed from above through the stair
+    // opening. Its ceiling must still occlude the fixtures and room floor from
+    // that back side instead of disappearing through face culling.
+    this.previewMaterials.ceiling.side = THREE.DoubleSide;
     this.previewMaterials.baseboard.color.multiplyScalar(this.surfaceStyle.wallTint);
     this.ownedMaterials.push(
       ...Object.values(this.lowerMaterials),
@@ -1038,9 +1459,7 @@ export class WorldView {
       });
     };
     for (const wall of this.plan.walls) {
-      const isShaftLining =
-        wall.id.includes('inherited-shaft-') ||
-        wall.id.includes('ceiling-shaft-collar-');
+      const isShaftLining = wallIsShaftLining(wall);
       const isLowerStoreyWall = wall.bottom < -INFINITE_STORY_PITCH * 0.55;
       const geometry = createWallGeometry(
         wall,
@@ -1051,9 +1470,7 @@ export class WorldView {
         isShaftLining
           ? this.surfaceStyle.floorPatternScale
           : this.surfaceStyle.wallPatternScale,
-        wall.detail === 'upper-shell' ||
-          wall.detail === 'upper-portal-lintel' ||
-          wall.detail === 'biome-boundary-band' ||
+        wall.detail === 'biome-boundary-band' ||
           (
             wall.detail === 'biome-boundary-skin' &&
             wall.id.includes('-return-')
@@ -1270,8 +1687,16 @@ export class WorldView {
       minZ: -this.plan.size * 0.5,
       maxZ: this.plan.size * 0.5,
     };
+    const endlessAbyssFeatures = this.plan.features.filter(
+      (feature): feature is EpicStructureFeature =>
+        feature.kind === 'epic-structure' && feature.variant === 'endless-abyss',
+    );
+    const endlessAbyssRoomIds = new Set(endlessAbyssFeatures.map((feature) => feature.roomId));
     const tallRooms = this.plan.rooms.filter(
-      (room) => room.level >= 0 && room.ceilingHeight > this.plan.wallHeight + 0.1,
+      (room) =>
+        room.level >= 0 &&
+        room.ceilingHeight > this.plan.wallHeight + 0.1 &&
+        !endlessAbyssRoomIds.has(room.id),
     );
     const inheritedCeilingOpenings = [...getInfiniteChunkCeilingOpenings(this.plan)];
     const stairCeilingOpenings = this.plan.stairCeilingOpenings ?? [];
@@ -1279,6 +1704,7 @@ export class WorldView {
       ...inheritedCeilingOpenings,
       ...stairCeilingOpenings,
       ...tallRooms.map((room) => room.bounds),
+      ...endlessAbyssFeatures.map((feature) => feature.bounds),
     ];
     const ceilingRects = ceilingOpenings.length > 0
       ? cellsAroundHoles(worldBounds, ceilingOpenings)
@@ -1300,9 +1726,10 @@ export class WorldView {
       'office-drop-ceiling',
       this.group,
     );
-    makeMesh(
-      mergeOrSingle(
-        tallRooms.flatMap((room) => {
+    const createElevatedCeilings = (
+      rooms: typeof tallRooms,
+      distant: boolean,
+    ): THREE.BufferGeometry[] => rooms.flatMap((room) => {
           const clippedOpenings = [...inheritedCeilingOpenings, ...stairCeilingOpenings]
             .map((opening) => intersectRects(room.bounds, opening))
             .filter((opening): opening is Rect => opening !== null);
@@ -1310,15 +1737,51 @@ export class WorldView {
             ? cellsAroundHoles(room.bounds, clippedOpenings)
             : [room.bounds];
           return rects.map((rect) =>
-            createCeilingGeometry(rect, room.ceilingHeight, this.surfaceStyle.ceilingPatternScale)
+            createCeilingGeometry(
+              rect,
+              room.ceilingHeight,
+              distant
+                ? distantCeilingPatternScale(
+                    this.surfaceStyle.ceilingPatternScale,
+                    room.ceilingHeight,
+                  )
+                : this.surfaceStyle.ceilingPatternScale,
+            )
           );
-        }),
-      ),
-      this.materials.ceiling,
+        });
+    const distantRooms = tallRooms.filter(
+      (room) =>
+        room.ceilingHeight >= DISTANT_CEILING_THRESHOLD &&
+        !this.plan.features.some(
+          (feature) =>
+            feature.kind === 'epic-structure' &&
+            feature.variant === 'ascending-passages' &&
+            feature.roomId === room.id,
+        ),
+    );
+    const raisedRooms = tallRooms.filter(
+      (room) =>
+        room.ceilingHeight < DISTANT_CEILING_THRESHOLD &&
+        !this.plan.features.some(
+          (feature) =>
+            feature.kind === 'epic-structure' &&
+            feature.variant === 'ascending-passages' &&
+            feature.roomId === room.id,
+        ),
+    );
+    makeMesh(
+      mergeOrSingle(createElevatedCeilings(raisedRooms, false)),
+      this.elevatedCeilingMaterial,
       'elevated-atrium-ceilings',
       this.group,
     );
-    if (inheritedCeilingOpenings.length > 0) {
+    makeMesh(
+      mergeOrSingle(createElevatedCeilings(distantRooms, true)),
+      this.distantCeilingMaterial,
+      'distant-elevated-tiled-ceilings',
+      this.group,
+    );
+    if (inheritedCeilingOpenings.length > 0 && endlessAbyssFeatures.length === 0) {
       makeMesh(
         mergeOrSingle(
           cellsAroundHoles(worldBounds, inheritedCeilingOpenings).map((rect) =>
@@ -1446,24 +1909,16 @@ export class WorldView {
     for (const feature of features) {
       const group = new THREE.Group();
       group.name = `epic-structure-${feature.index}-${feature.variant}`;
-      this.buildEpicUpperShell(feature, group);
+      if (feature.variant !== 'ascending-passages') {
+        this.buildEpicUpperShell(feature, group);
+      }
 
       if (feature.variant === 'endless-abyss') {
         this.buildEpicEndlessAbyss(feature, group);
-      } else if (feature.variant === 'lost-ceiling') {
-        this.buildEpicLostCeiling(feature, group);
       } else if (feature.variant === 'ascending-passages') {
         this.buildEpicAscendingPassages(feature, group);
-      } else if (feature.variant === 'endless-pillars') {
-        this.buildEpicEndlessPillars(feature, group);
       } else if (feature.variant === 'impossible-stairwell') {
         this.buildEpicImpossibleStairwell(feature, group);
-      } else if (feature.variant === 'suspended-rooms') {
-        this.buildEpicSuspendedRooms(feature, group);
-      } else if (feature.variant === 'nested-gates') {
-        this.buildEpicNestedGates(feature, group);
-      } else {
-        this.buildEpicLightCathedral(feature, group);
       }
       this.group.add(group);
     }
@@ -1480,7 +1935,9 @@ export class WorldView {
     // Neighbouring epic chunks build their own shell. Keeping each face just
     // inside its chunk avoids coplanar double walls on the shared seam.
     const seamInset = 0.24;
-    const bottom = this.plan.wallHeight - 0.04;
+    const bottom = feature.variant === 'impossible-stairwell'
+      ? 0
+      : this.plan.wallHeight - 0.04;
     const height = feature.height - bottom + 0.03;
     if (height <= 0.08) return;
     const walls: WallSegment[] = [
@@ -1537,6 +1994,9 @@ export class WorldView {
         kind: 'wallpaper',
       },
     ];
+    if (feature.variant === 'impossible-stairwell') {
+      walls.splice(0, walls.length, ...getEpicStairRoomWalls(feature));
+    }
     makeMesh(
       mergeOrSingle(walls.map((wall) =>
         createWallGeometry(
@@ -1557,598 +2017,736 @@ export class WorldView {
     feature: EpicStructureFeature,
     group: THREE.Group,
   ): void {
-    if (!feature.voidBounds) return;
-    const width = rectWidth(feature.voidBounds);
-    const depth = rectDepth(feature.voidBounds);
-    const center = rectCenter(feature.voidBounds);
+    if (!feature.voidBounds || !feature.passageLevels) return;
+    const voidBounds = feature.voidBounds;
     const abyssBottom = getEpicAbyssBottom(feature);
-    makeMesh(
-      mergeOrSingle(createOpenShaftWallGeometries(
-        feature.voidBounds,
-        abyssBottom,
-        -0.004,
-        0.64,
-        this.surfaceStyle.floorPatternScale,
-      )),
-      this.lowerMaterials.floor,
-      'epic-endless-abyss-shaft',
-      group,
-    );
-
-    const strata: THREE.BufferGeometry[] = [];
-    const ledgeDepth = Math.min(0.28, Math.min(width, depth) * 0.012);
-    for (let y = -5.4; y > abyssBottom + 2.7; y -= 5.4) {
-      const tint = 0.66 + ((Math.round(Math.abs(y) / 5.4) % 4) * 0.035);
-      strata.push(
-        createTexturedBoxGeometry(
-          width,
-          0.16,
-          ledgeDepth,
-          center.x,
-          y,
-          feature.voidBounds.minZ + ledgeDepth * 0.5,
-          tint,
-          this.surfaceStyle.floorPatternScale,
-        ),
-        createTexturedBoxGeometry(
-          width,
-          0.16,
-          ledgeDepth,
-          center.x,
-          y,
-          feature.voidBounds.maxZ - ledgeDepth * 0.5,
-          tint,
-          this.surfaceStyle.floorPatternScale,
-        ),
-        createTexturedBoxGeometry(
-          ledgeDepth,
-          0.16,
-          Math.max(0.05, depth - ledgeDepth * 2),
-          feature.voidBounds.minX + ledgeDepth * 0.5,
-          y,
-          center.z,
-          tint,
-          this.surfaceStyle.floorPatternScale,
-        ),
-        createTexturedBoxGeometry(
-          ledgeDepth,
-          0.16,
-          Math.max(0.05, depth - ledgeDepth * 2),
-          feature.voidBounds.maxX - ledgeDepth * 0.5,
-          y,
-          center.z,
-          tint,
-          this.surfaceStyle.floorPatternScale,
-        ),
+    const facadeBounds = feature.passageFacadeBounds ?? voidBounds;
+    const halfSize = this.plan.size * 0.5;
+    const previewFloorBounds: Rect = {
+      minX: -halfSize,
+      maxX: halfSize,
+      minZ: -halfSize,
+      maxZ: halfSize,
+    };
+    const currentWalls: THREE.BufferGeometry[] = [];
+    const lowerWalls: THREE.BufferGeometry[] = [];
+    const lowerLedges: THREE.BufferGeometry[] = [];
+    const currentCorridorWalls: THREE.BufferGeometry[] = [];
+    const lowerCorridorWalls: THREE.BufferGeometry[] = [];
+    const currentCorridorCeilings: THREE.BufferGeometry[] = [];
+    const lowerCorridorCeilings: THREE.BufferGeometry[] = [];
+    const detailedPreviewFloors: THREE.BufferGeometry[] = [];
+    const distantPreviewCaps: THREE.BufferGeometry[] = [];
+    const corridorLights: THREE.BufferGeometry[] = [];
+    const detailedPassagesFor = (
+      passages: readonly EpicPassagePreview[],
+      levelY: number,
+    ): EpicPassagePreview[] => {
+      if (Math.abs(levelY) > INFINITE_STORY_PITCH * 3 + 0.01) return [];
+      const focus = feature.destination;
+      const ranked = passages.map((passage) => {
+        const portal = passage.side === 'north'
+          ? { x: passage.along, z: facadeBounds.minZ }
+          : passage.side === 'south'
+            ? { x: passage.along, z: facadeBounds.maxZ }
+            : passage.side === 'west'
+              ? { x: facadeBounds.minX, z: passage.along }
+              : { x: facadeBounds.maxX, z: passage.along };
+        const horizontalDistance = Math.hypot(portal.x - focus.x, portal.z - focus.z);
+        const directlyBelow = levelY < 0 && horizontalDistance < 8;
+        return {
+          passage,
+          score: horizontalDistance + (directlyBelow ? 80 : 0),
+        };
+      }).filter(({ score }) => score <= 70)
+        .sort((left, right) => left.score - right.score)
+        .slice(0, 4);
+      return ranked.map(({ passage }) => passage);
+    };
+    for (const [levelIndex, level] of feature.passageLevels.entries()) {
+      if (level.y < abyssBottom - 0.1) continue;
+      const tint = 0.71 + (levelIndex % 4) * 0.035;
+      const facade = createEpicFacadeBandGeometries(
+        facadeBounds,
+        level.passages,
+        level.y,
+        INFINITE_STORY_PITCH,
+        3.35,
+        ['north', 'south', 'west', 'east'],
+        tint,
+        true,
       );
-    }
-    makeMesh(
-      mergeOrSingle(strata),
-      this.lowerMaterials.floor,
-      'epic-endless-abyss-strata',
-      group,
-    );
-  }
-
-  private buildEpicLostCeiling(
-    feature: EpicStructureFeature,
-    group: THREE.Group,
-  ): void {
-    const rings: THREE.BufferGeometry[] = [];
-    const glows: THREE.BufferGeometry[] = [];
-    const tierCount = 6;
-    for (let tier = 0; tier < tierCount; tier += 1) {
-      const ratio = tier / Math.max(1, tierCount - 1);
-      const halfX = 46 - tier * 3.4;
-      const halfZ = 45 - tier * 3.1;
-      const y = 9 + ratio * Math.max(12, feature.height - 16);
-      const beam = 0.42;
-      rings.push(
-        createTexturedBoxGeometry(halfX * 2, 0.34, beam, 0, y, -halfZ, 0.86),
-        createTexturedBoxGeometry(halfX * 2, 0.34, beam, 0, y, halfZ, 0.86),
-        createTexturedBoxGeometry(beam, 0.34, halfZ * 2, -halfX, y, 0, 0.86),
-        createTexturedBoxGeometry(beam, 0.34, halfZ * 2, halfX, y, 0, 0.86),
+      (level.y === 0 ? currentWalls : lowerWalls).push(...facade);
+      if (Math.abs(level.y) > 0.01) {
+        // The ledge stops at the facade. Only entrances with a detailed preview
+        // receive floor beyond it, so distant sealed openings cannot expose a
+        // stray carpet tongue or a coplanar surface at the threshold.
+        for (const ledge of cellsAroundHoles(facadeBounds, [voidBounds])) {
+          lowerLedges.push(createTexturedBoxGeometry(
+            rectWidth(ledge),
+            0.22,
+            rectDepth(ledge),
+            rectCenter(ledge).x,
+            level.y - 0.22,
+            rectCenter(ledge).z,
+            tint,
+            this.surfaceStyle.floorPatternScale,
+          ));
+        }
+      }
+      const detailedPassages = new Set(
+        Math.abs(level.y) <= 0.01 ? level.passages : detailedPassagesFor(level.passages, level.y),
       );
-      for (const x of [-halfX * 0.55, halfX * 0.55]) {
-        glows.push(createEpicGlowPanel(2.8, 1.05, x, y - 0.012, 0));
+      for (const passage of level.passages) {
+        if (Math.abs(level.y) > 0.01 && !detailedPassages.has(passage)) {
+          distantPreviewCaps.push(createEpicPassagePreviewPanel(
+            passage,
+            facadeBounds,
+            level.y,
+          ));
+          continue;
+        }
+        const layout = Math.abs(level.y) <= 0.01
+          ? getEpicAbyssThroughPassageLayout(passage, facadeBounds, previewFloorBounds)
+          : getEpicAbyssRoomPreviewLayout(passage, facadeBounds);
+        const preview = createEpicCorridorPreviewGeometries(
+          passage,
+          facadeBounds,
+          level.y,
+          3.35,
+          layout,
+        );
+        (level.y === 0 ? currentCorridorWalls : lowerCorridorWalls).push(...preview.walls);
+        (level.y === 0 ? currentCorridorCeilings : lowerCorridorCeilings).push(...preview.ceilings);
+        if (Math.abs(level.y) > 0.01) {
+          const visibleFloorRects = subtractRects(layout.floorRects, [facadeBounds]);
+          if (visibleFloorRects.length > 0) {
+            detailedPreviewFloors.push(createFloorGeometry(
+              visibleFloorRects,
+              level.y,
+              this.surfaceStyle.floorPatternScale,
+              this.surfaceStyle.floorQuarterTurn,
+            ));
+          }
+        }
+        const horizontal = passage.side === 'north' || passage.side === 'south';
+        const outward = passage.side === 'north' || passage.side === 'west' ? -1 : 1;
+        const fixed = passage.side === 'north'
+          ? facadeBounds.minZ
+          : passage.side === 'south'
+            ? facadeBounds.maxZ
+            : passage.side === 'west'
+              ? facadeBounds.minX
+              : facadeBounds.maxX;
+        const lightFixed = fixed + outward * Math.max(0.42, passage.corridorDepth * 0.58);
+        corridorLights.push(createEpicGlowPanel(
+          horizontal ? Math.min(2.1, passage.width * 0.48) : 0.42,
+          horizontal ? 0.42 : Math.min(2.1, passage.width * 0.48),
+          horizontal ? passage.along : lightFixed,
+          level.y + 3.325,
+          horizontal ? lightFixed : passage.along,
+        ));
       }
     }
     makeMesh(
-      mergeOrSingle(rings),
+      mergeOrSingle(currentWalls),
       this.materials.wall,
-      'epic-lost-ceiling-height-rings',
+      'epic-endless-abyss-upper-passage-walls',
       group,
     );
     makeMesh(
-      mergeOrSingle(glows),
-      this.materials.fixtureGlow,
-      'epic-lost-ceiling-distant-lights',
+      mergeOrSingle(lowerWalls),
+      this.lowerMaterials.wall,
+      'epic-endless-abyss-stacked-passage-walls',
       group,
     );
+    makeMesh(
+      mergeOrSingle(lowerLedges),
+      this.lowerMaterials.floor,
+      'epic-endless-abyss-story-ledges',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(currentCorridorWalls),
+      this.materials.wall,
+      'epic-endless-abyss-current-corridor-walls',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(lowerCorridorWalls),
+      this.previewMaterials.wall,
+      'epic-endless-abyss-corridor-previews',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(currentCorridorCeilings),
+      this.materials.ceiling,
+      'epic-endless-abyss-current-corridor-ceilings',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(lowerCorridorCeilings),
+      this.previewMaterials.ceiling,
+      'epic-endless-abyss-corridor-ceilings',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(detailedPreviewFloors),
+      this.previewMaterials.floor,
+      'epic-endless-abyss-detailed-preview-floors',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(distantPreviewCaps),
+      this.previewMaterials.wall,
+      'epic-endless-abyss-distant-entry-caps',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(corridorLights),
+      this.materials.fixtureGlow,
+      'epic-endless-abyss-corridor-lights',
+      group,
+    );
+    const mistTint = this.plan.visualBiome === 'red'
+      ? new THREE.Color(0x170302)
+      : this.plan.visualBiome === 'white'
+        ? new THREE.Color(0x071016)
+        : new THREE.Color(0x100f08);
+    const mistMaterial = new THREE.ShaderMaterial({
+      name: 'epic-endless-abyss-depth-mist-material',
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      fog: false,
+      toneMapped: false,
+      uniforms: {
+        mistColor: { value: mistTint },
+      },
+      vertexShader: `
+        varying vec2 vMistUv;
+        varying float vMistDepth;
+        void main() {
+          vMistUv = uv;
+          vMistDepth = clamp((-position.y - 48.0) / 49.0, 0.0, 1.0);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 mistColor;
+        varying vec2 vMistUv;
+        varying float vMistDepth;
+        void main() {
+          vec2 centered = (vMistUv - 0.5) * 2.0;
+          float border = min(min(vMistUv.x, 1.0 - vMistUv.x), min(vMistUv.y, 1.0 - vMistUv.y));
+          float edgeFade = smoothstep(0.0, 0.16, border);
+          float centerDepth = 1.0 - smoothstep(0.12, 1.18, length(centered));
+          float broadWisp = 0.82 + 0.18 * sin(
+            centered.x * 5.4 + sin(centered.y * 4.1) + vMistDepth * 7.0
+          );
+          float alpha = edgeFade * broadWisp * mix(0.045, 0.16, vMistDepth) * mix(0.72, 1.0, centerDepth);
+          gl_FragColor = vec4(mistColor, alpha);
+        }
+      `,
+    });
+    this.ownedMaterials.push(mistMaterial);
+    const mistCenter = rectCenter(voidBounds);
+    const mistTop = -9.25 * INFINITE_STORY_PITCH;
+    const mistBottom = abyssBottom - 5;
+    const mistLayerCount = 10;
+    const mistPlanes = Array.from({ length: mistLayerCount }, (_, index) => {
+      const progress = index / (mistLayerCount - 1);
+      const inset = 0.8 + progress * 7.2;
+      return createEpicGlowPanel(
+        rectWidth(voidBounds) - inset,
+        rectDepth(voidBounds) - inset,
+        mistCenter.x,
+        THREE.MathUtils.lerp(mistBottom, mistTop, progress),
+        mistCenter.z,
+      );
+    });
+    const mist = makeMesh(
+      mergeOrSingle(mistPlanes),
+      mistMaterial,
+      'epic-endless-abyss-depth-mist',
+      group,
+    );
+    if (mist) mist.renderOrder = 4;
   }
 
   private buildEpicAscendingPassages(
     feature: EpicStructureFeature,
     group: THREE.Group,
   ): void {
-    const frames: THREE.BufferGeometry[] = [];
-    const voids: THREE.BufferGeometry[] = [];
-    const frameWidth = 0.34;
-    const facade = 48;
-    const portalWidth = 4.4;
-    const portalHeight = 3.5;
-    const addPortal = (
-      side: EpicFacadeSide,
-      along: number,
+    if (!feature.passageLevels || !feature.voidBounds) return;
+    const facadeBounds = feature.passageFacadeBounds ?? feature.bounds;
+    const voidBounds = feature.voidBounds;
+    const facades: THREE.BufferGeometry[] = [];
+    const previewFloors: THREE.BufferGeometry[] = [];
+    const previewWalls: THREE.BufferGeometry[] = [];
+    const distantPreviewCaps: THREE.BufferGeometry[] = [];
+    const previewCeilings: THREE.BufferGeometry[] = [];
+    const entryY = (feature.entryLevel ?? 0) * INFINITE_STORY_PITCH;
+    const nearbyPreviewBand = (y: number): boolean =>
+      y >= entryY - INFINITE_STORY_PITCH * 4 - 0.01 &&
+      y <= entryY + INFINITE_STORY_PITCH * 3 + 0.01;
+    const boxForRect = (
+      rect: Rect,
+      height: number,
       bottom: number,
-    ): void => {
-      const horizontalFacade = side === 'north' || side === 'south';
-      const fixed = side === 'north' || side === 'west' ? -facade : facade;
-      const inwardFixed = fixed + (
-        side === 'north' || side === 'west' ? 0.055 : -0.055
-      );
-      voids.push(createEpicVerticalPanel(
-        portalWidth,
-        portalHeight,
-        horizontalFacade ? along : inwardFixed,
+      tint: number,
+    ): THREE.BufferGeometry => {
+      const center = rectCenter(rect);
+      return createTexturedBoxGeometry(
+        rectWidth(rect),
+        height,
+        rectDepth(rect),
+        center.x,
         bottom,
-        horizontalFacade ? inwardFixed : along,
-        side,
-      ));
-      if (horizontalFacade) {
-        frames.push(
-          createTexturedBoxGeometry(
-            frameWidth,
-            portalHeight + frameWidth,
-            0.46,
-            along - portalWidth * 0.5 - frameWidth * 0.5,
-            bottom,
-            fixed,
-            0.9,
-          ),
-          createTexturedBoxGeometry(
-            frameWidth,
-            portalHeight + frameWidth,
-            0.46,
-            along + portalWidth * 0.5 + frameWidth * 0.5,
-            bottom,
-            fixed,
-            0.9,
-          ),
-          createTexturedBoxGeometry(
-            portalWidth + frameWidth * 2,
-            frameWidth,
-            0.46,
-            along,
-            bottom + portalHeight,
-            fixed,
-            0.94,
-          ),
-          createTexturedBoxGeometry(
-            portalWidth + 1.05,
-            0.18,
-            1.15,
-            along,
-            bottom - 0.2,
-            fixed + (side === 'north' ? 0.4 : -0.4),
-            0.84,
-          ),
-        );
-      } else {
-        frames.push(
-          createTexturedBoxGeometry(
-            0.46,
-            portalHeight + frameWidth,
-            frameWidth,
-            fixed,
-            bottom,
-            along - portalWidth * 0.5 - frameWidth * 0.5,
-            0.9,
-          ),
-          createTexturedBoxGeometry(
-            0.46,
-            portalHeight + frameWidth,
-            frameWidth,
-            fixed,
-            bottom,
-            along + portalWidth * 0.5 + frameWidth * 0.5,
-            0.9,
-          ),
-          createTexturedBoxGeometry(
-            0.46,
-            frameWidth,
-            portalWidth + frameWidth * 2,
-            fixed,
-            bottom + portalHeight,
-            along,
-            0.94,
-          ),
-          createTexturedBoxGeometry(
-            1.15,
-            0.18,
-            portalWidth + 1.05,
-            fixed + (side === 'west' ? 0.4 : -0.4),
-            bottom - 0.2,
-            along,
-            0.84,
-          ),
-        );
-      }
+        center.z,
+        tint,
+      );
     };
-
-    const rowCount = Math.max(5, Math.min(8, Math.floor((feature.height - 8) / 8)));
-    for (let row = 0; row < rowCount; row += 1) {
-      const bottom = 5.2 + row * 8;
-      const shift = row % 2 === 0 ? -1.8 : 1.8;
-      for (const along of [-28 + shift, shift, 28 + shift]) {
-        addPortal('north', along, bottom);
-        addPortal('south', -along, bottom);
-        addPortal('west', -along, bottom);
-        addPortal('east', along, bottom);
+    for (const [rowIndex, level] of feature.passageLevels.entries()) {
+      if (level.y >= feature.height - 0.1) continue;
+      const bandHeight = Math.min(INFINITE_STORY_PITCH, feature.height - level.y);
+      facades.push(...createEpicFacadeBandGeometries(
+        facadeBounds,
+        level.passages,
+        level.y,
+        bandHeight,
+        3.35,
+        ['north', 'south'],
+        0.84 + (rowIndex % 4) * 0.025,
+      ));
+      const detailedPassages = nearbyPreviewBand(level.y)
+        ? getDetailedEpic3Passages(level.passages, feature.destination.x)
+        : [];
+      const detailedSet = new Set(detailedPassages);
+      for (const passage of detailedPassages) {
+          const layout = getEpic3PassagePreviewLayout(
+            passage,
+            feature.bounds,
+            facadeBounds,
+          );
+          previewFloors.push(...layout.floorRects.map((rect) =>
+            boxForRect(rect, 0.2, level.y - 0.2, 0.86)
+          ));
+          previewWalls.push(...layout.wallRects.map((rect) =>
+            removeBottomCap(boxForRect(rect, 3.35, level.y, 0.88))
+          ));
+          previewCeilings.push(...layout.ceilingRects.map((rect) =>
+            boxForRect(rect, 0.18, level.y + 3.35, 0.91)
+          ));
+      }
+      for (const passage of level.passages) {
+          if (detailedSet.has(passage)) continue;
+          if (nearbyPreviewBand(level.y)) {
+            const layout = getEpic3ShallowPreviewLayout(passage, facadeBounds);
+            previewFloors.push(...layout.floorRects.map((rect) =>
+              boxForRect(rect, 0.2, level.y - 0.2, 0.86)
+            ));
+            previewWalls.push(...layout.wallRects.map((rect) =>
+              removeBottomCap(boxForRect(rect, 3.35, level.y, 0.88))
+            ));
+            previewCeilings.push(...layout.ceilingRects.map((rect) =>
+              boxForRect(rect, 0.18, level.y + 3.35, 0.91)
+            ));
+            continue;
+          }
+          const outward = passage.side === 'north' ? -1 : 1;
+          const fixed = passage.side === 'north' ? facadeBounds.minZ : facadeBounds.maxZ;
+          const capCenterZ = fixed + outward * 1.15;
+          distantPreviewCaps.push(createEpicVerticalPreviewPanel(
+            passage.width,
+            3.35,
+            passage.along,
+            level.y,
+            capCenterZ,
+            passage.side === 'north',
+          ));
       }
     }
+    const minimumY = Math.min(...feature.passageLevels.map((level) => level.y));
+    facades.push(...createEpicFacadeBandGeometries(
+      feature.bounds,
+      [],
+      minimumY,
+      -minimumY,
+      0,
+      ['west', 'east'],
+      0.88,
+    ));
+    facades.push(...createEpicFacadeBandGeometries(
+      feature.bounds,
+      [],
+      0,
+      INFINITE_STORY_PITCH,
+      3.35,
+      ['west', 'east'],
+      0.88,
+    ));
+    facades.push(...createEpicFacadeBandGeometries(
+      feature.bounds,
+      [],
+      INFINITE_STORY_PITCH,
+      feature.height - INFINITE_STORY_PITCH,
+      0,
+      ['west', 'east'],
+      0.88,
+    ));
     makeMesh(
-      mergeOrSingle(frames),
+      mergeOrSingle(facades),
       this.materials.wall,
       'epic-ascending-passages-facades',
       group,
     );
     makeMesh(
-      mergeOrSingle(voids),
-      this.materials.void,
-      'epic-ascending-passages-dark-openings',
+      mergeOrSingle(previewFloors),
+      this.materials.floor,
+      'epic-ascending-passages-corridor-floors',
       group,
     );
-  }
-
-  private buildEpicEndlessPillars(
-    feature: EpicStructureFeature,
-    group: THREE.Group,
-  ): void {
-    const capitals: THREE.BufferGeometry[] = [];
-    const obstacles = getEpicGroundObstacles(feature);
-    for (const entry of obstacles) {
-      const center = rectCenter(entry.bounds);
-      for (let y = 8; y < feature.height - 3; y += 12) {
-        capitals.push(createTexturedBoxGeometry(
-          rectWidth(entry.bounds) + 0.72,
-          0.28,
-          rectDepth(entry.bounds) + 0.72,
-          center.x,
-          y,
-          center.z,
-          0.78 + ((Math.round(y / 12) % 3) * 0.04),
-        ));
-      }
-    }
     makeMesh(
-      mergeOrSingle(capitals),
-      this.materials.baseboard,
-      'epic-endless-pillars-capital-bands',
+      mergeOrSingle(previewWalls),
+      this.materials.wall,
+      'epic-ascending-passages-corridor-previews',
       group,
     );
+    makeMesh(
+      mergeOrSingle(distantPreviewCaps),
+      this.previewMaterials.wall,
+      'epic-ascending-passages-distant-maze-hints',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(previewCeilings),
+      this.materials.ceiling,
+      'epic-ascending-passages-corridor-ceilings',
+      group,
+    );
+    const fogCenter = rectCenter(voidBounds);
+    const makeVerticalFog = (
+      name: string,
+      layers: readonly { y: number; inset: number }[],
+      opacity: number,
+    ): void => {
+      const material = this.materials.void.clone();
+      material.name = name;
+      material.transparent = true;
+      material.opacity = opacity;
+      material.depthWrite = false;
+      material.side = THREE.DoubleSide;
+      material.fog = false;
+      this.ownedMaterials.push(material);
+      const geometry = layers.map(({ y, inset }) => createEpicGlowPanel(
+        rectWidth(voidBounds) - inset * 2,
+        rectDepth(voidBounds) - inset * 2,
+        fogCenter.x,
+        y,
+        fogCenter.z,
+      ));
+      const fog = makeMesh(mergeOrSingle(geometry), material, name, group);
+      if (fog) fog.renderOrder = 4;
+    };
+    makeVerticalFog('epic-ascending-passages-upper-fog', [
+      { y: feature.height - 15, inset: 0 },
+      { y: feature.height - 9, inset: 0.55 },
+      { y: feature.height - 4, inset: 1.05 },
+      { y: feature.height - 0.4, inset: 1.45 },
+    ], 0.38);
+    makeVerticalFog('epic-ascending-passages-lower-fog', [
+      { y: minimumY + 11, inset: 0 },
+      { y: minimumY + 6, inset: 0.55 },
+      { y: minimumY + 2, inset: 1.05 },
+      { y: minimumY + 0.4, inset: 1.45 },
+    ], 0.34);
   }
 
   private buildEpicImpossibleStairwell(
     feature: EpicStructureFeature,
     group: THREE.Group,
   ): void {
+    const layout = getEpicStairwellLayout(feature);
     const treads: THREE.BufferGeometry[] = [];
+    const slopes: THREE.BufferGeometry[] = [];
+    const undersides: THREE.BufferGeometry[] = [];
+    const skirts: THREE.BufferGeometry[] = [];
+    const landings: THREE.BufferGeometry[] = [];
+    const landingUndersides: THREE.BufferGeometry[] = [];
+    const landingFascias: THREE.BufferGeometry[] = [];
+    const rails: THREE.BufferGeometry[] = [];
+    const balustrades: THREE.BufferGeometry[] = [];
+    const upperWalls: THREE.BufferGeometry[] = [];
+    const upperCeilings: THREE.BufferGeometry[] = [];
     const stepsPerFlight = 12;
-    const flightRise = 2.9;
-    const stepRise = 2.64 / stepsPerFlight;
-    const stepRun = 0.72;
-    const flightCount = Math.max(8, Math.floor((feature.height - 8) / flightRise));
-    for (let flight = 0; flight < flightCount; flight += 1) {
-      const side = flight % 4;
-      const flightBottom = 4.2 + flight * flightRise;
+    const railHeight = 1.02;
+
+    for (const [flightIndex, flight] of layout.flights.entries()) {
+      const run = flight.axis === 'x' ? rectWidth(flight.bounds) : rectDepth(flight.bounds);
+      const cross = flight.axis === 'x' ? rectDepth(flight.bounds) : rectWidth(flight.bounds);
+      const stepRun = run / stepsPerFlight;
+      const stepRise = flight.rise / stepsPerFlight;
+      const center = rectCenter(flight.bounds);
+      const ramp: RampSurface = {
+        bounds: flight.bounds,
+        axis: flight.axis,
+        riseDirection: flight.riseDirection,
+      };
+      const slope = createSlopedSurfaceGeometry(
+        flight.rise,
+        ramp,
+        this.surfaceStyle.floorPatternScale,
+        this.surfaceStyle.floorQuarterTurn,
+        0.004,
+        0.01,
+      );
+      slope.translate(0, flight.bottom, 0);
+      slopes.push(slope);
+      const underside = createSlopedUndersideGeometry(
+        flight.rise,
+        ramp,
+        this.surfaceStyle.wallPatternScale,
+        -0.18,
+      );
+      underside.translate(0, flight.bottom, 0);
+      undersides.push(underside);
+      for (const side of [-1, 1] as const) {
+        const skirt = createSlopedStairFasciaGeometry(
+          flight.rise,
+          ramp,
+          side,
+          0.184,
+          this.surfaceStyle.wallPatternScale,
+        );
+        skirt.translate(0, flight.bottom, 0);
+        skirts.push(skirt);
+      }
+
+      const outerCross = flight.axis === 'x'
+        ? (flight.outerEdge < 0 ? flight.bounds.minZ : flight.bounds.maxZ)
+        : (flight.outerEdge < 0 ? flight.bounds.minX : flight.bounds.maxX);
+
       for (let step = 0; step < stepsPerFlight; step += 1) {
-        const along = -4 + stepRun * (step + 0.5);
-        const bottom = flightBottom + stepRise * step;
-        const x = side === 0 ? along : side === 1 ? 8.2 : side === 2 ? -along : -8.2;
-        const z = side === 0 ? -8.2 : side === 1 ? along : side === 2 ? 8.2 : -along;
+        const progress = (step + 0.5) / stepsPerFlight;
+        const alongMin = flight.axis === 'x' ? flight.bounds.minX : flight.bounds.minZ;
+        const along = alongMin + run * progress;
+        const top = flight.bottom + stepRise * (
+          flight.riseDirection > 0 ? step + 1 : stepsPerFlight - step
+        );
         treads.push(createTexturedBoxGeometry(
-          side % 2 === 0 ? stepRun + 0.025 : 2.9,
-          0.16,
-          side % 2 === 0 ? 2.9 : stepRun + 0.025,
-          x,
-          bottom,
-          z,
-          0.9 + ((flight + step) % 5) * 0.018,
+          flight.axis === 'x' ? stepRun + 0.022 : cross,
+          0.14,
+          flight.axis === 'x' ? cross : stepRun + 0.022,
+          flight.axis === 'x' ? along : center.x,
+          top - 0.14,
+          flight.axis === 'x' ? center.z : along,
+          0.9 + ((flightIndex + step) % 5) * 0.018,
           this.surfaceStyle.floorPatternScale,
         ));
+        balustrades.push(createTexturedBoxGeometry(
+          flight.axis === 'x' ? stepRun + 0.018 : 0.12,
+          0.72,
+          flight.axis === 'x' ? 0.12 : stepRun + 0.018,
+          flight.axis === 'x' ? along : outerCross,
+          top,
+          flight.axis === 'x' ? outerCross : along,
+          0.86,
+          this.surfaceStyle.wallPatternScale,
+        ));
       }
-      const cornerX = side === 0 || side === 1 ? 8.2 : -8.2;
-      const cornerZ = side === 0 || side === 3 ? -8.2 : 8.2;
-      treads.push(createTexturedBoxGeometry(
-        3,
-        0.18,
-        3,
-        cornerX,
-        flightBottom + stepRise * stepsPerFlight,
-        cornerZ,
-        0.96,
+
+      const signedAngle = Math.atan2(flight.rise, run) * flight.riseDirection;
+      const rail = new THREE.BoxGeometry(
+        flight.axis === 'x' ? Math.hypot(run, flight.rise) : 0.1,
+        0.1,
+        flight.axis === 'x' ? 0.1 : Math.hypot(run, flight.rise),
+      );
+      if (flight.axis === 'x') rail.rotateZ(signedAngle);
+      else rail.rotateX(-signedAngle);
+      rail.translate(
+        flight.axis === 'x' ? center.x : outerCross,
+        flight.bottom + flight.rise * 0.5 + railHeight,
+        flight.axis === 'x' ? outerCross : center.z,
+      );
+      setGeometryTint(rail, 0.78);
+      rails.push(rail);
+      for (const progress of [0, 0.25, 0.5, 0.75, 1]) {
+        const directed = flight.riseDirection > 0 ? progress : 1 - progress;
+        const alongMin = flight.axis === 'x' ? flight.bounds.minX : flight.bounds.minZ;
+        const along = alongMin + run * progress;
+        rails.push(createTexturedBoxGeometry(
+          0.1,
+          railHeight,
+          0.1,
+          flight.axis === 'x' ? along : outerCross,
+          flight.bottom + directed * flight.rise,
+          flight.axis === 'x' ? outerCross : along,
+          0.78,
+        ));
+      }
+    }
+
+    for (const landing of layout.landings) {
+      const center = rectCenter(landing.bounds);
+      landings.push(createFloorGeometry(
+        [landing.bounds],
+        landing.top,
         this.surfaceStyle.floorPatternScale,
+        this.surfaceStyle.floorQuarterTurn,
+      ));
+      landingUndersides.push(createCeilingGeometry(
+        landing.bounds,
+        landing.top - 0.18,
+        this.surfaceStyle.ceilingPatternScale,
+      ));
+      landingFascias.push(createRectFasciaGeometry(
+        landing.bounds,
+        landing.top - 0.18,
+        landing.top,
+        this.surfaceStyle.wallPatternScale,
+      ));
+      const outerX = center.x < 0 ? landing.bounds.minX : landing.bounds.maxX;
+      const outerZ = center.z < 0 ? landing.bounds.minZ : landing.bounds.maxZ;
+      rails.push(
+        createTexturedBoxGeometry(rectWidth(landing.bounds), 0.1, 0.1, center.x, landing.top + railHeight, outerZ, 0.78),
+        createTexturedBoxGeometry(0.1, 0.1, rectDepth(landing.bounds), outerX, landing.top + railHeight, center.z, 0.78),
+        createTexturedBoxGeometry(0.1, railHeight, 0.1, outerX, landing.top, outerZ, 0.78),
+      );
+      balustrades.push(
+        createTexturedBoxGeometry(rectWidth(landing.bounds), 0.72, 0.12, center.x, landing.top, outerZ, 0.86, this.surfaceStyle.wallPatternScale),
+        createTexturedBoxGeometry(0.12, 0.72, rectDepth(landing.bounds), outerX, landing.top, center.z, 0.86, this.surfaceStyle.wallPatternScale),
+      );
+    }
+
+    for (const rect of layout.summitRects) {
+      landings.push(createFloorGeometry(
+        [rect],
+        layout.summitY,
+        this.surfaceStyle.floorPatternScale,
+        this.surfaceStyle.floorQuarterTurn,
+      ));
+      landingUndersides.push(createCeilingGeometry(
+        rect,
+        layout.summitY - 0.2,
+        this.surfaceStyle.ceilingPatternScale,
+      ));
+      landingFascias.push(createRectFasciaGeometry(
+        rect,
+        layout.summitY - 0.2,
+        layout.summitY,
+        this.surfaceStyle.wallPatternScale,
       ));
     }
+    for (const rect of layout.upperFloorRects) {
+      landings.push(createFloorGeometry(
+        [rect],
+        layout.summitY,
+        this.surfaceStyle.floorPatternScale,
+        this.surfaceStyle.floorQuarterTurn,
+      ));
+      landingUndersides.push(createCeilingGeometry(
+        rect,
+        layout.summitY - 0.2,
+        this.surfaceStyle.ceilingPatternScale,
+      ));
+      landingFascias.push(createRectFasciaGeometry(
+        rect,
+        layout.summitY - 0.2,
+        layout.summitY,
+        this.surfaceStyle.wallPatternScale,
+      ));
+      upperCeilings.push(createCeilingGeometry(
+        rect,
+        layout.upperCeilingY,
+        this.surfaceStyle.ceilingPatternScale,
+      ));
+    }
+    upperWalls.push(...layout.upperWalls.map((wall) => createWallGeometry(
+      wall,
+      false,
+      this.surfaceStyle.wallPatternScale,
+      false,
+      wallpaperPhaseForWall(this.plan.seed, wall),
+    )));
+    const summitOuter = Math.max(...layout.summitRects.map((rect) => rect.maxX));
+    const northRailMin = -4.3;
+    rails.push(
+      createTexturedBoxGeometry(summitOuter - northRailMin, 0.1, 0.1, (summitOuter + northRailMin) * 0.5, layout.summitY + railHeight, -summitOuter, 0.78),
+      createTexturedBoxGeometry(summitOuter * 2, 0.1, 0.1, 0, layout.summitY + railHeight, summitOuter, 0.78),
+      createTexturedBoxGeometry(0.1, 0.1, summitOuter * 2, -summitOuter, layout.summitY + railHeight, 0, 0.78),
+      createTexturedBoxGeometry(0.1, 0.1, summitOuter * 2, summitOuter, layout.summitY + railHeight, 0, 0.78),
+    );
+    balustrades.push(
+      createTexturedBoxGeometry(summitOuter - northRailMin, 0.72, 0.12, (summitOuter + northRailMin) * 0.5, layout.summitY, -summitOuter, 0.86, this.surfaceStyle.wallPatternScale),
+      createTexturedBoxGeometry(summitOuter * 2, 0.72, 0.12, 0, layout.summitY, summitOuter, 0.86, this.surfaceStyle.wallPatternScale),
+      createTexturedBoxGeometry(0.12, 0.72, summitOuter * 2, -summitOuter, layout.summitY, 0, 0.86, this.surfaceStyle.wallPatternScale),
+      createTexturedBoxGeometry(0.12, 0.72, summitOuter * 2, summitOuter, layout.summitY, 0, 0.86, this.surfaceStyle.wallPatternScale),
+    );
     makeMesh(
       mergeOrSingle(treads),
       this.materials.floor,
-      'epic-impossible-stairwell-floating-flights',
+      'epic4-stair-treads',
       group,
     );
-  }
-
-  private buildEpicSuspendedRooms(
-    feature: EpicStructureFeature,
-    group: THREE.Group,
-  ): void {
-    const floors: THREE.BufferGeometry[] = [];
-    const shells: THREE.BufferGeometry[] = [];
-    const voids: THREE.BufferGeometry[] = [];
-    const roomSpecs = [
-      { x: -29, z: -25, bottom: 10, width: 13, depth: 10 },
-      { x: 29, z: -25, bottom: 17, width: 14, depth: 10 },
-      { x: -29, z: 25, bottom: 24, width: 13, depth: 11 },
-      { x: 29, z: 25, bottom: 31, width: 14, depth: 11 },
-      { x: -10, z: -4, bottom: 39, width: 11, depth: 9 },
-      { x: 13, z: 5, bottom: 47, width: 12, depth: 9 },
-    ].filter((room) => room.bottom + 5 < feature.height);
-    const wallHeight = 4.8;
-    const thickness = 0.26;
-    const doorWidth = 2.25;
-    const doorHeight = 2.85;
-    for (const room of roomSpecs) {
-      floors.push(
-        createTexturedBoxGeometry(
-          room.width,
-          0.24,
-          room.depth,
-          room.x,
-          room.bottom,
-          room.z,
-          0.91,
-          this.surfaceStyle.floorPatternScale,
-        ),
-        createTexturedBoxGeometry(
-          room.width,
-          0.2,
-          room.depth,
-          room.x,
-          room.bottom + wallHeight,
-          room.z,
-          0.88,
-          this.surfaceStyle.ceilingPatternScale,
-        ),
-      );
-      const openAlongX = Math.abs(room.x) >= Math.abs(room.z);
-      const openSide: EpicFacadeSide = openAlongX
-        ? room.x > 0 ? 'west' : 'east'
-        : room.z > 0 ? 'north' : 'south';
-      const facadeAlongZ = openSide === 'north' || openSide === 'south';
-      const sideSpan = (
-        facadeAlongZ ? room.width : room.depth
-      ) - doorWidth;
-      const fixed = facadeAlongZ
-        ? room.z + (openSide === 'north' ? -room.depth * 0.5 : room.depth * 0.5)
-        : room.x + (openSide === 'west' ? -room.width * 0.5 : room.width * 0.5);
-      const along = facadeAlongZ ? room.x : room.z;
-
-      for (const side of ['north', 'south', 'west', 'east'] as const) {
-        if (side === openSide) continue;
-        if (side === 'north' || side === 'south') {
-          shells.push(createTexturedBoxGeometry(
-            room.width,
-            wallHeight,
-            thickness,
-            room.x,
-            room.bottom,
-            room.z + (side === 'north' ? -room.depth * 0.5 : room.depth * 0.5),
-            0.9,
-          ));
-        } else {
-          shells.push(createTexturedBoxGeometry(
-            thickness,
-            wallHeight,
-            room.depth,
-            room.x + (side === 'west' ? -room.width * 0.5 : room.width * 0.5),
-            room.bottom,
-            room.z,
-            0.9,
-          ));
-        }
-      }
-      if (facadeAlongZ) {
-        shells.push(
-          createTexturedBoxGeometry(
-            sideSpan * 0.5,
-            wallHeight,
-            thickness,
-            along - (doorWidth + sideSpan * 0.5) * 0.5,
-            room.bottom,
-            fixed,
-            0.94,
-          ),
-          createTexturedBoxGeometry(
-            sideSpan * 0.5,
-            wallHeight,
-            thickness,
-            along + (doorWidth + sideSpan * 0.5) * 0.5,
-            room.bottom,
-            fixed,
-            0.94,
-          ),
-          createTexturedBoxGeometry(
-            doorWidth,
-            wallHeight - doorHeight,
-            thickness,
-            along,
-            room.bottom + doorHeight,
-            fixed,
-            0.94,
-          ),
-        );
-        voids.push(createEpicVerticalPanel(
-          doorWidth,
-          doorHeight,
-          along,
-          room.bottom,
-          fixed + (openSide === 'north' ? 0.02 : -0.02),
-          openSide,
-        ));
-      } else {
-        shells.push(
-          createTexturedBoxGeometry(
-            thickness,
-            wallHeight,
-            sideSpan * 0.5,
-            fixed,
-            room.bottom,
-            along - (doorWidth + sideSpan * 0.5) * 0.5,
-            0.94,
-          ),
-          createTexturedBoxGeometry(
-            thickness,
-            wallHeight,
-            sideSpan * 0.5,
-            fixed,
-            room.bottom,
-            along + (doorWidth + sideSpan * 0.5) * 0.5,
-            0.94,
-          ),
-          createTexturedBoxGeometry(
-            thickness,
-            wallHeight - doorHeight,
-            doorWidth,
-            fixed,
-            room.bottom + doorHeight,
-            along,
-            0.94,
-          ),
-        );
-        voids.push(createEpicVerticalPanel(
-          doorWidth,
-          doorHeight,
-          fixed + (openSide === 'west' ? 0.02 : -0.02),
-          room.bottom,
-          along,
-          openSide,
-        ));
-      }
-    }
     makeMesh(
-      mergeOrSingle(floors),
+      mergeOrSingle(slopes),
       this.materials.floor,
-      'epic-suspended-room-slabs',
+      'epic4-stair-walkable-slopes',
       group,
     );
     makeMesh(
-      mergeOrSingle(shells),
+      mergeOrSingle(undersides),
+      this.lowerMaterials.wall,
+      'epic4-stair-textured-undersides',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(skirts),
+      this.lowerMaterials.wall,
+      'epic4-stair-support-skirts',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(landings),
+      this.materials.floor,
+      'epic4-stair-landings-and-summit',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(landingUndersides),
+      this.lowerMaterials.ceiling,
+      'epic4-stair-landing-undersides',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(landingFascias),
+      this.lowerMaterials.wall,
+      'epic4-stair-landing-fascias',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(rails),
+      this.materials.metal,
+      'epic4-stair-guardrails',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(balustrades),
+      this.lowerMaterials.wall,
+      'epic4-stair-textured-balustrades',
+      group,
+    );
+    makeMesh(
+      mergeOrSingle(upperWalls),
       this.materials.wall,
-      'epic-suspended-room-shells',
+      'epic4-upper-maze-walls',
       group,
     );
     makeMesh(
-      mergeOrSingle(voids),
-      this.materials.void,
-      'epic-suspended-room-dark-doors',
-      group,
-    );
-  }
-
-  private buildEpicNestedGates(
-    feature: EpicStructureFeature,
-    group: THREE.Group,
-  ): void {
-    const frames: THREE.BufferGeometry[] = [];
-    const glows: THREE.BufferGeometry[] = [];
-    for (const z of [-30, -12, 6, 24, 42]) {
-      const height = 11 + (z + 30) * 0.18;
-      frames.push(createTexturedBoxGeometry(
-        22.1,
-        0.82,
-        4.2,
-        0,
-        height - 0.82,
-        z,
-        0.92,
-      ));
-      for (let inset = 1; inset <= 2; inset += 1) {
-        const x = 10 - inset * 3.1;
-        const hangingHeight = 2.5 + inset * 1.05;
-        const bottom = height - 0.82 - hangingHeight;
-        frames.push(
-          createTexturedBoxGeometry(0.48, hangingHeight, 2.9, -x, bottom, z, 0.86),
-          createTexturedBoxGeometry(0.48, hangingHeight, 2.9, x, bottom, z, 0.86),
-          createTexturedBoxGeometry(x * 2, 0.4, 2.9, 0, bottom, z, 0.9),
-        );
-      }
-      glows.push(createEpicGlowPanel(
-        5.4,
-        1.15,
-        0,
-        Math.min(feature.height - 1, height - 0.84),
-        z,
-      ));
-    }
-    makeMesh(
-      mergeOrSingle(frames),
-      this.materials.wall,
-      'epic-nested-gates-receding-frames',
-      group,
-    );
-    makeMesh(
-      mergeOrSingle(glows),
-      this.materials.fixtureGlow,
-      'epic-nested-gates-threshold-lights',
-      group,
-    );
-  }
-
-  private buildEpicLightCathedral(
-    feature: EpicStructureFeature,
-    group: THREE.Group,
-  ): void {
-    const ribs: THREE.BufferGeometry[] = [];
-    const glows: THREE.BufferGeometry[] = [];
-    for (const z of [-30, 0, 30]) {
-      for (const y of [13, 29, 45, 61].filter((candidate) => candidate < feature.height - 2)) {
-        ribs.push(createTexturedBoxGeometry(70, 0.42, 1.05, 0, y, z, 0.94));
-      }
-    }
-    for (const x of [-34, -17, 17, 34]) {
-      ribs.push(createTexturedBoxGeometry(
-        0.72,
-        0.72,
-        66,
-        x,
-        feature.height - 7,
-        0,
-        0.96,
-      ));
-    }
-    const glowRows = [-38, -19, 0, 19, 38];
-    for (const [row, z] of glowRows.entries()) {
-      for (const [column, x] of [-24, 0, 24].entries()) {
-        glows.push(createEpicGlowPanel(
-          5.8,
-          1.55,
-          x,
-          11 + ((row + column) % 3) * 8,
-          z,
-        ));
-      }
-    }
-    makeMesh(
-      mergeOrSingle(ribs),
-      this.materials.wall,
-      'epic-light-cathedral-vault-ribs',
-      group,
-    );
-    makeMesh(
-      mergeOrSingle(glows),
-      this.materials.fixtureGlow,
-      'epic-light-cathedral-fluorescent-nave',
+      mergeOrSingle(upperCeilings),
+      this.materials.ceiling,
+      'epic4-upper-maze-ceiling',
       group,
     );
   }
@@ -2206,36 +2804,14 @@ export class WorldView {
         )));
       }
       for (const ramp of ramps) {
-        const center = rectCenter(ramp.bounds);
-        if (ramp.axis === 'x') {
-          for (const z of [ramp.bounds.minZ, ramp.bounds.maxZ]) {
-            // Ramp-side colliders are solid retaining walls. Their upper face
-            // remains visible while the carpet climbs, so removing the box
-            // caps exposed the hollow interior when viewed from above.
-            skirtGeometries.push(createTexturedBoxGeometry(
-              rectWidth(ramp.bounds),
-              skirtHeight,
-              skirtThickness,
-              center.x,
-              skirtBottom,
-              z,
-              0.96,
-              this.surfaceStyle.wallPatternScale,
-            ));
-          }
-        } else {
-          for (const x of [ramp.bounds.minX, ramp.bounds.maxX]) {
-            skirtGeometries.push(createTexturedBoxGeometry(
-              skirtThickness,
-              skirtHeight,
-              rectDepth(ramp.bounds),
-              x,
-              skirtBottom,
-              center.z,
-              0.96,
-              this.surfaceStyle.wallPatternScale,
-            ));
-          }
+        for (const side of [-1, 1] as const) {
+          skirtGeometries.push(createRampSkirtGeometry(
+            feature.elevation,
+            ramp,
+            side,
+            skirtThickness,
+            this.surfaceStyle.wallPatternScale,
+          ));
         }
       }
     }
@@ -2278,21 +2854,28 @@ export class WorldView {
         // Bleed the roof into the surrounding walls. A face exactly aligned
         // with a tunnel wall or doorway jamb produces visible z-fighting.
         const wallBleed = 0.018;
-        const roofBounds: Rect = {
-          minX: feature.bounds.minX - wallBleed,
-          maxX: feature.bounds.maxX + wallBleed,
-          minZ: feature.bounds.minZ - wallBleed,
-          maxZ: feature.bounds.maxZ + wallBleed,
-        };
-        roofGeometries.push(createTexturedBoxGeometry(
-          rectWidth(roofBounds),
-          ceilingY - clearance,
-          rectDepth(roofBounds),
-          rectCenter(roofBounds).x,
-          clearance,
-          rectCenter(roofBounds).z,
-          0.96,
-          this.surfaceStyle.wallPatternScale,
+        const visibleRoofRects: Rect[] = [];
+        for (const passageRect of feature.passageRects ?? [feature.bounds]) {
+          const expanded: Rect = {
+            minX: passageRect.minX - wallBleed,
+            maxX: passageRect.maxX + wallBleed,
+            minZ: passageRect.minZ - wallBleed,
+            maxZ: passageRect.maxZ + wallBleed,
+          };
+          const pieces = subtractRects([expanded], visibleRoofRects);
+          visibleRoofRects.push(...pieces);
+        }
+        roofGeometries.push(...visibleRoofRects.map((roofBounds) =>
+          createTexturedBoxGeometry(
+            rectWidth(roofBounds),
+            ceilingY - clearance,
+            rectDepth(roofBounds),
+            rectCenter(roofBounds).x,
+            clearance,
+            rectCenter(roofBounds).z,
+            0.96,
+            this.surfaceStyle.wallPatternScale,
+          )
         ));
       }
       if (feature.hump) {
@@ -2570,16 +3153,19 @@ export class WorldView {
     );
     const treadGeometries: THREE.BufferGeometry[] = [];
     const bodyGeometries: THREE.BufferGeometry[] = [];
+    const undersideGeometries: THREE.BufferGeometry[] = [];
     const cageGeometries: THREE.BufferGeometry[] = [];
     const upperFloorGeometries: THREE.BufferGeometry[] = [];
     const upperUndersideGeometries: THREE.BufferGeometry[] = [];
     const upperWallGeometries: THREE.BufferGeometry[] = [];
     const upperCeilingGeometries: THREE.BufferGeometry[] = [];
     const upperLightGeometries: THREE.BufferGeometry[] = [];
+    const upperLightFrameGeometries: THREE.BufferGeometry[] = [];
     const lowerFloorGeometries: THREE.BufferGeometry[] = [];
     const lowerWallGeometries: THREE.BufferGeometry[] = [];
     const lowerCeilingGeometries: THREE.BufferGeometry[] = [];
     const lowerLightGeometries: THREE.BufferGeometry[] = [];
+    const lowerLightFrameGeometries: THREE.BufferGeometry[] = [];
     const worldHalf = this.plan.size * 0.5;
     const previewZoneFor = (bounds: Rect): Rect => ({
       minX: Math.max(-worldHalf, bounds.minX - 6),
@@ -2591,7 +3177,8 @@ export class WorldView {
       zone: Rect,
       ceilingY: number,
       openings: readonly Rect[],
-      target: THREE.BufferGeometry[],
+      glowTarget: THREE.BufferGeometry[],
+      frameTarget: THREE.BufferGeometry[],
     ): void => {
       const columns = Math.max(1, Math.min(3, Math.floor(rectWidth(zone) / 5.2)));
       const rows = Math.max(1, Math.min(3, Math.floor(rectDepth(zone) / 5.2)));
@@ -2599,32 +3186,86 @@ export class WorldView {
         for (let zIndex = 0; zIndex < rows; zIndex += 1) {
           const x = zone.minX + ((xIndex + 0.5) / columns) * rectWidth(zone);
           const z = zone.minZ + ((zIndex + 0.5) / rows) * rectDepth(zone);
-          if (openings.some((opening) => pointInRect(x, z, opening, -0.65))) continue;
+          const quarterTurn = (xIndex + zIndex) % 2 === 1;
+          const panelWidth = quarterTurn ? 0.72 : 1.72;
+          const panelDepth = quarterTurn ? 1.72 : 0.72;
+          const panelBounds: Rect = {
+            minX: x - panelWidth * 0.5 - 0.12,
+            maxX: x + panelWidth * 0.5 + 0.12,
+            minZ: z - panelDepth * 0.5 - 0.12,
+            maxZ: z + panelDepth * 0.5 + 0.12,
+          };
+          if (openings.some((opening) =>
+            panelBounds.minX < opening.maxX && panelBounds.maxX > opening.minX &&
+            panelBounds.minZ < opening.maxZ && panelBounds.maxZ > opening.minZ
+          )) continue;
+          const frame = new THREE.BoxGeometry(panelWidth + 0.18, 0.045, panelDepth + 0.18);
+          frame.translate(x, ceilingY - 0.0225, z);
+          frameTarget.push(frame);
           const light = new THREE.PlaneGeometry(1.72, 0.72);
           light.rotateX(Math.PI * 0.5);
-          if ((xIndex + zIndex) % 2 === 1) light.rotateZ(Math.PI * 0.5);
-          light.translate(x, ceilingY - 0.035, z);
-          target.push(light);
+          if (quarterTurn) light.rotateZ(Math.PI * 0.5);
+          light.translate(x, ceilingY - 0.048, z);
+          glowTarget.push(light);
         }
       }
     };
     for (const stairs of stairFeatures) {
-      for (const slab of getStairSlabs(stairs)) {
-        bodyGeometries.push(createTexturedBoxGeometry(
+      const slabs = getStairSlabs(stairs);
+      for (const slab of slabs) {
+        const bodyHeight = slab.kind === 'step' ? 0.3 : 0.2;
+        bodyGeometries.push(removeHorizontalCaps(createTexturedBoxGeometry(
           rectWidth(slab.bounds),
-          slab.top - slab.bottom,
+          bodyHeight,
           rectDepth(slab.bounds),
           rectCenter(slab.bounds).x,
-          slab.bottom,
+          slab.top - bodyHeight,
           rectCenter(slab.bounds).z,
           slab.kind === 'step' ? 0.94 : 0.98,
           this.surfaceStyle.wallPatternScale,
-        ));
+        )));
         treadGeometries.push(createFloorGeometry(
           [slab.bounds],
           slab.top + 0.0012,
           this.surfaceStyle.floorPatternScale,
           this.surfaceStyle.floorQuarterTurn,
+        ));
+      }
+      const stepSlabs = slabs.filter((slab) => slab.kind === 'step');
+      const flights = (stairs.layout ?? 'switchback') === 'straight'
+        ? [stepSlabs]
+        : [
+            stepSlabs.slice(0, STAIR_STEPS_PER_FLIGHT),
+            stepSlabs.slice(STAIR_STEPS_PER_FLIGHT),
+          ];
+      const axis = stairs.heading.startsWith('x') ? 'x' : 'z';
+      for (const flight of flights) {
+        if (flight.length === 0) continue;
+        const bounds: Rect = {
+          minX: Math.min(...flight.map((slab) => slab.bounds.minX)),
+          maxX: Math.max(...flight.map((slab) => slab.bounds.maxX)),
+          minZ: Math.min(...flight.map((slab) => slab.bounds.minZ)),
+          maxZ: Math.max(...flight.map((slab) => slab.bounds.maxZ)),
+        };
+        const first = flight[0]!;
+        const last = flight.at(-1)!;
+        const firstAlong = axis === 'x' ? rectCenter(first.bounds).x : rectCenter(first.bounds).z;
+        const lastAlong = axis === 'x' ? rectCenter(last.bounds).x : rectCenter(last.bounds).z;
+        const bottom = Math.min(...flight.map((slab) => slab.top)) - STAIR_STORY_RISE / 30;
+        const rise = Math.max(...flight.map((slab) => slab.top)) - bottom;
+        const underside = createSlopedUndersideGeometry(
+          rise,
+          { bounds, axis, riseDirection: lastAlong >= firstAlong ? 1 : -1 },
+          this.surfaceStyle.ceilingPatternScale,
+        );
+        underside.translate(0, bottom, 0);
+        undersideGeometries.push(underside);
+      }
+      for (const landing of slabs.filter((slab) => slab.kind !== 'step')) {
+        undersideGeometries.push(createCeilingGeometry(
+          landing.bounds,
+          landing.top - 0.16,
+          this.surfaceStyle.ceilingPatternScale,
         ));
       }
       const baseY = stairs.baseY ?? 0;
@@ -2662,21 +3303,16 @@ export class WorldView {
             this.surfaceStyle.ceilingPatternScale,
           )
         ));
+        // The real cage already lines the shaft through the plenum. Preview
+        // walls begin on the next floor; extending this large rectangle down
+        // to the current ceiling produced the floating blank panel seen from
+        // inside the stairs.
         upperWallGeometries.push(
           ...createOpenShaftWallGeometries(
             previewZone,
-            // Continue the preview shell through the hidden plenum between
-            // this storey's drop ceiling and the next storey's floor.
-            baseY + this.plan.wallHeight,
+            previewFloorY,
             previewCeilingY,
             0.96,
-            this.surfaceStyle.wallPatternScale,
-          ),
-          ...createOpenShaftWallGeometries(
-            opening,
-            previewFloorY - 0.12,
-            previewFloorY,
-            0.94,
             this.surfaceStyle.wallPatternScale,
           ),
         );
@@ -2687,7 +3323,13 @@ export class WorldView {
             this.surfaceStyle.ceilingPatternScale,
           ),
         );
-        addPreviewLights(previewZone, previewCeilingY, [], upperLightGeometries);
+        addPreviewLights(
+          previewZone,
+          previewCeilingY,
+          [],
+          upperLightGeometries,
+          upperLightFrameGeometries,
+        );
       }
       if (stairs.inherited || baseY < -0.1) {
         const previewFloorY = baseY;
@@ -2698,16 +3340,17 @@ export class WorldView {
           this.surfaceStyle.floorPatternScale,
           this.surfaceStyle.floorQuarterTurn,
         ));
+        // Keep the synthetic room shell below its actual drop ceiling. The
+        // stair cage supplies the narrow textured lining up to the current
+        // floor without closing either walkable end of the flight.
         lowerWallGeometries.push(...createOpenShaftWallGeometries(
           previewZone,
           previewFloorY,
-          // The lower preview must meet the current floor instead of exposing
-          // the empty 2.66 m service space above its drop ceiling.
-          previewFloorY + STAIR_STORY_RISE,
+          previewCeilingY,
           0.96,
           this.surfaceStyle.wallPatternScale,
         ));
-        lowerCeilingGeometries.push(...cellsAroundHoles(previewZone, [stairs.bounds]).map((rect) =>
+        lowerCeilingGeometries.push(...cellsAroundHoles(previewZone, [opening]).map((rect) =>
           createCeilingGeometry(
             rect,
             previewCeilingY,
@@ -2717,8 +3360,9 @@ export class WorldView {
         addPreviewLights(
           previewZone,
           previewCeilingY,
-          [stairs.bounds],
+          [opening],
           lowerLightGeometries,
+          lowerLightFrameGeometries,
         );
       }
     }
@@ -2732,6 +3376,12 @@ export class WorldView {
       mergeOrSingle(bodyGeometries),
       this.materials.wall,
       'inter-storey-stair-bodies',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(undersideGeometries),
+      this.materials.ceiling,
+      'inter-storey-stair-textured-undersides',
       this.group,
     );
     makeMesh(mergeOrSingle(cageGeometries), this.materials.wall, 'inter-storey-stair-cages', this.group);
@@ -2766,6 +3416,12 @@ export class WorldView {
       this.group,
     );
     makeMesh(
+      mergeOrSingle(upperLightFrameGeometries),
+      this.materials.fixtureFrame,
+      'upper-stair-preview-light-frames',
+      this.group,
+    );
+    makeMesh(
       mergeOrSingle(lowerFloorGeometries),
       this.previewMaterials.floor,
       'lower-stair-preview-floor',
@@ -2787,6 +3443,12 @@ export class WorldView {
       mergeOrSingle(lowerLightGeometries),
       this.materials.fixtureGlow,
       'lower-stair-preview-lights',
+      this.group,
+    );
+    makeMesh(
+      mergeOrSingle(lowerLightFrameGeometries),
+      this.materials.fixtureFrame,
+      'lower-stair-preview-light-frames',
       this.group,
     );
   }

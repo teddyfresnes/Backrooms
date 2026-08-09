@@ -5,9 +5,17 @@ vi.mock('@dimforge/rapier3d', async () =>
 );
 
 import { PhysicsWorld } from './PhysicsWorld';
-import { applyEpicStructure } from '../world/EpicStructures';
+import {
+  applyEpicStructure,
+  getEpicStairwellLayout,
+} from '../world/EpicStructures';
 import { getStairCollisionShapes } from '../world/StairLayout';
-import type { StairSocketFeature, StaticCollider, WorldPlan } from '../world/types';
+import type {
+  EpicStructureFeature,
+  StairSocketFeature,
+  StaticCollider,
+  WorldPlan,
+} from '../world/types';
 
 const activeWorlds: PhysicsWorld[] = [];
 
@@ -72,21 +80,262 @@ afterEach(() => {
 });
 
 describe('PhysicsWorld chunk ownership', () => {
-  it('keeps a falling player inside the epic1 shaft below the death plane', async () => {
+  it('keeps epic1 open at its center while its continuous ledge and entrance are walkable', async () => {
     const plan = makePlan();
     plan.size = 112;
-    applyEpicStructure(plan, 1);
+    const feature = applyEpicStructure(plan, 1) as EpicStructureFeature;
     const physics = await PhysicsWorld.create(plan);
     activeWorlds.push(physics);
 
     expect(castDownAt(physics, 0, 2)).toBeNull();
-    expect(castDownAt(physics, 40, 2)).not.toBeNull();
-    for (const y of [-2, -50]) {
-      physics.teleport({ x: 0, y, z: 0 });
-      const result = physics.move({ x: 40, y: -0.01, z: 0 });
-      expect(result.position.x).toBeGreaterThan(30);
-      expect(result.position.x).toBeLessThan(32);
+    expect(castDownAt(physics, 55.25, 2)).not.toBeNull();
+
+    const currentLevel = feature.passageLevels?.find((level) => level.y === 0);
+    const passage = currentLevel?.passages[0];
+    expect(feature.voidBounds).toBeDefined();
+    expect(feature.passageFacadeBounds).toBeDefined();
+    expect(passage).toBeDefined();
+    if (!feature.voidBounds || !feature.passageFacadeBounds || !passage) return;
+
+    for (const candidate of currentLevel?.passages ?? []) {
+      const candidateHorizontal = candidate.side === 'north' || candidate.side === 'south';
+      const candidateOutward = candidate.side === 'north' || candidate.side === 'west' ? -1 : 1;
+      const candidateFacade = candidate.side === 'north'
+        ? feature.passageFacadeBounds.minZ
+        : candidate.side === 'south'
+          ? feature.passageFacadeBounds.maxZ
+          : candidate.side === 'west'
+            ? feature.passageFacadeBounds.minX
+            : feature.passageFacadeBounds.maxX;
+      const candidateVoid = candidate.side === 'north'
+        ? feature.voidBounds.minZ
+        : candidate.side === 'south'
+          ? feature.voidBounds.maxZ
+          : candidate.side === 'west'
+            ? feature.voidBounds.minX
+            : feature.voidBounds.maxX;
+      const candidateLedge = (candidateFacade + candidateVoid) * 0.5;
+      physics.teleport(candidateHorizontal
+        ? { x: candidate.along, y: 0.865, z: candidateLedge }
+        : { x: candidateLedge, y: 0.865, z: candidate.along });
+      const crossing = candidate.platformDepth * 0.5 + 0.68;
+      const crossedPortal = physics.move(candidate.side === 'north'
+        ? { x: 0, y: -0.01, z: -crossing }
+        : candidate.side === 'south'
+          ? { x: 0, y: -0.01, z: crossing }
+          : candidate.side === 'west'
+            ? { x: -crossing, y: -0.01, z: 0 }
+            : { x: crossing, y: -0.01, z: 0 }).position;
+      const fixedPosition = candidateHorizontal ? crossedPortal.z : crossedPortal.x;
+      expect(candidateOutward * (fixedPosition - candidateFacade)).toBeGreaterThan(0.24);
     }
+
+    const horizontal = passage.side === 'north' || passage.side === 'south';
+    const outward = passage.side === 'north' || passage.side === 'west' ? -1 : 1;
+    const facadeFixed = passage.side === 'north'
+      ? feature.passageFacadeBounds.minZ
+      : passage.side === 'south'
+        ? feature.passageFacadeBounds.maxZ
+        : passage.side === 'west'
+          ? feature.passageFacadeBounds.minX
+          : feature.passageFacadeBounds.maxX;
+    const voidFixed = passage.side === 'north'
+      ? feature.voidBounds.minZ
+      : passage.side === 'south'
+        ? feature.voidBounds.maxZ
+        : passage.side === 'west'
+          ? feature.voidBounds.minX
+          : feature.voidBounds.maxX;
+    const ledgeFixed = (facadeFixed + voidFixed) * 0.5;
+    const ledgeCenter = horizontal
+      ? { x: passage.along, z: ledgeFixed }
+      : { x: ledgeFixed, z: passage.along };
+    const corridorFixed = facadeFixed + outward * passage.corridorDepth * 0.5;
+    const corridorCenter = horizontal
+      ? { x: passage.along, z: corridorFixed }
+      : { x: corridorFixed, z: passage.along };
+    expect(plan.colliders.some((collider) => collider.id.startsWith('epic1-passage-floor-')))
+      .toBe(false);
+    expect(castDownAt(physics, ledgeCenter.x, 2, ledgeCenter.z)).not.toBeNull();
+    expect(castDownAt(physics, corridorCenter.x, 2, corridorCenter.z)).not.toBeNull();
+
+    const shaftWalls = plan.colliders.filter((collider) =>
+      collider.id.startsWith('epic1-shaft-wall-')
+    );
+    expect(shaftWalls.length).toBeGreaterThan(4);
+    const sideWalls = shaftWalls.filter((collider) =>
+      collider.id.startsWith(`epic1-shaft-wall-${passage.side}-`)
+    );
+    expect(sideWalls.some((collider) => {
+      const center = horizontal ? collider.center.x : collider.center.z;
+      const halfSpan = horizontal ? collider.halfExtents.x : collider.halfExtents.z;
+      return Math.abs(center - passage.along) < halfSpan + 0.32;
+    })).toBe(false);
+
+    physics.teleport({ x: ledgeCenter.x, y: 1.6, z: ledgeCenter.z });
+    let grounded = false;
+    for (let step = 0; step < 8 && !grounded; step += 1) {
+      grounded = physics.move({ x: 0, y: -0.2, z: 0 }).grounded;
+    }
+    expect(grounded).toBe(true);
+    expect(Math.abs(physics.getPosition().y - 0.865)).toBeLessThan(0.012);
+
+    const crossingDistance = passage.platformDepth * 0.5 + 0.82;
+    const movement = passage.side === 'north'
+      ? { x: 0, y: -0.01, z: -crossingDistance }
+      : passage.side === 'south'
+        ? { x: 0, y: -0.01, z: crossingDistance }
+        : passage.side === 'west'
+          ? { x: -crossingDistance, y: -0.01, z: 0 }
+          : { x: crossingDistance, y: -0.01, z: 0 };
+    const crossed = physics.move(movement).position;
+    if (passage.side === 'north') {
+      expect(crossed.z).toBeLessThan(feature.passageFacadeBounds.minZ - 0.2);
+    } else if (passage.side === 'south') {
+      expect(crossed.z).toBeGreaterThan(feature.passageFacadeBounds.maxZ + 0.2);
+    } else if (passage.side === 'west') {
+      expect(crossed.x).toBeLessThan(feature.passageFacadeBounds.minX - 0.2);
+    } else {
+      expect(crossed.x).toBeGreaterThan(feature.passageFacadeBounds.maxX + 0.2);
+    }
+
+    const fartherOut = physics.move(passage.side === 'north'
+      ? { x: 0, y: -0.01, z: -0.42 }
+      : passage.side === 'south'
+        ? { x: 0, y: -0.01, z: 0.42 }
+        : passage.side === 'west'
+          ? { x: -0.42, y: -0.01, z: 0 }
+          : { x: 0.42, y: -0.01, z: 0 }).position;
+    const fartherFixed = horizontal ? fartherOut.z : fartherOut.x;
+    expect(outward * (fartherFixed - facadeFixed)).toBeGreaterThan(1.05);
+  });
+
+  it('walks the first two epic4 flights and exposes physical landings up to the summit', async () => {
+    const plan = makePlan();
+    plan.size = 112;
+    const feature = applyEpicStructure(plan, 4) as EpicStructureFeature;
+    const layout = getEpicStairwellLayout(feature);
+    plan.spawn = { x: -4.45, y: 0.865, z: -5.9 };
+    const physics = await PhysicsWorld.create(plan);
+    activeWorlds.push(physics);
+
+    for (let index = 0; index < 220 && physics.getPosition().x < 4.45; index += 1) {
+      physics.move({ x: 0.055, y: -0.015, z: 0 });
+    }
+    expect(physics.getPosition().x).toBeGreaterThan(4.2);
+    expect(physics.getPosition().y).toBeGreaterThan(3.05);
+
+    for (let index = 0; index < 55 && physics.getPosition().x < 5.9; index += 1) {
+      physics.move({ x: 0.055, y: -0.015, z: 0 });
+    }
+    for (let index = 0; index < 220 && physics.getPosition().z < 4.45; index += 1) {
+      physics.move({ x: 0, y: -0.015, z: 0.055 });
+    }
+    expect(physics.getPosition().z).toBeGreaterThan(4.2);
+    expect(physics.getPosition().y).toBeGreaterThan(5.4);
+
+    const summitHit = castDownAt(physics, 0, feature.height - 0.5, -5.9);
+    expect(summitHit).not.toBeNull();
+    expect(feature.height - 0.5 - summitHit!.timeOfImpact).toBeCloseTo(layout.summitY, 2);
+
+    const openingHit = castDownAt(physics, -5.9, feature.height - 0.5, 0);
+    expect(openingHit).not.toBeNull();
+    expect(feature.height - 0.5 - openingHit!.timeOfImpact).toBeLessThan(layout.summitY - 0.5);
+
+    const upperMazeHit = castDownAt(physics, -5.9, feature.height + 1, -12);
+    expect(upperMazeHit).not.toBeNull();
+    expect(feature.height + 1 - upperMazeHit!.timeOfImpact).toBeCloseTo(layout.summitY, 3);
+
+    physics.teleport({ x: -5.9, y: layout.summitY + 0.865, z: -5.9 });
+    for (let index = 0; index < 130 && physics.getPosition().z > -12; index += 1) {
+      physics.move({ x: 0, y: -0.015, z: -0.055 });
+    }
+    expect(physics.getPosition().z).toBeLessThan(-11.5);
+    expect(physics.getPosition().y).toBeCloseTo(layout.summitY + 0.865, 1);
+  });
+
+  it('keeps the surrounding maze and clears a connected approach around epic4', () => {
+    const plan = makePlan();
+    plan.size = 112;
+    plan.rooms = [
+      { id: 'inside-room', bounds: { minX: -5, maxX: 5, minZ: -5, maxZ: 5 }, kind: 'open-hall', level: 0, ceilingHeight: 8, detailDensity: 1 },
+      { id: 'outside-room', bounds: { minX: 30, maxX: 45, minZ: 30, maxZ: 45 }, kind: 'office', level: 0, ceilingHeight: 2.74, detailDensity: 1 },
+    ];
+    plan.walls = [
+      { id: 'inside-wall', x: 0, z: 10, length: 20, orientation: 'x', bottom: 0, height: 2.74, thickness: 0.2, tint: 1, collision: true, kind: 'wallpaper' },
+      { id: 'outside-wall', x: 36, z: 36, length: 8, orientation: 'x', bottom: 0, height: 2.74, thickness: 0.2, tint: 1, collision: true, kind: 'wallpaper' },
+    ];
+    plan.colliders = [
+      { id: 'collider-inside-wall', center: { x: 0, y: 1.37, z: 10 }, halfExtents: { x: 10, y: 1.37, z: 0.1 }, kind: 'wall' },
+      { id: 'collider-outside-wall', center: { x: 36, y: 1.37, z: 36 }, halfExtents: { x: 4, y: 1.37, z: 0.1 }, kind: 'wall' },
+    ];
+
+    const feature = applyEpicStructure(plan, 4);
+
+    expect(plan.rooms.some((room) => room.id === 'outside-room')).toBe(true);
+    expect(plan.rooms.some((room) => room.id === 'inside-room')).toBe(false);
+    expect(plan.walls.some((wall) => wall.id === 'outside-wall')).toBe(true);
+    expect(plan.walls.some((wall) => wall.id === 'inside-wall')).toBe(false);
+    expect(plan.colliders.some((collider) => collider.id === 'collider-outside-wall')).toBe(true);
+    expect(plan.colliders.some((collider) => collider.id === 'collider-inside-wall')).toBe(false);
+    expect(plan.floorRects).toEqual([{ minX: -56, maxX: 56, minZ: -56, maxZ: 56 }]);
+    expect(plan.walls.every((wall) =>
+      wall.x < feature.bounds.minX - 3 || wall.x > feature.bounds.maxX + 3 ||
+      wall.z < feature.bounds.minZ - 3 || wall.z > feature.bounds.maxZ + 3
+    )).toBe(true);
+  });
+
+  it('keeps epic3 open through the central fissure while supporting its elevated arrival gallery', async () => {
+    const plan = makePlan();
+    plan.size = 112;
+    const feature = applyEpicStructure(plan, 3) as EpicStructureFeature;
+    const physics = await PhysicsWorld.create(plan);
+    activeWorlds.push(physics);
+
+    expect(feature.voidBounds).toBeDefined();
+    expect(feature.passageFacadeBounds).toBeDefined();
+    expect(castDownAt(physics, 0, 2, 0)).toBeNull();
+    expect(castDownAt(physics, 0, 2, -5.5)).toBeNull();
+    expect(castDownAt(physics, 0, 2, feature.bounds.minZ - 0.3)).toBeNull();
+    expect(castDownAt(physics, feature.bounds.maxX + 0.3, 2, -6.5)).toBeNull();
+
+    const arrivalSurfaceY = feature.destination.y - 0.865;
+    const arrivalHit = castDownAt(
+      physics,
+      feature.destination.x,
+      arrivalSurfaceY + 2,
+      feature.destination.z,
+    );
+    expect(arrivalHit).not.toBeNull();
+    expect(arrivalSurfaceY + 2 - arrivalHit!.timeOfImpact).toBeCloseTo(arrivalSurfaceY, 3);
+
+    physics.teleport(feature.destination);
+    for (let index = 0; index < 140; index += 1) {
+      physics.move({ x: 0, y: -0.015, z: 0.04 });
+    }
+    expect(physics.getPosition().z).toBeGreaterThan(feature.passageFacadeBounds!.minZ + 0.25);
+    expect(physics.getPosition().y).toBeLessThan(feature.destination.y - 0.2);
+  });
+
+  it('crosses every aligned epic5 threshold and blocks the solid wall spans', async () => {
+    const plan = makePlan();
+    plan.size = 112;
+    applyEpicStructure(plan, 5);
+    plan.spawn = { x: -44, y: 0.865, z: 0 };
+    const physics = await PhysicsWorld.create(plan);
+    activeWorlds.push(physics);
+
+    for (let index = 0; index < 1000 && physics.getPosition().x < 44; index += 1) {
+      physics.move({ x: 0.1, y: -0.015, z: 0 });
+    }
+    expect(physics.getPosition().x).toBeGreaterThan(43.5);
+    expect(physics.getPosition().y).toBeCloseTo(0.865, 1);
+
+    physics.teleport({ x: -38, y: 0.865, z: 14 });
+    for (let index = 0; index < 100; index += 1) {
+      physics.move({ x: 0.1, y: -0.015, z: 0 });
+    }
+    expect(physics.getPosition().x).toBeLessThan(-33.45);
   });
 
   it('keeps create(plan) compatible through the origin chunk', async () => {

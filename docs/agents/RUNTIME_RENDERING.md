@@ -8,10 +8,19 @@ associés. Le voisinage normal est un 3×3 sur l’étage courant.
 - Au démarrage, jusqu’à trois workers temporaires préparent les voisins.
 - Ensuite, un worker persistant génère un chunk à la fois.
 - Les destinations verticales sont préchargées près des puits et escaliers.
-- Les volumes hauts des monuments épinglent leur story source au lieu de
-  remonter tous les 5,4 m. Pour `epic1`, cet épinglage dure aussi pendant la
-  chute : sa coque descend sous le seuil de mort et le sol de réapparition
-  reste monté.
+- Les volumes hauts de `epic2`, `epic3`, `epic4` et `epic5` épinglent leur
+  story source au lieu de remonter tous les 5,4 m. Le runtime source est résolu
+  depuis la position du joueur, y compris juste après une téléportation haute.
+- `epic3` dépasse son chunk propriétaire sur l’axe longitudinal. Tant que le
+  joueur est dans son volume, le streamer garde ce propriétaire comme centre et
+  exclut ses voisins en x, dont les murs ordinaires couperaient la faille.
+- `epic1` n’est jamais épinglé : seule la story immédiatement inférieure est
+  préchargée en priorité à l’approche du gouffre. Chaque story montée prépare la
+  suivante, sans rafale de trois générations, puis utilise le même hand-off à
+  mi-hauteur que les pits.
+  Au démontage, le dernier palier sûr conserve seulement son plan et sa lightmap
+  CPU ; le callback de chute le remonte immédiatement, sans régénération ni
+  superposition des aperçus verticaux.
 - Une transition d’étage est différée tant que le chunk cible n’est pas prêt.
 - Sans `Worker`, un fallback synchrone reste disponible.
 
@@ -19,18 +28,54 @@ Le worker (`src/world/infinite.worker.ts`) calcule à la fois le `WorldPlan` et 
 pixels de lightmap. `WorldStream.mountChunk()` applique l’offset monde au groupe
 Three.js et au lot de colliders. Le démontage doit retirer les deux.
 
-`/locate epic1` à `/locate epic8` cible les monuments déjà montés. Leur pavage
-garantit les huit commandes dès qu’un voisinage 3×3 est complet ; pendant le
-remplissage transitoire après un déplacement, certaines suggestions peuvent
-réapparaître au fil du montage des chunks manquants.
+`/locate epic1`, `/locate epic2`, `/locate epic3`, `/locate epic4` et
+`/locate epic5` résout analytiquement l’occurrence la plus proche, même hors du
+voisinage monté. Un worker auxiliaire prépare le plan et la lightmap hors du
+thread principal ; le chunk central, sa vue et ses colliders sont ensuite montés
+avant la téléportation. Pour `epic1`, le voisin nord visible depuis le point
+d’arrivée est monté dans le même warmup ; les autres voisins rejoignent le flux
+normal du streamer.
+Pour `epic3`, seuls les voisins nord et sud restent montés pendant la visite.
 
 ## Construction visuelle
 
 `WorldView` dans `src/render/WorldBuilder.ts` consomme un plan local :
 
 - géométries statiques fusionnées par matériau ;
-- volumes monumentaux dérivés de `EpicStructureFeature`, avec niveaux hauts
-  purement visuels et obstacles au sol partagés avec les colliders ;
+- gaines profondes doublées de moquette à l’intérieur, mais enclos des étages
+  traversés rendus avec le papier peint ordinaire pour rester architecturaux ;
+- volumes monumentaux dérivés de `EpicStructureFeature`; leurs rangées de
+  passages sérialisées construisent de vraies ouvertures, plateformes et
+  previews de couloir, tandis que toute partie accessible partage ses mesures
+  avec les colliders ;
+- `epic1` rend quatre stories au-dessus et une profondeur finie de stories sous
+  le joueur, puis masque leur terminaison par des couches de brume à bords
+  fondus sans collision. L’étage actif ouvre ses couloirs jusqu’aux chunks
+  voisins. Dans une fenêtre verticale de trois stories, seules quatre entrées
+  latérales proches du point d’arrivée reçoivent une petite pièce, son plafond
+  et un luminaire ; les autres sont des panneaux en retrait. Les faces basses
+  des murs sont supprimées pour ne jamais se superposer à la corniche. Cette
+  corniche s’arrête à la façade et seul un aperçu détaillé ajoute du sol derrière
+  son ouverture. Les plafonds génériques de pit et de salle haute sont désactivés
+  dans ce chunk : les rangées propres à `epic1` restent visibles vers le haut ;
+- `epic3` construit les cellules de labyrinthe complètes près du point
+  d’arrivée dans une fenêtre de quatre stories sous le joueur et trois stories
+  au-dessus. Dans cette même fenêtre, les entrées latéralement plus éloignées
+  montrent un vestibule court mais entièrement fermé (sol, plafond, côtés et
+  fond). Hors de cette fenêtre, un panneau en retrait ferme toute la largeur de
+  l’ouverture ; aucun trou ne doit révéler la coque extérieure. Aucun mesh de
+  plateforme ne longe le vide. Deux nappes de brume séparées masquent le haut
+  et le fond du gouffre ;
+- `epic5` reste sur le chemin de rendu ordinaire des murs et du plafond. Ses
+  luminaires ont tous `ceilingY` sur le plafond réel, sans panneau lumineux
+  décoratif ou hauteur aléatoire supplémentaire ;
+- les escaliers inter-étages rendent des contremarches minces et une sous-face
+  inclinée texturée, jamais des marches remplies jusqu’au sol. Les murs d’une
+  preview s’arrêtent à son vrai plafond ; la cage réelle habille seule le
+  plénum, et les luminaires de preview doivent rester entièrement hors de
+  l’ouverture ;
+- plafonds bas des `squeeze-view` construits sur `passageRects` quand ce champ
+  existe, afin qu’un passage en L ou en T ne couvre pas son rectangle englobant ;
 - éléments répétitifs en `InstancedMesh` ;
 - lightmaps de plafond et générales produites par `BakedLighting.ts` ;
 - graffitis procéduraux via `WallGraffiti.ts` ;
@@ -50,6 +95,23 @@ soustraction de rectangles et les réparations de jonction.
   éclairés.
 - Les plafonds et sols troués doivent être construits par soustraction de
   rectangles, sans faces coplanaires de réparation qui se chevauchent.
+- Les jupes latérales des rampes suivent la pente avec des rideaux verticaux,
+  sans cap supérieur : le tapis déborde déjà sur la couture et deux surfaces à
+  cet endroit provoquent du z-fighting.
+- Les volées hautes d’`epic4` ajoutent une sous-face en papier peint non baked,
+  décalée de 18 cm sous la pente. Leurs côtés sont de minces fascias suivant la
+  pente, jamais des rideaux triangulaires descendant à la base de la volée. Un
+  palier sépare obligatoirement sa moquette supérieure, sa tranche en papier
+  peint et sa dalle de plafond inférieure ; un luminaire de palier s’attache à
+  cette dalle et ne doit jamais apparaître sous une face en moquette.
+- Tout plafond au-dessus de la ligne des murs utilise un matériau texturé sans
+  fog, double face et légèrement émissif, sans réutiliser la lightmap 2D du
+  plafond bas, pour ne pas se confondre avec le fond.
+  À partir de 18 m, la variante distante renforce ce traitement et réduit aussi
+  l’échelle UV des dalles en fonction de la hauteur.
+- Les fragments de coque haute gardent leurs faces d’extrémité : leur retrait
+  produit des fentes verticales noires aux raccords. Leur base reste au-dessus
+  du plafond bas afin qu’aucune fine lame de papier peint ne le traverse.
 - Une géométrie visible depuis un étage voisin doit avoir les faces/caps
   nécessaires ; ne pas compter uniquement sur le back-face culling.
 - Toute nouvelle ressource détenue par `WorldView` doit être libérée dans
