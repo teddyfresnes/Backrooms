@@ -1,0 +1,196 @@
+html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #14181d; }
+body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.animation-lab { --injury-gray: 0; --injury-saturation: 1; --injury-vignette: 0; --injury-contrast: 1; --injury-brightness: 1; --death-veil: 0; position: fixed; inset: 0; background: #14181d; color: #edf2f6; }
+.animation-lab__canvas { display: block; width: 100%; height: 100%; outline: none; filter: grayscale(var(--injury-gray)) saturate(var(--injury-saturation)) contrast(var(--injury-contrast)) brightness(var(--injury-brightness)); will-change: filter; }
+.animation-lab__panel {
+  position: fixed; top: 12px; right: 12px; z-index: 4; width: min(410px, calc(100vw - 24px)); max-height: calc(100vh - 24px);
+  overflow: auto; box-sizing: border-box; padding: 12px 13px; border: 1px solid rgba(255,255,255,.15); border-radius: 9px;
+  background: rgba(8,11,14,.84); backdrop-filter: blur(9px); box-shadow: 0 16px 42px rgba(0,0,0,.32);
+  font-size: 11px; line-height: 1.35;
+}
+.animation-lab__title { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.animation-lab__title > div { display: grid; gap: 2px; }
+.animation-lab__title strong { font-size: 13px; letter-spacing: .12em; }
+.animation-lab__title span { color: #8f9aa4; font-size: 9px; }
+.animation-lab__title a { padding: 5px 7px; color: #aeb8c2; text-decoration: none; border: 1px solid rgba(255,255,255,.12); border-radius: 5px; font-size: 9px; }
+.animation-lab__title a:hover { color: white; border-color: rgba(255,255,255,.28); }
+.animation-lab__stats { display: grid; grid-template-columns: 1fr auto; gap: 5px 12px; padding: 9px 0; border-top: 1px solid rgba(255,255,255,.09); border-bottom: 1px solid rgba(255,255,255,.09); }
+.animation-lab__stats span { color: #8d98a2; letter-spacing: .06em; }
+.animation-lab__stats b { max-width: 255px; text-align: right; color: #dde5eb; font-weight: 600; font-variant-numeric: tabular-nums; }
+.animation-lab__toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 10px; }
+.animation-lab button {
+  appearance: none; border: 1px solid rgba(255,255,255,.12); border-radius: 6px; padding: 7px 8px; color: #cbd3da;
+  background: rgba(255,255,255,.055); font: inherit; cursor: pointer; text-align: left;
+}
+.animation-lab button:hover { background: rgba(255,255,255,.095); border-color: rgba(255,255,255,.23); }
+.animation-lab button.is-active { border-color: rgba(131,178,255,.55); background: rgba(90,139,218,.18); color: #eef5ff; }
+.animation-lab button.is-forced::after { content: '  • FORCÉ'; color: #98bcff; font-size: 9px; }
+.animation-lab__range { margin-top: 10px; padding: 8px 9px; border-radius: 6px; background: rgba(255,255,255,.035); }
+.animation-lab__range label { display: flex; justify-content: space-between; gap: 12px; color: #98a3ad; font-size: 9px; letter-spacing: .06em; }
+.animation-lab__range output { color: #dbe3e9; font-variant-numeric: tabular-nums; }
+.animation-lab__range input { width: 100%; margin: 8px 0 1px; accent-color: #8bb5ff; }
+.animation-lab__clips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+.animation-lab__clips button { min-height: 34px; }
+.animation-lab__controls, .animation-lab__note { margin: 10px 0 0; color: #9da7af; }
+.animation-lab__note { padding-top: 9px; border-top: 1px solid rgba(255,255,255,.08); color: #7f8a94; font-size: 9px; }
+.animation-lab__hint {
+  position: fixed; left: 50%; bottom: 7vh; z-index: 3; transform: translateX(-50%); display: grid; gap: 4px; min-width: 300px;
+  max-width: min(520px, calc(100vw - 30px)); box-sizing: border-box; padding: 10px 14px; border: 1px solid rgba(255,255,255,.14);
+  border-radius: 7px; background: rgba(8,11,14,.82); text-align: center; pointer-events: none; transition: opacity .14s ease;
+}
+.animation-lab__hint strong { font-size: 12px; letter-spacing: .09em; }
+.animation-lab__hint span { color: #9ca7b0; font-size: 10px; }
+.animation-lab__hint.is-hidden { opacity: 0; }
+@media (max-width: 700px) {
+  .animation-lab__panel { top: 8px; right: 8px; width: min(360px, calc(100vw - 16px)); max-height: 58vh; }
+  .animation-lab__clips { grid-template-columns: 1fr; }
+  .animation-lab__controls, .animation-lab__note { display: none; }
+}
+
+.animation-lab__panel { right: 96px; transition: opacity .16s ease, transform .16s ease; }
+.animation-lab__panel.is-collapsed { opacity: 0; transform: translateX(18px); pointer-events: none; }
+.animation-lab__switcher {
+  position: fixed; top: 12px; right: 12px; z-index: 6; display: grid; gap: 7px; width: 76px;
+}
+.animation-lab__switcher button {
+  min-height: 42px; padding: 7px 6px; text-align: center; font-size: 9px; font-weight: 700; letter-spacing: .04em;
+  background: rgba(8,11,14,.86); backdrop-filter: blur(9px);
+}
+.animation-lab__switcher button.is-active { border-color: rgba(131,178,255,.66); background: rgba(90,139,218,.22); color: #f2f7ff; }
+@media (max-width: 700px) {
+  .animation-lab__panel { right: 92px; width: min(340px, calc(100vw - 108px)); }
+  .animation-lab__switcher { top: 8px; right: 8px; width: 76px; }
+}
+
+.animation-lab__motion-fx {
+  --motion-blur: 0px;
+  --motion-opacity: 0;
+  position: fixed;
+  inset: -4px;
+  z-index: 1;
+  pointer-events: none;
+  opacity: var(--motion-opacity);
+  background: rgba(255,255,255,.002);
+  backdrop-filter: blur(var(--motion-blur));
+  -webkit-backdrop-filter: blur(var(--motion-blur));
+  mask-image: radial-gradient(circle at center, transparent 38%, rgba(0,0,0,.18) 64%, #000 100%);
+  -webkit-mask-image: radial-gradient(circle at center, transparent 38%, rgba(0,0,0,.18) 64%, #000 100%);
+  will-change: opacity, backdrop-filter;
+}
+
+.animation-lab__switcher .animation-lab__kill {
+  border-color: rgba(255, 92, 92, .56);
+  background: rgba(150, 24, 24, .28);
+  color: #ffd7d7;
+}
+.animation-lab__switcher .animation-lab__kill:hover {
+  border-color: rgba(255, 120, 120, .88);
+  background: rgba(190, 30, 30, .42);
+  color: #fff;
+}
+.animation-lab__switcher .animation-lab__kill:disabled {
+  cursor: default;
+  opacity: .68;
+  border-color: rgba(255,255,255,.16);
+  background: rgba(70, 16, 16, .45);
+  color: #bdaaaa;
+}
+
+.animation-lab__damage-fx {
+  --damage-opacity: 0;
+  --blood-scale: 1;
+  --hit-blood-opacity: 0;
+  --hit-blood-side: 0;
+  position: fixed;
+  inset: -2.5%;
+  z-index: 2;
+  pointer-events: none;
+  opacity: var(--damage-opacity);
+  transform: scale(var(--blood-scale));
+  /* Dark, dried edge smears instead of a full-screen bright-red arcade wash. */
+  background-image:
+    url('/assets/blood/blood-overlay.png'),
+    radial-gradient(ellipse at center, transparent 52%, rgba(56, 15, 12, .015) 70%, rgba(70, 18, 14, .20) 100%),
+    radial-gradient(ellipse at 2% 18%, rgba(88, 24, 19, .20) 0 1.1%, transparent 4.6%),
+    radial-gradient(ellipse at 98% 27%, rgba(78, 20, 16, .18) 0 1.25%, transparent 5.1%),
+    radial-gradient(ellipse at 8% 91%, rgba(92, 25, 18, .17) 0 1.2%, transparent 5.2%),
+    radial-gradient(ellipse at 94% 84%, rgba(74, 18, 15, .19) 0 1.35%, transparent 5.8%);
+  background-size: cover, cover, cover, cover, cover, cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-blend-mode: normal, normal, normal, normal, normal, normal;
+  box-shadow: inset 0 0 130px 34px rgba(62, 11, 9, calc(.07 + var(--injury-vignette) * .16));
+  filter: saturate(.52) brightness(.88) contrast(1.06);
+  mix-blend-mode: normal;
+  will-change: opacity, transform;
+}
+.animation-lab__damage-fx::before {
+  content: '';
+  position: absolute;
+  inset: -8%;
+  opacity: var(--hit-blood-opacity);
+  background-image: url('/assets/blood/blood-overlay.png');
+  background-size: 118% 118%;
+  background-position: center;
+  background-repeat: no-repeat;
+  transform: translateX(calc(var(--hit-blood-side) * 5.5%)) rotate(calc(var(--hit-blood-side) * -2.5deg)) scale(1.04);
+  filter: saturate(.72) brightness(.72) contrast(1.18);
+  mix-blend-mode: normal;
+  will-change: opacity, transform;
+}
+
+.animation-lab__damage-fx::after {
+  content: '';
+  position: absolute;
+  inset: -1%;
+  opacity: var(--death-veil);
+  background:
+    radial-gradient(ellipse at 50% 47%, transparent 22%, rgba(7, 10, 12, .16) 47%, rgba(2, 4, 6, .82) 100%),
+    linear-gradient(rgba(19, 25, 29, .16), rgba(0, 0, 0, .20));
+  box-shadow: inset 0 0 210px 92px rgba(0, 0, 0, .86);
+  mix-blend-mode: multiply;
+  transition: opacity 80ms linear;
+}
+
+
+/* Production Backrooms interaction prompt, scoped to the animation lab. */
+.animation-lab__get-up-prompt {
+  position: absolute;
+  z-index: 16;
+  bottom: 15%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 7px 11px;
+  border: 1px solid rgba(245, 240, 216, 0.27);
+  border-radius: 3px;
+  background: rgba(10, 11, 8, 0.8);
+  color: #f5f0d8;
+  font: 500 11px/1.4 'Space Grotesk Variable', system-ui, sans-serif;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 7px);
+  transition: opacity 140ms ease, transform 140ms ease;
+  backdrop-filter: blur(8px);
+}
+.animation-lab__get-up-prompt.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.animation-lab__get-up-prompt kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 2px 6px;
+  border: 1px solid rgba(245, 240, 216, 0.27);
+  border-radius: 3px;
+  background: rgba(245, 240, 216, 0.06);
+  color: #f5f0d8;
+  font: 500 11px/1 'JetBrains Mono Variable', monospace;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animation-lab__get-up-prompt { transition: none; }
+}
