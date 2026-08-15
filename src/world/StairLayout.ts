@@ -144,11 +144,41 @@ export const getStairSlabs = (stairs: StairSocketFeature): StairSlab[] => {
   return slabs;
 };
 
-export const getStairCageWalls = (stairs: StairSocketFeature): StairCageWall[] => {
+export const getStairCageWalls = (
+  stairs: StairSocketFeature,
+  lowerCeilingHeight: number,
+): StairCageWall[] => {
   const alongX = stairs.heading.startsWith('x');
   const positive = stairs.heading.endsWith('+');
   const baseY = stairs.baseY ?? 0;
   const wallThickness = 0.16;
+  const upperFloorY = baseY + STAIR_STORY_RISE;
+  const lowerCeilingY = Math.min(
+    upperFloorY,
+    baseY + Math.max(0, lowerCeilingHeight),
+  );
+  const endWall = (
+    positiveEnd: boolean,
+    bottom: number,
+    top: number,
+  ): StairCageWall => ({
+    bounds: alongX
+      ? {
+          minX: positiveEnd ? stairs.bounds.maxX : stairs.bounds.minX - wallThickness,
+          maxX: positiveEnd ? stairs.bounds.maxX + wallThickness : stairs.bounds.minX,
+          minZ: stairs.bounds.minZ - wallThickness,
+          maxZ: stairs.bounds.maxZ + wallThickness,
+        }
+      : {
+          minX: stairs.bounds.minX - wallThickness,
+          maxX: stairs.bounds.maxX + wallThickness,
+          minZ: positiveEnd ? stairs.bounds.maxZ : stairs.bounds.minZ - wallThickness,
+          maxZ: positiveEnd ? stairs.bounds.maxZ + wallThickness : stairs.bounds.minZ,
+        },
+    bottom,
+    top,
+    kind: 'outer',
+  });
   const walls: StairCageWall[] = alongX
     ? [
         {
@@ -200,29 +230,7 @@ export const getStairCageWalls = (stairs: StairSocketFeature): StairCageWall[] =
       ];
 
   if ((stairs.layout ?? 'switchback') === 'switchback') {
-    walls.push(alongX
-      ? {
-          bounds: {
-            minX: positive ? stairs.bounds.maxX : stairs.bounds.minX - wallThickness,
-            maxX: positive ? stairs.bounds.maxX + wallThickness : stairs.bounds.minX,
-            minZ: stairs.bounds.minZ - wallThickness,
-            maxZ: stairs.bounds.maxZ + wallThickness,
-          },
-          bottom: baseY,
-          top: baseY + STAIR_STORY_RISE,
-          kind: 'outer',
-        }
-      : {
-          bounds: {
-            minX: stairs.bounds.minX - wallThickness,
-            maxX: stairs.bounds.maxX + wallThickness,
-            minZ: positive ? stairs.bounds.maxZ : stairs.bounds.minZ - wallThickness,
-            maxZ: positive ? stairs.bounds.maxZ + wallThickness : stairs.bounds.minZ,
-          },
-          bottom: baseY,
-          top: baseY + STAIR_STORY_RISE,
-          kind: 'outer',
-        });
+    walls.push(endWall(positive, baseY, upperFloorY));
 
     if ((stairs.switchbackJoin ?? 'joined') === 'divider') {
       const longMin = alongX ? stairs.bounds.minX : stairs.bounds.minZ;
@@ -251,6 +259,15 @@ export const getStairCageWalls = (stairs: StairSocketFeature): StairCageWall[] =
         top: baseY + STAIR_STORY_RISE,
         kind: 'divider',
       });
+    }
+  }
+  if (lowerCeilingY < upperFloorY - 1e-4) {
+    // Entry/exit openings only belong to the rooms on either floor. Close the
+    // otherwise exposed plenum between the lower drop ceiling and upper slab,
+    // while keeping the walkable doorway volumes themselves unobstructed.
+    walls.push(endWall(!positive, lowerCeilingY, upperFloorY));
+    if ((stairs.layout ?? 'switchback') === 'straight') {
+      walls.push(endWall(positive, lowerCeilingY, upperFloorY));
     }
   }
   return walls;

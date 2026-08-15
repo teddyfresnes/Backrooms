@@ -25,7 +25,7 @@ const plan = {
 
 describe('WorldDoorLayer', () => {
   it('offers the English E prompt only while a closed door is targeted', () => {
-    const layer = new WorldDoorLayer(plan);
+    const layer = new WorldDoorLayer(plan, null);
     const interaction = layer.getInteraction(
       new THREE.Vector3(0, 0.9, 2),
       new THREE.Vector3(0, 0, -1),
@@ -44,8 +44,8 @@ describe('WorldDoorLayer', () => {
   });
 
   it('animates a tap much faster than a held interaction', () => {
-    const fast = new WorldDoorLayer(plan);
-    const slow = new WorldDoorLayer(plan);
+    const fast = new WorldDoorLayer(plan, null);
+    const slow = new WorldDoorLayer(plan, null);
 
     expect(fast.open(feature.id, 'fast')).toBe(feature.colliderId);
     expect(slow.open(feature.id, 'slow')).toBe(feature.colliderId);
@@ -64,5 +64,26 @@ describe('WorldDoorLayer', () => {
     expect(slow.consumePassableColliderIds()).toEqual([feature.colliderId]);
     fast.dispose();
     slow.dispose();
+  });
+
+  it('restores an in-flight door without desynchronizing its collider release', () => {
+    const source = new WorldDoorLayer(plan, null);
+    source.open(feature.id, 'slow');
+    source.update(0.2);
+    const progress = source.getOpenProgress(feature.id)!;
+    const states = source.getDoorStates();
+    expect(states).toHaveLength(1);
+    expect(states[0]?.colliderReleased).toBe(false);
+
+    const restored = new WorldDoorLayer(plan, null);
+    restored.restoreDoorStates(states);
+    expect(restored.getOpenProgress(feature.id)).toBeCloseTo(progress, 6);
+    expect(restored.consumePassableColliderIds()).toEqual([]);
+    restored.update(states[0]!.remainingDuration);
+    expect(restored.getOpenProgress(feature.id)).toBe(1);
+    expect(restored.consumePassableColliderIds()).toEqual([feature.colliderId]);
+
+    source.dispose();
+    restored.dispose();
   });
 });

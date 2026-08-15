@@ -1,12 +1,16 @@
 import * as THREE from 'three';
 import { AudioSystem } from '../audio/AudioSystem';
+import { describeViewDirection, resolveDiagnosticsVisibility } from './Diagnostics';
+import type { DiagnosticsSnapshot, PlayerDiagnostics, SystemDiagnostics } from './Diagnostics';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { PlayerController } from '../player/PlayerController';
 import { AdaptiveRenderScale, renderScaleLimits } from '../render/AdaptiveQuality';
+import type { RenderScaleLimits } from '../render/AdaptiveQuality';
 import { MaterialLibrary } from '../render/MaterialLibrary';
 import { PostFX } from '../render/PostFX';
 import { ExperienceUI } from '../ui/ExperienceUI';
 import type { ConsoleCompletion, ConsoleMode, ConsoleSubmitResult } from '../ui/ExperienceUI';
+import { loadGameSettings, type GameSettings } from '../ui/settings';
 import { createReadableSeed } from '../world/SeededRandom';
 import { fingerprintWorld, validateWorldPlan } from '../world/generateWorld';
 import { generateInfiniteChunk } from '../world/InfiniteWorld';
@@ -14,24 +18,7 @@ import type { DoorOpenMode, VisualBiome, WorldPlan } from '../world/types';
 import { WorldStream } from './WorldStream';
 import type { LocateTarget } from './WorldStream';
 
-export interface DebugExperience {
-  ready: boolean;
-  seed: string;
-  fingerprint: string;
-  rooms: number;
-  lights: number;
-  props: number;
-  features: string[];
-  player: { x: number; y: number; z: number };
-  fps: number;
-  pixelRatio: number;
-  drawCalls: number;
-  triangles: number;
-  chunks: number;
-  pendingChunks: number;
-  noclip: boolean;
-  darkness: number;
-}
+export type DebugExperience = DiagnosticsSnapshot;
 
 declare global {
   interface Window {
@@ -87,6 +74,37 @@ const ATMOSPHERE: Record<VisualBiome, {
   },
 };
 
+const LEGACY_ATMOSPHERE: typeof ATMOSPHERE = {
+  yellow: {
+    background: 0x45452d,
+    fog: 0x77754b,
+    hemisphereSky: 0xfff7d8,
+    hemisphereGround: 0x282619,
+    ambient: 0xfff0c4,
+    key: 0xfff5d8,
+  },
+  red: {
+    background: 0x270503,
+    fog: 0x5c0906,
+    hemisphereSky: 0xff2114,
+    hemisphereGround: 0x190201,
+    ambient: 0xff160d,
+    key: 0xff301d,
+  },
+  white: {
+    background: 0x62696a,
+    fog: 0xaeb6b6,
+    hemisphereSky: 0xf7fbff,
+    hemisphereGround: 0x303738,
+    ambient: 0xeaf3ff,
+    key: 0xf5fbff,
+  },
+};
+
+export interface GameOptions {
+  onRequestNewGame?(): void;
+}
+
 export class Game {
   readonly plan: WorldPlan;
   private readonly seed: string;
@@ -107,6 +125,14 @@ export class Game {
   private readonly ui: ExperienceUI;
   private readonly audio = new AudioSystem();
   private readonly lookDirection = new THREE.Vector3();
+  private readonly drawingBufferSize = new THREE.Vector2();
+  private readonly cinematicPosition = new THREE.Vector3();
+  private readonly cinematicEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+  private readonly originFingerprint: string;
+  private readonly cinematicPhase: number;
+  private readonly systemDiagnostics: SystemDiagnostics;
+  private readonly renderScale: RenderScaleLimits;
+  private settings: GameSettings;
   private materials?: MaterialLibrary;
   private worldStream?: WorldStream;
   private physics?: PhysicsWorld;
@@ -116,28 +142,36 @@ export class Game {
   private accumulator = 0;
   private elapsed = 0;
   private fps = 60;
+  private frameTimeMs = 1000 / 60;
   private frameCounter = 0;
   private metricsTimer = 0;
   private darkness = 0;
   private pixelRatio: number;
   private readonly adaptiveRenderScale: AdaptiveRenderScale;
+  private cinematicStartedAt = 0;
+  private wasMainMenuOpen = false;
   private locateRequestId = 0;
+  private diagnosticsVisible = false;
   private disposed = false;
 
-  constructor(private readonly container: HTMLElement) {
-    if (!document.createElement('canvas').getContext('webgl2')) {
-      throw new Error('WebGL 2 est requis pour explorer cette archive.');
-    }
-    const renderScale = renderScaleLimits(
+  constructor(
+    private readonly container: HTMLElement,
+    private readonly options: GameOptions = {},
+  ) {
+    this.settings = loadGameSettings();
+    this.renderScale = renderScaleLimits(
       window.innerWidth,
       window.innerHeight,
       window.devicePixelRatio,
       matchMedia('(pointer: coarse)').matches,
     );
-    this.adaptiveRenderScale = new AdaptiveRenderScale(renderScale);
-    this.pixelRatio = this.adaptiveRenderScale.value;
+    this.adaptiveRenderScale = new AdaptiveRenderScale(this.renderScale);
+    this.pixelRatio = this.pixelRatioForQuality(this.settings.renderQuality);
     this.seed = resolveSeed();
     this.plan = generateInfiniteChunk(this.seed, { x: 0, z: 0, story: 0 });
+    this.originFingerprint = fingerprintWorld(this.plan);
+    this.cinematicPhase = [...this.originFingerprint]
+      .reduce((value, character) => (value * 31 + character.charCodeAt(0)) % 628, 0) / 100;
     const issues = validateWorldPlan(this.plan);
     if (issues.length > 0) throw new Error(`Plan invalide : ${issues.join(' ')}`);
 
@@ -159,16 +193,18 @@ export class Game {
     // The composer performs several renderer calls. Reset once per presented
     // frame so debug draw/triangle counts cover the whole pipeline.
     this.renderer.info.autoReset = false;
+    this.systemDiagnostics = this.readSystemDiagnostics();
     this.root.append(this.renderer.domElement);
 
-    this.ui = new ExperienceUI(this.root, this.plan, {
+    this.ui = new ExperienceUI(this.root, {
       enter: () => this.enter(),
       regenerate: () => this.regenerate(),
       toggleFullscreen: () => void this.toggleFullscreen(),
+      settingsChanged: (settings) => this.applySettings(settings),
       submitConsole: (value, mode) => this.submitConsole(value, mode),
       completeConsole: (value, mode) => this.completeConsole(value, mode),
       consoleVisibility: (open) => this.setConsoleVisibility(open),
-    }, this.seed);
+    }, this.settings);
     this.configureScene();
     this.resize();
     window.addEventListener('resize', this.resize);
@@ -177,26 +213,40 @@ export class Game {
   }
 
   async initialize(): Promise<void> {
-    this.ui.setLoading(0.08, 'LECTURE DU PLAN');
-    this.materials = await MaterialLibrary.load(this.renderer, (ratio) => {
-      this.ui.setLoading(0.1 + ratio * 0.48, 'CHARGEMENT DES MATÉRIAUX PBR');
-    });
-    this.ui.setLoading(0.62, 'INITIALISATION DES COLLISIONS');
-    this.physics = await PhysicsWorld.create(this.plan);
-    this.ui.setLoading(0.7, 'GÉNÉRATION DES ZONES VOISINES');
+    const materials = await MaterialLibrary.load(this.renderer);
+    if (this.disposed) {
+      materials.dispose();
+      return;
+    }
+    this.materials = materials;
+
+    const physics = await PhysicsWorld.create(this.plan);
+    if (this.disposed) {
+      physics.dispose();
+      return;
+    }
+    this.physics = physics;
     this.worldStream = new WorldStream(
       this.seed,
       this.plan,
       this.scene,
       this.materials.materialSets,
       this.physics,
+      this.settings.lighting,
     );
     await this.worldStream.initialize();
-    this.ui.setLoading(0.79, 'DISPOSITION DES OBJETS ABANDONNÃ‰S');
+    if (this.disposed) return;
     await this.worldStream.waitForVisualAssets();
+    if (this.disposed) return;
+    if (this.worldStream.getLightingMode() !== this.settings.lighting) {
+      await this.worldStream.setLightingMode(this.settings.lighting);
+      if (this.disposed) return;
+    }
     this.camera.rotation.set(0, -Math.PI * 0.22, 0, 'YXZ');
+    this.camera.fov = this.settings.fieldOfView;
+    this.camera.updateProjectionMatrix();
     this.player = new PlayerController(this.camera, this.renderer.domElement, this.physics, {
-      onLockChange: (locked) => this.ui.setLocked(locked),
+      onLockChange: (locked) => this.onPlayerLockChange(locked),
       onFootstep: (strength) => this.audio.footstep(strength),
       onInteract: (mode) => this.tryInteract(mode),
       onLand: () => this.audio.impact(),
@@ -211,17 +261,26 @@ export class Game {
     // interactive frame already contains the full visible architecture.
     this.worldStream.update(0, 0, this.player.position);
 
-    this.ui.setLoading(0.84, 'CALIBRAGE OPTIQUE');
-    this.postFX = new PostFX(this.renderer, this.scene, this.camera);
+    this.player.setFieldOfView(this.settings.fieldOfView);
+    this.player.setLookSensitivity(this.settings.lookSensitivity);
+    this.player.setCameraMotionEnabled(this.settings.cameraMotion);
+    this.player.setControlBindings(this.settings.controls);
+    this.cinematicPosition.copy(this.camera.position);
+    this.cinematicEuler.setFromQuaternion(this.camera.quaternion, 'YXZ');
+    this.audio.setMasterVolume(this.settings.masterVolume);
+
+    this.postFX = new PostFX(this.renderer, this.scene, this.camera, this.settings.lighting);
     this.resize();
     await this.renderer.compileAsync(this.scene, this.camera);
+    if (this.disposed) return;
     // Warm every composer target behind the opaque loading overlay. The
     // post-processing pipeline has its own shader/target allocation that
     // renderer.compileAsync cannot cover; priming several presented frames
     // prevents black frames when the player first dismisses the overlay.
     await this.warmupPostFX();
-    this.ui.setLoading(0.98, 'STABILISATION DU SIGNAL');
+    if (this.disposed) return;
     this.updateDebugState(true);
+    this.ui.setSessionStarted(true);
     this.ui.setReady();
     this.renderer.setAnimationLoop(this.frame);
   }
@@ -239,13 +298,34 @@ export class Game {
     this.directionalKey.position.set(4.5, 7.5, 3.2);
     this.directionalKey.castShadow = false;
     this.scene.add(this.directionalKey);
+    this.applyAtmosphere(this.plan.visualBiome ?? 'yellow', 1);
   }
 
   private updateAtmosphere(delta: number): void {
     if (!this.worldStream || !this.player) return;
     const context = this.worldStream.getLightingContext(this.player.position);
-    const target = ATMOSPHERE[context.biome];
     const blend = 1 - Math.exp(-Math.max(0, delta) * 1.6);
+    this.applyAtmosphere(context.biome, blend);
+    const legacy = this.settings.lighting === 'legacy';
+    const darknessRate = context.darkness > this.darkness ? 1.25 : 2;
+    const darknessBlend = 1 - Math.exp(-Math.max(0, delta) * darknessRate);
+    this.darkness = THREE.MathUtils.lerp(this.darkness, context.darkness, darknessBlend);
+    if (legacy) {
+      this.hemisphere.intensity = 0.17;
+      this.ambientFill.intensity = 0.018;
+      this.directionalKey.intensity = 0.07;
+      this.postFX?.setDarkness(0);
+      return;
+    }
+    this.hemisphere.intensity = THREE.MathUtils.lerp(0.25, 0.15, this.darkness);
+    this.ambientFill.intensity = THREE.MathUtils.lerp(0.19, 0.08, this.darkness);
+    this.directionalKey.intensity = THREE.MathUtils.lerp(0.34, 0.14, this.darkness);
+    this.postFX?.setDarkness(this.darkness);
+  }
+
+  private applyAtmosphere(biome: VisualBiome, blend: number): void {
+    const legacy = this.settings.lighting === 'legacy';
+    const target = (legacy ? LEGACY_ATMOSPHERE : ATMOSPHERE)[biome];
     this.backgroundColor.lerp(this.atmosphereTargetColor.setHex(target.background), blend);
     this.fog.color.lerp(this.atmosphereTargetColor.setHex(target.fog), blend);
     this.hemisphere.color.lerp(this.atmosphereTargetColor.setHex(target.hemisphereSky), blend);
@@ -255,18 +335,77 @@ export class Game {
     );
     this.ambientFill.color.lerp(this.atmosphereTargetColor.setHex(target.ambient), blend);
     this.directionalKey.color.lerp(this.atmosphereTargetColor.setHex(target.key), blend);
-    const darknessRate = context.darkness > this.darkness ? 1.25 : 2;
-    const darknessBlend = 1 - Math.exp(-Math.max(0, delta) * darknessRate);
-    this.darkness = THREE.MathUtils.lerp(this.darkness, context.darkness, darknessBlend);
-    this.hemisphere.intensity = THREE.MathUtils.lerp(0.25, 0.15, this.darkness);
-    this.ambientFill.intensity = THREE.MathUtils.lerp(0.19, 0.08, this.darkness);
-    this.directionalKey.intensity = THREE.MathUtils.lerp(0.34, 0.14, this.darkness);
-    this.postFX?.setDarkness(this.darkness);
+    this.fog.density = legacy ? 0.0042 : 0.0015;
+    this.directionalKey.position.set(legacy ? 3.5 : 4.5, legacy ? 8 : 7.5, legacy ? 2.5 : 3.2);
+    if (legacy) {
+      this.hemisphere.intensity = 0.17;
+      this.ambientFill.intensity = 0.018;
+      this.directionalKey.intensity = 0.07;
+    } else {
+      this.hemisphere.intensity = THREE.MathUtils.lerp(0.25, 0.15, this.darkness);
+      this.ambientFill.intensity = THREE.MathUtils.lerp(0.19, 0.08, this.darkness);
+      this.directionalKey.intensity = THREE.MathUtils.lerp(0.34, 0.14, this.darkness);
+    }
   }
+
+  private pixelRatioForQuality(quality: GameSettings['renderQuality']): number {
+    if (quality === 'performance') return this.renderScale.min;
+    if (quality === 'quality') return this.renderScale.max;
+    return this.adaptiveRenderScale.value;
+  }
+
+  private async applySettings(next: GameSettings): Promise<void> {
+    const previousLighting = this.settings.lighting;
+    this.settings = { ...next };
+    this.camera.fov = next.fieldOfView;
+    this.camera.updateProjectionMatrix();
+    this.player?.setFieldOfView(next.fieldOfView);
+    this.player?.setLookSensitivity(next.lookSensitivity);
+    this.player?.setCameraMotionEnabled(next.cameraMotion);
+    this.player?.setControlBindings(next.controls);
+    this.audio.setMasterVolume(next.masterVolume);
+
+    const nextPixelRatio = this.pixelRatioForQuality(next.renderQuality);
+    if (nextPixelRatio !== this.pixelRatio) {
+      this.pixelRatio = nextPixelRatio;
+      this.resize();
+    }
+    if (previousLighting === next.lighting || !this.worldStream || !this.postFX) {
+      this.applyAtmosphere(this.worldStream?.getLightingContext(this.player?.position ?? this.camera.position).biome ?? 'yellow', 1);
+      return;
+    }
+
+    this.ui.setSettingsProgress(0, 'Préparation de l’éclairage');
+    this.postFX.setLightingMode(next.lighting);
+    const biome = this.worldStream.getLightingContext(this.player?.position ?? this.camera.position).biome;
+    this.applyAtmosphere(biome, 1);
+    try {
+      await this.worldStream.setLightingMode(next.lighting, ({ completed, total }) => {
+        const progress = total === 0 ? 1 : completed / total;
+        this.ui.setSettingsProgress(progress, next.lighting === 'legacy'
+          ? 'Calcul de l’éclairage classique'
+          : 'Restauration de l’éclairage moderne');
+      });
+      this.ui.setSettingsProgress(1, 'Éclairage appliqué');
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 180));
+    } finally {
+      this.ui.setSettingsProgress(null);
+    }
+    this.updateDebugState(true);
+  }
+
+  private readonly onPlayerLockChange = (locked: boolean): void => {
+    this.ui.setLocked(locked);
+    this.player?.setInputEnabled(locked);
+    void this.audio.setSuspended(!locked || document.hidden);
+    this.previousTime = performance.now();
+    this.accumulator = 0;
+  };
 
   private async warmupPostFX(): Promise<void> {
     if (!this.postFX) return;
     for (let frame = 0; frame < 3; frame += 1) {
+      if (this.disposed || !this.postFX) return;
       this.postFX.render(1 / 60);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     }
@@ -297,6 +436,10 @@ export class Game {
   }
 
   private regenerate(): void {
+    if (this.options.onRequestNewGame) {
+      this.options.onRequestNewGame();
+      return;
+    }
     const url = new URL(window.location.href);
     sessionStorage.removeItem('threshold-zero-auto-seed');
     sessionStorage.removeItem('threshold-zero-seed');
@@ -322,6 +465,7 @@ export class Game {
     if (!trimmed.startsWith('/')) return null;
     const commandSuggestions = [
       { value: '/help', label: '/help', detail: 'AFFICHE LES COMMANDES DISPONIBLES' },
+      { value: '/logs', label: '/logs', detail: 'AFFICHE OU MASQUE LE PANNEAU TECHNIQUE' },
       { value: '/noclip', label: '/noclip', detail: 'ACTIVE OU DESACTIVE LE VOL LIBRE' },
       { value: '/locate ', label: '/locate <cible>', detail: 'TÉLÉPORTE VERS UNE CIBLE CONNUE' },
     ];
@@ -332,6 +476,17 @@ export class Game {
       );
       return suggestions.length > 0
         ? { hint: `${suggestions.length} COMMANDE(S) DISPONIBLE(S)`, suggestions }
+        : null;
+    }
+    if (/^\/logs(?:\s|$)/i.test(trimmed)) {
+      const query = trimmed.replace(/^\/logs\s*/i, '').toLowerCase();
+      const modes = [
+        { value: '/logs on', label: 'on', detail: 'AFFICHE LE PANNEAU TECHNIQUE' },
+        { value: '/logs off', label: 'off', detail: 'MASQUE LE PANNEAU TECHNIQUE' },
+        { value: '/logs toggle', label: 'toggle', detail: 'BASCULE LE PANNEAU TECHNIQUE' },
+      ].filter((suggestion) => suggestion.label.startsWith(query));
+      return modes.length > 0
+        ? { hint: 'CHOISIS UN ÉTAT · TAB POUR PARCOURIR', suggestions: modes }
         : null;
     }
     if (!/^\/locate(?:\s|$)/i.test(trimmed)) return null;
@@ -375,8 +530,20 @@ export class Game {
         const feedback = 'SYNTAXE: /help';
         return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
       }
-      const feedback = '/locate <cible> - teleportation · /noclip [on|off] - vol libre · C - chat local · H - commandes';
+      const feedback = '/locate <cible> - teleportation · /noclip [on|off] - vol libre · /logs [on|off] - diagnostic';
       return { close: false, feedback, messages: [echo, { kind: 'system', text: feedback }] };
+    }
+    if (normalizedCommand === 'logs') {
+      const visible = resolveDiagnosticsVisibility(this.diagnosticsVisible, args);
+      if (visible === null) {
+        const feedback = 'SYNTAXE: /logs [on|off|toggle]';
+        return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
+      }
+      this.diagnosticsVisible = visible;
+      this.ui.setDiagnosticsVisible(visible);
+      this.updateDebugState(true);
+      const feedback = visible ? 'PANNEAU TECHNIQUE AFFICHE' : 'PANNEAU TECHNIQUE MASQUE';
+      return { close: true, feedback, messages: [echo, { kind: 'system', text: feedback }] };
     }
     if (normalizedCommand === 'noclip') {
       if (!this.player) {
@@ -498,14 +665,15 @@ export class Game {
 
   private readonly onConsoleHotkey = (event: KeyboardEvent): void => {
     if (event.repeat || this.disposed || !this.player || Game.isEditableTarget(event.target)) return;
-    if (event.code !== 'KeyH' && event.code !== 'KeyC') return;
+    const slash = event.key === '/';
+    if (event.code !== 'KeyH' && event.code !== 'KeyC' && !slash) return;
     if (!this.player.isLocked) return;
     event.preventDefault();
     if (this.ui.isConsoleOpen) {
       this.ui.closeConsole();
-      if (event.code === 'KeyH') return;
+      if (event.code === 'KeyH' || slash) return;
     }
-    this.ui.openConsole(event.code === 'KeyH' ? 'command' : 'chat');
+    this.ui.openConsole(event.code === 'KeyC' ? 'chat' : 'command');
   };
 
   private static isEditableTarget(target: EventTarget | null): boolean {
@@ -514,27 +682,58 @@ export class Game {
     return tag === 'input' || tag === 'textarea' || target.isContentEditable;
   }
 
+  private updateMenuCinematic(): void {
+    this.camera.position.copy(this.cinematicPosition);
+    this.camera.rotation.copy(this.cinematicEuler);
+    if (!this.settings.menuMotion) return;
+    const time = Math.max(0, this.elapsed - this.cinematicStartedAt);
+    const slowTime = time + this.cinematicPhase;
+    this.camera.position.x += Math.sin(slowTime * 0.17) * 0.09;
+    this.camera.position.y += Math.sin(slowTime * 0.23) * 0.025;
+    this.camera.position.z += Math.cos(slowTime * 0.14) * 0.09;
+    this.camera.rotation.set(
+      this.cinematicEuler.x + Math.sin(slowTime * 0.13) * 0.014,
+      this.cinematicEuler.y + Math.sin(slowTime * 0.09) * 0.24,
+      0,
+      'YXZ',
+    );
+  }
+
   private readonly frame = (now: number): void => {
     if (this.disposed || !this.player || !this.worldStream || !this.postFX) return;
     const measuredDelta = Math.max(0, (now - this.previousTime) / 1000);
     const rawDelta = Math.min(0.05, measuredDelta);
     this.previousTime = now;
     this.elapsed += rawDelta;
-    this.accumulator = Math.min(this.accumulator + rawDelta, 0.12);
-    const fixedDelta = 1 / 60;
-    while (this.accumulator >= fixedDelta) {
-      this.player.fixedUpdate(fixedDelta);
-      this.accumulator -= fixedDelta;
+    const playing = this.player.isLocked;
+    const mainMenuOpen = this.ui.isMainMenuOpen;
+    if (mainMenuOpen && !this.wasMainMenuOpen) {
+      this.cinematicPosition.copy(this.camera.position);
+      this.cinematicEuler.setFromQuaternion(this.camera.quaternion, 'YXZ');
+      this.cinematicStartedAt = this.elapsed;
     }
-    this.player.renderUpdate(rawDelta, this.accumulator / fixedDelta);
+    this.wasMainMenuOpen = mainMenuOpen;
 
-    this.worldStream.update(this.elapsed, rawDelta, this.player.position);
+    if (playing) {
+      this.accumulator = Math.min(this.accumulator + rawDelta, 0.12);
+      const fixedDelta = 1 / 60;
+      while (this.accumulator >= fixedDelta) {
+        this.player.fixedUpdate(fixedDelta);
+        this.accumulator -= fixedDelta;
+      }
+      this.player.renderUpdate(rawDelta, this.accumulator / fixedDelta);
+      this.worldStream.update(this.elapsed, rawDelta, this.player.position);
+    } else {
+      this.accumulator = 0;
+      this.ui.setInteraction(null);
+      if (mainMenuOpen) this.updateMenuCinematic();
+    }
     this.updateAtmosphere(rawDelta);
     this.player.getViewDirection(this.lookDirection);
-    const interaction = this.player.isTraversing || this.player.isNoclipEnabled
+    const interaction = !playing || this.player.isTraversing || this.player.isNoclipEnabled
       ? null
       : this.worldStream.getInteraction(this.player.position, this.lookDirection);
-    this.ui.setInteraction(this.player.isLocked ? interaction?.label ?? null : null);
+    this.ui.setInteraction(interaction?.label ?? null);
     const room = this.worldStream.findRoomAt(
       this.player.position.x,
       this.player.position.y,
@@ -546,7 +745,12 @@ export class Game {
     // Generation stalls must remain visible to both the HUD and quality loop.
     const instantaneousFps = measuredDelta > 0 ? 1 / measuredDelta : 60;
     this.fps = THREE.MathUtils.lerp(this.fps, instantaneousFps, 0.055);
-    const nextPixelRatio = this.adaptiveRenderScale.update(this.fps, measuredDelta);
+    if (measuredDelta > 0) {
+      this.frameTimeMs = THREE.MathUtils.lerp(this.frameTimeMs, measuredDelta * 1000, 0.055);
+    }
+    const nextPixelRatio = this.settings.renderQuality === 'auto'
+      ? this.adaptiveRenderScale.update(this.fps, measuredDelta)
+      : null;
     if (nextPixelRatio !== null && nextPixelRatio !== this.pixelRatio) {
       this.pixelRatio = nextPixelRatio;
       this.resize();
@@ -575,35 +779,160 @@ export class Game {
   };
 
   private readonly onVisibilityChange = (): void => {
-    void this.audio.setSuspended(document.hidden);
+    void this.audio.setSuspended(document.hidden || !this.player?.isLocked);
     this.previousTime = performance.now();
     this.accumulator = 0;
   };
 
+  private readSystemDiagnostics(): SystemDiagnostics {
+    const gl = this.renderer.getContext();
+    const extension = gl.getExtension('WEBGL_debug_renderer_info') as {
+      UNMASKED_RENDERER_WEBGL: number;
+      UNMASKED_VENDOR_WEBGL: number;
+    } | null;
+    const deviceNavigator = navigator as Navigator & { deviceMemory?: number };
+    return {
+      browser: navigator.userAgent,
+      platform: navigator.platform || 'unknown',
+      language: navigator.language,
+      cpuThreads: navigator.hardwareConcurrency || null,
+      deviceMemoryGb: deviceNavigator.deviceMemory ?? null,
+      gpu: extension ? String(gl.getParameter(extension.UNMASKED_RENDERER_WEBGL)) : 'unavailable',
+      gpuVendor: extension ? String(gl.getParameter(extension.UNMASKED_VENDOR_WEBGL)) : 'unavailable',
+      webgl: gl.getParameter(gl.VERSION) as string,
+      maxTextureSize: this.renderer.capabilities.maxTextureSize,
+    };
+  }
+
   private updateDebugState(ready: boolean): void {
-    const player = this.player?.position ?? new THREE.Vector3(this.plan.spawn.x, this.plan.spawn.y, this.plan.spawn.z);
-    const stream = this.worldStream?.getDebugCounts();
-    window.__BACKROOMS__ = {
+    const spawn = { x: this.plan.spawn.x, y: this.plan.spawn.y, z: this.plan.spawn.z };
+    const player: PlayerDiagnostics = this.player?.getDebugState() ?? {
+      ...spawn,
+      position: spawn,
+      velocity: { x: 0, y: 0, z: 0 },
+      horizontalSpeed: 0,
+      verticalSpeed: 0,
+      grounded: true,
+      moving: false,
+      sprinting: false,
+      crouching: false,
+      noclip: false,
+      traversing: false,
+      pointerLocked: false,
+      view: describeViewDirection({ x: 0, y: 0, z: -1 }),
+    };
+    if (this.player && this.diagnosticsVisible) this.player.getViewDirection(this.lookDirection);
+    else this.lookDirection.set(0, 0, 0);
+    const runtime = this.worldStream?.getDiagnostics(
+      this.player?.position ?? this.camera.position,
+      this.camera.position,
+      this.lookDirection,
+    );
+    const streaming = runtime?.streaming ?? {
+      chunks: 1,
+      views: 0,
+      physicsChunks: this.physics ? 1 : 0,
+      rooms: this.plan.rooms.length,
+      lights: this.plan.lights.length,
+      lightSources: this.plan.lights.filter((light) => !light.dead).length,
+      colliders: this.plan.colliders.length,
+      props: this.plan.propPlacements?.length ?? 0,
+      pendingChunks: 0,
+      preparedChunks: 0,
+      verticalPrefetch: 0,
+      priorityVerticalPrefetch: 0,
+      workerMode: 'main-thread' as const,
+      workerInFlight: null,
+      pendingStory: null,
+      recoveryChunk: null,
+    };
+    const world = runtime?.world ?? {
+      room: 'threshold' as const,
+      chunkKey: null,
+      chunk: null,
+      centerChunkKey: '0:0:0' as const,
+      localPosition: { ...player.position },
+      planSeed: this.plan.seed,
+      planVersion: this.plan.version,
+      biome: null,
+      visualBiome: this.plan.visualBiome ?? null,
+      featureKinds: [...new Set(this.plan.features.map((feature) => feature.kind))],
+      featureIds: this.plan.features.map((feature) => feature.id),
+      darkness: this.darkness,
+    };
+    world.darkness = this.darkness;
+    this.renderer.getDrawingBufferSize(this.drawingBufferSize);
+    const safeDeviceRatio = Math.max(0.01, window.devicePixelRatio || 1);
+    const memory = performance as Performance & {
+      memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number };
+    };
+    const bytesPerMegabyte = 1024 * 1024;
+    const snapshot: DiagnosticsSnapshot = {
       ready,
+      updatedAt: Date.now(),
+      session: {
+        title: 'Backrooms: Random story',
+        seed: this.seed,
+        originFingerprint: this.originFingerprint,
+        generatorVersion: this.plan.version,
+        originFeatures: this.plan.features.map((feature) => feature.kind),
+      },
+      player,
+      world,
+      target: runtime?.target ?? null,
+      performance: {
+        fps: this.fps,
+        frameTimeMs: this.frameTimeMs,
+        frame: this.frameCounter,
+        drawCalls: this.renderer.info.render.calls,
+        triangles: this.renderer.info.render.triangles,
+        geometries: this.renderer.info.memory.geometries,
+        textures: this.renderer.info.memory.textures,
+        programs: this.renderer.info.programs?.length ?? 0,
+        jsHeapUsedMb: memory.memory?.usedJSHeapSize
+          ? memory.memory.usedJSHeapSize / bytesPerMegabyte
+          : null,
+        jsHeapLimitMb: memory.memory?.jsHeapSizeLimit
+          ? memory.memory.jsHeapSizeLimit / bytesPerMegabyte
+          : null,
+      },
+      quality: {
+        preset: this.settings.renderQuality,
+        pixelRatio: this.pixelRatio,
+        devicePixelRatio: safeDeviceRatio,
+        renderScalePercent: this.pixelRatio / safeDeviceRatio * 100,
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        renderBuffer: {
+          width: this.drawingBufferSize.x,
+          height: this.drawingBufferSize.y,
+        },
+        antialias: this.renderer.getContextAttributes().antialias ?? false,
+        shadows: this.renderer.shadowMap.enabled,
+        lightingMode: this.worldStream?.getLightingMode() ?? 'modern',
+      },
+      streaming,
+      system: this.systemDiagnostics,
       seed: this.seed,
-      fingerprint: fingerprintWorld(this.plan),
-      rooms: stream?.rooms ?? this.plan.rooms.length,
-      lights: stream?.lights ?? this.plan.lights.length,
-      props: stream?.props ?? this.plan.propPlacements?.length ?? 0,
+      fingerprint: this.originFingerprint,
+      rooms: streaming.rooms,
+      lights: streaming.lights,
+      props: streaming.props,
       features: this.plan.features.map((feature) => feature.kind),
-      player: { x: player.x, y: player.y, z: player.z },
       fps: this.fps,
       pixelRatio: this.pixelRatio,
       drawCalls: this.renderer.info.render.calls,
       triangles: this.renderer.info.render.triangles,
-      chunks: stream?.chunks ?? 1,
-      pendingChunks: stream?.pendingChunks ?? 0,
-      noclip: this.player?.isNoclipEnabled ?? false,
+      chunks: streaming.chunks,
+      pendingChunks: streaming.pendingChunks,
+      noclip: player.noclip,
       darkness: this.darkness,
     };
+    window.__BACKROOMS__ = snapshot;
+    if (this.diagnosticsVisible) this.ui.updateDiagnostics(snapshot);
   }
 
   dispose(): void {
+    if (this.disposed) return;
     this.disposed = true;
     this.renderer.setAnimationLoop(null);
     window.removeEventListener('resize', this.resize);
@@ -615,6 +944,11 @@ export class Game {
     this.postFX?.dispose();
     this.materials?.dispose();
     this.audio.dispose();
+    this.ui.dispose();
     this.renderer.dispose();
+    this.renderer.forceContextLoss();
+    this.renderer.domElement.remove();
+    this.root.remove();
+    if (window.__BACKROOMS__) delete window.__BACKROOMS__;
   }
 }

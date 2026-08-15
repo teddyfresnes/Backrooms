@@ -66,18 +66,11 @@ const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
 const choosePitStoryDepth = (rng: SeededRandom): number => rng.weighted([
-  { value: 1, weight: 0.31 },
-  { value: 2, weight: 0.18 },
-  { value: 3, weight: 0.13 },
-  { value: 4, weight: 0.1 },
-  { value: 5, weight: 0.075 },
-  { value: 6, weight: 0.06 },
-  { value: 7, weight: 0.045 },
-  { value: 8, weight: 0.035 },
-  { value: 9, weight: 0.025 },
-  { value: 10, weight: 0.02 },
-  { value: 11, weight: 0.012 },
-  { value: 12, weight: 0.008 },
+  { value: 1, weight: 0.39 },
+  { value: 2, weight: 0.24 },
+  { value: 3, weight: 0.17 },
+  { value: 4, weight: 0.12 },
+  { value: 5, weight: 0.08 },
 ]);
 
 export const worldHasPit = (seed: string): boolean => {
@@ -88,10 +81,10 @@ export const worldHasPit = (seed: string): boolean => {
 export const worldMaxPitStories = (seed: string): number => {
   if (!worldHasPit(seed)) return 0;
   const rootRng = new SeededRandom(`${seed}:v${GENERATOR_VERSION}`);
-  let stories = choosePitStoryDepth(rootRng.fork('feature:grid-pit:depth'));
   const voidRng = rootRng.fork('feature:grid-pit:void');
-  if (voidRng.chance(0.055)) stories = Math.max(stories, voidRng.int(8, MAX_PIT_STORIES));
-  return stories;
+  return voidRng.chance(0.055)
+    ? MAX_PIT_STORIES
+    : choosePitStoryDepth(rootRng.fork('feature:grid-pit:depth'));
 };
 
 const worldMayHavePassageVoid = (seed: string): boolean => {
@@ -711,7 +704,6 @@ const buildGridPit = (
     preferredGapZ: number,
     maximumColumns: number,
     maximumRows: number,
-    skipChance: number,
   ): void => {
     holeWidth = Math.min(holeWidth, Math.max(0.9, (targetWidth - 0.45) * 0.5));
     holeDepth = Math.min(holeDepth, Math.max(0.9, (targetDepth - 0.45) * 0.5));
@@ -733,8 +725,6 @@ const buildGridPit = (
     const originZ = center.z - footprintDepth * 0.5;
     for (let xIndex = 0; xIndex < columns; xIndex += 1) {
       for (let zIndex = 0; zIndex < rows; zIndex += 1) {
-        const interior = xIndex > 0 && xIndex < columns - 1 && zIndex > 0 && zIndex < rows - 1;
-        if (interior && rng.chance(skipChance)) continue;
         const minX = originX + xIndex * (holeWidth + gapX);
         const minZ = originZ + zIndex * (holeDepth + gapZ);
         holes.push({
@@ -768,7 +758,6 @@ const buildGridPit = (
       rng.float(0.45, 4.8),
       monumental ? 16 : 10,
       monumental ? 16 : 10,
-      0.04,
     );
   } else if (pattern === 'large-grid') {
     addRegularGrid(
@@ -778,7 +767,6 @@ const buildGridPit = (
       rng.float(0.7, 5.8),
       monumental ? 11 : 7,
       monumental ? 11 : 7,
-      0.07,
     );
   } else if (pattern === 'dense-grid') {
     addRegularGrid(
@@ -788,32 +776,22 @@ const buildGridPit = (
       rng.float(0.38, 1.2),
       monumental ? 16 : 9,
       monumental ? 16 : 9,
-      0.025,
     );
   } else if (pattern === 'mixed-grid') {
-    const pitchX = targetWidth / 3;
-    const pitchZ = targetDepth / 3;
-    const sizeX = pitchX * rng.float(0.34, 0.55);
-    const sizeZ = pitchZ * rng.float(0.34, 0.55);
-    footprintWidth = targetWidth;
-    footprintDepth = targetDepth;
-    const originX = center.x - targetWidth * 0.5;
-    const originZ = center.z - targetDepth * 0.5;
-    holes.push({
-      minX: originX,
-      maxX: originX + pitchX + sizeX,
-      minZ: originZ,
-      maxZ: originZ + pitchZ + sizeZ,
-      depth: dropDepth,
-    });
-    for (const [xIndex, zIndex] of [[2, 0], [2, 1], [0, 2], [1, 2], [2, 2]] as const) {
-      const minX = originX + xIndex * pitchX;
-      const minZ = originZ + zIndex * pitchZ;
-      holes.push({ minX, maxX: minX + sizeX, minZ, maxZ: minZ + sizeZ, depth: dropDepth });
-    }
+    // The rare mixed family varies the spacing between rooms, never the cells
+    // inside one room: a complete repeated lattice reads as intentional and
+    // keeps both reflection axes intact.
+    addRegularGrid(
+      rng.float(1.6, 3.8),
+      rng.float(1.6, 3.8),
+      rng.float(1.8, 5.4),
+      rng.float(1.8, 5.4),
+      monumental ? 12 : 7,
+      monumental ? 12 : 7,
+    );
   } else {
-    // An irregular cluster still uses one size family; only the gaps and a few
-    // interior islands break the grid rhythm.
+    // Large clusters keep one size family and a complete lattice. Scale and
+    // spacing can change between rooms without creating visual noise locally.
     addRegularGrid(
       rng.float(3.5, 7.8),
       rng.float(3.5, 7.8),
@@ -821,46 +799,18 @@ const buildGridPit = (
       rng.float(1.4, 7.2),
       monumental ? 10 : 6,
       monumental ? 10 : 6,
-      0.22,
     );
   }
 
-  // A large grid no longer repeats one twelve-storey shaft dozens of times.
-  // One aperture carries the exceptional depth while its neighbours terminate
-  // on varied, readable landings over the next few levels.
-  const depthAnchor = holes.length > 0 ? rng.pick(holes) : undefined;
-  const secondaryStories = new Map<PitHole, number>();
-  if (dropStories > 1) {
-    const secondaryCandidates = rng.shuffle(holes.filter((hole) => hole !== depthAnchor));
-    const maximumSecondaryCount = Math.min(
-      8,
-      Math.max(1, Math.floor(Math.sqrt(secondaryCandidates.length))),
-    );
-    const secondaryCount = rng.int(0, maximumSecondaryCount);
-    for (const hole of secondaryCandidates.slice(0, secondaryCount)) {
-      secondaryStories.set(hole, rng.weighted([
-        { value: 2, weight: 0.7 },
-        { value: Math.min(3, dropStories), weight: 0.23 },
-        { value: Math.min(4, dropStories), weight: 0.07 },
-      ]));
-    }
-  }
+  // Every aperture in a room belongs to one vertical destination. Mixing a
+  // shallow landing, a deep shaft and an abyss in the same repeated pattern
+  // breaks both its visual rhythm and its streaming contract.
+  const holeKind = deepVoidRng ? 'void' as const : 'drop' as const;
+  const stories = deepVoidRng ? MAX_PIT_STORIES : dropStories;
   for (const hole of holes) {
-    const stories = hole === depthAnchor
-      ? dropStories
-      : secondaryStories.get(hole) ?? 1;
-    hole.kind = 'drop';
+    hole.kind = holeKind;
     hole.stories = stories;
     hole.depth = stories * dropDepth;
-  }
-  if (deepVoidRng) {
-    const abyss = depthAnchor ??
-      [...holes].sort((a, b) => rectWidth(b) * rectDepth(b) - rectWidth(a) * rectDepth(a))[0];
-    if (abyss) {
-      abyss.kind = 'void';
-      abyss.stories = deepVoidRng.int(8, MAX_PIT_STORIES);
-      abyss.depth = abyss.stories * dropDepth;
-    }
   }
 
   const safeWidth = rectWidth(room.bounds) - 2.3;
@@ -1454,11 +1404,10 @@ const addCeilingVariations = (
         ? referenceWalls.reduce((sum, wall) => sum + wall.thickness, 0) / referenceWalls.length
         : WALL_THICKNESS;
       const supported = supportingWalls.length > 0;
-      // A true wall continuation must meet its lower wall exactly or it leaves
-      // a dark slit. A portal lintel is different: its wallpaper underside
-      // crosses the edge of the low ceiling, so keeping it slightly above that
-      // plane prevents the two textures from blinking without exposing a gap.
-      const shellBottom = supported ? WALL_HEIGHT : WALL_HEIGHT + 0.012;
+      // Both shell variants must meet the office ceiling exactly. The renderer
+      // removes a portal lintel's wallpaper bottom cap and replaces it with a
+      // disjoint ceiling-material soffit, so no coplanar faces remain here.
+      const shellBottom = world.wallHeight;
       addWall(plan, rng.fork(`upper-shell:${shellIndex}`), {
         roomId: owner.roomId,
         x: owner.orientation === 'x' ? midpoint : owner.fixed,
@@ -3214,24 +3163,24 @@ const addSqueezeViews = (
       for (const [side, collider] of [
         ['north', {
           x: rectCenter(hole).x,
-          z: hole.minZ,
+          z: hole.minZ - shaftThickness * 0.5,
           halfX: rectWidth(hole) * 0.5 + shaftThickness,
           halfZ: shaftThickness * 0.5,
         }],
         ['south', {
           x: rectCenter(hole).x,
-          z: hole.maxZ,
+          z: hole.maxZ + shaftThickness * 0.5,
           halfX: rectWidth(hole) * 0.5 + shaftThickness,
           halfZ: shaftThickness * 0.5,
         }],
         ['west', {
-          x: hole.minX,
+          x: hole.minX - shaftThickness * 0.5,
           z: rectCenter(hole).z,
           halfX: shaftThickness * 0.5,
           halfZ: rectDepth(hole) * 0.5 + shaftThickness,
         }],
         ['east', {
-          x: hole.maxX,
+          x: hole.maxX + shaftThickness * 0.5,
           z: rectCenter(hole).z,
           halfX: shaftThickness * 0.5,
           halfZ: rectDepth(hole) * 0.5 + shaftThickness,
@@ -3275,24 +3224,24 @@ const addSqueezeViews = (
         for (const [side, collider] of [
           ['north', {
             x: rectCenter(previewBounds).x,
-            z: previewBounds.minZ,
+            z: previewBounds.minZ - shaftThickness * 0.5,
             halfX: rectWidth(previewBounds) * 0.5 + shaftThickness,
             halfZ: shaftThickness * 0.5,
           }],
           ['south', {
             x: rectCenter(previewBounds).x,
-            z: previewBounds.maxZ,
+            z: previewBounds.maxZ + shaftThickness * 0.5,
             halfX: rectWidth(previewBounds) * 0.5 + shaftThickness,
             halfZ: shaftThickness * 0.5,
           }],
           ['west', {
-            x: previewBounds.minX,
+            x: previewBounds.minX - shaftThickness * 0.5,
             z: rectCenter(previewBounds).z,
             halfX: shaftThickness * 0.5,
             halfZ: rectDepth(previewBounds) * 0.5 + shaftThickness,
           }],
           ['east', {
-            x: previewBounds.maxX,
+            x: previewBounds.maxX + shaftThickness * 0.5,
             z: rectCenter(previewBounds).z,
             halfX: shaftThickness * 0.5,
             halfZ: rectDepth(previewBounds) * 0.5 + shaftThickness,
@@ -3851,24 +3800,24 @@ const addPassageHoleColliders = (
   for (const [side, collider] of [
     ['north', {
       x: rectCenter(hole).x,
-      z: hole.minZ,
+      z: hole.minZ - shaftThickness * 0.5,
       halfX: rectWidth(hole) * 0.5 + shaftThickness,
       halfZ: shaftThickness * 0.5,
     }],
     ['south', {
       x: rectCenter(hole).x,
-      z: hole.maxZ,
+      z: hole.maxZ + shaftThickness * 0.5,
       halfX: rectWidth(hole) * 0.5 + shaftThickness,
       halfZ: shaftThickness * 0.5,
     }],
     ['west', {
-      x: hole.minX,
+      x: hole.minX - shaftThickness * 0.5,
       z: rectCenter(hole).z,
       halfX: shaftThickness * 0.5,
       halfZ: rectDepth(hole) * 0.5 + shaftThickness,
     }],
     ['east', {
-      x: hole.maxX,
+      x: hole.maxX + shaftThickness * 0.5,
       z: rectCenter(hole).z,
       halfX: shaftThickness * 0.5,
       halfZ: rectDepth(hole) * 0.5 + shaftThickness,
@@ -3911,24 +3860,24 @@ const addPassageHoleColliders = (
   for (const [side, collider] of [
     ['north', {
       x: rectCenter(previewBounds).x,
-      z: previewBounds.minZ,
+      z: previewBounds.minZ - shaftThickness * 0.5,
       halfX: rectWidth(previewBounds) * 0.5 + shaftThickness,
       halfZ: shaftThickness * 0.5,
     }],
     ['south', {
       x: rectCenter(previewBounds).x,
-      z: previewBounds.maxZ,
+      z: previewBounds.maxZ + shaftThickness * 0.5,
       halfX: rectWidth(previewBounds) * 0.5 + shaftThickness,
       halfZ: shaftThickness * 0.5,
     }],
     ['west', {
-      x: previewBounds.minX,
+      x: previewBounds.minX - shaftThickness * 0.5,
       z: rectCenter(previewBounds).z,
       halfX: shaftThickness * 0.5,
       halfZ: rectDepth(previewBounds) * 0.5 + shaftThickness,
     }],
     ['east', {
-      x: previewBounds.maxX,
+      x: previewBounds.maxX + shaftThickness * 0.5,
       z: rectCenter(previewBounds).z,
       halfX: shaftThickness * 0.5,
       halfZ: rectDepth(previewBounds) * 0.5 + shaftThickness,
@@ -3961,6 +3910,7 @@ const planFlushWallBreach = (
   rng: SeededRandom,
   alongCenter: number,
   apertureWidth: number,
+  forceHole: boolean,
   forceVoid: boolean,
 ): FlushWallBreachPlan | undefined => {
   const source = candidate.wall;
@@ -4004,7 +3954,7 @@ const planFlushWallBreach = (
   if (negativeTurnSpace >= minimumTurn && positiveTurnSpace >= minimumTurn) {
     layoutOptions.push({ value: 't-junction', weight: 0.16 });
   }
-  const layout = forceVoid ? 'dead-end' : rng.weighted(layoutOptions);
+  const layout = forceHole ? 'dead-end' : rng.weighted(layoutOptions);
   const minimumDepth = Math.max(5.2, apertureWidth * 2.75);
   const depth = quantize(
     rng.float(minimumDepth, Math.max(minimumDepth, Math.min(11.5, availableDepth - 0.62))),
@@ -4086,7 +4036,7 @@ const planFlushWallBreach = (
   }
 
   let hole: PassageHole | undefined;
-  if (layout === 'dead-end' && (forceVoid || rng.chance(0.66))) {
+  if (layout === 'dead-end' && (forceHole || rng.chance(0.66))) {
     const holeLength = quantize(rng.float(1.25, Math.min(2.45, depth * 0.34)), 0.05);
     const kind = forceVoid ? 'void' as const : 'drop' as const;
     const stories = kind === 'void' ? MAX_PIT_STORIES : 1;
@@ -4113,13 +4063,20 @@ const carveWallBreach = (
   const breachProfile = secretRoom || (!forceVoid && !rng.chance(0.62))
     ? 'projecting' as const
     : 'flush' as const;
+  const structuralMaximumWidth = candidate.max - candidate.min - 1.35;
+  const wideAperture =
+    breachProfile === 'flush' &&
+    structuralMaximumWidth >= 2.15 &&
+    rng.fork('aperture:wide').chance(0.34);
   const maximumWidth = Math.min(
-    breachProfile === 'flush' ? 1.95 : 1.42,
-    candidate.max - candidate.min - 1.35,
+    breachProfile === 'flush' ? wideAperture ? 3.2 : 1.95 : 1.42,
+    structuralMaximumWidth,
   );
   if (maximumWidth < 1.02) return false;
   const apertureWidth = quantize(rng.float(
-    breachProfile === 'flush' ? Math.min(1.2, maximumWidth) : 1.02,
+    breachProfile === 'flush'
+      ? Math.min(wideAperture ? 2.15 : 1.2, maximumWidth)
+      : 1.02,
     maximumWidth,
   ), 0.01);
   const centerMin = candidate.min + apertureWidth * 0.5 + 0.62;
@@ -4145,8 +4102,16 @@ const carveWallBreach = (
   const featureId = `wall-breach-${world.features.filter(
     (feature) => feature.kind === 'squeeze-view' && feature.passageStyle === 'wall-breach',
   ).length}`;
+  const forceHole = forceVoid || (wideAperture && rng.fork('wide-hole').chance(0.48));
   const flushPlan = breachProfile === 'flush'
-    ? planFlushWallBreach(candidate, rng.fork('flush-layout'), alongCenter, apertureWidth, forceVoid)
+    ? planFlushWallBreach(
+        candidate,
+        rng.fork('flush-layout'),
+        alongCenter,
+        apertureWidth,
+        forceHole,
+        forceVoid,
+      )
     : undefined;
   if (breachProfile === 'flush' && !flushPlan) return false;
   if (flushPlan && plan.walls.some((wall) => {
@@ -4189,7 +4154,11 @@ const carveWallBreach = (
   fragment(openingMax, sourceMax, 'right-jamb');
 
   const clearanceHeight = quantize(
-    breachProfile === 'flush' ? rng.float(1.58, 2.12) : rng.float(1.36, 1.47),
+    breachProfile === 'flush'
+      ? flushPlan?.hole
+        ? rng.float(1.36, 1.49)
+        : rng.float(1.58, 2.12)
+      : rng.float(1.36, 1.47),
     0.01,
   );
   addWall(plan, rng.fork('lintel'), {
@@ -4675,26 +4644,26 @@ const addLowerLevel = (world: WorldPlan, feature: GridPitFeature, rootRng: Seede
     world.colliders.push(
       {
         id: `shaft-${holeIndex}-north`,
-        center: { x: holeCenter.x, y: wallY, z: hole.minZ },
-        halfExtents: { x: rectWidth(hole) * 0.5, y: shaftHeight * 0.5, z: side },
+        center: { x: holeCenter.x, y: wallY, z: hole.minZ - side },
+        halfExtents: { x: rectWidth(hole) * 0.5 + side * 2, y: shaftHeight * 0.5, z: side },
         kind: 'wall',
       },
       {
         id: `shaft-${holeIndex}-south`,
-        center: { x: holeCenter.x, y: wallY, z: hole.maxZ },
-        halfExtents: { x: rectWidth(hole) * 0.5, y: shaftHeight * 0.5, z: side },
+        center: { x: holeCenter.x, y: wallY, z: hole.maxZ + side },
+        halfExtents: { x: rectWidth(hole) * 0.5 + side * 2, y: shaftHeight * 0.5, z: side },
         kind: 'wall',
       },
       {
         id: `shaft-${holeIndex}-west`,
-        center: { x: hole.minX, y: wallY, z: holeCenter.z },
-        halfExtents: { x: side, y: shaftHeight * 0.5, z: rectDepth(hole) * 0.5 },
+        center: { x: hole.minX - side, y: wallY, z: holeCenter.z },
+        halfExtents: { x: side, y: shaftHeight * 0.5, z: rectDepth(hole) * 0.5 + side * 2 },
         kind: 'wall',
       },
       {
         id: `shaft-${holeIndex}-east`,
-        center: { x: hole.maxX, y: wallY, z: holeCenter.z },
-        halfExtents: { x: side, y: shaftHeight * 0.5, z: rectDepth(hole) * 0.5 },
+        center: { x: hole.maxX + side, y: wallY, z: holeCenter.z },
+        halfExtents: { x: side, y: shaftHeight * 0.5, z: rectDepth(hole) * 0.5 + side * 2 },
         kind: 'wall',
       },
     );
@@ -4707,26 +4676,26 @@ const addLowerLevel = (world: WorldPlan, feature: GridPitFeature, rootRng: Seede
       world.colliders.push(
         {
           id: `abyss-${holeIndex}-north`,
-          center: { x: holeCenter.x, y: abyssY, z: hole.minZ },
-          halfExtents: { x: rectWidth(hole) * 0.5, y: abyssHeight * 0.5, z: side },
+          center: { x: holeCenter.x, y: abyssY, z: hole.minZ - side },
+          halfExtents: { x: rectWidth(hole) * 0.5 + side * 2, y: abyssHeight * 0.5, z: side },
           kind: 'wall',
         },
         {
           id: `abyss-${holeIndex}-south`,
-          center: { x: holeCenter.x, y: abyssY, z: hole.maxZ },
-          halfExtents: { x: rectWidth(hole) * 0.5, y: abyssHeight * 0.5, z: side },
+          center: { x: holeCenter.x, y: abyssY, z: hole.maxZ + side },
+          halfExtents: { x: rectWidth(hole) * 0.5 + side * 2, y: abyssHeight * 0.5, z: side },
           kind: 'wall',
         },
         {
           id: `abyss-${holeIndex}-west`,
-          center: { x: hole.minX, y: abyssY, z: holeCenter.z },
-          halfExtents: { x: side, y: abyssHeight * 0.5, z: rectDepth(hole) * 0.5 },
+          center: { x: hole.minX - side, y: abyssY, z: holeCenter.z },
+          halfExtents: { x: side, y: abyssHeight * 0.5, z: rectDepth(hole) * 0.5 + side * 2 },
           kind: 'wall',
         },
         {
           id: `abyss-${holeIndex}-east`,
-          center: { x: hole.maxX, y: abyssY, z: holeCenter.z },
-          halfExtents: { x: side, y: abyssHeight * 0.5, z: rectDepth(hole) * 0.5 },
+          center: { x: hole.maxX + side, y: abyssY, z: holeCenter.z },
+          halfExtents: { x: side, y: abyssHeight * 0.5, z: rectDepth(hole) * 0.5 + side * 2 },
           kind: 'wall',
         },
       );
@@ -5051,7 +5020,7 @@ export const addStepColliders = (world: WorldPlan, stairs: StairSocketFeature): 
       kind: 'step',
     });
   }
-  for (const [index, wall] of getStairCageWalls(stairs).entries()) {
+  for (const [index, wall] of getStairCageWalls(stairs, world.wallHeight).entries()) {
     const center = rectCenter(wall.bounds);
     world.colliders.push({
       id: `${stairs.id}-cage-wall-${index}`,

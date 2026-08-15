@@ -118,12 +118,14 @@ export const PROP_ASSETS: readonly PropAssetDefinition[] = [
   polyHaven('sofa_01', 'Sofa_01_1k.gltf', 'seating', { x: 2.12, y: 0.9, z: 0.98 }, true, 0.34, { x: 0.88, y: 0.78, z: 0.76 }),
   polyHaven('sofa_02', 'sofa_02_1k.gltf', 'seating', { x: 2.18, y: 0.86, z: 1.02 }, true, 0.3, { x: 0.88, y: 0.76, z: 0.76 }),
 
-  polyHaven('metal_office_desk', 'metal_office_desk_1k.gltf', 'table', { x: 1.78, y: 0.8, z: 0.82 }, true, 1.15, TABLE_COLLIDER),
-  polyHaven('schooldesk_01', 'SchoolDesk_01_1k.gltf', 'table', { x: 0.72, y: 0.8, z: 0.62 }, true, 0.65, TABLE_COLLIDER),
-  polyHaven('side_table_01', 'side_table_01_1k.gltf', 'table', { x: 0.62, y: 0.6, z: 0.62 }, true, 0.75, TABLE_COLLIDER),
-  polyHaven('side_table_tall_01', 'side_table_tall_01_1k.gltf', 'table', { x: 0.54, y: 0.72, z: 0.54 }, true, 0.5, TABLE_COLLIDER),
-  polyHaven('woodentable_01', 'WoodenTable_01_1k.gltf', 'table', { x: 1.65, y: 0.78, z: 0.92 }, true, 0.78, TABLE_COLLIDER),
-  polyHaven('woodentable_02', 'WoodenTable_02_1k.gltf', 'table', { x: 1.55, y: 0.78, z: 0.92 }, true, 0.7, TABLE_COLLIDER),
+  // These envelopes preserve each source model's aspect ratio. Scene props use
+  // their exact rendered height and footprint to stay on the tabletop.
+  polyHaven('metal_office_desk', 'metal_office_desk_1k.gltf', 'table', { x: 1.73, y: 0.68, z: 0.82 }, true, 1.15, TABLE_COLLIDER),
+  polyHaven('schooldesk_01', 'SchoolDesk_01_1k.gltf', 'table', { x: 0.645, y: 0.8, z: 0.495 }, true, 0.65, TABLE_COLLIDER),
+  polyHaven('side_table_01', 'side_table_01_1k.gltf', 'table', { x: 0.6, y: 0.6, z: 0.49 }, true, 0.75, TABLE_COLLIDER),
+  polyHaven('side_table_tall_01', 'side_table_tall_01_1k.gltf', 'table', { x: 0.363, y: 0.72, z: 0.363 }, true, 0.5, TABLE_COLLIDER),
+  polyHaven('woodentable_01', 'WoodenTable_01_1k.gltf', 'table', { x: 1.65, y: 0.503, z: 0.603 }, true, 0.78, TABLE_COLLIDER),
+  polyHaven('woodentable_02', 'WoodenTable_02_1k.gltf', 'table', { x: 0.562, y: 0.78, z: 0.562 }, true, 0.7, TABLE_COLLIDER),
 
   polyHaven('drawer_cabinet', 'drawer_cabinet_1k.gltf', 'storage', { x: 0.82, y: 1.18, z: 0.52 }, true, 0.85, STORAGE_COLLIDER),
   polyHaven('industrial_storage_cart', 'industrial_storage_cart_1k.gltf', 'storage', { x: 1.18, y: 1.72, z: 0.62 }, true, 0.58, STORAGE_COLLIDER),

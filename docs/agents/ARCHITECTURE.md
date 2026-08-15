@@ -8,7 +8,18 @@ localisé, utiliser directement le guide de sous-système indiqué dans
 
 ```text
 src/main.ts
-  └─ Game
+  ├─ StartMenu (aucun runtime 3D chargé)
+  ├─ import dynamique de RussianStairwellGame
+      ├─ StairwellEnvironment + ImportedApartmentEnvironment
+      ├─ PhysicsWorld (plan statique + trimesh de l’appartement)
+      ├─ PlayerController + porte interactive
+      ├─ GameSave (pose, porte et temps de jeu)
+      └─ HallExitInteraction -- E sur la porte du RDC ─┐
+                                                       ↓
+  └─ import dynamique de Game (labyrinthe procédural précédent)
+
+Runtime procédural conservé :
+  Game
       ├─ génère le chunk origine et valide son WorldPlan
       ├─ charge MaterialLibrary et crée PhysicsWorld
       ├─ initialise WorldStream
@@ -19,19 +30,26 @@ src/main.ts
       └─ présente la scène via PostFX à chaque frame
 ```
 
-Le contrat central est `WorldPlan` dans `src/world/types.ts`. La génération ne
-crée que des données. Le rendu et la physique consomment ces données séparément.
+Le runtime russe est la route de lancement par défaut. C’est une scène finie et
+statique : ne pas la faire passer par `WorldStream`, dont les coordonnées de
+chunks et d’étages appartiennent au monde procédural. `src/main.ts` détruit ce
+runtime avant d’instancier `Game` lorsque la porte-portail du hall est activée.
+Le contrat central du labyrinthe reste `WorldPlan` dans `src/world/types.ts` ;
+la génération ne crée que des données et le rendu et la physique les consomment
+séparément.
 
 ## Responsabilités
 
 | Zone | Responsabilité | Points d’entrée |
 |---|---|---|
-| `src/core` | orchestration, boucle, streaming | `Game`, `WorldStream` |
+| `src/core` | lancement, sauvegarde, boucles et streaming | `RussianStairwellGame`, `GameSave`, `Game`, `WorldStream` |
+| `src/stairwell` | scène statique, matériaux et météo russe | `StairwellEnvironment`, `createStairwellPlan` |
+| `src/apartment` | appartement importé et porte persistante | `ImportedApartmentEnvironment`, `ImportedApartmentDoorInteraction` |
 | `src/world` | plan déterministe, topologie, chunks, props | `generateWorld`, `generateInfiniteChunk` |
 | `src/render` | géométrie Three.js, matériaux, lumière, post-FX | `WorldView`, `MaterialLibrary`, `ZonalLighting` |
 | `src/physics` | personnage Rapier et colliders par chunk | `PhysicsWorld` |
 | `src/player` | entrée FPS, déplacement, chute, noclip | `PlayerController` |
-| `src/ui` | chargement, HUD, console locale | `ExperienceUI` |
+| `src/ui` | démarrage, menus, réglages persistants, console et diagnostic | `ExperienceUI` |
 | `src/audio` | ambiance et retours de déplacement | `AudioSystem` |
 
 ## Deux espaces de coordonnées
@@ -66,7 +84,11 @@ uniquement le plan sérialisable ; le champ lumineux zonal est créé au montage
 
 ## Propriété et nettoyage
 
-- `Game` possède les grands systèmes et les détruit dans `dispose()`.
+- `RussianStairwellGame` possède sa scène, le joueur, la physique, l’appartement,
+  la porte et l’UI ; il les détruit tous dans `dispose()` avant de recréer une
+  session.
+- `Game` possède les grands systèmes du runtime procédural et les détruit dans
+  `dispose()`.
 - `WorldStream` possède les `WorldView` montés et leurs entrées physiques.
 - `WorldView` possède sa géométrie, ses matériaux zonaux clonés, textures
   générées et couche de props.

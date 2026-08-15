@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import { describeViewDirection } from '../core/Diagnostics';
+import type { PlayerDiagnostics } from '../core/Diagnostics';
 import { InputManager } from '../input/InputManager';
+import type { ControlBindings } from '../input/ControlBindings';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
-import type { DoorOpenMode, Vec3Data } from '../world/types';
+import type { DoorOpenMode, QuaternionData, Vec3Data } from '../world/types';
 
 export interface PlayerCallbacks {
   onLockChange(locked: boolean): void;
@@ -30,6 +33,7 @@ const NOCLIP_SPEED = 8.5;
 const NOCLIP_SPRINT_SPEED = 22;
 const STANDING_JUMP_SPEED = 5.45;
 const CROUCHED_JUMP_SPEED = 4.25;
+const MIN_LOOK_QUATERNION_LENGTH = 1e-8;
 const SLOW_INTERACTION_HOLD = 1;
 
 export class PlayerController {
@@ -48,6 +52,7 @@ export class PlayerController {
   private readonly lastSafePosition = new THREE.Vector3();
   private readonly rollQuaternion = new THREE.Quaternion();
   private readonly pointerDocument: Document;
+  private readonly pointerElement: HTMLElement;
   private grounded = true;
   private verticalVelocity = -0.5;
   private gaitPhase = 0;
@@ -70,7 +75,10 @@ export class PlayerController {
   private noclipEnabled = false;
   private interactionHoldElapsed?: number;
   private interactionHoldTriggered = false;
-  private readonly baseFov: number;
+  private baseFov: number;
+  private cameraMotionEnabled = true;
+  private readonly onPointerLock = (): void => this.callbacks.onLockChange(true);
+  private readonly onPointerUnlock = (): void => this.callbacks.onLockChange(false);
 
   constructor(
     private readonly camera: THREE.PerspectiveCamera,
@@ -86,13 +94,14 @@ export class PlayerController {
     this.controls = new PointerLockControls(this.lookCamera, domElement);
     this.baseFov = camera.fov;
     this.pointerDocument = domElement.ownerDocument;
+    this.pointerElement = domElement;
     this.physics.getPosition(this.position);
     this.previousPosition.copy(this.position);
     this.renderedPosition.copy(this.position);
     this.anchorSafePosition(this.position);
     this.renderUpdate(0, 1);
-    this.controls.addEventListener('lock', () => this.callbacks.onLockChange(true));
-    this.controls.addEventListener('unlock', () => this.callbacks.onLockChange(false));
+    this.controls.addEventListener('lock', this.onPointerLock);
+    this.controls.addEventListener('unlock', this.onPointerUnlock);
     this.pointerDocument.addEventListener('mousemove', this.onMouseMove);
   }
 
@@ -112,6 +121,28 @@ export class PlayerController {
     this.controls.lock();
   }
 
+  setFieldOfView(fieldOfView: number): void {
+    this.baseFov = THREE.MathUtils.clamp(fieldOfView, 60, 100);
+    if (!this.sprinting && !this.crouching) {
+      this.camera.fov = this.baseFov;
+      this.camera.updateProjectionMatrix();
+    }
+  }
+
+  setLookSensitivity(sensitivity: number): void {
+    this.controls.pointerSpeed = THREE.MathUtils.clamp(sensitivity, 0.3, 2);
+  }
+
+  setCameraMotionEnabled(enabled: boolean): void {
+    this.cameraMotionEnabled = enabled;
+    if (!enabled) {
+      this.lookRoll = 0;
+      this.lookLift = 0;
+      this.strafeLean = 0;
+      this.landingKick = 0;
+    }
+  }
+
   setInputEnabled(enabled: boolean): void {
     this.input.setEnabled(enabled);
     if (!enabled) {
@@ -120,6 +151,10 @@ export class PlayerController {
       this.sprinting = false;
       this.targetStrafeLean = 0;
     }
+  }
+
+  setControlBindings(bindings: ControlBindings): void {
+    this.input.setBindings(bindings);
   }
 
   setNoclipEnabled(enabled: boolean): boolean {
@@ -151,6 +186,50 @@ export class PlayerController {
 
   getViewDirection(target = new THREE.Vector3()): THREE.Vector3 {
     return this.controls.getDirection(target);
+  }
+
+  getLookQuaternion(target = new THREE.Quaternion()): THREE.Quaternion {
+    return target.copy(this.lookCamera.quaternion);
+  }
+
+  setLookQuaternion(quaternion: Readonly<QuaternionData>): boolean {
+    const { x, y, z, w } = quaternion;
+    if (![x, y, z, w].every(Number.isFinite)) return false;
+
+    const length = Math.hypot(x, y, z, w);
+    if (!Number.isFinite(length) || length < MIN_LOOK_QUATERNION_LENGTH) return false;
+
+    this.lookCamera.quaternion.set(x / length, y / length, z / length, w / length);
+    this.traversal?.lookQuaternion.copy(this.lookCamera.quaternion);
+    this.lookRoll = 0;
+    this.lookLift = 0;
+    this.targetStrafeLean = 0;
+    this.strafeLean = 0;
+    this.rollQuaternion.identity();
+    this.renderUpdate(0, 1);
+    return true;
+  }
+
+  getDebugState(): PlayerDiagnostics {
+    const view = describeViewDirection(this.getViewDirection());
+    const verticalSpeed = this.noclipEnabled ? 0 : this.verticalVelocity;
+    return {
+      x: this.position.x,
+      y: this.position.y,
+      z: this.position.z,
+      position: { x: this.position.x, y: this.position.y, z: this.position.z },
+      velocity: { x: this.velocity.x, y: verticalSpeed, z: this.velocity.z },
+      horizontalSpeed: Math.hypot(this.velocity.x, this.velocity.z),
+      verticalSpeed,
+      grounded: this.grounded,
+      moving: this.moving,
+      sprinting: this.sprinting,
+      crouching: this.crouching,
+      noclip: this.noclipEnabled,
+      traversing: this.isTraversing,
+      pointerLocked: this.isLocked,
+      view,
+    };
   }
 
   teleport(destination: Vec3Data): void {
@@ -219,13 +298,12 @@ export class PlayerController {
     this.previousTraversalProgress = this.traversalProgress;
 
     if (!this.controls.isLocked) {
-      this.input.consumePress('KeyE');
-      this.input.consumeRelease('KeyE');
+      this.input.consumeActionPress('interact');
+      this.input.consumeActionRelease('interact');
       this.interactionHoldElapsed = undefined;
       this.interactionHoldTriggered = false;
-      this.input.consumePress('Space');
-      this.input.consumePress('ControlLeft');
-      this.input.consumePress('ControlRight');
+      this.input.consumeActionPress('jump');
+      this.input.consumeActionPress('crouch');
       this.velocity.multiplyScalar(0.82);
       this.moving = false;
       this.sprinting = false;
@@ -234,22 +312,21 @@ export class PlayerController {
     }
 
     if (this.noclipEnabled) {
-      this.input.consumePress('KeyE');
-      this.input.consumeRelease('KeyE');
+      this.input.consumeActionPress('interact');
+      this.input.consumeActionRelease('interact');
       this.interactionHoldElapsed = undefined;
       this.interactionHoldTriggered = false;
-      this.input.consumePress('Space');
-      this.input.consumePress('ControlLeft');
-      this.input.consumePress('ControlRight');
+      this.input.consumeActionPress('jump');
+      this.input.consumeActionPress('crouch');
       this.updateNoclip(delta);
       return;
     }
 
-    if (this.input.consumePress('KeyE')) {
+    if (this.input.consumeActionPress('interact')) {
       this.interactionHoldElapsed = 0;
       this.interactionHoldTriggered = false;
     }
-    if (this.interactionHoldElapsed !== undefined && this.input.isPressed('KeyE')) {
+    if (this.interactionHoldElapsed !== undefined && this.input.isActionPressed('interact')) {
       this.interactionHoldElapsed += delta;
       if (
         !this.interactionHoldTriggered &&
@@ -259,7 +336,7 @@ export class PlayerController {
         this.callbacks.onInteract('slow');
       }
     }
-    if (this.input.consumeRelease('KeyE')) {
+    if (this.input.consumeActionRelease('interact')) {
       if (this.interactionHoldElapsed !== undefined && !this.interactionHoldTriggered) {
         this.callbacks.onInteract('fast');
       }
@@ -299,9 +376,7 @@ export class PlayerController {
     }
 
     const axes = this.input.axes;
-    const leftCrouchToggle = this.input.consumePress('ControlLeft');
-    const rightCrouchToggle = this.input.consumePress('ControlRight');
-    const crouchToggle = leftCrouchToggle || rightCrouchToggle;
+    const crouchToggle = this.input.consumeActionPress('crouch');
     if (crouchToggle) this.crouchRequested = !this.crouchRequested;
     this.crouching = this.physics.setCrouched(this.crouchRequested);
     this.controls.getDirection(this.forward);
@@ -325,7 +400,7 @@ export class PlayerController {
       this.velocity.z *= friction;
     }
 
-    const jumpRequested = this.input.consumePress('Space');
+    const jumpRequested = this.input.consumeActionPress('jump');
     if (this.grounded && jumpRequested) {
       this.verticalVelocity = this.crouching ? CROUCHED_JUMP_SPEED : STANDING_JUMP_SPEED;
       this.grounded = false;
@@ -440,7 +515,10 @@ export class PlayerController {
     this.lookRoll *= lookDecay;
     this.lookLift *= lookDecay;
 
-    const bobAmplitude = (this.crouching ? 0.014 : this.sprinting ? 0.043 : 0.027) * this.motionBlend;
+    const cameraMotion = this.cameraMotionEnabled ? 1 : 0;
+    const bobAmplitude = (
+      this.crouching ? 0.014 : this.sprinting ? 0.043 : 0.027
+    ) * this.motionBlend * cameraMotion;
     const verticalBob = (0.48 - Math.abs(Math.cos(gait))) * bobAmplitude;
     const lateralBob = Math.sin(gait) * bobAmplitude * 0.42;
     const forwardBob = Math.cos(gait * 2) * bobAmplitude * 0.09;
@@ -461,20 +539,22 @@ export class PlayerController {
       ? -Math.sin(renderTraversalProgress * Math.PI) * this.traversal.duckDepth
       : 0;
     this.landingKick = THREE.MathUtils.lerp(this.landingKick, 0, 1 - Math.exp(-frameDelta * 11));
-    const eyeOffset = 0.73 - this.crouchBlend * 0.46 + traversalDuck - this.landingKick;
+    const eyeOffset = 0.73 - this.crouchBlend * 0.46 + traversalDuck -
+      this.landingKick * cameraMotion;
     this.camera.position
       .copy(this.renderedPosition)
-      .addScaledVector(this.renderRight, lateralBob - this.lookRoll * 0.42)
+      .addScaledVector(this.renderRight, lateralBob - this.lookRoll * 0.42 * cameraMotion)
       .addScaledVector(this.renderForward, forwardBob);
-    this.camera.position.y += eyeOffset + verticalBob + this.lookLift;
+    this.camera.position.y += eyeOffset + verticalBob + this.lookLift * cameraMotion;
 
     const gaitRoll = -Math.sin(gait) * bobAmplitude * 0.2;
-    const roll = this.lookRoll - this.strafeLean * 0.012 + gaitRoll;
+    const roll = (this.lookRoll - this.strafeLean * 0.012 + gaitRoll) * cameraMotion;
     this.rollQuaternion.setFromAxisAngle(FIXED_Z_AXIS, roll);
     this.camera.quaternion.copy(this.lookCamera.quaternion).multiply(this.rollQuaternion);
 
-    const targetFov =
-      this.baseFov + (this.sprinting ? 4.8 * this.motionBlend : 0) - this.crouchBlend * 0.9;
+    const targetFov = this.baseFov + (
+      (this.sprinting ? 4.8 * this.motionBlend : 0) - this.crouchBlend * 0.9
+    ) * cameraMotion;
     const nextFov = THREE.MathUtils.lerp(
       this.camera.fov,
       targetFov,
@@ -496,7 +576,13 @@ export class PlayerController {
 
   dispose(): void {
     this.pointerDocument.removeEventListener('mousemove', this.onMouseMove);
+    this.controls.removeEventListener('lock', this.onPointerLock);
+    this.controls.removeEventListener('unlock', this.onPointerUnlock);
     this.controls.disconnect();
+    if (
+      this.pointerDocument.pointerLockElement === this.pointerElement
+      && typeof this.pointerDocument.exitPointerLock === 'function'
+    ) this.pointerDocument.exitPointerLock();
     this.input.dispose();
   }
 }

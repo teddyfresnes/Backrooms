@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_PIT_STORIES,
   PIT_PRESENCE_RATE,
   UNLIT_ZONE_PRESENCE_RATE,
   fingerprintWorld,
@@ -368,7 +369,7 @@ describe('Level 0 procedural generator', () => {
     }
   });
 
-  it('varies pit silhouettes across single holes, grids and mixed clusters', () => {
+  it('varies pit scale while keeping every room grid complete and symmetric', () => {
     const pits = pitAuditSeeds
       .map((seed) => hazardWorld(seed).features.find((feature) => feature.kind === 'grid-pit'))
       .filter((feature): feature is GridPitFeature => feature?.kind === 'grid-pit');
@@ -398,9 +399,29 @@ describe('Level 0 procedural generator', () => {
       expect(pit.lowerBounds.maxX).toBeGreaterThanOrEqual(pit.bounds.maxX);
       expect(pit.lowerBounds.minZ).toBeLessThanOrEqual(pit.bounds.minZ);
       expect(pit.lowerBounds.maxZ).toBeGreaterThanOrEqual(pit.bounds.maxZ);
+      const axisX = Math.min(...pit.holes.map((hole) => hole.minX)) +
+        Math.max(...pit.holes.map((hole) => hole.maxX));
+      const axisZ = Math.min(...pit.holes.map((hole) => hole.minZ)) +
+        Math.max(...pit.holes.map((hole) => hole.maxZ));
+      const xSpans = new Set(pit.holes.map((hole) => `${hole.minX}:${hole.maxX}`));
+      const zSpans = new Set(pit.holes.map((hole) => `${hole.minZ}:${hole.maxZ}`));
+      expect(pit.holes).toHaveLength(xSpans.size * zSpans.size);
       for (let left = 0; left < pit.holes.length; left += 1) {
+        const hole = pit.holes[left]!;
+        expect(pit.holes.some((candidate) =>
+          Math.abs(candidate.minX - (axisX - hole.maxX)) <= 0.011 &&
+          Math.abs(candidate.maxX - (axisX - hole.minX)) <= 0.011 &&
+          Math.abs(candidate.minZ - hole.minZ) <= 0.011 &&
+          Math.abs(candidate.maxZ - hole.maxZ) <= 0.011
+        )).toBe(true);
+        expect(pit.holes.some((candidate) =>
+          Math.abs(candidate.minX - hole.minX) <= 0.011 &&
+          Math.abs(candidate.maxX - hole.maxX) <= 0.011 &&
+          Math.abs(candidate.minZ - (axisZ - hole.maxZ)) <= 0.011 &&
+          Math.abs(candidate.maxZ - (axisZ - hole.minZ)) <= 0.011
+        )).toBe(true);
         for (let right = left + 1; right < pit.holes.length; right += 1) {
-          const a = pit.holes[left]!;
+          const a = hole;
           const b = pit.holes[right]!;
           const overlaps = a.minX < b.maxX && a.maxX > b.minX && a.minZ < b.maxZ && a.maxZ > b.minZ;
           expect(overlaps).toBe(false);
@@ -562,8 +583,7 @@ describe('Level 0 procedural generator', () => {
     expect(portalLintels.some((wall) => wall.thickness >= 1)).toBe(true);
     expect(portalLintels.every((wall) =>
       wall.kind === 'wallpaper' &&
-      wall.bottom >= 2.74 &&
-      wall.bottom < 2.76 &&
+      Math.abs(wall.bottom - 2.74) < 0.001 &&
       wall.bottom + wall.height > 3.2
     )).toBe(true);
     expect(worlds.every((world) => world.walls.every((wall) => wall.detail !== 'ceiling-drop'))).toBe(true);
@@ -574,9 +594,7 @@ describe('Level 0 procedural generator', () => {
       );
       expect(shells.every((wall) => wall.kind === 'wallpaper')).toBe(true);
       expect(shells.every((wall) =>
-        wall.detail === 'upper-shell'
-          ? Math.abs(wall.bottom - world.wallHeight) < 0.001
-          : wall.bottom >= world.wallHeight + 0.008 && wall.bottom <= world.wallHeight + 0.02
+        Math.abs(wall.bottom - world.wallHeight) < 0.001
       )).toBe(true);
       for (const zone of world.ceilingZones ?? []) {
         const zoneRooms = zone.roomIds.map((roomId) =>
@@ -646,12 +664,10 @@ describe('Level 0 procedural generator', () => {
     }
   });
 
-  it('keeps size families coherent and makes mixed grids exceptional', () => {
+  it('keeps one coherent hole size family inside every pit room', () => {
     const worlds = pitAuditSeeds.map(hazardWorld);
     const pits = worlds.flatMap(gridPits);
-    const mixed = pits.filter((pit) => pit.pattern === 'mixed-grid');
-    expect(mixed.length / pits.length).toBeLessThan(0.08);
-    for (const pit of pits.filter((candidate) => candidate.pattern !== 'mixed-grid')) {
+    for (const pit of pits) {
       const widths = pit.holes.map(rectWidth);
       const depths = pit.holes.map(rectDepth);
       expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(0.03);
@@ -709,15 +725,43 @@ describe('Level 0 procedural generator', () => {
     expect(dropCount).toBeGreaterThan(0);
   });
 
-  it('keeps multi-storey drops open and covers every depth from one to twelve stories', () => {
-    const observedStories = new Set<number>();
+  it('aligns every pit collider inner face with its opening edge', () => {
+    const world = hazardWorld(pitAuditSeeds[0]!);
+    const pit = gridPits(world)[0]!;
+    expect(pit).toBeDefined();
+    for (const [holeIndex, hole] of pit.holes.entries()) {
+      const collider = (suffix: string): StaticCollider =>
+        world.colliders.find((candidate) => candidate.id === `shaft-${holeIndex}-${suffix}`)!;
+      expect(collider('north').center.z + collider('north').halfExtents.z)
+        .toBeCloseTo(hole.minZ, 6);
+      expect(collider('south').center.z - collider('south').halfExtents.z)
+        .toBeCloseTo(hole.maxZ, 6);
+      expect(collider('west').center.x + collider('west').halfExtents.x)
+        .toBeCloseTo(hole.minX, 6);
+      expect(collider('east').center.x - collider('east').halfExtents.x)
+        .toBeCloseTo(hole.maxX, 6);
+    }
+  });
+
+  it('sends every hole in a room to one shared depth from one to five stories or death', () => {
+    const observedDropStories = new Set<number>();
     let shaftCount = 0;
     for (const seed of pitAuditSeeds) {
       const world = hazardWorld(seed);
       for (const pit of gridPits(world)) {
+        const signatures = new Set(pit.holes.map((hole) =>
+          `${hole.kind ?? 'drop'}:${hole.stories ?? 1}:${hole.depth}`
+        ));
+        expect(signatures.size).toBe(1);
         for (const hole of pit.holes) {
           const stories = hole.stories ?? 1;
-          observedStories.add(stories);
+          if (hole.kind === 'void') {
+            expect(stories).toBe(MAX_PIT_STORIES);
+          } else {
+            expect(stories).toBeGreaterThanOrEqual(1);
+            expect(stories).toBeLessThanOrEqual(5);
+            observedDropStories.add(stories);
+          }
           if (stories <= 1) continue;
           shaftCount += 1;
           const x = (hole.minX + hole.maxX) * 0.5;
@@ -728,13 +772,8 @@ describe('Level 0 procedural generator', () => {
       }
     }
     expect(shaftCount).toBeGreaterThan(0);
-    expect([...observedStories].sort((left, right) => left - right))
-      .toEqual(Array.from({ length: 12 }, (_, index) => index + 1));
-    for (const world of pitAuditSeeds.map(hazardWorld)) {
-      for (const pit of gridPits(world)) {
-        expect(pit.holes.filter((hole) => (hole.stories ?? 1) > 4).length).toBeLessThanOrEqual(1);
-      }
-    }
+    expect([...observedDropStories].sort((left, right) => left - right))
+      .toEqual([1, 2, 3, 4, 5]);
   });
 
   it('keeps every lower-story light clear of every pit opening', () => {
@@ -781,6 +820,12 @@ describe('Level 0 procedural generator', () => {
     expect(secondPass).toEqual(firstPass);
     expect(voidWorldCount).toBeGreaterThan(0);
     expect(voidWorldCount / pitAuditSeeds.length).toBeLessThan(0.15);
+    for (const world of pitAuditSeeds.map(hazardWorld)) {
+      for (const pit of gridPits(world)) {
+        if (!pit.holes.some((hole) => hole.kind === 'void')) continue;
+        expect(pit.holes.every((hole) => hole.kind === 'void')).toBe(true);
+      }
+    }
   }, 20_000);
 
   it('builds projecting and flush wall passages with turns, dead ends, slopes and holes', () => {
@@ -805,15 +850,27 @@ describe('Level 0 procedural generator', () => {
     const flushBreaches = wallBreaches.filter(
       ({ feature }) => feature.breachProfile === 'flush',
     );
+    const wideBreaches = flushBreaches.filter(
+      ({ feature }) => feature.apertureWidth >= 2.15,
+    );
 
     expect(squeezes.length).toBeGreaterThan(0);
     expect(wallBreaches.length).toBeGreaterThan(hazardSeeds.length);
     expect(projectingBreaches.length).toBeGreaterThan(0);
     expect(flushBreaches.length).toBeGreaterThan(0);
+    expect(wideBreaches.length).toBeGreaterThan(0);
+    expect(wideBreaches.length).toBeLessThan(flushBreaches.length);
+    expect(Math.max(...wideBreaches.map(({ feature }) => feature.apertureWidth)))
+      .toBeGreaterThanOrEqual(2.5);
+    expect(wideBreaches.some(({ feature }) => (feature.holes?.length ?? 0) > 0)).toBe(true);
     expect(squeezes.every((feature) => feature.apertureWidth > playerDiameter)).toBe(true);
     expect(squeezes.every((feature) => {
       const clearance = feature.clearanceHeight ?? 10;
-      if (feature.breachProfile === 'flush') return clearance >= 1.58 && clearance <= 2.12;
+      if (feature.breachProfile === 'flush') {
+        return (feature.holes?.length ?? 0) > 0
+          ? clearance >= 1.36 && clearance <= 1.49
+          : clearance >= 1.58 && clearance <= 2.12;
+      }
       if (!feature.hump) return clearance >= 1.36 && clearance <= 1.49;
       const headroom = clearance - feature.hump.elevation;
       return headroom >= 1.15 && headroom <= 1.43;
@@ -867,12 +924,23 @@ describe('Level 0 procedural generator', () => {
           collider.kind === 'wall'
         );
         expect(shaftColliders).toHaveLength(4);
+        const shaftCollider = (suffix: string): StaticCollider =>
+          shaftColliders.find((collider) => collider.id.endsWith(`-${suffix}`))!;
+        expect(shaftCollider('north').center.z + shaftCollider('north').halfExtents.z)
+          .toBeCloseTo(hole.minZ, 6);
+        expect(shaftCollider('south').center.z - shaftCollider('south').halfExtents.z)
+          .toBeCloseTo(hole.maxZ, 6);
+        expect(shaftCollider('west').center.x + shaftCollider('west').halfExtents.x)
+          .toBeCloseTo(hole.minX, 6);
+        expect(shaftCollider('east').center.x - shaftCollider('east').halfExtents.x)
+          .toBeCloseTo(hole.maxX, 6);
         expect(Math.min(...shaftColliders.map((collider) =>
           collider.center.y - collider.halfExtents.y
         ))).toBeLessThanOrEqual(
           hole.kind === 'void' ? -54 : -2.71,
         );
         if (feature.breachProfile === 'flush') {
+          expect(feature.clearanceHeight).toBeLessThanOrEqual(1.49);
           const holeCrossWidth = feature.axis === 'x' ? rectDepth(hole) : rectWidth(hole);
           expect(holeCrossWidth).toBeCloseTo(feature.apertureWidth, 6);
           expect(feature.layout).toBe('dead-end');
@@ -1232,8 +1300,8 @@ describe('Level 0 procedural generator', () => {
         collider.kind === 'wall'
       )).toHaveLength(
         feature.layout === 'straight'
-          ? 2
-          : feature.switchbackJoin === 'divider' ? 4 : 3,
+          ? 4
+          : feature.switchbackJoin === 'divider' ? 5 : 4,
       );
       expect(world.lights.some((light) => lightPanelOverlapsRect(light, feature.bounds)))
         .toBe(false);
@@ -1241,7 +1309,12 @@ describe('Level 0 procedural generator', () => {
         collider.id === `${feature.id}-terminal-wall`
       )).toBe(false);
 
-      const cageWalls = getStairCageWalls(feature);
+      const cageWalls = getStairCageWalls(feature, world.wallHeight);
+      const plenumWalls = cageWalls.filter((wall) =>
+        Math.abs(wall.bottom - world.wallHeight) < 1e-6 &&
+        Math.abs(wall.top - STAIR_STORY_RISE) < 1e-6
+      );
+      expect(plenumWalls).toHaveLength(feature.layout === 'straight' ? 2 : 1);
       if (feature.layout === 'straight') {
         expect(slabs.some((slab) => slab.kind === 'mid-landing')).toBe(false);
         expect(cageWalls.some((wall) => wall.kind === 'divider')).toBe(false);

@@ -67,10 +67,13 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
   traverser une pièce simple et large, sans plafond bas, carrefour ni relief
   architectural ajouté par une passe ultérieure.
 - Une coque de plafond haut rejoint exactement le sommet du mur bas. Un linteau
-  de portail commence légèrement au-dessus pour ne pas superposer sa sous-face
-  au plafond bas voisin. Si le wrapper rabaisse ensuite la pièce à cause d’une
-  ouverture verticale ou d’une façade incomplète, il supprime aussi chaque fragment de
-  `upper-shell` / `upper-portal-lintel` qui ne borde plus aucune pièce haute.
+  de portail commence légèrement au-dessus et le rendu soustrait son empreinte
+  du plafond bas voisin. Sa sous-face emploie le matériau et les UV monde du
+  plafond, jamais le papier peint, et reste exactement à `wallHeight` pour une
+  jonction plane sans superposer leurs géométries. Si le wrapper rabaisse ensuite
+  la pièce à cause d’une ouverture verticale ou d’une façade incomplète, il
+  supprime aussi chaque fragment de `upper-shell` / `upper-portal-lintel` qui ne
+  borde plus aucune pièce haute.
 - Après mutation de murs ou de zones verticales, appeler le helper de
   reconstruction prévu au bon endroit plutôt que patcher un seul tableau.
 - Le dégagement d’arrivée d’une ouverture de plafond s’applique après les
@@ -84,7 +87,10 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
   court et `flush` pour une ouverture directement découpée dans la cloison.
   Les passages `flush` sérialisent leur empreinte réelle dans `passageRects` ;
   `bounds` n’est que leur rectangle englobant et ne doit pas servir à remplir
-  les coins vides d’un coude ou d’un embranchement.
+  les coins vides d’un coude ou d’un embranchement. Certaines ouvertures
+  `flush` atteignent 3,2 m de large. Lorsqu’elles terminent sur un `PassageHole`,
+  leur plafond descend systématiquement à hauteur d’accroupissement avant le
+  puits ; une partie des variantes larges force cette terminaison.
 - Les trous terminaux d’un cul-de-sac `flush` occupent toute la largeur du
   passage. Leurs colliders doivent être ajoutés au plan mutable, avant
   l’affectation finale de `world.colliders`.
@@ -107,8 +113,11 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
   moins une paire d’étages, pas uniquement un plan isolé.
 - Une gaine profonde ne doit rester exposée que dans son étage source et son
   étage d’arrivée. Dans chaque étage seulement traversé, ses ouvertures actives
-  sont regroupées dans un enclos fermé, ancré à deux limites d’une salle ; les
-  profondeurs différentes d’un même pit partagent cet invariant.
+  sont regroupées dans un enclos fermé, ancré à deux limites d’une salle dès
+  que la trame intermédiaire le permet. Toutes les ouvertures d’un même
+  `grid-pit` partagent une destination : 1 à 5 étages plus bas, ou un vide
+  mortel. Leur motif emploie une grille complète, symétrique et de taille
+  homogène dans la salle.
 - Le pavage épique utilise des supercellules 32×32 dépendantes du seed. Chacune
   contient exactement `epic1`, `epic2`, `epic3`, `epic4` et `epic5`, soit
   5 chunks monumentaux sur 1024. Les huit slots candidats, leurs transformations

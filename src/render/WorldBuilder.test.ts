@@ -172,10 +172,60 @@ describe('wallpaper mapping', () => {
     view.dispose();
     Object.values(materials).forEach((material) => material.dispose());
   });
+
+  it('restores baked lightmaps and their off-grid junction repairs in legacy mode', () => {
+    const plan: WorldPlan = {
+      version: 1,
+      seed: 'LEGACY-LIGHTMAP-RENDER-AUDIT',
+      size: 112,
+      wallHeight: 2.74,
+      rooms: [],
+      walls: [{
+        id: 'legacy-off-grid-wall',
+        x: 0,
+        z: 0.18,
+        length: 8,
+        orientation: 'x',
+        bottom: 0,
+        height: 2.74,
+        thickness: 0.22,
+        tint: 1,
+        collision: true,
+        kind: 'wallpaper',
+      }],
+      columns: [],
+      solidMasses: [],
+      lights: [],
+      missingCeilingTiles: [],
+      features: [],
+      detailSockets: [],
+      colliders: [],
+      floorRects: [{ minX: -56, maxX: 56, minZ: -56, maxZ: 56 }],
+      spawn: { x: 8, y: 0.9, z: 8 },
+    };
+    const materials = createTestMaterials();
+    const lightMaps = {
+      resolution: 1,
+      general: new Uint8Array([128, 128, 96, 255]),
+      ceiling: new Uint8Array([128, 128, 96, 255]),
+    };
+    const view = new WorldView(plan, materials, {
+      lightingMode: 'legacy',
+      bakedLightMaps: lightMaps,
+    });
+    const ceiling = view.group.getObjectByName('office-drop-ceiling') as THREE.Mesh;
+    expect(view.group.getObjectByName('ceiling-lightmap-junction-repairs')).toBeDefined();
+    expect(view.group.getObjectByName('floor-lightmap-junction-repairs')).toBeDefined();
+    expect((ceiling.material as THREE.MeshStandardMaterial).lightMap).not.toBeNull();
+    expect(ceiling.geometry.hasAttribute('uv1')).toBe(true);
+
+    view.dispose();
+    Object.values(materials).forEach((material) => material.dispose());
+  });
 });
 
 describe('open pit shaft rendering', () => {
-  it('uses capless vertical faces that remain below the walkable floor', () => {
+  it('joins capless textured faces exactly to every opening edge', () => {
     const bottom = -2.72;
     const top = -0.004;
     const hole = { minX: -2, maxX: 3, minZ: 4, maxZ: 7 };
@@ -191,10 +241,10 @@ describe('open pit shaft rendering', () => {
       geometry.computeBoundingBox();
       expect(geometry.boundingBox?.min.y).toBeCloseTo(bottom, 5);
       expect(geometry.boundingBox?.max.y).toBeCloseTo(top, 5);
-      if (wallIndex === 0) {
-        expect(geometry.boundingBox?.min.z).toBeLessThan(hole.minZ);
-        expect(geometry.boundingBox?.max.z).toBeGreaterThan(hole.minZ);
-      }
+      if (wallIndex === 0) expect(geometry.boundingBox?.max.z).toBeCloseTo(hole.minZ, 5);
+      if (wallIndex === 1) expect(geometry.boundingBox?.min.z).toBeCloseTo(hole.maxZ, 5);
+      if (wallIndex === 2) expect(geometry.boundingBox?.max.x).toBeCloseTo(hole.minX, 5);
+      if (wallIndex === 3) expect(geometry.boundingBox?.min.x).toBeCloseTo(hole.maxX, 5);
       const normals = geometry.getAttribute('normal');
       const geometryIndex = geometry.getIndex();
       expect(geometryIndex).not.toBeNull();
@@ -238,27 +288,27 @@ describe('open pit shaft rendering', () => {
       {
         suffix: 'north',
         x: center.x,
-        z: opening.minZ,
+        z: opening.minZ - thickness * 0.5,
         length: opening.maxX - opening.minX + thickness * 2,
         orientation: 'x' as const,
       },
       {
         suffix: 'south',
         x: center.x,
-        z: opening.maxZ,
+        z: opening.maxZ + thickness * 0.5,
         length: opening.maxX - opening.minX + thickness * 2,
         orientation: 'x' as const,
       },
       {
         suffix: 'west',
-        x: opening.minX,
+        x: opening.minX - thickness * 0.5,
         z: center.z,
         length: opening.maxZ - opening.minZ + thickness * 2,
         orientation: 'z' as const,
       },
       {
         suffix: 'east',
-        x: opening.maxX,
+        x: opening.maxX + thickness * 0.5,
         z: center.z,
         length: opening.maxZ - opening.minZ + thickness * 2,
         orientation: 'z' as const,
@@ -304,11 +354,11 @@ describe('open pit shaft rendering', () => {
     for (let index = 0; index < positions.count; index += 1) {
       if (
         normals.getZ(index) > 0.9 &&
-        Math.abs(positions.getZ(index) - (opening.minZ + thickness * 0.5)) < 1e-5
+        Math.abs(positions.getZ(index) - opening.minZ) < 1e-5
       ) northInnerXs.push(positions.getX(index));
       if (
         normals.getX(index) > 0.9 &&
-        Math.abs(positions.getX(index) - (opening.minX + thickness * 0.5)) < 1e-5
+        Math.abs(positions.getX(index) - opening.minX) < 1e-5
       ) westInnerZs.push(positions.getZ(index));
     }
     expect(Math.min(...northInnerXs)).toBeLessThan(opening.minX - thickness * 0.9);
@@ -337,6 +387,12 @@ describe('open pit shaft rendering', () => {
       1,
     );
     wallpaperTexture.needsUpdate = true;
+    const ceilingTexture = new THREE.DataTexture(
+      Uint8Array.of(186, 178, 112, 255),
+      1,
+      1,
+    );
+    ceilingTexture.needsUpdate = true;
     const materials = createTestMaterials();
     materials.floor.name = 'test-carpet';
     materials.floor.map = carpetTexture;
@@ -346,6 +402,7 @@ describe('open pit shaft rendering', () => {
     materials.wall.map = wallpaperTexture;
     materials.wall.emissive.setHex(0x080704);
     materials.wall.emissiveIntensity = 0.025;
+    materials.ceiling.map = ceilingTexture;
 
     const hole = {
       minX: -1.8,
@@ -440,6 +497,7 @@ describe('open pit shaft rendering', () => {
     const enclosureWalls = view.group.getObjectByName('merged-wallpaper-walls') as THREE.Mesh;
     const lowerWalls = view.group.getObjectByName('lower-storey-wallpaper-walls') as THREE.Mesh;
     const lowerFloor = view.group.getObjectByName('lower-carpet-deep-pit') as THREE.Mesh;
+    const floorUnderside = view.group.getObjectByName('current-floor-structural-underside') as THREE.Mesh;
 
     for (const mesh of [firstShaft, throughShaft, lowerFloor]) {
       const material = mesh.material as THREE.MeshStandardMaterial;
@@ -460,14 +518,25 @@ describe('open pit shaft rendering', () => {
     expect(enclosureMaterial.map).not.toBe(carpetTexture);
     expect(throughShaft.geometry.getAttribute('position').count).toBe(24);
     expect(enclosureWalls.geometry.getAttribute('position').count).toBe(24);
+    expect((floorUnderside.material as THREE.MeshStandardMaterial).map).toBe(ceilingTexture);
     const shaftUvs = firstShaft.geometry.getAttribute('uv');
     expect(shaftUvs).toBeDefined();
     expect(shaftUvs.count).toBeGreaterThan(0);
+    const northSeamRay = new THREE.Raycaster(
+      new THREE.Vector3(0, -0.12, 0),
+      new THREE.Vector3(0, 0, -1),
+      0,
+      4,
+    );
+    const northSeamHits = northSeamRay.intersectObject(firstShaft);
+    expect(northSeamHits.length).toBeGreaterThan(0);
+    expect(northSeamHits[0]!.point.z).toBeCloseTo(hole.minZ, 5);
 
     view.dispose();
     Object.values(materials).forEach((material) => material.dispose());
     carpetTexture.dispose();
     wallpaperTexture.dispose();
+    ceilingTexture.dispose();
   });
 
   it('keeps inherited ceiling apertures open and reveals a lit upper storey', () => {
@@ -688,33 +757,20 @@ describe('open pit shaft rendering', () => {
   });
 });
 
-describe('baseboard suppression', () => {
-  it('omits trim in baseboardless zones and on crawl-tunnel walls', () => {
+describe('baseboard continuity', () => {
+  it('keeps crawl-passage trim and clips bare districts per wall face and interval', () => {
     const plan: WorldPlan = {
       version: 1,
-      seed: 'BASEBOARDLESS-ZONE-RENDER-AUDIT',
+      seed: 'BASEBOARD-CONTINUITY-RENDER-AUDIT',
       size: 32,
       wallHeight: 2.74,
       rooms: [],
       walls: [
         {
-          id: 'wall-with-baseboard',
-          x: -8,
-          z: 0,
-          length: 2,
-          orientation: 'x',
-          bottom: 0,
-          height: 2.74,
-          thickness: 0.22,
-          tint: 1,
-          collision: true,
-          kind: 'wallpaper',
-        },
-        {
-          id: 'wall-in-baseboardless-zone',
+          id: 'shared-district-wall',
           x: 0,
           z: 0,
-          length: 2,
+          length: 4,
           orientation: 'x',
           bottom: 0,
           height: 2.74,
@@ -724,7 +780,7 @@ describe('baseboard suppression', () => {
           kind: 'wallpaper',
         },
         {
-          id: 'crawl-tunnel-outside-zone',
+          id: 'crawl-tunnel-wall',
           x: 8,
           z: 0,
           length: 2,
@@ -739,7 +795,7 @@ describe('baseboard suppression', () => {
         },
       ],
       columns: [{
-        x: 0,
+        x: -6,
         z: 4,
         width: 1,
         depth: 1,
@@ -747,15 +803,18 @@ describe('baseboard suppression', () => {
         tint: 1,
       }],
       solidMasses: [{
-        id: 'mass-in-baseboardless-zone',
-        bounds: { minX: 2, maxX: 4, minZ: 2, maxZ: 4 },
+        id: 'mass-touching-baseboardless-zone',
+        bounds: { minX: 3, maxX: 5, minZ: 3, maxZ: 5 },
         height: 2.74,
         tint: 1,
       }],
       baseboardlessZones: [
-        { minX: 1, maxX: 1.5, minZ: -0.2, maxZ: 0.2 },
-        { minX: 0.5, maxX: 1, minZ: 3.5, maxZ: 4.5 },
-        { minX: 4, maxX: 4.5, minZ: 2, maxZ: 4 },
+        // Only the positive-z face of the right half belongs to the bare room.
+        { minX: 0, maxX: 2, minZ: 0, maxZ: 3 },
+        // Exact endpoint/edge contacts must not erase an adjacent object's trim.
+        { minX: -3, maxX: -2, minZ: -0.2, maxZ: 0.2 },
+        { minX: -5.5, maxX: -5, minZ: 3.5, maxZ: 4.5 },
+        { minX: 5, maxX: 5.5, minZ: 3, maxZ: 5 },
       ],
       lights: [],
       missingCeilingTiles: [],
@@ -763,18 +822,32 @@ describe('baseboard suppression', () => {
       detailSockets: [],
       colliders: [],
       floorRects: [{ minX: -16, maxX: 16, minZ: -16, maxZ: 16 }],
-      spawn: { x: -8, y: 0.9, z: 0 },
+      spawn: { x: 0, y: 0.9, z: -2 },
     };
     const materials = createTestMaterials();
     const view = new WorldView(plan, materials);
     const baseboards = view.group.getObjectByName('merged-baseboards') as THREE.Mesh;
 
     expect(baseboards).toBeDefined();
-    const positions = baseboards.geometry.getAttribute('position');
-    expect(positions.count).toBe(24);
-    for (let index = 0; index < positions.count; index += 1) {
-      expect(positions.getX(index)).toBeLessThan(-6.8);
-    }
+    const hitsBaseboard = (
+      x: number,
+      z: number,
+      directionX: number,
+      directionZ: number,
+    ): boolean => new THREE.Raycaster(
+      new THREE.Vector3(x, 0.0575, z),
+      new THREE.Vector3(directionX, 0, directionZ),
+      0,
+      0.45,
+    ).intersectObject(baseboards).length > 0;
+
+    expect(hitsBaseboard(-1, 0.5, 0, -1)).toBe(true);
+    expect(hitsBaseboard(-1, -0.5, 0, 1)).toBe(true);
+    expect(hitsBaseboard(1, 0.5, 0, -1)).toBe(false);
+    expect(hitsBaseboard(1, -0.5, 0, 1)).toBe(true);
+    expect(hitsBaseboard(8, 0.5, 0, -1)).toBe(true);
+    expect(hitsBaseboard(-6, 4.9, 0, -1)).toBe(true);
+    expect(hitsBaseboard(4, 5.4, 0, -1)).toBe(true);
 
     view.dispose();
     Object.values(materials).forEach((material) => material.dispose());
@@ -782,7 +855,7 @@ describe('baseboard suppression', () => {
 });
 
 describe('high-ceiling passage closures', () => {
-  it('keeps textured undersides and closes the ends of upper portal fragments', () => {
+  it('continues the ceiling texture across a portal without overlapping faces', () => {
     const plan: WorldPlan = {
       version: 1,
       seed: 'HIGH-PORTAL-SOFFIT-RENDER-AUDIT',
@@ -790,10 +863,17 @@ describe('high-ceiling passage closures', () => {
       wallHeight: 2.74,
       rooms: [{
         id: 'tall-room',
-        bounds: { minX: -6, maxX: 6, minZ: -6, maxZ: 6 },
+        bounds: { minX: -6, maxX: 6, minZ: -6, maxZ: 0 },
         kind: 'open-hall',
         level: 0,
         ceilingHeight: 8,
+        detailDensity: 0,
+      }, {
+        id: 'low-room',
+        bounds: { minX: -6, maxX: 6, minZ: 0, maxZ: 6 },
+        kind: 'office',
+        level: 0,
+        ceilingHeight: 2.74,
         detailDensity: 0,
       }],
       walls: [
@@ -804,8 +884,8 @@ describe('high-ceiling passage closures', () => {
           z: 0,
           length: 2.4,
           orientation: 'x',
-          bottom: 2.7,
-          height: 5.3,
+          bottom: 2.74,
+          height: 5.26,
           thickness: 1.2,
           tint: 1,
           collision: true,
@@ -819,8 +899,8 @@ describe('high-ceiling passage closures', () => {
           z: 0,
           length: 2,
           orientation: 'x',
-          bottom: 2.7,
-          height: 5.3,
+          bottom: 2.74,
+          height: 5.26,
           thickness: 0.8,
           tint: 1,
           collision: true,
@@ -839,19 +919,31 @@ describe('high-ceiling passage closures', () => {
       spawn: { x: 3, y: 0.9, z: 3 },
     };
     const materials = createTestMaterials();
+    const ceilingMap = new THREE.DataTexture(Uint8Array.of(210, 198, 112, 255), 1, 1);
+    ceilingMap.needsUpdate = true;
+    materials.ceiling.map = ceilingMap;
     const view = new WorldView(plan, materials);
     const walls = view.group.getObjectByName('merged-wallpaper-walls') as THREE.Mesh;
-    for (const x of [0, 3.5]) {
-      const raycaster = new THREE.Raycaster(
-        new THREE.Vector3(x, 2.2, 0),
-        new THREE.Vector3(0, 1, 0),
-        0,
-        1,
-      );
-      const hits = raycaster.intersectObject(walls);
-      expect(hits.length).toBeGreaterThan(0);
-      expect(hits[0]!.point.y).toBeCloseTo(2.7, 4);
-    }
+    const portalRay = new THREE.Raycaster(
+      new THREE.Vector3(0, 2.2, 0),
+      new THREE.Vector3(0, 1, 0),
+      0,
+      1,
+    );
+    expect(portalRay.intersectObject(walls)).toHaveLength(0);
+    const seamRay = new THREE.Raycaster(
+      new THREE.Vector3(0, plan.wallHeight + 0.006, -1),
+      new THREE.Vector3(0, 0, 1),
+      0,
+      1,
+    );
+    const seamHits = seamRay.intersectObject(walls);
+    expect(seamHits.length).toBeGreaterThan(0);
+    expect(seamHits[0]!.point.z).toBeCloseTo(-0.6, 5);
+    portalRay.ray.origin.x = 3.5;
+    const upperShellHits = portalRay.intersectObject(walls);
+    expect(upperShellHits.length).toBeGreaterThan(0);
+    expect(upperShellHits[0]!.point.y).toBeCloseTo(2.74, 4);
     const wallIndex = walls.geometry.getIndex();
     const wallNormals = walls.geometry.getAttribute('normal');
     expect(wallIndex).not.toBeNull();
@@ -861,7 +953,32 @@ describe('high-ceiling passage closures', () => {
       ).some((normalX) => normalX > 0.9)).toBe(true);
     }
 
+    const lowCeiling = view.group.getObjectByName('office-drop-ceiling') as THREE.Mesh<
+      THREE.BufferGeometry,
+      THREE.MeshStandardMaterial
+    >;
+    expect(lowCeiling.material.map).toBe(ceilingMap);
+    const thresholdRay = new THREE.Raycaster(
+      new THREE.Vector3(0, 2.2, 0.3),
+      new THREE.Vector3(0, 1, 0),
+      0,
+      1,
+    );
+    const soffitHits = thresholdRay.intersectObject(lowCeiling);
+    expect(soffitHits).toHaveLength(1);
+    expect(soffitHits[0]!.point.y).toBeCloseTo(plan.wallHeight, 6);
+    expect(soffitHits[0]!.uv?.x).toBeCloseTo(0 / 2.4, 5);
+    expect(soffitHits[0]!.uv?.y).toBeCloseTo(0.3 / 2.4, 5);
+    thresholdRay.ray.origin.z = 0.8;
+    const roomCeilingHits = thresholdRay.intersectObject(lowCeiling);
+    expect(roomCeilingHits).toHaveLength(1);
+    expect(roomCeilingHits[0]!.point.y).toBeCloseTo(plan.wallHeight, 6);
+    expect(soffitHits[0]!.point.y).toBeCloseTo(roomCeilingHits[0]!.point.y, 6);
+    expect(roomCeilingHits[0]!.uv?.x).toBeCloseTo(0 / 2.4, 5);
+    expect(roomCeilingHits[0]!.uv?.y).toBeCloseTo(0.8 / 2.4, 5);
+
     view.dispose();
+    ceilingMap.dispose();
     Object.values(materials).forEach((material) => material.dispose());
   });
 });
@@ -1486,6 +1603,15 @@ describe('crouch passages and inter-storey stairs', () => {
     expect(upperWalls.geometry.boundingBox?.min.y).toBeCloseTo(5.4, 5);
     expect(upperWalls.geometry.boundingBox?.max.y).toBeCloseTo(8.14, 5);
     expect(upperCeiling.geometry.boundingBox?.min.y).toBeCloseTo(8.14, 5);
+    const lowerCeilingGapRay = new THREE.Raycaster(
+      new THREE.Vector3(1, 4, 0),
+      new THREE.Vector3(-1, 0, 0),
+      0,
+      2,
+    );
+    expect(lowerCeilingGapRay.intersectObject(stairCage).length).toBeGreaterThan(0);
+    lowerCeilingGapRay.ray.origin.y = 2;
+    expect(lowerCeilingGapRay.intersectObject(stairCage)).toHaveLength(0);
     const unsupportedUpperPreviewWallRay = new THREE.Raycaster(
       new THREE.Vector3(-5.5, 4, 0),
       new THREE.Vector3(-1, 0, 0),
@@ -1629,6 +1755,16 @@ describe('crouch passages and inter-storey stairs', () => {
     expect(floorUnderside.geometry.boundingBox?.min.y).toBeCloseTo(-0.12, 5);
     expect(arrivalFascias.geometry.boundingBox?.min.y).toBeCloseTo(-0.12, 5);
     expect(arrivalFascias.geometry.boundingBox?.max.y).toBeCloseTo(0, 5);
+    const upperApproachGapRay = new THREE.Raycaster(
+      new THREE.Vector3(0, -1, 1.5),
+      new THREE.Vector3(0, 0, 1),
+      0,
+      2,
+    );
+    const stairCage = view.group.getObjectByName('inter-storey-stair-cages') as THREE.Mesh;
+    expect(upperApproachGapRay.intersectObject(stairCage).length).toBeGreaterThan(0);
+    upperApproachGapRay.ray.origin.y = -3;
+    expect(upperApproachGapRay.intersectObject(stairCage)).toHaveLength(0);
     const openingCenter = rectCenter(plan.floorOpenings![0]!);
     const edgeRay = new THREE.Raycaster(
       new THREE.Vector3(openingCenter.x, -0.06, openingCenter.z),

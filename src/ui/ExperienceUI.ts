@@ -1,10 +1,26 @@
-import type { RoomKind, WorldPlan } from '../world/types';
-import { fingerprintWorld } from '../world/generateWorld';
+import type { DiagnosticsSnapshot } from '../core/Diagnostics';
+import {
+  controlActions,
+  defaultControlBindings,
+  detectKeyboardPreset,
+  formatKeyLabel,
+  isBindableCode,
+  remapControlBinding,
+  type ControlAction,
+  type KeyboardPreset,
+} from '../input/ControlBindings';
+import {
+  defaultGameSettings,
+  saveGameSettings,
+  type GameSettings,
+} from './settings';
 
 interface UIActions {
   enter(): void;
   regenerate(): void;
+  loadGame?(): void;
   toggleFullscreen(): void;
+  settingsChanged(settings: GameSettings): void | Promise<void>;
   submitConsole(value: string, mode: ConsoleMode): ConsoleSubmitResult;
   completeConsole(value: string, mode: ConsoleMode): ConsoleCompletion | null;
   consoleVisibility(open: boolean): void;
@@ -34,28 +50,59 @@ export interface ConsoleSubmitResult {
   messages: ConsoleMessage[];
 }
 
-const roomLabels: Record<RoomKind, string> = {
-  office: 'Bureaux partitionnés',
-  corridor: 'Couloir de liaison',
-  'open-hall': 'Hall à piliers',
-  nested: 'Salles imbriquées',
-  threshold: 'Galerie de seuils',
-  sparse: 'Zone silencieuse',
-  'pit-gallery': 'Quadrillage inférieur',
-  'lower-maze': 'Sous-niveau moquetté',
-  'vista-hall': 'Hall à plafond démesuré',
+type MenuPage = 'home' | 'settings' | 'controls' | 'credits';
+
+const icons = {
+  play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7Z"/></svg>',
+  shuffle: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3c4.5 0 5.5 10 10 10h3M17 4l3 3-3 3M4 17h3c1.7 0 2.9-1.4 4-3.1M15 7.4c.7-.3 1.3-.4 2-.4h3M17 14l3 3-3 3"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h3M11 12h9M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="14" cy="18" r="2"/></svg>',
+  controls: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8h10a5 5 0 0 1 4.8 6.4l-.7 2.4a2.5 2.5 0 0 1-4.2 1l-1.6-1.8H8.7l-1.6 1.8a2.5 2.5 0 0 1-4.2-1l-.7-2.4A5 5 0 0 1 7 8Z"/><path d="M7 11v4M5 13h4M16 12h.01M19 14h.01"/></svg>',
+  fullscreen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>',
+  info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg>',
+  back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>',
+  exit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></svg>',
+  reset: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8V4m0 0h4M5 4l3 3a7 7 0 1 1-2 7"/></svg>',
+};
+
+const bindingLabels: Readonly<Record<ControlAction, string>> = {
+  forward: 'Avancer',
+  backward: 'Reculer',
+  left: 'Aller à gauche',
+  right: 'Aller à droite',
+  sprint: 'Courir',
+  jump: 'Sauter',
+  crouch: 'S’accroupir',
+  interact: 'Interagir',
+};
+
+const titleCase = (value: string): string => value
+  .replace(/([a-z])([A-Z])/g, '$1 $2')
+  .replaceAll('_', ' ')
+  .replace(/^./, (character) => character.toUpperCase());
+
+const formatDiagnosticValue = (value: unknown): string => {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'boolean') return value ? 'oui' : 'non';
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return String(value);
+    return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  }
+  if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '—';
+  if (typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, nested]) => `${key} ${formatDiagnosticValue(nested)}`)
+      .join(' · ');
+  }
+  return String(value);
 };
 
 export class ExperienceUI {
   private readonly root: HTMLElement;
-  private readonly loadingLabel: HTMLElement;
-  private readonly loadingFill: HTMLElement;
   private readonly enterButton: HTMLButtonElement;
+  private readonly loadButton: HTMLButtonElement;
   private readonly overlay: HTMLElement;
-  private readonly roomLabel: HTMLElement;
-  private readonly fpsLabel: HTMLElement;
-  private readonly fallFlash: HTMLElement;
   private readonly interactionPrompt: HTMLElement;
+  private readonly fallFlash: HTMLElement;
   private readonly consolePanel: HTMLElement;
   private readonly consoleHistory: HTMLElement;
   private readonly consoleMessages: HTMLElement;
@@ -63,9 +110,14 @@ export class ExperienceUI {
   private readonly consoleInput: HTMLInputElement;
   private readonly consoleHint: HTMLElement;
   private readonly consoleModeLabel: HTMLElement;
+  private readonly diagnosticsPanel: HTMLElement;
+  private readonly diagnosticsContent: HTMLElement;
   private readonly actions: UIActions;
+  private settings: GameSettings;
+  private activePage: MenuPage = 'home';
   private readyState = false;
   private enteredOnce = false;
+  private mainMenuState = true;
   private interactionLabel: string | null = null;
   private consoleMode: ConsoleMode = 'command';
   private completionSource = '';
@@ -75,73 +127,166 @@ export class ExperienceUI {
   private historyIndex = 0;
   private historyDraft = '';
   private chatFadeTimer?: number;
+  private pendingBinding?: ControlAction;
+  private pendingBindingButton?: HTMLButtonElement;
 
-  constructor(container: HTMLElement, plan: WorldPlan, actions: UIActions, displaySeed = plan.seed) {
+  constructor(
+    container: HTMLElement,
+    actions: UIActions,
+    settings: GameSettings,
+  ) {
     this.actions = actions;
-    const fingerprint = fingerprintWorld(plan);
+    this.settings = { ...settings };
+    const bindingRows = controlActions.map((action) => `
+      <button class="binding-row" type="button" data-binding="${action}">
+        <span>${bindingLabels[action]}</span>
+        <kbd data-binding-value>${formatKeyLabel(settings.controls[action])}</kbd>
+      </button>
+    `).join('');
     this.root = document.createElement('div');
-    this.root.className = 'experience-ui';
+    this.root.className = 'experience-ui is-main-menu';
+    this.root.dataset.menuPage = 'home';
+    this.root.setAttribute('aria-busy', 'true');
     this.root.innerHTML = `
       <div class="atmosphere-overlay" aria-hidden="true">
-        <div class="scanlines"></div>
-        <div class="noise-layer"></div>
+        <div class="menu-shade"></div>
+        <div class="film-grain"></div>
         <div class="edge-shadow"></div>
       </div>
 
-      <section class="entry-overlay" data-ui="overlay" aria-label="Menu principal">
-        <div class="entry-card">
-          <header class="entry-header">
-            <div class="archive-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-            <p class="eyebrow">ARCHIVE L–0 <i></i> SESSION ${fingerprint.toUpperCase()}</p>
-          </header>
-          <div class="title-lockup">
-            <p class="pretitle">THRESHOLD</p>
-            <h1>ZERO</h1>
-            <p class="level-index">LEVEL <strong>0</strong></p>
-          </div>
-          <p class="manifesto">Un espace de bureaux qui ne se souvient plus de son plan. Aucun objectif. Aucun témoin. Seulement la lumière et la moquette humide.</p>
+      <section class="menu-overlay" data-ui="overlay" role="dialog" aria-modal="true" aria-label="Menu principal" aria-hidden="true" inert>
+        <div class="menu-panel">
+          <aside class="menu-sidebar">
+            <header class="brand-lockup">
+              <div class="brand-mark" aria-hidden="true">BR</div>
+              <div><h1>Backrooms</h1><p>Random story</p></div>
+            </header>
 
-          <div class="world-metrics" aria-label="Propriétés du monde infini">
-            <div><span>∞</span><small>étendue explorable</small></div>
-            <div><span>SEED</span><small>topologie persistante</small></div>
-            <div><span>LIVE</span><small>génération continue</small></div>
-          </div>
+            <nav class="menu-navigation" aria-label="Navigation du menu">
+              <button class="active" type="button" data-open-page="home" data-nav-page="home" aria-label="Accueil" title="Accueil">${icons.play}<span>Accueil</span></button>
+              <button type="button" data-open-page="settings" data-nav-page="settings" aria-label="Paramètres" title="Paramètres">${icons.settings}<span>Paramètres</span></button>
+              <button type="button" data-open-page="controls" data-nav-page="controls" aria-label="Commandes" title="Commandes">${icons.controls}<span>Commandes</span></button>
+            </nav>
 
-          <div class="loading-block" data-ui="loading">
-            <div class="loading-row"><span data-ui="loading-label">INITIALISATION DU SIGNAL</span><b>WEBGL / PBR</b></div>
-            <div class="loading-track"><i data-ui="loading-fill"></i></div>
-          </div>
+            <footer class="sidebar-footer">
+              <button type="button" data-ui="fullscreen" aria-label="Plein écran" title="Plein écran">${icons.fullscreen}<span>Plein écran</span></button>
+              <button type="button" data-open-page="credits" data-nav-page="credits" aria-label="Crédits" title="Crédits">${icons.info}<span>Crédits</span></button>
+              <button class="pause-only" type="button" data-ui="main-menu" aria-label="Menu principal" title="Menu principal">${icons.exit}<span>Menu principal</span></button>
+            </footer>
+          </aside>
 
-          <div class="controls-strip" aria-label="Commandes">
-            <span><kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> marcher</span>
-            <span><kbd>⇧</kbd> accélérer</span>
-            <span><kbd>ESPACE</kbd> sauter</span>
-            <span><kbd>CTRL</kbd> accroupi/debout</span>
-            <span><kbd>E</kbd> interagir</span>
-            <span><kbd>C</kbd> chat</span>
-            <span><kbd>H</kbd> console</span>
-            <span><span class="mouse-icon">◉</span> regarder</span>
-          </div>
+          <div class="menu-content">
+            <section class="menu-page active" data-page="home" aria-labelledby="home-title">
+              <div class="home-stage">
+                <header class="home-title">
+                  <h2 id="home-title">Backrooms<span>.</span></h2>
+                  <p>Random story</p>
+                </header>
+                <div class="menu-actions" aria-label="Actions principales">
+                  <button class="menu-action primary session-only" type="button" data-ui="enter" disabled>
+                    <span data-ui="enter-copy">Entrer</span>${icons.play}
+                  </button>
+                  <button class="menu-action" type="button" data-ui="regenerate">
+                    <span>Nouvelle partie</span>${icons.shuffle}
+                  </button>
+                  <button class="menu-action" type="button" data-ui="load" disabled>
+                    <span><strong>Charger</strong><small data-ui="load-copy">Aucune sauvegarde</small></span>${icons.play}
+                  </button>
+                </div>
+              </div>
+            </section>
 
-          <button class="enter-button" type="button" data-ui="enter" disabled>
-            <span data-ui="enter-copy">CHARGEMENT</span>
-            <i aria-hidden="true">→</i>
-          </button>
-          <div class="entry-actions">
-            <button type="button" data-ui="regenerate">Nouvelle dérive</button>
-            <button type="button" data-ui="fullscreen">Plein écran</button>
-            <code>${displaySeed}</code>
+            <section class="menu-page" data-page="settings" aria-label="Paramètres">
+              <header class="page-heading">
+                <h2>Paramètres</h2>
+                <button class="reset-settings" type="button" data-ui="reset-settings">${icons.reset}<span>Réinitialiser</span></button>
+              </header>
+              <div class="settings-list">
+                <fieldset class="settings-card">
+                  <legend>Affichage</legend>
+                  <label class="setting-row">
+                    <strong>Éclairage</strong>
+                    <select data-setting="lighting" aria-label="Système d’éclairage">
+                      <option value="modern">Moderne</option>
+                      <option value="legacy">Classique</option>
+                    </select>
+                  </label>
+                  <label class="setting-row">
+                    <strong>Qualité</strong>
+                    <select data-setting="renderQuality" aria-label="Qualité de rendu">
+                      <option value="auto">Automatique</option>
+                      <option value="performance">Performance</option>
+                      <option value="quality">Qualité</option>
+                    </select>
+                  </label>
+                  <label class="setting-row range-row">
+                    <strong>Champ de vision</strong>
+                    <span class="range-control"><input data-setting="fieldOfView" type="range" min="60" max="100" step="1" /><output data-output="fieldOfView"></output></span>
+                  </label>
+                  <label class="setting-row toggle-row">
+                    <strong>Réticule</strong>
+                    <input data-setting="crosshair" type="checkbox" role="switch" />
+                  </label>
+                </fieldset>
+
+                <fieldset class="settings-card">
+                  <legend>Expérience</legend>
+                  <label class="setting-row range-row">
+                    <strong>Volume général</strong>
+                    <span class="range-control"><input data-setting="masterVolume" type="range" min="0" max="1" step="0.01" /><output data-output="masterVolume"></output></span>
+                  </label>
+                  <label class="setting-row range-row">
+                    <strong>Sensibilité souris</strong>
+                    <span class="range-control"><input data-setting="lookSensitivity" type="range" min="0.3" max="2" step="0.05" /><output data-output="lookSensitivity"></output></span>
+                  </label>
+                  <label class="setting-row toggle-row">
+                    <strong>Mouvements de caméra</strong>
+                    <input data-setting="cameraMotion" type="checkbox" role="switch" />
+                  </label>
+                  <label class="setting-row toggle-row">
+                    <strong>Animation du menu</strong>
+                    <input data-setting="menuMotion" type="checkbox" role="switch" />
+                  </label>
+                </fieldset>
+              </div>
+              <div class="settings-progress" data-ui="settings-progress" aria-hidden="true">
+                <div><span data-ui="settings-progress-label">Application</span><b data-ui="settings-progress-value">0%</b></div>
+                <div class="loading-track"><i data-ui="settings-progress-fill"></i></div>
+              </div>
+            </section>
+
+            <section class="menu-page" data-page="controls" aria-label="Commandes">
+              <header class="page-heading">
+                <h2>Commandes</h2>
+                <div class="keyboard-presets" aria-label="Disposition du clavier">
+                  <button type="button" data-control-preset="azerty">AZERTY</button>
+                  <button type="button" data-control-preset="qwerty">QWERTY</button>
+                </div>
+              </header>
+              <p class="binding-help" data-ui="binding-help">Sélectionnez une commande, puis appuyez sur une touche.</p>
+              <div class="bindings-grid">${bindingRows}</div>
+              <footer class="fixed-controls" aria-label="Commandes système">
+                <span><kbd>Souris</kbd> Regarder</span>
+                <span><kbd>Échap</kbd> Pause</span>
+                <span><kbd>C</kbd> Chat</span>
+                <span><kbd>H</kbd> Console</span>
+              </footer>
+            </section>
+
+            <section class="menu-page" data-page="credits" aria-label="Crédits">
+              <header class="page-heading"><h2>Crédits</h2></header>
+              <div class="credits-card">
+                <div class="credits-logo" aria-hidden="true">BR<span>:</span>RS</div>
+                <p>Three.js · Rapier · génération déterministe</p>
+                <small>Licences des assets disponibles dans le projet.</small>
+              </div>
+            </section>
           </div>
-          <p class="entry-note">Casque recommandé · Échap libère la souris · Aucun monstre dans cette version</p>
         </div>
+        <p class="menu-hint"><kbd>Échap</kbd><span data-ui="escape-hint">Retour</span></p>
       </section>
 
       <section class="hud" data-ui="hud" aria-hidden="true">
-        <div class="hud-status">
-          <span class="signal-dot"></span>
-          <div><small>LOCALISATION APPROX.</small><strong data-ui="room">SEUIL INCONNU</strong></div>
-        </div>
-        <div class="hud-seed"><small>SEED</small><code>${displaySeed}</code></div>
         <div class="reticle" aria-hidden="true"><i></i><b></b><span></span><em></em></div>
         <div class="interaction-prompt" data-ui="interaction" aria-hidden="true"><kbd>E</kbd><span></span></div>
         <section class="command-console" data-ui="console" aria-hidden="true">
@@ -157,26 +302,24 @@ export class ExperienceUI {
             <small data-ui="console-hint"></small>
           </div>
         </section>
-        <div class="hud-bottom">
-          <span>THRESHOLD ZERO // BUILD 0.${plan.version}</span>
-          <span data-ui="fps">-- FPS</span>
-          <span>ÉCHAP — PAUSE</span>
-        </div>
       </section>
 
-      <div class="fall-flash" data-ui="fall"><span>PERDU DANS LE VIDE</span></div>
+      <aside class="diagnostics-panel" data-ui="diagnostics" aria-hidden="true" aria-label="Informations techniques">
+        <header><span>LOGS</span><small>capture de diagnostic</small></header>
+        <div class="diagnostics-content" data-ui="diagnostics-content"></div>
+        <footer><code>/logs</code><span>masquer</span></footer>
+      </aside>
+
+      <div class="fall-flash" data-ui="fall"><span>Retour au dernier point sûr</span></div>
       <div class="fatal-error" data-ui="error" role="alert"></div>
     `;
     container.append(this.root);
 
-    this.loadingLabel = this.query('[data-ui="loading-label"]');
-    this.loadingFill = this.query('[data-ui="loading-fill"]');
     this.enterButton = this.query<HTMLButtonElement>('[data-ui="enter"]');
+    this.loadButton = this.query<HTMLButtonElement>('[data-ui="load"]');
     this.overlay = this.query('[data-ui="overlay"]');
-    this.roomLabel = this.query('[data-ui="room"]');
-    this.fpsLabel = this.query('[data-ui="fps"]');
-    this.fallFlash = this.query('[data-ui="fall"]');
     this.interactionPrompt = this.query('[data-ui="interaction"]');
+    this.fallFlash = this.query('[data-ui="fall"]');
     this.consolePanel = this.query('[data-ui="console"]');
     this.consoleHistory = this.query('[data-ui="chat-history"]');
     this.consoleMessages = this.query('[data-ui="chat-messages"]');
@@ -184,42 +327,100 @@ export class ExperienceUI {
     this.consoleInput = this.query<HTMLInputElement>('[data-ui="console-input"]');
     this.consoleHint = this.query('[data-ui="console-hint"]');
     this.consoleModeLabel = this.query('[data-ui="console-mode"]');
+    this.diagnosticsPanel = this.query('[data-ui="diagnostics"]');
+    this.diagnosticsContent = this.query('[data-ui="diagnostics-content"]');
+
     this.enterButton.addEventListener('click', actions.enter);
     this.query('[data-ui="regenerate"]').addEventListener('click', actions.regenerate);
+    this.loadButton.addEventListener('click', () => actions.loadGame?.());
     this.query('[data-ui="fullscreen"]').addEventListener('click', actions.toggleFullscreen);
+    this.query('[data-ui="main-menu"]').addEventListener('click', this.showMainMenu);
+    this.query('[data-ui="reset-settings"]').addEventListener('click', this.resetSettings);
+    for (const button of this.root.querySelectorAll<HTMLElement>('[data-open-page]')) {
+      button.addEventListener('click', () => this.showPage(button.dataset.openPage as MenuPage));
+    }
+    for (const button of this.root.querySelectorAll<HTMLElement>('[data-back]')) {
+      button.addEventListener('click', () => this.showPage('home'));
+    }
+    for (const control of this.root.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-setting]')) {
+      const eventName = control instanceof HTMLInputElement && control.type === 'range'
+        ? 'input'
+        : 'change';
+      control.addEventListener(eventName, this.onSettingInput);
+    }
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-binding]')) {
+      button.addEventListener('click', () => {
+        this.startBinding(button.dataset.binding as ControlAction, button);
+      });
+    }
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-control-preset]')) {
+      button.addEventListener('click', () => {
+        this.applyControlPreset(button.dataset.controlPreset as KeyboardPreset);
+      });
+    }
     this.consoleInput.addEventListener('keydown', this.onConsoleKeyDown);
     this.consoleInput.addEventListener('input', this.onConsoleInput);
+    document.addEventListener('keydown', this.onMenuKeyDown);
+    document.addEventListener('fullscreenchange', this.onFullscreenChange);
+    this.syncSettingsControls();
+    this.applySettingsPresentation();
   }
 
-  setLoading(progress: number, label: string): void {
-    this.loadingLabel.textContent = label.toUpperCase();
-    this.loadingFill.style.transform = `scaleX(${Math.min(1, Math.max(0.025, progress))})`;
+  get isMainMenuOpen(): boolean {
+    return this.mainMenuState && !this.root.classList.contains('is-playing');
+  }
+
+  get isPaused(): boolean {
+    return this.enteredOnce && !this.mainMenuState && !this.root.classList.contains('is-playing');
   }
 
   setReady(): void {
     this.readyState = true;
-    this.setLoading(1, 'SIGNAL STABLE');
     this.enterButton.disabled = false;
-    this.query('[data-ui="enter-copy"]').textContent = 'ENTRER DANS LE LEVEL 0';
     this.root.classList.add('is-ready');
+    this.root.setAttribute('aria-busy', 'false');
+    this.overlay.setAttribute('aria-hidden', 'false');
+    this.overlay.inert = false;
+    if (document.activeElement === document.body) this.enterButton.focus({ preventScroll: true });
+  }
+
+  setLoadGameAvailable(available: boolean, detail = 'Aucune sauvegarde'): void {
+    this.loadButton.disabled = !available;
+    this.query('[data-ui="load-copy"]').textContent = detail;
+  }
+
+  setSessionStarted(started: boolean): void {
+    this.root.classList.toggle('has-session', started);
   }
 
   setLocked(locked: boolean): void {
     if (!locked) this.closeConsole();
-    if (locked) this.enteredOnce = true;
-    this.root.classList.toggle('is-playing', locked);
-    this.overlay.setAttribute('aria-hidden', String(locked));
-    if (!locked && this.readyState && this.enteredOnce) {
-      this.query('[data-ui="enter-copy"]').textContent = 'REPRENDRE L’EXPLORATION';
+    if (locked) {
+      this.enteredOnce = true;
+      this.mainMenuState = false;
+      this.root.classList.add('is-playing');
+      this.root.classList.remove('is-paused', 'is-main-menu');
+      this.overlay.setAttribute('aria-hidden', 'true');
+      this.overlay.inert = true;
+      this.query('[data-ui="hud"]').setAttribute('aria-hidden', 'false');
+      return;
+    }
+    this.root.classList.remove('is-playing');
+    this.overlay.setAttribute('aria-hidden', 'false');
+    this.overlay.inert = false;
+    this.query('[data-ui="hud"]').setAttribute('aria-hidden', 'true');
+    if (this.readyState && this.enteredOnce) {
+      this.mainMenuState = false;
       this.root.classList.add('is-paused');
-    } else if (locked) {
-      this.root.classList.remove('is-paused');
+      this.root.classList.remove('is-main-menu');
+      this.overlay.setAttribute('aria-label', 'Menu pause');
+      this.query('[data-ui="enter-copy"]').textContent = 'Reprendre';
+      this.showPage('home');
     }
   }
 
-  update(room: RoomKind, fps: number): void {
-    this.roomLabel.textContent = roomLabels[room].toUpperCase();
-    this.fpsLabel.textContent = `${Math.round(fps).toString().padStart(2, '0')} FPS`;
+  update(_room: unknown, _fps: number): void {
+    // The regular HUD is intentionally silent. Runtime details live behind /logs.
   }
 
   setInteraction(label: string | null): void {
@@ -229,6 +430,49 @@ export class ExperienceUI {
     this.interactionPrompt.classList.toggle('visible', visible);
     this.interactionPrompt.setAttribute('aria-hidden', String(!visible));
     this.interactionPrompt.querySelector('span')!.textContent = label ?? '';
+  }
+
+  setDiagnosticsVisible(visible: boolean): void {
+    this.root.classList.toggle('has-diagnostics', visible);
+    this.diagnosticsPanel.setAttribute('aria-hidden', String(!visible));
+  }
+
+  updateDiagnostics(snapshot: DiagnosticsSnapshot): void {
+    const fragment = document.createDocumentFragment();
+    const ignored = new Set(['ready', 'updatedAt']);
+    for (const [sectionName, rawSection] of Object.entries(snapshot)) {
+      if (ignored.has(sectionName) || typeof rawSection !== 'object' || rawSection === null) continue;
+      const section = document.createElement('section');
+      const heading = document.createElement('h2');
+      heading.textContent = titleCase(sectionName);
+      const list = document.createElement('dl');
+      for (const [key, value] of Object.entries(rawSection as Record<string, unknown>)) {
+        const row = document.createElement('div');
+        const term = document.createElement('dt');
+        const description = document.createElement('dd');
+        term.textContent = titleCase(key);
+        description.textContent = formatDiagnosticValue(value);
+        row.append(term, description);
+        list.append(row);
+      }
+      section.append(heading, list);
+      fragment.append(section);
+    }
+    this.diagnosticsContent.replaceChildren(fragment);
+  }
+
+  setSettingsProgress(progress: number | null, label = 'Application'): void {
+    const panel = this.query('[data-ui="settings-progress"]');
+    const visible = progress !== null;
+    panel.classList.toggle('visible', visible);
+    panel.setAttribute('aria-hidden', String(!visible));
+    this.query<HTMLSelectElement>('[data-setting="lighting"]').disabled = visible;
+    this.query<HTMLButtonElement>('[data-ui="reset-settings"]').disabled = visible;
+    if (!visible) return;
+    const normalized = Math.min(1, Math.max(0, progress));
+    this.query('[data-ui="settings-progress-label"]').textContent = label;
+    this.query('[data-ui="settings-progress-value"]').textContent = `${Math.round(normalized * 100)}%`;
+    this.query<HTMLElement>('[data-ui="settings-progress-fill"]').style.transform = `scaleX(${normalized})`;
   }
 
   get isConsoleOpen(): boolean {
@@ -241,7 +485,7 @@ export class ExperienceUI {
     this.consoleModeLabel.textContent = mode === 'command' ? '/' : 'me:';
     this.consoleInput.value = mode === 'command' ? '/' : '';
     this.consoleHint.textContent = mode === 'command'
-      ? 'ÉCRIS /HELP OU /LOCATE · TAB COMPLÈTE · ↑↓ HISTORIQUE'
+      ? 'ÉCRIS /HELP · TAB COMPLÈTE · ↑↓ HISTORIQUE'
       : 'ENTRÉE ENVOIE · / EXÉCUTE AUSSI UNE COMMANDE';
     this.resetCompletion();
     this.historyIndex = this.submittedInputs.length;
@@ -275,6 +519,197 @@ export class ExperienceUI {
       }, 6500);
     }
   }
+
+  private showPage(page: MenuPage): void {
+    this.cancelBinding();
+    this.activePage = page;
+    this.root.dataset.menuPage = page;
+    for (const section of this.root.querySelectorAll<HTMLElement>('[data-page]')) {
+      const active = section.dataset.page === page;
+      section.classList.toggle('active', active);
+      section.setAttribute('aria-hidden', String(!active));
+    }
+    for (const button of this.root.querySelectorAll<HTMLElement>('[data-nav-page]')) {
+      const active = button.dataset.navPage === page;
+      button.classList.toggle('active', active);
+      if (active) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    }
+    this.query('[data-ui="escape-hint"]').textContent = page === 'home'
+      ? (this.root.classList.contains('is-paused') ? 'Reprendre' : 'Retour')
+      : 'Retour';
+    requestAnimationFrame(() => {
+      const target = this.root.querySelector<HTMLElement>(
+        `[data-page="${page}"] button:not(:disabled), [data-page="${page}"] select, [data-page="${page}"] input`,
+      ) ?? this.root.querySelector<HTMLElement>(`[data-nav-page="${page}"]`);
+      target?.focus({ preventScroll: true });
+    });
+  }
+
+  private readonly showMainMenu = (): void => {
+    this.mainMenuState = true;
+    this.root.classList.add('is-main-menu');
+    this.root.classList.remove('is-paused');
+    this.overlay.setAttribute('aria-label', 'Menu principal');
+    this.query('[data-ui="enter-copy"]').textContent = this.enteredOnce ? 'Continuer' : 'Jouer';
+    this.showPage('home');
+  };
+
+  private syncSettingsControls(): void {
+    for (const control of this.root.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-setting]')) {
+      const key = control.dataset.setting as keyof GameSettings;
+      const value = this.settings[key];
+      if (control instanceof HTMLInputElement && control.type === 'checkbox') control.checked = Boolean(value);
+      else control.value = String(value);
+    }
+    this.query<HTMLOutputElement>('[data-output="fieldOfView"]').value = `${Math.round(this.settings.fieldOfView)}°`;
+    this.query<HTMLOutputElement>('[data-output="lookSensitivity"]').value = `${Math.round(this.settings.lookSensitivity * 100)}%`;
+    this.query<HTMLOutputElement>('[data-output="masterVolume"]').value = `${Math.round(this.settings.masterVolume * 100)}%`;
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-binding]')) {
+      const action = button.dataset.binding as ControlAction;
+      const key = button.querySelector<HTMLElement>('[data-binding-value]');
+      if (key) key.textContent = formatKeyLabel(this.settings.controls[action]);
+      button.setAttribute('aria-label', `${bindingLabels[action]} : ${formatKeyLabel(this.settings.controls[action])}`);
+    }
+    const preset = detectKeyboardPreset(this.settings.controls);
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-control-preset]')) {
+      const active = button.dataset.controlPreset === preset;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    }
+    this.interactionPrompt.querySelector('kbd')!.textContent = formatKeyLabel(this.settings.controls.interact);
+  }
+
+  private applySettingsPresentation(): void {
+    this.root.classList.toggle('menu-motion-disabled', !this.settings.menuMotion);
+    this.root.classList.toggle('crosshair-disabled', !this.settings.crosshair);
+  }
+
+  private commitSettings(): void {
+    saveGameSettings(this.settings);
+    this.applySettingsPresentation();
+    this.root.classList.add('is-applying-settings');
+    void Promise.resolve(this.actions.settingsChanged({ ...this.settings }))
+      .catch(() => {
+        this.setSettingsProgress(0, 'Impossible d’appliquer ce réglage');
+        window.setTimeout(() => this.setSettingsProgress(null), 2400);
+      })
+      .finally(() => this.root.classList.remove('is-applying-settings'));
+  }
+
+  private readonly onSettingInput = (event: Event): void => {
+    const control = event.currentTarget as HTMLInputElement | HTMLSelectElement;
+    const key = control.dataset.setting as keyof GameSettings;
+    if (key === 'menuMotion' || key === 'cameraMotion' || key === 'crosshair') {
+      this.settings = { ...this.settings, [key]: (control as HTMLInputElement).checked };
+    } else if (key === 'fieldOfView' || key === 'lookSensitivity' || key === 'masterVolume') {
+      this.settings = { ...this.settings, [key]: Number(control.value) };
+    } else {
+      this.settings = { ...this.settings, [key]: control.value } as GameSettings;
+    }
+    this.syncSettingsControls();
+    this.commitSettings();
+  };
+
+  private readonly resetSettings = (): void => {
+    this.cancelBinding();
+    this.settings = defaultGameSettings();
+    this.syncSettingsControls();
+    this.commitSettings();
+  };
+
+  private readonly onMenuKeyDown = (event: KeyboardEvent): void => {
+    if (this.overlay.getAttribute('aria-hidden') === 'true' || this.isConsoleOpen) return;
+    if (this.pendingBinding) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.code === 'Escape') {
+        this.cancelBinding();
+        return;
+      }
+      if (event.repeat || !isBindableCode(event.code)) return;
+      this.commitBinding(event.code);
+      return;
+    }
+    if (event.key === 'Tab') {
+      const focusable = [...this.root.querySelectorAll<HTMLElement>(
+        `.menu-sidebar button:not(:disabled), ` +
+        `[data-page="${this.activePage}"] button:not(:disabled), ` +
+        `[data-page="${this.activePage}"] select:not(:disabled), ` +
+        `[data-page="${this.activePage}"] input:not(:disabled)`,
+      )].filter((element) => element.getClientRects().length > 0);
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+      return;
+    }
+    if (event.code !== 'Escape') return;
+    if (this.activePage !== 'home') {
+      event.preventDefault();
+      this.showPage('home');
+      return;
+    }
+    if (this.root.classList.contains('is-paused') && this.readyState) {
+      event.preventDefault();
+      this.actions.enter();
+    }
+  };
+
+  private startBinding(action: ControlAction, button: HTMLButtonElement): void {
+    this.cancelBinding();
+    this.pendingBinding = action;
+    this.pendingBindingButton = button;
+    button.classList.add('listening');
+    button.setAttribute('aria-pressed', 'true');
+    const key = button.querySelector<HTMLElement>('[data-binding-value]');
+    if (key) key.textContent = '…';
+    this.query('[data-ui="binding-help"]').textContent = `Nouvelle touche pour « ${bindingLabels[action]} »`;
+  }
+
+  private cancelBinding(): void {
+    if (!this.pendingBinding) return;
+    this.pendingBindingButton?.classList.remove('listening');
+    this.pendingBindingButton?.removeAttribute('aria-pressed');
+    this.pendingBinding = undefined;
+    this.pendingBindingButton = undefined;
+    this.query('[data-ui="binding-help"]').textContent = 'Sélectionnez une commande, puis appuyez sur une touche.';
+    this.syncSettingsControls();
+  }
+
+  private commitBinding(code: string): void {
+    const action = this.pendingBinding;
+    if (!action) return;
+    const remapped = remapControlBinding(this.settings.controls, action, code);
+    this.settings = { ...this.settings, controls: remapped.bindings };
+    this.pendingBindingButton?.classList.remove('listening');
+    this.pendingBindingButton?.removeAttribute('aria-pressed');
+    this.pendingBinding = undefined;
+    this.pendingBindingButton = undefined;
+    this.query('[data-ui="binding-help"]').textContent = remapped.swappedAction
+      ? 'Touches échangées pour éviter un conflit.'
+      : 'Commande mise à jour.';
+    this.syncSettingsControls();
+    this.commitSettings();
+  }
+
+  private applyControlPreset(preset: KeyboardPreset): void {
+    this.cancelBinding();
+    this.settings = { ...this.settings, controls: defaultControlBindings(preset) };
+    this.syncSettingsControls();
+    this.commitSettings();
+  }
+
+  private readonly onFullscreenChange = (): void => {
+    const label = this.query('[data-ui="fullscreen"] span');
+    label.textContent = document.fullscreenElement ? 'Quitter le plein écran' : 'Plein écran';
+  };
 
   private appendMessages(messages: readonly ConsoleMessage[]): void {
     if (messages.length === 0) return;
@@ -357,6 +792,13 @@ export class ExperienceUI {
     error.classList.add('visible');
   }
 
+  dispose(): void {
+    document.removeEventListener('keydown', this.onMenuKeyDown);
+    document.removeEventListener('fullscreenchange', this.onFullscreenChange);
+    if (this.chatFadeTimer !== undefined) window.clearTimeout(this.chatFadeTimer);
+    this.root.remove();
+  }
+
   private query<T extends HTMLElement = HTMLElement>(selector: string): T {
     const result = this.root.querySelector<T>(selector);
     if (!result) throw new Error(`Missing UI element: ${selector}`);
@@ -377,9 +819,7 @@ export class ExperienceUI {
 
   private navigateInputHistory(direction: -1 | 1): void {
     if (this.submittedInputs.length === 0) return;
-    if (this.historyIndex === this.submittedInputs.length) {
-      this.historyDraft = this.consoleInput.value;
-    }
+    if (this.historyIndex === this.submittedInputs.length) this.historyDraft = this.consoleInput.value;
     this.historyIndex = Math.min(
       this.submittedInputs.length,
       Math.max(0, this.historyIndex + direction),
@@ -398,13 +838,11 @@ export class ExperienceUI {
       this.closeConsole();
       return;
     }
-
     if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
       event.preventDefault();
       this.navigateInputHistory(event.code === 'ArrowUp' ? -1 : 1);
       return;
     }
-
     if (event.code === 'Tab') {
       event.preventDefault();
       if (this.completionSuggestions.length === 0) this.updateSuggestions();
@@ -415,9 +853,8 @@ export class ExperienceUI {
       this.completionIndex = (this.completionIndex + 1) % this.completionSuggestions.length;
       const suggestion = this.completionSuggestions[this.completionIndex]!;
       this.consoleInput.value = suggestion.value;
-      if (suggestion.value.endsWith(' ')) {
-        this.updateSuggestions();
-      } else {
+      if (suggestion.value.endsWith(' ')) this.updateSuggestions();
+      else {
         this.consoleHint.textContent = `${suggestion.detail} [${this.completionIndex + 1}/${this.completionSuggestions.length}]`;
         this.renderSuggestions(this.completionIndex);
       }
@@ -425,7 +862,6 @@ export class ExperienceUI {
       this.consoleInput.setSelectionRange(end, end);
       return;
     }
-
     if (event.code !== 'Enter') return;
     event.preventDefault();
     const value = this.consoleInput.value.trim();
@@ -439,9 +875,8 @@ export class ExperienceUI {
     const result = this.actions.submitConsole(value, this.consoleMode);
     this.appendMessages(result.messages);
     this.consoleHint.textContent = result.feedback;
-    if (result.close) {
-      this.closeConsole();
-    } else {
+    if (result.close) this.closeConsole();
+    else {
       this.consoleInput.focus();
       this.consoleInput.select();
       this.updateSuggestions();

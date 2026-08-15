@@ -36,11 +36,15 @@ blocage.
 | Sol, rampe, marche, collider | `PhysicsWorld.test.ts` | test génération + rendu concerné |
 | Géométrie ou caps | `WorldBuilder.test.ts` | `npm run build` |
 | Champ zonal/blackout | `ZonalLighting.test.ts` | `WorldBuilder.test.ts` si matériaux/géométrie |
+| Mode classique / bake | `BakedLighting.test.ts` | `WorldBuilder.test.ts` + build |
 | Streaming/offset/préfetch | `WorldStream.test.ts` | `InfiniteWorld.test.ts` |
 | Contrôleur joueur | `PlayerController.test.ts` | `PhysicsWorld.test.ts` si collision |
 | Props | `PropPlacement.test.ts` | build + contrôle visuel si nouvel asset |
 | Qualité/post-FX | `AdaptiveQuality.test.ts` | contrôle visuel |
 | UI/audio/styles | test disponible, sinon build | contrôle navigateur |
+| Sauvegarde russe | `GameSave.test.ts` | accueil sans/avec save + rechargement |
+| Escalier/appartement | tests `src/stairwell` et `src/apartment` | `PhysicsWorld.test.ts` + contrôle visuel |
+| Porte du hall / route Backrooms | `HallExitInteraction.test.ts`, `ExperienceRouting.test.ts` | descente au RDC + interaction E |
 
 ## Contrôle navigateur
 
@@ -52,9 +56,18 @@ Pour un changement visuel ou d’interaction :
 4. vérifier la console, le HUD et la zone modifiée ;
 5. conserver le même seed pour comparer avant/après.
 
-`window.__BACKROOMS__` expose notamment seed, fingerprint, position joueur, FPS,
-draw calls, triangles, chunks et chargements en attente. Utiliser `/noclip` et
-`/locate` pour atteindre une zone sans modifier temporairement le code.
+Pour Russian Stairwells, partir sans stockage local et vérifier que **Charger**
+est désactivé. Lancer une partie, déplacer/orienter le joueur, ouvrir la porte,
+revenir au menu ou masquer la page, puis recharger et choisir **Charger** : pose,
+vue et porte doivent être restaurées. Corrompre ensuite le slot le plus récent
+pour confirmer le repli sur le second sans erreur console ni requête asset 404.
+
+`window.__BACKROOMS__` expose le même snapshot structuré que `/logs` : session,
+position et orientation joueur, chunk et génération courants, objet regardé,
+performances, qualité, streaming et physique. Les alias historiques (`seed`,
+`fps`, `drawCalls`, `chunks`…) restent disponibles à la racine. Utiliser
+`/logs`, `/noclip` et `/locate` pour documenter ou atteindre une zone sans
+modifier temporairement le code.
 
 ## Avant de conclure
 

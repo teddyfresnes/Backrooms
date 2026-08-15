@@ -107,6 +107,61 @@ export class PhysicsWorld {
     }
   }
 
+  /**
+   * Adds an imported architectural shell as world-space triangle meshes.
+   * Imported apartment geometry is too irregular for a useful set of boxes,
+   * while furniture and doors continue to use the cheaper chunk collider API.
+   */
+  addTrimeshChunk(key: string, meshes: readonly THREE.Mesh[]): void {
+    if (!key) throw new Error('Physics chunk keys cannot be empty.');
+    if (this.chunkBodies.has(key)) throw new Error(`Physics chunk already exists: ${key}`);
+
+    const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+    const vertex = new THREE.Vector3();
+    try {
+      for (const mesh of meshes) {
+        mesh.updateWorldMatrix(true, false);
+        const geometry = mesh.geometry;
+        const position = geometry.getAttribute('position');
+        if (!position || position.itemSize < 3 || position.count < 3) continue;
+
+        const vertices = new Float32Array(position.count * 3);
+        for (let index = 0; index < position.count; index += 1) {
+          vertex.fromBufferAttribute(position, index).applyMatrix4(mesh.matrixWorld);
+          vertices[index * 3] = vertex.x;
+          vertices[index * 3 + 1] = vertex.y;
+          vertices[index * 3 + 2] = vertex.z;
+        }
+
+        let indices: Uint32Array;
+        if (geometry.index) {
+          indices = new Uint32Array(geometry.index.count);
+          for (let index = 0; index < geometry.index.count; index += 1) {
+            indices[index] = geometry.index.getX(index);
+          }
+        } else {
+          const triangleVertexCount = Math.floor(position.count / 3) * 3;
+          indices = new Uint32Array(triangleVertexCount);
+          for (let index = 0; index < triangleVertexCount; index += 1) indices[index] = index;
+        }
+        if (indices.length < 3) continue;
+
+        this.world.createCollider(
+          RAPIER.ColliderDesc.trimesh(vertices, indices)
+            .setFriction(0.58)
+            .setRestitution(0),
+          body,
+        );
+      }
+      this.chunkBodies.set(key, body);
+      this.chunkColliders.set(key, new Map());
+      this.requestChunkSynchronization();
+    } catch (error) {
+      this.world.removeRigidBody(body);
+      throw error;
+    }
+  }
+
   removeChunk(key: string): boolean {
     const body = this.chunkBodies.get(key);
     if (!body) return false;
@@ -239,6 +294,13 @@ export class PhysicsWorld {
 
   get isCrouched(): boolean {
     return this.crouched;
+  }
+
+  /** Returns the equivalent standing capsule center without mutating physics. */
+  getStandingPosition(target = new THREE.Vector3()): THREE.Vector3 {
+    target.copy(this.position);
+    if (this.crouched) target.y += CROUCH_CENTER_DROP;
+    return target;
   }
 
   reset(): void {

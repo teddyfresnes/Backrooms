@@ -76,7 +76,7 @@ const cloneMaterial = (
   source: THREE.Material,
   tone: number,
   biome: VisualBiome,
-  lighting: ZonalLightingContext,
+  lighting: ZonalLightingContext | null,
 ): THREE.Material => {
   const material = source.clone();
   const colored = material as THREE.Material & { color?: THREE.Color };
@@ -84,10 +84,10 @@ const cloneMaterial = (
     const biomeTone = biome === 'red' ? 0.88 : biome === 'white' ? 1 : 0.96;
     colored.color.multiplyScalar(tone * biomeTone);
   }
-  if (
+  if (lighting && (
     material instanceof THREE.MeshStandardMaterial ||
     material instanceof THREE.MeshBasicMaterial
-  ) applyZonalLighting(material, lighting);
+  )) applyZonalLighting(material, lighting);
   return material;
 };
 
@@ -95,7 +95,7 @@ const cloneAsset = (
   source: THREE.Group,
   placement: PropPlacement,
   biome: VisualBiome,
-  lighting: ZonalLightingContext,
+  lighting: ZonalLightingContext | null,
 ): THREE.Group => {
   const instance = source.clone(true);
   instance.name = `prop-model-${placement.assetId}`;
@@ -133,7 +133,7 @@ export class WorldPropLayer {
 
   constructor(
     plan: WorldPlan,
-    lighting: ZonalLightingContext = createZonalLightingContext(plan),
+    lighting: ZonalLightingContext | null = createZonalLightingContext(plan),
   ) {
     this.group.name = 'rare-decorative-props';
     const biome = plan.visualBiome ?? 'yellow';

@@ -11,6 +11,7 @@ export class InputManager {
   private readonly justPressed = new Set<string>();
   private readonly justReleased = new Set<string>();
   private enabled = true;
+  private bindings = defaultControlBindings();
 
   constructor() {
     window.addEventListener('keydown', this.onKeyDown);
@@ -22,15 +23,15 @@ export class InputManager {
     if (!this.enabled) {
       return { forward: 0, right: 0, vertical: 0, sprint: false, crouch: false };
     }
-    const forward = Number(this.has('KeyW', 'KeyZ', 'ArrowUp')) - Number(this.has('KeyS', 'ArrowDown'));
-    const right = Number(this.has('KeyD', 'ArrowRight')) - Number(this.has('KeyA', 'KeyQ', 'ArrowLeft'));
-    const crouch = this.has('ControlLeft', 'ControlRight');
-    const vertical = Number(this.has('Space', 'PageUp')) - Number(crouch || this.has('PageDown'));
+    const forward = Number(this.isActionPressed('forward')) - Number(this.isActionPressed('backward'));
+    const right = Number(this.isActionPressed('right')) - Number(this.isActionPressed('left'));
+    const crouch = this.isActionPressed('crouch');
+    const vertical = Number(this.isActionPressed('jump')) - Number(crouch);
     return {
       forward,
       right,
       vertical,
-      sprint: this.has('ShiftLeft', 'ShiftRight'),
+      sprint: this.isActionPressed('sprint'),
       crouch,
     };
   }
@@ -51,6 +52,35 @@ export class InputManager {
 
   isPressed(code: string): boolean {
     return this.enabled && this.pressed.has(code);
+  }
+
+  setBindings(bindings: ControlBindings): void {
+    this.bindings = { ...bindings };
+    this.clear();
+  }
+
+  consumeActionPress(action: ControlAction): boolean {
+    if (!this.enabled) return false;
+    for (const code of equivalentKeyCodes(this.bindings[action])) {
+      if (!this.justPressed.has(code)) continue;
+      this.justPressed.delete(code);
+      return true;
+    }
+    return false;
+  }
+
+  consumeActionRelease(action: ControlAction): boolean {
+    if (!this.enabled) return false;
+    for (const code of equivalentKeyCodes(this.bindings[action])) {
+      if (!this.justReleased.has(code)) continue;
+      this.justReleased.delete(code);
+      return true;
+    }
+    return false;
+  }
+
+  isActionPressed(action: ControlAction): boolean {
+    return this.enabled && this.has(...equivalentKeyCodes(this.bindings[action]));
   }
 
   setEnabled(enabled: boolean): void {
@@ -93,3 +123,9 @@ export class InputManager {
     window.removeEventListener('blur', this.clear);
   }
 }
+import {
+  defaultControlBindings,
+  equivalentKeyCodes,
+  type ControlAction,
+  type ControlBindings,
+} from './ControlBindings';

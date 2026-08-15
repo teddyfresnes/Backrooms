@@ -1,8 +1,15 @@
-# THRESHOLD ZERO — Backrooms Level 0
+# Backrooms: Random story
 
-Une vertical slice jouable sur navigateur consacrée à l’atmosphère du Level 0 : plan procédural déterministe, matériaux PBR locaux, faux plafonds irréguliers, néons instanciés, audio réactif et déplacement FPS avec vraies collisions.
+L’expérience jouable par défaut est désormais **Russian Stairwells** : quatre
+niveaux d’une cage d’escalier soviétique, un appartement importé, pluie sur les
+vitres, porte interactive et déplacement FPS avec collisions Rapier. Le moteur
+procédural historique du Level 0 devient la suite de l’expérience : descendre
+au rez-de-chaussée et appuyer sur **E** devant la double porte du hall charge le
+labyrinthe Backrooms du commit précédent.
 
-Il n’y a volontairement ni monstre ni objectif pour l’instant. Cette version sert de fondation esthétique et technique.
+L’accueil est volontairement léger : la scène 3D et l’appartement ne sont chargés
+qu’après **Nouvelle partie** ou **Charger**. La progression est sauvegardée
+automatiquement dans deux emplacements locaux tournants.
 
 ## Lancer
 
@@ -26,27 +33,26 @@ npm run validate
 - `ZQSD` ou `WASD` : marcher
 - `Maj` : accélérer
 - `Ctrl` : s’accroupir
-- `E` : traverser les passages exigus interactifs
+- `E` : ouvrir ou fermer la porte de l’appartement
 - `C` : ouvrir le chat local et envoyer un message sous la forme `me: message`
 - `H` : ouvrir la console avec `/` déjà prêt
 - `↑` / `↓` : parcourir l'historique des messages et commandes
-- `/help` : afficher l'aide des commandes
-- `/noclip` : basculer le vol libre sans collision (`Espace` monte, `Ctrl` descend)
-- `/locate` puis `Tab` : afficher toutes les cibles chargées et compléter la sélection
-- `/locate dark-room` : rejoindre la pièce hors tension la plus proche
-- `/locate missing-lights` : rejoindre une salle où quelques panneaux ont disparu
-- `/locate hidden-hall` : rejoindre une entrée de hall caché quand elle est chargée
+- `/help` : afficher l’aide des commandes
+- `/save` : forcer une sauvegarde immédiate
 - souris : regarder
 - `Échap` : libérer la souris / pause
 
-Le seed courant est affiché dans le HUD. Une partie lancée sans paramètre reçoit toujours une nouvelle topologie, y compris après rafraîchissement ; pour rejouer un monde précis, utiliser explicitement `?seed=AMBER-HALL-0417`.
+La sauvegarde conserve la dernière position sûre, l’orientation, la durée de jeu
+et l’état animé de la porte. Elle est écrite périodiquement, à la pause, lorsque
+la page devient invisible et avant son déchargement. Une sauvegarde corrompue ou
+incompatible est ignorée proprement ; **Charger** reste alors désactivé.
 
-## Ce qui est déjà présent
+## Fondation procédurale conservée
 
 - labyrinthe BSP dense d’environ une centaine de cellules connectées, avec une forte proportion de couloirs, des cloisons d’épaisseurs variables et des volumes volontairement condamnés ;
 - salles typées : bureaux, corridors, véritables grands halls de 450 m² ou plus, salles imbriquées, zones silencieuses et galeries de seuils ;
 - retours de murs, cloisons coupées, colonnes irrégulières et masses architecturales épaisses qui cassent la sensation d’espace entièrement optimisé ;
-- fosses rares en six familles : trou unique, petites/grandes grilles, grilles denses, mixtes et clusters monumentaux ; un aperçu inférieur compact reste actif jusqu’au chargement asynchrone de l’étage canonique ;
+- fosses rares en six familles : trou unique et grilles régulières symétriques de plusieurs échelles, jusqu’aux ensembles monumentaux ; tous les trous d’une salle rejoignent le même étage (1 à 5 niveaux) ou le même vide mortel, et un aperçu inférieur compact reste actif jusqu’au chargement asynchrone de l’étage canonique ;
 - étages infinis streamés verticalement, puits profonds cohérents sur plusieurs niveaux et grands atriums qui réservent réellement les volumes des étages supérieurs ;
 - halls à piliers agrandis, galeries symétriques à sorties parallèles et brèches monumentales ouvrant sur de longs couloirs ;
 - escalier généré et franchissable grâce à l’autostep Rapier ;
@@ -66,10 +72,12 @@ Le seed courant est affiché dans le HUD. Une partie lancée sans paramètre re�
 src/
   audio/       ambiance Web Audio et pas synthétiques
   core/        initialisation, boucle fixe, qualité adaptative
+  apartment/   appartement importé, colliders et porte interactive
   input/       clavier AZERTY/QWERTY
   physics/     capsule cinématique Rapier et colliders générés
   player/      caméra FPS, inertie, bob et chute
   render/      PBR, géométrie fusionnée, instancing, lumières et post-FX
+  stairwell/   géométrie, matériaux et environnement Russian Stairwells
   ui/          écran d’entrée et HUD
   world/       seed, plan pur, BSP, registre de features et tests
 ```

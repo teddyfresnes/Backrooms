@@ -1,10 +1,20 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { MaterialSet } from './MaterialLibrary';
+import {
+  bakedLightMapJunctionNeedsRepair,
+  bakedLightMapTexelSize,
+  createBakedLightMaps,
+  createBakedMaterialSet,
+  ensureBakedLightUv,
+} from './BakedLighting';
+import type { BakedLightMapData, BakedLightMaps } from './BakedLighting';
+import type { LightingMode } from './LightingMode';
 import { applyZonalLighting, createZonalMaterialSet } from './ZonalLighting';
 import type { ZonalLightingContext } from './ZonalLighting';
 import { createGraffitiMesh, selectWallGraffiti } from './WallGraffiti';
 import { WorldDoorLayer } from './WorldDoors';
+import type { DoorStateSnapshot } from './WorldDoors';
 import { WorldPropLayer } from './WorldProps';
 import type {
   DoorOpenMode,
@@ -243,9 +253,11 @@ const createTexturedBoxGeometry = (
 };
 
 /**
- * Builds four thin, capless shaft walls. Keeping both vertical sides opaque
- * prevents back-face holes from the room below, while removing horizontal
- * caps avoids a raised kerb and coplanar blinking at either end.
+ * Builds four thin, capless shaft walls. Their inward textured faces land
+ * exactly on the opening bounds, so the surrounding ceiling underside and the
+ * vertical lining share one edge when viewed from below. Keeping both vertical
+ * sides opaque prevents back-face holes, while removing horizontal caps avoids
+ * a raised kerb and coplanar blinking at either end.
  */
 export const createOpenShaftWallGeometries = (
   hole: Rect,
@@ -264,7 +276,7 @@ export const createOpenShaftWallGeometries = (
     {
       id: 'open-shaft-north',
       x: center.x,
-      z: hole.minZ,
+      z: hole.minZ - thickness * 0.5,
       length: width + thickness * 2,
       orientation: 'x',
       bottom,
@@ -277,7 +289,7 @@ export const createOpenShaftWallGeometries = (
     {
       id: 'open-shaft-south',
       x: center.x,
-      z: hole.maxZ,
+      z: hole.maxZ + thickness * 0.5,
       length: width + thickness * 2,
       orientation: 'x',
       bottom,
@@ -289,7 +301,7 @@ export const createOpenShaftWallGeometries = (
     },
     {
       id: 'open-shaft-west',
-      x: hole.minX,
+      x: hole.minX - thickness * 0.5,
       z: center.z,
       length: depth + thickness * 2,
       orientation: 'z',
@@ -302,7 +314,7 @@ export const createOpenShaftWallGeometries = (
     },
     {
       id: 'open-shaft-east',
-      x: hole.maxX,
+      x: hole.maxX + thickness * 0.5,
       z: center.z,
       length: depth + thickness * 2,
       orientation: 'z',
@@ -605,6 +617,24 @@ const intersectRects = (left: Rect, right: Rect): Rect | null => {
     : null;
 };
 
+const wallFootprint = (wall: WallSegment): Rect => {
+  const halfLength = wall.length * 0.5;
+  const halfThickness = wall.thickness * 0.5;
+  return wall.orientation === 'x'
+    ? {
+        minX: wall.x - halfLength,
+        maxX: wall.x + halfLength,
+        minZ: wall.z - halfThickness,
+        maxZ: wall.z + halfThickness,
+      }
+    : {
+        minX: wall.x - halfThickness,
+        maxX: wall.x + halfThickness,
+        minZ: wall.z - halfLength,
+        maxZ: wall.z + halfLength,
+      };
+};
+
 const subtractRect = (source: Rect, cut: Rect): Rect[] => {
   const overlap = intersectRects(source, cut);
   if (!overlap) return [source];
@@ -650,11 +680,130 @@ const subtractRects = (sources: readonly Rect[], cuts: readonly Rect[]): Rect[] 
     [...sources],
   );
 
-const rectsTouchOrOverlap = (left: Rect, right: Rect): boolean =>
-  left.minX <= right.maxX + 1e-4 &&
-  left.maxX >= right.minX - 1e-4 &&
-  left.minZ <= right.maxZ + 1e-4 &&
-  left.maxZ >= right.minZ - 1e-4;
+const createHorizontalJunctionRepairGeometry = (
+  walls: readonly WallSegment[],
+  clipRects: readonly Rect[],
+  worldSize: number,
+  wallHeight: number,
+  surface: 'floor' | 'ceiling',
+  patternScale = 1,
+  floorQuarterTurn = false,
+): { geometry: THREE.BufferGeometry | null; patches: Rect[] } => {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const lightMapUvs: number[] = [];
+  const indices: number[] = [];
+  const halfWorld = worldSize * 0.5;
+  const texelSize = bakedLightMapTexelSize(worldSize);
+  const repairWidth = texelSize * 1.05;
+  const y = surface === 'floor' ? 0.002 : wallHeight;
+  const normalY = surface === 'floor' ? 1 : -1;
+  const occupiedPatches: Rect[] = [];
+
+  const addPatch = (rect: Rect, wall: WallSegment, side: -1 | 1): void => {
+    const offset = positions.length / 3;
+    const corners = [
+      [rect.minX, rect.minZ],
+      [rect.maxX, rect.minZ],
+      [rect.maxX, rect.maxZ],
+      [rect.minX, rect.maxZ],
+    ] as const;
+    const halfLength = wall.length * 0.5;
+    const alongMin = (wall.orientation === 'x' ? wall.x : wall.z) - halfLength;
+    const alongMax = (wall.orientation === 'x' ? wall.x : wall.z) + halfLength;
+    const endInset = Math.min(texelSize * 0.5, wall.length * 0.5);
+    const fixed = wall.orientation === 'x' ? wall.z : wall.x;
+    const sampleFixed = fixed + side * (wall.thickness * 0.5 + repairWidth);
+
+    for (const [x, z] of corners) {
+      positions.push(x, y, z);
+      normals.push(0, normalY, 0);
+      if (surface === 'floor') {
+        if (floorQuarterTurn) {
+          uvs.push((z / 2.15) * patternScale, (-x / 2.15) * patternScale);
+        } else {
+          uvs.push((x / 2.15) * patternScale, (z / 2.15) * patternScale);
+        }
+      } else {
+        uvs.push((x / 2.4) * patternScale, (z / 2.4) * patternScale);
+      }
+      const along = THREE.MathUtils.clamp(
+        wall.orientation === 'x' ? x : z,
+        alongMin + endInset,
+        alongMax - endInset,
+      );
+      const sampleX = wall.orientation === 'x' ? along : sampleFixed;
+      const sampleZ = wall.orientation === 'x' ? sampleFixed : along;
+      lightMapUvs.push(
+        THREE.MathUtils.clamp((sampleX + halfWorld) / worldSize, 0, 1),
+        THREE.MathUtils.clamp((sampleZ + halfWorld) / worldSize, 0, 1),
+      );
+    }
+    if (surface === 'floor') {
+      indices.push(offset, offset + 2, offset + 1, offset, offset + 3, offset + 2);
+    } else {
+      indices.push(offset, offset + 1, offset + 2, offset, offset + 2, offset + 3);
+    }
+  };
+
+  const addVisiblePatch = (rect: Rect, wall: WallSegment, side: -1 | 1): void => {
+    let visiblePieces = [rect];
+    for (const occupied of occupiedPatches) {
+      visiblePieces = visiblePieces.flatMap((piece) => subtractRect(piece, occupied));
+      if (visiblePieces.length === 0) return;
+    }
+    for (const piece of visiblePieces) {
+      addPatch(piece, wall, side);
+      occupiedPatches.push(piece);
+    }
+  };
+
+  for (const wall of walls) {
+    if (wall.bottom < -1 || wall.height <= 1.2) continue;
+    const touchesSurface = surface === 'floor'
+      ? wall.bottom <= 0.02
+      : wall.bottom + wall.height >= wallHeight - 0.02;
+    if (!touchesSurface) continue;
+    const fixed = wall.orientation === 'x' ? wall.z : wall.x;
+    if (!bakedLightMapJunctionNeedsRepair(fixed, wall.thickness, worldSize)) continue;
+
+    const halfLength = wall.length * 0.5;
+    const halfThickness = wall.thickness * 0.5;
+    for (const side of [-1, 1] as const) {
+      const inner = fixed + side * halfThickness;
+      const outer = inner + side * repairWidth;
+      const strip: Rect = wall.orientation === 'x'
+        ? {
+            minX: wall.x - halfLength,
+            maxX: wall.x + halfLength,
+            minZ: Math.min(inner, outer),
+            maxZ: Math.max(inner, outer),
+          }
+        : {
+            minX: Math.min(inner, outer),
+            maxX: Math.max(inner, outer),
+            minZ: wall.z - halfLength,
+            maxZ: wall.z + halfLength,
+          };
+      for (const clip of clipRects) {
+        const clipped = intersectRects(strip, clip);
+        if (clipped) addVisiblePatch(clipped, wall, side);
+      }
+    }
+  }
+
+  if (positions.length === 0) return { geometry: null, patches: [] };
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setAttribute('uv1', new THREE.Float32BufferAttribute(lightMapUvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return { geometry, patches: occupiedPatches };
+};
 
 const createCeilingGeometry = (
   rect: Rect,
@@ -826,6 +975,7 @@ const makeMesh = (
   parent: THREE.Object3D,
 ): THREE.Mesh | null => {
   if (!geometry) return null;
+  ensureBakedLightUv(geometry, material);
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = name;
   mesh.matrixAutoUpdate = false;
@@ -1148,6 +1298,7 @@ const createPreviewMaterial = (
   emissive: number,
   emissiveIntensity: number,
 ): THREE.MeshStandardMaterial => {
+  const legacyBakedSource = source.lightMap !== null;
   const material = source.clone();
   material.name = name;
   material.lightMap = null;
@@ -1158,6 +1309,7 @@ const createPreviewMaterial = (
     // viewed through a shaft. Modulating it with the albedo keeps the preview
     // bright while making the upper ceiling unmistakably readable.
     if (material.map) material.emissiveMap = material.map;
+    if (legacyBakedSource) material.fog = false;
   }
   material.onBeforeCompile = source.onBeforeCompile;
   material.customProgramCacheKey = source.customProgramCacheKey;
@@ -1190,11 +1342,13 @@ const createElevatedCeilingMaterial = (
   name: string,
   minimumEmissiveIntensity: number,
 ): THREE.MeshStandardMaterial => {
+  const legacyBakedSource = source.lightMap !== null;
   const material = source.clone();
   material.name = name;
   // Preserve the real tile albedo; giant ceilings use a stronger emissive lift
   // so the grid remains readable at distance.
   material.lightMap = null;
+  if (legacyBakedSource) material.fog = false;
   material.side = THREE.DoubleSide;
   if (material.map) material.emissiveMap = material.map;
   if (material.emissive.getHex() === 0) material.emissive.setHex(0x8a823c);
@@ -1235,6 +1389,11 @@ const DEFAULT_SURFACE_STYLE: SurfaceStyle = {
   floorQuarterTurn: false,
 };
 
+export interface WorldViewOptions {
+  lightingMode?: LightingMode;
+  bakedLightMaps?: BakedLightMapData;
+}
+
 export class WorldView {
   readonly group = new THREE.Group();
   readonly ready: Promise<void>;
@@ -1251,7 +1410,8 @@ export class WorldView {
   private readonly materials: MaterialSet;
   private readonly elevatedCeilingMaterial: THREE.MeshStandardMaterial;
   private readonly distantCeilingMaterial: THREE.MeshStandardMaterial;
-  private readonly lightingContext: ZonalLightingContext;
+  private readonly lightingContext?: ZonalLightingContext;
+  private readonly bakedLightMaps?: BakedLightMaps;
   private readonly ownedMaterials: THREE.Material[];
   private readonly animatedFogMaterials: THREE.ShaderMaterial[] = [];
   private readonly graffitiTextures: THREE.CanvasTexture[] = [];
@@ -1263,12 +1423,20 @@ export class WorldView {
   constructor(
     readonly plan: WorldPlan,
     sourceMaterials: MaterialSet,
+    options: WorldViewOptions = {},
   ) {
     this.group.name = `world-${plan.seed}`;
-    const zonal = createZonalMaterialSet(sourceMaterials, plan);
-    this.materials = zonal.materials;
-    this.lightingContext = zonal.context;
-    this.ownedMaterials = zonal.ownedMaterials;
+    if (options.lightingMode === 'legacy') {
+      this.bakedLightMaps = createBakedLightMaps(plan, options.bakedLightMaps);
+      const baked = createBakedMaterialSet(sourceMaterials, this.bakedLightMaps, plan.size);
+      this.materials = baked.materials;
+      this.ownedMaterials = baked.ownedMaterials;
+    } else {
+      const zonal = createZonalMaterialSet(sourceMaterials, plan);
+      this.materials = zonal.materials;
+      this.lightingContext = zonal.context;
+      this.ownedMaterials = zonal.ownedMaterials;
+    }
     this.surfaceStyle = plan.surfaceStyle ?? DEFAULT_SURFACE_STYLE;
     this.materials.wall.color.multiplyScalar(this.surfaceStyle.wallTint);
     this.materials.plaster.color.multiplyScalar(this.surfaceStyle.wallTint);
@@ -1343,9 +1511,16 @@ export class WorldView {
     this.buildStairs();
     this.buildCeilingDamage();
     this.buildImpossibleVista();
-    this.doorLayer = new WorldDoorLayer(plan, this.lightingContext);
+    if (this.bakedLightMaps) {
+      this.group.traverse((object) => {
+        if (!(object instanceof THREE.Mesh || object instanceof THREE.InstancedMesh)) return;
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of materials) ensureBakedLightUv(object.geometry, material, 0.28);
+      });
+    }
+    this.doorLayer = new WorldDoorLayer(plan, this.lightingContext ?? null);
     this.group.add(this.doorLayer.group);
-    this.propLayer = new WorldPropLayer(plan, this.lightingContext);
+    this.propLayer = new WorldPropLayer(plan, this.lightingContext ?? null);
     this.group.add(this.propLayer.group);
     this.ready = Promise.all([this.doorLayer.ready, this.propLayer.ready]).then(() => undefined);
   }
@@ -1358,7 +1533,7 @@ export class WorldView {
     for (const placement of placements) {
       const created = createGraffitiMesh(placement);
       if (!created) continue;
-      applyZonalLighting(created.mesh.material, this.lightingContext);
+      if (this.lightingContext) applyZonalLighting(created.mesh.material, this.lightingContext);
       group.add(created.mesh);
       this.graffitiTextures.push(created.texture);
       this.graffitiMaterials.push(created.mesh.material);
@@ -1378,8 +1553,49 @@ export class WorldView {
       (feature): feature is RaisedZoneFeature => feature.kind === 'raised-zone',
     );
     const districtFloorElevations = elevationFeatures.map((feature) => feature.elevation);
-    const touchesBaseboardlessZone = (bounds: Rect): boolean =>
-      baseboardlessZones.some((zone) => rectsTouchOrOverlap(zone, bounds));
+    const isInsideBaseboardlessZone = (x: number, z: number): boolean =>
+      baseboardlessZones.some((zone) => pointInRect(x, z, zone, 0.02));
+    const baseboardlessClaimsForWall = (
+      wall: WallSegment,
+    ): Array<{ min: number; max: number; side: -1 | 1 }> => {
+      const alongCenter = wall.orientation === 'x' ? wall.x : wall.z;
+      const fixed = wall.orientation === 'x' ? wall.z : wall.x;
+      const wallMin = alongCenter - wall.length * 0.5;
+      const wallMax = alongCenter + wall.length * 0.5;
+      const sampleOffset = wall.thickness * 0.5 + 0.04;
+      const claims = baseboardlessZones.flatMap((zone) => {
+        const crossMin = wall.orientation === 'x' ? zone.minZ : zone.minX;
+        const crossMax = wall.orientation === 'x' ? zone.maxZ : zone.maxX;
+        const min = Math.max(
+          wallMin,
+          wall.orientation === 'x' ? zone.minX : zone.minZ,
+        );
+        const max = Math.min(
+          wallMax,
+          wall.orientation === 'x' ? zone.maxX : zone.maxZ,
+        );
+        if (max - min <= 0.02) return [];
+        return ([-1, 1] as const).flatMap((side) => {
+          const sampleFixed = fixed + side * sampleOffset;
+          if (sampleFixed < crossMin + 0.02 || sampleFixed > crossMax - 0.02) return [];
+          return [{ min, max, side }];
+        });
+      }).sort((left, right) => left.side - right.side || left.min - right.min);
+      const merged: Array<{ min: number; max: number; side: -1 | 1 }> = [];
+      for (const claim of claims) {
+        const previous = merged[merged.length - 1];
+        if (
+          previous &&
+          previous.side === claim.side &&
+          claim.min <= previous.max + 0.02
+        ) {
+          previous.max = Math.max(previous.max, claim.max);
+        } else {
+          merged.push({ ...claim });
+        }
+      }
+      return merged;
+    };
     const elevationClaimsForWall = (
       wall: WallSegment,
     ): Array<{ min: number; max: number; elevation: number; side: -1 | 1 }> => {
@@ -1471,46 +1687,33 @@ export class WorldView {
           ),
         wallpaperPhaseForWall(this.plan.seed, wall),
       );
-      if (restsOnWalkableFloor) removeBottomCap(geometry);
+      if (restsOnWalkableFloor || wall.detail === 'upper-portal-lintel') {
+        removeBottomCap(geometry);
+      }
       const wallMaterial = wall.kind === 'plaster' ? this.materials.plaster : this.materials.wall;
       if (isShaftLining) {
         shaftCarpetGeometries.push(geometry);
       } else if (isLowerStoreyWall) {
         lowerWallGeometries.push(geometry);
       } else {
+        ensureBakedLightUv(geometry, wallMaterial, 0.42);
         (wall.kind === 'plaster' ? plasterGeometries : wallGeometries).push(geometry);
       }
 
-      const halfLength = wall.length * 0.5;
-      const halfThickness = wall.thickness * 0.5;
-      const wallBounds: Rect = wall.orientation === 'x'
-        ? {
-            minX: wall.x - halfLength,
-            maxX: wall.x + halfLength,
-            minZ: wall.z - halfThickness,
-            maxZ: wall.z + halfThickness,
-          }
-        : {
-            minX: wall.x - halfThickness,
-            maxX: wall.x + halfThickness,
-            minZ: wall.z - halfLength,
-            maxZ: wall.z + halfLength,
-          };
       const suppressBaseboard =
-        wall.detail === 'crawl-tunnel' ||
         wall.detail === 'lower-shell' ||
         wall.detail === 'biome-boundary-band' ||
         (
           wall.detail === 'biome-boundary-skin' &&
           wall.id.includes('-return-')
-        ) ||
-        touchesBaseboardlessZone(wallBounds);
+        );
       if (wall.height > 1.3 && restsOnWalkableFloor && !suppressBaseboard) {
         const alongX = wall.orientation === 'x';
         const wallAlong = alongX ? wall.x : wall.z;
         const wallMin = wallAlong - wall.length * 0.5;
         const wallMax = wallAlong + wall.length * 0.5;
         const elevationClaims = elevationClaimsForWall(wall);
+        const baseboardlessClaims = baseboardlessClaimsForWall(wall);
         const addTrim = (
           min: number,
           max: number,
@@ -1539,23 +1742,37 @@ export class WorldView {
           if (lowerStorey) {
             lowerBaseboardGeometries.push(trim);
           } else {
+            ensureBakedLightUv(trim, this.materials.baseboard, 0.36);
             baseboardGeometries.push(trim);
           }
         };
-        if (elevationClaims.length === 0) {
+        if (elevationClaims.length === 0 && baseboardlessClaims.length === 0) {
           addTrim(wallMin, wallMax, wall.bottom, isLowerStoreyWall);
         } else {
           for (const side of [-1, 1] as const) {
-            const sideClaims = elevationClaims.filter((claim) => claim.side === side);
+            const sideElevationClaims = elevationClaims.filter((claim) => claim.side === side);
+            const sideBaseboardlessClaims = baseboardlessClaims.filter(
+              (claim) => claim.side === side,
+            );
             let ordinaryIntervals = [{ min: wallMin, max: wallMax }];
-            for (const claim of sideClaims) {
+            for (const claim of [...sideElevationClaims, ...sideBaseboardlessClaims]) {
               ordinaryIntervals = subtractInterval(ordinaryIntervals, claim.min, claim.max);
             }
             for (const interval of ordinaryIntervals) {
               addTrim(interval.min, interval.max, wall.bottom, isLowerStoreyWall, side);
             }
-            for (const claim of sideClaims) {
-              addTrim(claim.min, claim.max, claim.elevation, false, side);
+            for (const claim of sideElevationClaims) {
+              let raisedIntervals = [{ min: claim.min, max: claim.max }];
+              for (const baseboardlessClaim of sideBaseboardlessClaims) {
+                raisedIntervals = subtractInterval(
+                  raisedIntervals,
+                  baseboardlessClaim.min,
+                  baseboardlessClaim.max,
+                );
+              }
+              for (const interval of raisedIntervals) {
+                addTrim(interval.min, interval.max, claim.elevation, false, side);
+              }
             }
           }
         }
@@ -1574,16 +1791,12 @@ export class WorldView {
         column.tint,
         this.surfaceStyle.wallPatternScale,
       );
+      ensureBakedLightUv(geometry, this.materials.wall, 0.32);
       wallGeometries.push(geometry);
-      const columnBounds: Rect = {
-        minX: column.x - column.width * 0.5,
-        maxX: column.x + column.width * 0.5,
-        minZ: column.z - column.depth * 0.5,
-        maxZ: column.z + column.depth * 0.5,
-      };
-      if (!touchesBaseboardlessZone(columnBounds)) {
+      if (!isInsideBaseboardlessZone(column.x, column.z)) {
         const trim = new THREE.BoxGeometry(column.width + 0.055, 0.115, column.depth + 0.055);
         trim.translate(column.x, columnBottom + 0.0575, column.z);
+        ensureBakedLightUv(trim, this.materials.baseboard, 0.26);
         baseboardGeometries.push(trim);
       }
     }
@@ -1602,8 +1815,9 @@ export class WorldView {
         mass.tint,
         this.surfaceStyle.wallPatternScale,
       );
+      ensureBakedLightUv(massGeometry, this.materials.wall, 0.36);
       wallGeometries.push(massGeometry);
-      if (!touchesBaseboardlessZone(mass.bounds)) {
+      if (!isInsideBaseboardlessZone(center.x, center.z)) {
         const trimHeight = 0.115;
         const massTrims = [
           new THREE.BoxGeometry(width + 0.055, trimHeight, 0.09).translate(
@@ -1627,6 +1841,9 @@ export class WorldView {
             center.z,
           ),
         ];
+        for (const trim of massTrims) {
+          ensureBakedLightUv(trim, this.materials.baseboard, 0.28);
+        }
         baseboardGeometries.push(...massTrims);
       }
     }
@@ -1659,6 +1876,7 @@ export class WorldView {
       this.surfaceStyle.floorPatternScale,
       this.surfaceStyle.floorQuarterTurn,
     );
+    ensureBakedLightUv(floorGeometry, this.materials.floor);
     const floor = new THREE.Mesh(floorGeometry, this.materials.floor);
     floor.name = 'continuous-carpet-floor';
     floor.matrixAutoUpdate = false;
@@ -1694,19 +1912,46 @@ export class WorldView {
     );
     const inheritedCeilingOpenings = [...getInfiniteChunkCeilingOpenings(this.plan)];
     const stairCeilingOpenings = this.plan.stairCeilingOpenings ?? [];
+    // Portal soffits use the same height, world-space UVs and material as the
+    // adjacent office ceiling. Their wallpaper bottom caps were removed above,
+    // and the ceiling is cut over the same footprint, so the two disjoint faces
+    // meet on one plane without either a visible step or any z-fighting.
+    const portalLintelSoffits = this.plan.walls
+      .filter((wall) => wall.detail === 'upper-portal-lintel')
+      .flatMap((wall) => {
+        const bounds = intersectRects(worldBounds, wallFootprint(wall));
+        return bounds ? [{ bounds, y: this.plan.wallHeight }] : [];
+      });
     const ceilingOpenings = [
       ...inheritedCeilingOpenings,
       ...stairCeilingOpenings,
       ...tallRooms.map((room) => room.bounds),
       ...endlessAbyssFeatures.map((feature) => feature.bounds),
+      ...portalLintelSoffits.map((soffit) => soffit.bounds),
     ];
     const ceilingRects = ceilingOpenings.length > 0
       ? cellsAroundHoles(worldBounds, ceilingOpenings)
       : [worldBounds];
+    const ceilingJunctionRepair = this.bakedLightMaps
+      ? createHorizontalJunctionRepairGeometry(
+          this.plan.walls,
+          ceilingRects,
+          this.plan.size,
+          this.plan.wallHeight,
+          'ceiling',
+          this.surfaceStyle.ceilingPatternScale,
+        )
+      : { geometry: null, patches: [] };
+    const visibleCeilingRects = subtractRects(ceilingRects, ceilingJunctionRepair.patches);
     makeMesh(
-      mergeOrSingle(ceilingRects.map((rect) =>
-        createCeilingGeometry(rect, this.plan.wallHeight, this.surfaceStyle.ceilingPatternScale)
-      )),
+      mergeOrSingle([
+        ...visibleCeilingRects.map((rect) =>
+          createCeilingGeometry(rect, this.plan.wallHeight, this.surfaceStyle.ceilingPatternScale)
+        ),
+        ...portalLintelSoffits.map((soffit) =>
+          createCeilingGeometry(soffit.bounds, soffit.y, this.surfaceStyle.ceilingPatternScale)
+        ),
+      ]),
       this.materials.ceiling,
       'office-drop-ceiling',
       this.group,
@@ -1861,6 +2106,29 @@ export class WorldView {
         mergeOrSingle(previewLightGeometries),
         this.materials.fixtureGlow,
         'upper-story-preview-lights',
+        this.group,
+      );
+    }
+    if (this.bakedLightMaps) {
+      const floorJunctionRepair = createHorizontalJunctionRepairGeometry(
+        this.plan.walls,
+        this.plan.floorRects,
+        this.plan.size,
+        this.plan.wallHeight,
+        'floor',
+        this.surfaceStyle.floorPatternScale,
+        this.surfaceStyle.floorQuarterTurn,
+      );
+      makeMesh(
+        floorJunctionRepair.geometry,
+        this.materials.floor,
+        'floor-lightmap-junction-repairs',
+        this.group,
+      );
+      makeMesh(
+        ceilingJunctionRepair.geometry,
+        this.materials.ceiling,
+        'ceiling-lightmap-junction-repairs',
         this.group,
       );
     }
@@ -3295,7 +3563,7 @@ export class WorldView {
         ));
       }
       const baseY = stairs.baseY ?? 0;
-      for (const wall of getStairCageWalls(stairs)) {
+      for (const wall of getStairCageWalls(stairs, this.plan.wallHeight)) {
         const geometry = createTexturedBoxGeometry(
           rectWidth(wall.bounds),
           wall.top - wall.bottom,
@@ -3553,6 +3821,7 @@ export class WorldView {
       this.surfaceStyle.floorPatternScale,
       this.surfaceStyle.floorQuarterTurn,
     );
+    ensureBakedLightUv(vistaFloorGeometry, this.materials.floor);
     const floor = new THREE.Mesh(vistaFloorGeometry, this.materials.floor);
     floor.name = 'vista-carpet-floor';
     floor.matrixAutoUpdate = false;
@@ -3734,7 +4003,7 @@ export class WorldView {
   }
 
   setWorldOffset(offset: Readonly<THREE.Vector3>): void {
-    this.lightingContext.worldOffset.copy(offset);
+    this.lightingContext?.worldOffset.copy(offset);
   }
 
   getInteraction(
@@ -3777,6 +4046,14 @@ export class WorldView {
     return this.doorLayer.open(doorId, mode);
   }
 
+  getDoorStates(): DoorStateSnapshot[] {
+    return this.doorLayer.getDoorStates();
+  }
+
+  restoreDoorStates(states: readonly DoorStateSnapshot[]): void {
+    this.doorLayer.restoreDoorStates(states);
+  }
+
   consumePassableDoorColliderIds(): string[] {
     return this.doorLayer.consumePassableColliderIds();
   }
@@ -3809,7 +4086,9 @@ export class WorldView {
     this.ownedMaterials.forEach((material) => material.dispose());
     this.graffitiMaterials.forEach((material) => material.dispose());
     this.graffitiTextures.forEach((texture) => texture.dispose());
-    this.lightingContext.lightField.dispose();
+    this.lightingContext?.lightField.dispose();
+    this.bakedLightMaps?.general.dispose();
+    this.bakedLightMaps?.ceiling.dispose();
     this.group.removeFromParent();
   }
 }

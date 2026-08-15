@@ -23,6 +23,9 @@ export const PROP_CHUNK_PRESENCE_RATE = 0.22;
 
 interface SceneSlot {
   choices: readonly string[];
+  key?: string;
+  /** When set, x/z are offsets in the support's local tabletop space. */
+  support?: string;
   x: number;
   z: number;
   y?: number;
@@ -57,12 +60,17 @@ const CHAIRS = polyIds(
   'woodenchair_01',
 );
 const SOFAS = polyIds('sofa_01', 'sofa_02');
-const DESKS = polyIds('metal_office_desk', 'schooldesk_01');
-const TABLES = polyIds('woodentable_01', 'woodentable_02');
-const SIDE_TABLES = polyIds('side_table_01', 'side_table_tall_01');
+const OFFICE_DESKS = polyIds('metal_office_desk');
+const SCHOOL_DESKS = polyIds('schooldesk_01');
+const MEETING_TABLES = polyIds('woodentable_01');
+const SIDE_TABLES = polyIds('side_table_01', 'side_table_tall_01', 'woodentable_02');
 const TELEVISIONS = polyIds('television_01', 'television_02');
 const SMALL_ELECTRONICS = polyIds(
   'boombox',
+  'portable_cassette_player',
+  'vintage_radio_transceiver',
+);
+const SMALL_TABLE_ELECTRONICS = polyIds(
   'portable_cassette_player',
   'vintage_radio_transceiver',
 );
@@ -96,11 +104,11 @@ const SCENE_RECIPES: readonly SceneRecipe[] = [
     id: 'abandoned-office-corner',
     minSpan: 8,
     slots: [
-      { choices: DESKS, x: 0, z: -0.45 },
+      { choices: OFFICE_DESKS, key: 'desk', x: 0, z: -0.45 },
       { choices: CHAIRS, x: -0.15, z: 0.92, rotation: Math.PI, jitter: 0.14, rotationJitter: 0.16 },
-      { choices: TELEVISIONS, x: -0.28, z: -0.48, y: 0.8, scale: 0.72, chance: 0.48 },
-      { choices: DESK_CLUTTER, x: 0.34, z: -0.38, y: 0.81, scale: 0.82 },
-      { choices: polyIds('desk_lamp_arm_01'), x: 0.58, z: -0.46, y: 0.81, scale: 0.84, chance: 0.62 },
+      { choices: TELEVISIONS, support: 'desk', x: -0.43, z: 0, scale: 0.72, chance: 0.48 },
+      { choices: DESK_CLUTTER, support: 'desk', x: 0.13, z: 0.08, scale: 0.78 },
+      { choices: polyIds('desk_lamp_arm_01'), support: 'desk', x: 0.56, z: -0.03, scale: 0.68, chance: 0.62 },
       { choices: BOXES, x: 1.26, z: 0.2, scale: 0.86, chance: 0.78, jitter: 0.16 },
     ],
   },
@@ -108,12 +116,12 @@ const SCENE_RECIPES: readonly SceneRecipe[] = [
     id: 'meeting-left-behind',
     minSpan: 8.6,
     slots: [
-      { choices: TABLES, x: 0, z: 0, scale: 1.08 },
+      { choices: MEETING_TABLES, key: 'table', x: 0, z: 0, scale: 1.08 },
       { choices: CHAIRS, x: -1.35, z: 0.1, rotation: Math.PI * 0.5, jitter: 0.12 },
       { choices: CHAIRS, x: 1.38, z: -0.12, rotation: -Math.PI * 0.5, jitter: 0.16, rotationJitter: 0.12 },
       { choices: CHAIRS, x: -0.38, z: 1.12, rotation: Math.PI, chance: 0.72, jitter: 0.14 },
       { choices: CHAIRS, x: 0.48, z: -1.18, chance: 0.55, jitter: 0.16, rotationJitter: 0.18 },
-      { choices: SMALL_ELECTRONICS, x: 0.2, z: 0.05, y: 0.79, scale: 0.82, chance: 0.62 },
+      { choices: SMALL_ELECTRONICS, support: 'table', x: 0.2, z: 0.05, scale: 0.76, chance: 0.62 },
     ],
   },
   {
@@ -121,10 +129,10 @@ const SCENE_RECIPES: readonly SceneRecipe[] = [
     minSpan: 8.2,
     slots: [
       { choices: polyIds('television_01'), x: 0, z: -1.02, scale: 1.08, rotationJitter: 0.16 },
-      { choices: SIDE_TABLES, x: 1.05, z: -0.92, chance: 0.42, jitter: 0.1 },
+      { choices: SIDE_TABLES, key: 'side-table', x: 1.05, z: -0.92, jitter: 0.1 },
       { choices: CHAIRS, x: -1.18, z: 0.72, rotation: Math.PI * 0.84, jitter: 0.18, rotationJitter: 0.22 },
       { choices: CHAIRS, x: 0.72, z: 0.92, rotation: Math.PI, chance: 0.58, jitter: 0.2, rotationJitter: 0.22 },
-      { choices: SMALL_ELECTRONICS, x: 0.82, z: -0.88, chance: 0.68, jitter: 0.1 },
+      { choices: SMALL_TABLE_ELECTRONICS, support: 'side-table', x: 0, z: 0, scale: 0.76, chance: 0.68 },
       { choices: BOXES, x: 1.32, z: 0.18, scale: 0.82, chance: 0.74, jitter: 0.16 },
     ],
   },
@@ -145,11 +153,11 @@ const SCENE_RECIPES: readonly SceneRecipe[] = [
     minSpan: 9,
     slots: [
       { choices: SOFAS, x: 0, z: 1.28, rotation: Math.PI, jitter: 0.12 },
-      { choices: SIDE_TABLES, x: 0.08, z: 0.05, jitter: 0.1 },
+      { choices: SIDE_TABLES, key: 'side-table', x: 0.08, z: 0.05, jitter: 0.1 },
       { choices: TELEVISIONS, x: 0, z: -1.35, scale: 0.96, chance: 0.78, rotationJitter: 0.12 },
       { choices: CHAIRS, x: 1.62, z: 0.42, rotation: -Math.PI * 0.54, chance: 0.68, jitter: 0.15, rotationJitter: 0.2 },
       { choices: BOXES, x: -1.56, z: 0.18, scale: 0.82, chance: 0.6, jitter: 0.18 },
-      { choices: DESK_CLUTTER, x: 0.08, z: 0.05, y: 0.61, scale: 0.82, chance: 0.62 },
+      { choices: SMALL_TABLE_ELECTRONICS, support: 'side-table', x: 0, z: 0, scale: 0.76, chance: 0.62 },
     ],
   },
   {
@@ -180,11 +188,11 @@ const SCENE_RECIPES: readonly SceneRecipe[] = [
     id: 'school-office-remnant',
     minSpan: 8.8,
     slots: [
-      { choices: DESKS, x: -1.05, z: -0.48, jitter: 0.1 },
-      { choices: DESKS, x: 1.05, z: 0.42, rotation: Math.PI, chance: 0.58, jitter: 0.12 },
+      { choices: SCHOOL_DESKS, key: 'school-desk', x: -1.05, z: -0.48, jitter: 0.1 },
+      { choices: SCHOOL_DESKS, x: 1.05, z: 0.42, rotation: Math.PI, chance: 0.58, jitter: 0.12 },
       { choices: polyIds('schoolchair_01'), x: -1.05, z: 0.72, rotation: Math.PI, jitter: 0.12, rotationJitter: 0.16 },
       { choices: polyIds('schoolchair_01'), x: 1.05, z: -0.82, chance: 0.58, jitter: 0.12, rotationJitter: 0.16 },
-      { choices: kenneyFurnitureIds('books'), x: -0.95, z: -0.38, y: 0.81, chance: 0.74 },
+      { choices: kenneyFurnitureIds('books'), support: 'school-desk', x: 0.06, z: 0.04, scale: 0.88, chance: 0.74 },
       { choices: BOXES, x: 1.48, z: 0.85, scale: 0.82, chance: 0.65, jitter: 0.14 },
     ],
   },
@@ -446,6 +454,52 @@ const rotateOffset = (
   z: x * Math.sin(rotation) + z * Math.cos(rotation),
 });
 
+interface SceneSupport {
+  placement: PropPlacement;
+  definition: PropAssetDefinition;
+}
+
+const fitScaleOnSupport = (
+  definition: PropAssetDefinition,
+  proposedScale: number,
+  localX: number,
+  localZ: number,
+  rotationY: number,
+  support: SceneSupport,
+): number => {
+  const relativeRotation = rotationY - support.placement.rotationY;
+  const cosine = Math.abs(Math.cos(relativeRotation));
+  const sine = Math.abs(Math.sin(relativeRotation));
+  const widthAtUnitScale = definition.size.x * cosine + definition.size.z * sine;
+  const depthAtUnitScale = definition.size.x * sine + definition.size.z * cosine;
+  const inset = 0.045 * support.placement.scale;
+  const availableWidth = support.definition.size.x * support.placement.scale -
+    2 * (Math.abs(localX) + inset);
+  const availableDepth = support.definition.size.z * support.placement.scale -
+    2 * (Math.abs(localZ) + inset);
+  if (availableWidth <= 0 || availableDepth <= 0) return 0;
+  return Math.min(
+    proposedScale,
+    availableWidth / widthAtUnitScale,
+    availableDepth / depthAtUnitScale,
+  );
+};
+
+const overlapsRaisedCandidate = (
+  bounds: Rect,
+  bottom: number,
+  height: number,
+  candidates: readonly PropPlacement[],
+): boolean => candidates.some((candidate) => {
+  if (candidate.position.y <= 0.12) return false;
+  const candidateDefinition = getPropAsset(candidate.assetId);
+  const candidateTop = candidate.position.y + candidateDefinition.size.y * candidate.scale;
+  const top = bottom + height;
+  return bottom < candidateTop - 0.01 &&
+    top > candidate.position.y + 0.01 &&
+    rectsOverlap(bounds, candidate.bounds, 0.015);
+});
+
 const tryScenePlacement = (
   plan: WorldPlan,
   room: RoomRecord,
@@ -466,26 +520,58 @@ const tryScenePlacement = (
       };
       const candidates: PropPlacement[] = [];
       const localUsed = new Set(used);
+      const supports = new Map<string, SceneSupport>();
       let valid = true;
       for (const slot of recipe.slots) {
         if (slot.chance !== undefined && !rng.chance(slot.chance)) continue;
+        const support = slot.support ? supports.get(slot.support) : undefined;
+        if (slot.support && !support) {
+          valid = false;
+          break;
+        }
         const definition = weightedAsset(rng, choicesByIds(slot.choices), localUsed);
         localUsed.add(definition.id);
         const jitter = slot.jitter ?? 0;
+        const offsetScale = support?.placement.scale ?? 1;
+        const localX = (
+          slot.x + (jitter > 0 ? rng.float(-jitter, jitter) : 0)
+        ) * offsetScale;
+        const localZ = (
+          slot.z + (jitter > 0 ? rng.float(-jitter, jitter) : 0)
+        ) * offsetScale;
+        const frameRotation = support?.placement.rotationY ?? angle;
         const offset = rotateOffset(
-          slot.x + (jitter > 0 ? rng.float(-jitter, jitter) : 0),
-          slot.z + (jitter > 0 ? rng.float(-jitter, jitter) : 0),
-          angle,
+          localX,
+          localZ,
+          frameRotation,
         );
-        const scale = (slot.scale ?? 1) * rng.float(0.9, 1.1);
+        let scale = (slot.scale ?? 1) *
+          (support ? support.placement.scale * rng.float(0.96, 1.04) : rng.float(0.9, 1.1));
         const rotationJitter = slot.rotationJitter ?? 0.055;
-        const rotationY = angle +
+        const rotationY = frameRotation +
           (slot.rotation ?? 0) +
           rng.float(-rotationJitter, rotationJitter);
-        const x = anchor.x + offset.x;
-        const z = anchor.z + offset.z;
+        if (support) {
+          scale = fitScaleOnSupport(
+            definition,
+            scale,
+            localX,
+            localZ,
+            rotationY,
+            support,
+          );
+          if (scale < 0.12) {
+            valid = false;
+            break;
+          }
+        }
+        const x = (support?.placement.position.x ?? anchor.x) + offset.x;
+        const z = (support?.placement.position.z ?? anchor.z) + offset.z;
+        const y = support
+          ? support.placement.position.y + support.definition.size.y * support.placement.scale
+          : slot.y ?? 0;
         const bounds = placementBounds(definition, x, z, rotationY, scale);
-        const raised = (slot.y ?? 0) > 0.12;
+        const raised = y > 0.12;
         if (!placementIsSafe(
           plan,
           room,
@@ -498,18 +584,29 @@ const tryScenePlacement = (
           valid = false;
           break;
         }
-        candidates.push({
+        if (raised && overlapsRaisedCandidate(
+          bounds,
+          y,
+          definition.size.y * scale,
+          candidates,
+        )) {
+          valid = false;
+          break;
+        }
+        const placement: PropPlacement = {
           id: `rare-prop-${placementIndex + candidates.length}`,
           assetId: definition.id,
           roomId: room.id,
-          position: { x, y: slot.y ?? 0, z },
+          position: { x, y, z },
           rotationY,
           scale,
           bounds,
           kind: 'scene',
           sceneId: recipe.id,
           tone: rng.float(0.9, 1.02),
-        });
+        };
+        candidates.push(placement);
+        if (slot.key) supports.set(slot.key, { placement, definition });
       }
       if (!valid) continue;
       localUsed.forEach((id) => used.add(id));

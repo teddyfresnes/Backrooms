@@ -84,9 +84,11 @@ Pour `epic3`, seuls les voisins nord et sud restent montés pendant la visite.
 - les escaliers inter-étages rendent des contremarches minces et une sous-face
   inclinée texturée, jamais des marches remplies jusqu’au sol. Les murs d’une
   preview s’arrêtent à son vrai plafond ; la cage réelle habille seule le
-  plénum, et les luminaires de preview doivent rester entièrement hors de
-  l’ouverture. Un plancher percé conserve une sous-face visible depuis la story
-  inférieure et les ouvertures d’escalier ferment les quatre chants de dalle ;
+  plénum. Ses extrémités ferment la bande entre le plafond bas et la dalle haute
+  sans obstruer les baies praticables des deux stories. Les luminaires de preview
+  doivent rester entièrement hors de l’ouverture. Un plancher percé conserve
+  une sous-face visible depuis la story inférieure et les ouvertures d’escalier
+  ferment les quatre chants de dalle ;
 - plafonds bas des `squeeze-view` construits sur `passageRects` quand ce champ
   existe, afin qu’un passage en L ou en T ne couvre pas son rectangle englobant ;
 - éléments répétitifs en `InstancedMesh` ;
@@ -111,10 +113,15 @@ redondante, pas de lui appliquer un décalage arbitraire.
 - Préférer une géométrie fusionnée ou instanciée à un `Mesh` par module.
 - Réutiliser les `MaterialSet`; cloner seulement pour une variation réellement
   propre au chunk ou à la feature.
-- Tout matériau cloné pour une porte, un prop, un graffiti ou une preview doit
-  conserver ou recevoir le décorateur zonal du chunk.
+- En mode moderne, tout matériau cloné pour une porte, un prop, un graffiti ou
+  une preview doit conserver ou recevoir le décorateur zonal du chunk. Le mode
+  classique laisse portes, props et graffitis au pipeline PBR historique.
 - Les plafonds et sols troués doivent être construits par soustraction de
   rectangles, sans faces coplanaires de réparation qui se chevauchent.
+- Pour un puits, la face intérieure texturée de chaque paroi tombe exactement
+  sur la limite du rectangle d'ouverture : le centre de la paroi est donc
+  décalé vers l'extérieur d'une demi-épaisseur. La sous-face du plafond s'arrête
+  sur cette même limite et aucun cap horizontal ne recouvre la couture.
 - Les jupes latérales des rampes suivent la pente avec des rideaux verticaux,
   sans cap supérieur : le tapis déborde déjà sur la couture et deux surfaces à
   cet endroit provoquent du z-fighting.
@@ -135,9 +142,16 @@ redondante, pas de lui appliquer un décalage arbitraire.
   produit des fentes verticales noires aux raccords. Leur base rejoint exactement
   le sommet du mur bas pour ne laisser aucune fente horizontale ; le plafond bas
   voisin se termine sur ce même plan et masque la jonction de son côté.
-- La sous-face d’un `upper-portal-lintel` reste légèrement au-dessus du plafond
-  bas : les deux plans ne doivent jamais être coplanaires, sinon leurs textures
-  clignotent à la frontière entre salle haute et salle normale.
+- Les parois des passages accroupis gardent leurs plinthes. Une
+  `baseboardlessZone` ne retire que la portion de plinthe située sur la face du
+  mur qui regarde réellement dans cette zone ; un simple contact d’extrémité ou
+  la pièce située de l’autre côté du mur ne doivent jamais perdre leur plinthe.
+- La sous-face rendue d’un `upper-portal-lintel` rejoint exactement le plafond
+  bas et utilise le même matériau ainsi que les mêmes UV en coordonnées monde.
+  Le cap inférieur en papier peint est retiré et le plafond bas est soustrait
+  sur toute l’empreinte du portail : les deux surfaces disjointes partagent un
+  plan continu, sans marche visible ni clignotement à la frontière entre salle
+  haute et salle normale.
 - Une géométrie visible depuis un étage voisin doit avoir les faces/caps
   nécessaires ; ne pas compter uniquement sur le back-face culling.
 - Toute nouvelle ressource détenue par `WorldView` doit être libérée dans
@@ -160,14 +174,45 @@ seuils, une portée réduite seulement dans le blackout et une garde verticale s
 la story active. Ne pas piloter une forte densité de fog depuis la seule position
 du joueur : cela recréerait une bulle visible pendant les transitions.
 
-Le post-traitement ne contient ni normal pass ni SSAO. Son pipeline bloom, tone
-mapping, grain, vignette et SMAA reste fixe ; seuls quelques uniforms d’ambiance
-évoluent sans recompilation.
+En mode moderne, le post-traitement ne contient ni normal pass ni SSAO. Son
+pipeline utilise bloom, tone mapping, grain, vignette et SMAA. Le mode classique
+recrée le normal pass, le SSAO et les réglages de bloom historiques ; le composer
+est reconstruit lors de la bascule.
+
+`LightingMode` expose `modern` et `legacy` aux paramètres graphiques. Le mode
+`legacy` restaure le pipeline antérieur à `e6d7e6a` : bake CPU de deux lightmaps
+224² par chunk (surfaces générales et plafond), masque de surface dans le shader
+et réglages de matériaux historiques. Les workers calculent le bake hors du
+thread principal quand ils sont disponibles. `WorldStream.setLightingMode()`
+reconstruit uniquement les `WorldView`, conserve plans, colliders et portes
+ouvertes, garde les données du bake actif et publie une progression
+`{ completed, total }` utilisable par le menu.
 
 Les coordonnées de `LightSlot.ceilingY` sont absolues dans le plan local ;
 `WorldBuilder` applique ses petits offsets visuels une seule fois.
 
 ## Physique et joueur
+
+`RussianStairwellGame` utilise un plan Rapier statique séparé de `WorldStream`.
+La coque de l’appartement entre dans `PhysicsWorld.addTrimeshChunk()` après mise
+à jour de ses matrices monde ; les meubles gardent des AABB économiques. Les
+deux familles sont indexées par clé et suivent le même nettoyage que les chunks
+procéduraux. La porte d’entrée possède son propre collider activé uniquement
+quand elle est complètement fermée.
+
+La double porte importée du rez-de-chaussée reste statique et collidable, mais
+`HallExitInteraction` la raycast comme un portail. Un appui sur l’action
+configurable **interagir** déclenche le routeur de `main.ts` : la sauvegarde du
+stairwell est écrite, tous ses systèmes sont détruits, puis le `Game` procédural
+du commit précédent est chargé dynamiquement. La transition est différée à une
+microtâche afin de ne pas détruire Rapier au milieu du tick d’entrée courant.
+
+La sauvegarde russe est versionnée par schéma, expérience et version de contenu.
+Deux slots tournants conservent le snapshot valide le plus récent et le dernier
+snapshot écrit dans l’autre slot, afin de reprendre celui-ci si le plus récent
+est corrompu ou si l’écriture suivante échoue. Ne jamais sauvegarder la position
+brute d’une chute : le runtime écrit le dernier ancrage
+sûr transmis par `PlayerController`.
 
 `PhysicsWorld` possède un personnage cinématique Rapier et des lots de colliders
 indexés par clé de chunk. Les mutations groupées passent par
@@ -182,21 +227,33 @@ Un appui bref sur E ouvre vite ; un maintien d’une seconde ouvre en deux secon
 
 `Game.frame()` :
 
-1. borne le delta et exécute `PlayerController.fixedUpdate()` à 60 Hz ;
-2. interpole la caméra avec `renderUpdate()` ;
-3. met à jour le streaming et les interactions ;
-4. adapte progressivement la résolution ;
+1. quand le pointeur est verrouillé, borne le delta et exécute
+   `PlayerController.fixedUpdate()` à 60 Hz ;
+2. interpole la caméra avec `renderUpdate()` puis met à jour streaming et
+   interactions ;
+3. quand le jeu est en pause, fige simulation, streaming et caméra ; seul le
+   menu principal peut remplacer cette caméra par son panoramique lent ;
+4. adapte progressivement la résolution en mode qualité automatique ;
 5. rend via `PostFX`.
 
 Ne pas déplacer la physique dans la mise à jour de rendu variable. Les rampes,
 marches, accroupissement et transitions verticales sont sensibles à cette
 séparation.
 
+Les commandes configurables sont stockées dans `GameSettings.controls` sous
+forme de `KeyboardEvent.code` physiques. `ExperienceUI` garantit une touche
+unique par action, puis `Game` transmet la configuration à `PlayerController`
+et `InputManager`. Les variantes gauche/droite de Maj, Ctrl et Alt sont traitées
+comme une même touche pour les conflits et à l’exécution.
+
 ## Props et assets
 
 - `PropCatalog.ts` décrit chemins, tailles, catégories et transformations.
 - `PropPlacement.ts` sélectionne des placements déterministes et sûrs.
 - `WorldProps.ts` charge, normalise, clone et détruit les modèles.
+- Dans une scène composée, un accessoire posé en hauteur référence son meuble
+  support : sa hauteur suit l’échelle réelle du meuble et son emprise est
+  réduite si nécessaire pour rester à l’intérieur du plateau.
 - Le catalogue runtime est volontairement resserré : ancres PBR Poly Haven,
   petit désordre Kenney seulement. Les sources sont servies depuis
   `public/assets/textures/{polyhaven,kenney}`.
@@ -223,6 +280,7 @@ séparation.
 
 - rendu architectural : `src/render/WorldBuilder.test.ts`
 - lumière zonale : `src/render/ZonalLighting.test.ts`
+- lumière classique : `src/render/BakedLighting.test.ts`
 - graffiti : `src/render/WallGraffiti.test.ts`
 - streaming : `src/core/WorldStream.test.ts`
 - physique : `src/physics/PhysicsWorld.test.ts`

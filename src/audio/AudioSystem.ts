@@ -23,18 +23,25 @@ export class AudioSystem {
   private footstepNoise?: AudioBuffer;
   private sources: AudioScheduledSourceNode[] = [];
   private started = false;
+  private disposed = false;
   private stepSide = -1;
+  private masterVolume = 0.42;
 
   async start(): Promise<void> {
+    if (this.disposed) return;
     if (this.started) {
-      await this.context?.resume();
+      try {
+        await this.context?.resume();
+      } catch {
+        // The context may have closed while a session was being replaced.
+      }
       return;
     }
     this.started = true;
     this.context = new AudioContext({ latencyHint: 'interactive' });
     const context = this.context;
     this.master = context.createGain();
-    this.master.gain.value = 0.42;
+    this.master.gain.value = this.masterVolume;
     this.lowpass = context.createBiquadFilter();
     this.lowpass.type = 'lowpass';
     this.lowpass.frequency.value = 6200;
@@ -53,10 +60,17 @@ export class AudioSystem {
       this.loadBuffer('/assets/audio/fluorescent-hum-cc0.mp3'),
       this.loadBuffer('/assets/audio/ventilation-cc0.mp3'),
     ]);
+    if (this.disposed || this.context !== context) return;
     if (humBuffer) this.sources.push(createLoopSource(context, humBuffer, this.humGain, 3.7));
     if (ventilationBuffer) this.sources.push(createLoopSource(context, ventilationBuffer, this.ventGain, 8.1));
     this.createElectricalBed();
     this.footstepNoise = this.createNoiseBuffer(0.18);
+  }
+
+  setMasterVolume(volume: number): void {
+    this.masterVolume = Math.min(1, Math.max(0, Number.isFinite(volume) ? volume : 0.42));
+    if (!this.context || !this.master) return;
+    this.master.gain.setTargetAtTime(this.masterVolume, this.context.currentTime, 0.035);
   }
 
   private async loadBuffer(url: string): Promise<AudioBuffer | null> {
@@ -149,12 +163,18 @@ export class AudioSystem {
   }
 
   async setSuspended(suspended: boolean): Promise<void> {
-    if (!this.context) return;
-    if (suspended) await this.context.suspend();
-    else await this.context.resume();
+    if (!this.context || this.disposed) return;
+    try {
+      if (suspended) await this.context.suspend();
+      else await this.context.resume();
+    } catch {
+      // Closing and suspending can race while a runtime is replaced.
+    }
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.sources.forEach((source) => {
       try {
         source.stop();
@@ -162,6 +182,13 @@ export class AudioSystem {
         // Already stopped.
       }
     });
-    void this.context?.close();
+    const context = this.context;
+    this.context = undefined;
+    this.master = undefined;
+    this.humGain = undefined;
+    this.ventGain = undefined;
+    this.lowpass = undefined;
+    this.footstepNoise = undefined;
+    void context?.close().catch(() => undefined);
   }
 }

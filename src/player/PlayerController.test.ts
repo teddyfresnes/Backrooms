@@ -5,6 +5,16 @@ const inputState = vi.hoisted(() => ({
   presses: new Set<string>(),
   releases: new Set<string>(),
   down: new Set<string>(),
+  bindings: {
+    forward: 'KeyZ',
+    backward: 'KeyS',
+    left: 'KeyQ',
+    right: 'KeyD',
+    sprint: 'ShiftLeft',
+    jump: 'Space',
+    crouch: 'ControlLeft',
+    interact: 'KeyE',
+  } as Record<string, string>,
 }));
 
 vi.mock('three/addons/controls/PointerLockControls.js', async () => {
@@ -45,6 +55,31 @@ vi.mock('../input/InputManager', () => ({
     }
     isPressed(code: string): boolean {
       return inputState.down.has(code);
+    }
+    setBindings(bindings: Record<string, string>): void {
+      inputState.bindings = { ...bindings };
+    }
+    consumeActionPress(action: string): boolean {
+      return this.consumeAny(inputState.presses, action);
+    }
+    consumeActionRelease(action: string): boolean {
+      return this.consumeAny(inputState.releases, action);
+    }
+    isActionPressed(action: string): boolean {
+      return this.actionCodes(action).some((code) => inputState.down.has(code));
+    }
+    private consumeAny(source: Set<string>, action: string): boolean {
+      const code = this.actionCodes(action).find((candidate) => source.has(candidate));
+      if (!code) return false;
+      source.delete(code);
+      return true;
+    }
+    private actionCodes(action: string): string[] {
+      const code = inputState.bindings[action]!;
+      if (code === 'ShiftLeft' || code === 'ShiftRight') return ['ShiftLeft', 'ShiftRight'];
+      if (code === 'ControlLeft' || code === 'ControlRight') return ['ControlLeft', 'ControlRight'];
+      if (code === 'AltLeft' || code === 'AltRight') return ['AltLeft', 'AltRight'];
+      return [code];
     }
     setEnabled(): void {}
     dispose(): void {}
@@ -124,13 +159,14 @@ const createController = (physics: FakePhysics) => {
     onSafePosition: vi.fn(),
     onFallReset: vi.fn(),
   };
+  const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 100);
   const controller = new PlayerController(
-    new THREE.PerspectiveCamera(70, 1, 0.1, 100),
+    camera,
     element,
     physics as unknown as PhysicsWorld,
     callbacks,
   );
-  return { callbacks, controller };
+  return { callbacks, camera, controller };
 };
 
 beforeEach(() => {
@@ -143,9 +179,44 @@ beforeEach(() => {
   inputState.presses.clear();
   inputState.releases.clear();
   inputState.down.clear();
+  Object.assign(inputState.bindings, {
+    forward: 'KeyZ',
+    backward: 'KeyS',
+    left: 'KeyQ',
+    right: 'KeyD',
+    sprint: 'ShiftLeft',
+    jump: 'Space',
+    crouch: 'ControlLeft',
+    interact: 'KeyE',
+  });
 });
 
 describe('PlayerController interaction timing', () => {
+  it('uses the remapped interaction key immediately', () => {
+    const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });
+    const { callbacks, controller } = createController(physics);
+    controller.setControlBindings({
+      forward: 'KeyW',
+      backward: 'KeyS',
+      left: 'KeyA',
+      right: 'KeyD',
+      sprint: 'ShiftLeft',
+      jump: 'Space',
+      crouch: 'ControlLeft',
+      interact: 'KeyF',
+    });
+
+    inputState.presses.add('KeyF');
+    inputState.down.add('KeyF');
+    controller.fixedUpdate(0.1);
+    inputState.down.delete('KeyF');
+    inputState.releases.add('KeyF');
+    controller.fixedUpdate(1 / 60);
+
+    expect(callbacks.onInteract).toHaveBeenCalledWith('fast');
+    controller.dispose();
+  });
+
   it('uses a quick open for a short E press', () => {
     const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });
     const { callbacks, controller } = createController(physics);
@@ -186,6 +257,21 @@ describe('PlayerController interaction timing', () => {
 });
 
 describe('PlayerController locomotion', () => {
+  it('applies persisted camera comfort settings', () => {
+    const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });
+    const { camera, controller } = createController(physics);
+
+    controller.setFieldOfView(88);
+    controller.setLookSensitivity(1.45);
+    controller.setCameraMotionEnabled(false);
+    controller.renderUpdate(1 / 60, 1);
+
+    expect(camera.fov).toBeCloseTo(88);
+    expect(controller.controls.pointerSpeed).toBeCloseTo(1.45);
+    expect(camera.rotation.z).toBeCloseTo(0);
+    controller.dispose();
+  });
+
   it('jumps from the ground when Space is pressed', () => {
     const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });
     const { controller } = createController(physics);
@@ -230,6 +316,49 @@ describe('PlayerController locomotion', () => {
     expect(physics.crouched).toBe(false);
     expect(physics.crouchRequests).toContain(true);
     expect(physics.crouchRequests.at(-1)).toBe(false);
+    controller.dispose();
+  });
+});
+
+describe('PlayerController look state', () => {
+  it('round-trips the internal normalized look quaternion independently from camera roll', () => {
+    const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });
+    const { camera, controller } = createController(physics);
+    const expected = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.34, -1.17, 0, 'YXZ'));
+
+    expect(controller.setLookQuaternion({
+      x: expected.x * 4,
+      y: expected.y * 4,
+      z: expected.z * 4,
+      w: expected.w * 4,
+    })).toBe(true);
+
+    const target = new THREE.Quaternion();
+    expect(controller.getLookQuaternion(target)).toBe(target);
+    expect(target.length()).toBeCloseTo(1);
+    expect(target.angleTo(expected)).toBeCloseTo(0);
+    expect(camera.quaternion.angleTo(expected)).toBeCloseTo(0);
+
+    camera.rotateZ(0.2);
+    expect(controller.getLookQuaternion().angleTo(expected)).toBeCloseTo(0);
+    controller.dispose();
+  });
+
+  it('rejects non-finite and degenerate look quaternions without changing the view', () => {
+    const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });
+    const { controller } = createController(physics);
+    const expected = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.72);
+    expect(controller.setLookQuaternion(expected)).toBe(true);
+
+    for (const invalid of [
+      { x: Number.NaN, y: 0, z: 0, w: 1 },
+      { x: 0, y: Number.POSITIVE_INFINITY, z: 0, w: 1 },
+      { x: 0, y: 0, z: 0, w: 0 },
+      { x: 1e-12, y: 0, z: 0, w: 0 },
+    ]) {
+      expect(controller.setLookQuaternion(invalid)).toBe(false);
+      expect(controller.getLookQuaternion().angleTo(expected)).toBeCloseTo(0);
+    }
     controller.dispose();
   });
 });
@@ -294,6 +423,30 @@ describe('PlayerController infinite vertical recovery', () => {
     expect(callbacks.onFallReset).toHaveBeenCalledTimes(1);
     expect(controller.position.toArray()).toEqual([-6, -250, 11]);
     expect(physics.teleports.at(-1)).toEqual({ x: -6, y: -250, z: 11 });
+    controller.dispose();
+  });
+});
+
+describe('PlayerController diagnostics', () => {
+  it('exposes reproducible movement and view state without mutable Three.js objects', () => {
+    const physics = new FakePhysics({ x: 12.5, y: 6.265, z: -18.75 });
+    const { controller } = createController(physics);
+
+    const state = controller.getDebugState();
+
+    expect(state.position).toEqual({ x: 12.5, y: 6.265, z: -18.75 });
+    expect(state).toMatchObject({
+      x: 12.5,
+      y: 6.265,
+      z: -18.75,
+      grounded: true,
+      noclip: false,
+      traversing: false,
+      pointerLocked: true,
+      view: { yaw: 0, pitch: 0, cardinal: 'N' },
+    });
+    expect(state.view.direction).toEqual({ x: 0, y: 0, z: -1 });
+    expect(state.position).not.toBe(controller.position);
     controller.dispose();
   });
 });

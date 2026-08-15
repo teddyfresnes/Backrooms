@@ -95,6 +95,32 @@ const overlaps = (left: Rect, right: Rect): boolean =>
   left.minZ < right.maxZ &&
   left.maxZ > right.minZ;
 
+const fitsOnTabletop = (
+  item: NonNullable<WorldPlan['propPlacements']>[number],
+  support: NonNullable<WorldPlan['propPlacements']>[number],
+): boolean => {
+  const itemDefinition = getPropAsset(item.assetId);
+  const supportDefinition = getPropAsset(support.assetId);
+  const deltaX = item.position.x - support.position.x;
+  const deltaZ = item.position.z - support.position.z;
+  const cosine = Math.cos(support.rotationY);
+  const sine = Math.sin(support.rotationY);
+  const localX = deltaX * cosine + deltaZ * sine;
+  const localZ = -deltaX * sine + deltaZ * cosine;
+  const relativeRotation = item.rotationY - support.rotationY;
+  const relativeCosine = Math.abs(Math.cos(relativeRotation));
+  const relativeSine = Math.abs(Math.sin(relativeRotation));
+  const itemHalfX = (
+    itemDefinition.size.x * relativeCosine + itemDefinition.size.z * relativeSine
+  ) * item.scale * 0.5;
+  const itemHalfZ = (
+    itemDefinition.size.x * relativeSine + itemDefinition.size.z * relativeCosine
+  ) * item.scale * 0.5;
+  const inset = 0.04 * support.scale;
+  return Math.abs(localX) + itemHalfX <= supportDefinition.size.x * support.scale * 0.5 - inset &&
+    Math.abs(localZ) + itemHalfZ <= supportDefinition.size.z * support.scale * 0.5 - inset;
+};
+
 describe('rare decorative props', () => {
   it('keeps prop clusters rare while drawing broadly from the catalog', () => {
     const samples = 500;
@@ -151,6 +177,36 @@ describe('rare decorative props', () => {
         )).toBe(true);
       }
     }
+  });
+
+  it('keeps every raised scene object in contact with and inside its table', () => {
+    const supportedScenes = new Set<string>();
+    let raisedObjects = 0;
+    for (let index = 0; index < 900; index += 1) {
+      const plan = testPlan();
+      populateRareProps(plan, `PROP-SURFACE-AUDIT-${index}`);
+      for (const item of plan.propPlacements?.filter(({ position }) => position.y > 0.12) ?? []) {
+        raisedObjects += 1;
+        const support = plan.propPlacements?.find((candidate) => {
+          if (candidate.sceneId !== item.sceneId || candidate.position.y > 0.12) return false;
+          const definition = getPropAsset(candidate.assetId);
+          if (definition.category !== 'table') return false;
+          const top = candidate.position.y + definition.size.y * candidate.scale;
+          return Math.abs(top - item.position.y) < 1e-9 && fitsOnTabletop(item, candidate);
+        });
+        expect(support, `${item.sceneId}:${item.assetId}`).toBeDefined();
+        supportedScenes.add(item.sceneId!);
+      }
+    }
+
+    expect(raisedObjects).toBeGreaterThan(25);
+    expect(supportedScenes).toEqual(new Set([
+      'abandoned-office-corner',
+      'meeting-left-behind',
+      'dead-television-corner',
+      'abandoned-lounge',
+      'school-office-remnant',
+    ]));
   });
 
   it('places a real catalog object in rooms designated by a door', () => {

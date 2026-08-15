@@ -34,6 +34,14 @@ export interface DoorInteractionCandidate {
   label: string;
 }
 
+export interface DoorStateSnapshot {
+  readonly id: string;
+  readonly progress: number;
+  readonly targetProgress: number;
+  readonly remainingDuration: number;
+  readonly colliderReleased: boolean;
+}
+
 const gltfLoader = new GLTFLoader();
 let templatePromise: Promise<THREE.Group> | undefined;
 
@@ -94,7 +102,7 @@ const loadDoorTemplate = (): Promise<THREE.Group> => {
 
 const cloneDoorTemplate = (
   source: THREE.Group,
-  lighting: ZonalLightingContext,
+  lighting: ZonalLightingContext | null,
 ): THREE.Group => {
   const clone = source.clone(true);
   clone.traverse((child) => {
@@ -102,10 +110,10 @@ const cloneDoorTemplate = (
     child.geometry = child.geometry.clone();
     const cloneMaterial = (sourceMaterial: THREE.Material): THREE.Material => {
       const material = sourceMaterial.clone();
-      if (
+      if (lighting && (
         material instanceof THREE.MeshStandardMaterial ||
         material instanceof THREE.MeshBasicMaterial
-      ) applyZonalLighting(material, lighting);
+      )) applyZonalLighting(material, lighting);
       return material;
     };
     child.material = Array.isArray(child.material)
@@ -133,7 +141,7 @@ export class WorldDoorLayer {
 
   constructor(
     plan: WorldPlan,
-    lighting: ZonalLightingContext = createZonalLightingContext(plan),
+    lighting: ZonalLightingContext | null = createZonalLightingContext(plan),
   ) {
     this.group.name = 'interactive-office-doors';
     const features = plan.features.filter(
@@ -176,7 +184,8 @@ export class WorldDoorLayer {
             runtime.feature.position.z +
               (runtime.feature.orientation === 'z' ? hingeAlong : 0),
           );
-          instance.rotation.y = runtime.closedRotation;
+          instance.rotation.y = runtime.closedRotation +
+            runtime.swingSign * OPEN_SWING * runtime.progress;
           instance.scale.setScalar(scale);
           runtime.pivot = instance;
           this.group.add(instance);
@@ -247,6 +256,35 @@ export class WorldDoorLayer {
 
   getOpenProgress(doorId: string): number | undefined {
     return this.runtimes.get(doorId)?.progress;
+  }
+
+  getDoorStates(): DoorStateSnapshot[] {
+    return [...this.runtimes.entries()]
+      .filter(([, runtime]) => runtime.targetProgress > 0 || runtime.progress > 0.015)
+      .map(([id, runtime]) => ({
+        id,
+        progress: runtime.progress,
+        targetProgress: runtime.targetProgress,
+        remainingDuration: Math.max(0, runtime.duration - runtime.elapsed),
+        colliderReleased: runtime.colliderReleased,
+      }));
+  }
+
+  restoreDoorStates(states: readonly DoorStateSnapshot[]): void {
+    for (const state of states) {
+      const runtime = this.runtimes.get(state.id);
+      if (!runtime) continue;
+      runtime.progress = THREE.MathUtils.clamp(state.progress, 0, 1);
+      runtime.startProgress = runtime.progress;
+      runtime.targetProgress = THREE.MathUtils.clamp(state.targetProgress, 0, 1);
+      runtime.elapsed = 0;
+      runtime.duration = Math.max(0.05, state.remainingDuration);
+      runtime.colliderReleased = state.colliderReleased;
+      if (runtime.pivot) {
+        runtime.pivot.rotation.y = runtime.closedRotation +
+          runtime.swingSign * OPEN_SWING * runtime.progress;
+      }
+    }
   }
 
   consumePassableColliderIds(): string[] {

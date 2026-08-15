@@ -554,7 +554,7 @@ const rebuildPillarHallLights = (
   plan: WorldPlan,
   hall: WorldPlan['rooms'][number],
   pillars: readonly WorldPlan['columns'][number][],
-  hallPit: GridPitFeature | undefined,
+  blockedOpenings: readonly Rect[],
   rng: SeededRandom,
 ): void => {
   plan.lights = plan.lights.filter((light) => light.roomId !== hall.id);
@@ -586,20 +586,26 @@ const rebuildPillarHallLights = (
         Math.abs(x - pillar.x) <= pillar.width * 0.5 + halfPanelX + 0.28 &&
         Math.abs(z - pillar.z) <= pillar.depth * 0.5 + halfPanelZ + 0.28,
     ) ||
-    (hallPit?.holes.some(
+    blockedOpenings.some(
       (hole) =>
         x + halfPanelX >= hole.minX &&
         x - halfPanelX <= hole.maxX &&
         z + halfPanelZ >= hole.minZ &&
         z - halfPanelZ <= hole.maxZ,
-    ) ?? false) ||
+    ) ||
     plan.solidMasses.some(
       (mass) =>
         x + halfPanelX >= mass.bounds.minX &&
         x - halfPanelX <= mass.bounds.maxX &&
         z + halfPanelZ >= mass.bounds.minZ &&
         z - halfPanelZ <= mass.bounds.maxZ,
-    );
+    ) ||
+    plan.walls.some((wall) => {
+      const halfWallX = wall.orientation === 'x' ? wall.length * 0.5 : wall.thickness * 0.5;
+      const halfWallZ = wall.orientation === 'z' ? wall.length * 0.5 : wall.thickness * 0.5;
+      return Math.abs(x - wall.x) <= halfPanelX + halfWallX + 0.05 &&
+        Math.abs(z - wall.z) <= halfPanelZ + halfWallZ + 0.05;
+    });
 
   let lightIndex = 0;
   for (let xIndex = 0; xIndex < columns; xIndex += 1) {
@@ -740,7 +746,7 @@ const applyBiome = (plan: WorldPlan, biome: InfiniteBiome, seed: string): void =
         kind: 'column',
       });
     }
-    rebuildPillarHallLights(plan, hall, added, hallPit, rng.fork('ceiling-lights'));
+    rebuildPillarHallLights(plan, hall, added, hallPit?.holes ?? [], rng.fork('ceiling-lights'));
   }
 };
 
@@ -994,12 +1000,21 @@ const inheritedShaftEnclosuresForPlan = (
   >();
   for (const opening of openings) {
     const center = rectCenter(opening);
-    const containingRooms = plan.rooms
+    const roomsWithClearance = plan.rooms
+      .filter((room) =>
+        room.level >= 0 &&
+        room.bounds.minX <= opening.minX - 0.35 &&
+        room.bounds.maxX >= opening.maxX + 0.35 &&
+        room.bounds.minZ <= opening.minZ - 0.35 &&
+        room.bounds.maxZ >= opening.maxZ + 0.35
+      )
+      .sort((left, right) => rectArea(left.bounds) - rectArea(right.bounds));
+    const roomsContainingCenter = plan.rooms
       .filter((room) =>
         room.level >= 0 && pointInRect(center.x, center.z, room.bounds, 0.02)
       )
       .sort((left, right) => rectArea(left.bounds) - rectArea(right.bounds));
-    const host = containingRooms[0] ?? [...plan.rooms]
+    const host = roomsWithClearance[0] ?? roomsContainingCenter[0] ?? [...plan.rooms]
       .filter((room) => room.level >= 0)
       .sort((left, right) => {
         const leftCenter = rectCenter(left.bounds);
@@ -1021,8 +1036,8 @@ const inheritedShaftEnclosuresForPlan = (
   const shaftClearance = 0.9;
   const enclosures: InheritedShaftEnclosure[] = [];
   for (const { roomId, openings: roomOpenings } of openingGroups.values()) {
-    const room = plan.rooms.find((candidate) => candidate.id === roomId);
-    if (!room) continue;
+    const assignedRoom = plan.rooms.find((candidate) => candidate.id === roomId);
+    if (!assignedRoom) continue;
     const union: Rect = {
       minX: Math.min(...roomOpenings.map((opening) => opening.minX)),
       maxX: Math.max(...roomOpenings.map((opening) => opening.maxX)),
@@ -1034,6 +1049,7 @@ const inheritedShaftEnclosuresForPlan = (
       roomMax: number,
       unionMin: number,
       unionMax: number,
+      allowFloating: boolean,
     ): Array<{ min: number; max: number }> => {
       const choices: Array<{ min: number; max: number }> = [];
       const insetMin = Math.max(-half + wallInset, roomMin + wallInset);
@@ -1050,9 +1066,24 @@ const inheritedShaftEnclosuresForPlan = (
           max: insetMax,
         });
       }
-      // A coalesced opening can exceptionally span the complete host room.
-      // Keep a closed shell around it even when no room corner has clearance.
-      if (choices.length === 0) {
+      // A shaft can straddle a partition in the unrelated intermediate
+      // layout. In that case, anchor just outside the host-room boundary and
+      // extend the opposite side far enough to keep the whole shaft internal.
+      const outerMin = Math.max(-half + wallInset, roomMin - wallInset);
+      const outerMax = Math.min(half - wallInset, roomMax + wallInset);
+      if (choices.length === 0 && outerMin <= unionMin - 0.35) {
+        choices.push({
+          min: outerMin,
+          max: Math.min(half - wallInset, unionMax + shaftClearance),
+        });
+      }
+      if (choices.length === 0 && outerMax >= unionMax + 0.35) {
+        choices.push({
+          min: Math.max(-half + wallInset, unionMin - shaftClearance),
+          max: outerMax,
+        });
+      }
+      if (choices.length === 0 && allowFloating) {
         choices.push({
           min: Math.max(-half + wallInset, unionMin - shaftClearance),
           max: Math.min(half - wallInset, unionMax + shaftClearance),
@@ -1060,30 +1091,74 @@ const inheritedShaftEnclosuresForPlan = (
       }
       return choices;
     };
+    const enclosureCandidates = plan.rooms
+      .filter((room) => room.level >= 0 && rectsOverlap(room.bounds, union))
+      .flatMap((room) => {
+        const xChoices = axisChoices(
+          room.bounds.minX,
+          room.bounds.maxX,
+          union.minX,
+          union.maxX,
+          false,
+        );
+        const zChoices = axisChoices(
+          room.bounds.minZ,
+          room.bounds.maxZ,
+          union.minZ,
+          union.maxZ,
+          false,
+        );
+        return xChoices.flatMap((x) => zChoices.map((z) => ({
+          roomId: room.id,
+          bounds: {
+            minX: x.min,
+            maxX: x.max,
+            minZ: z.min,
+            maxZ: z.max,
+          },
+        })));
+      })
+      .filter(({ bounds }) =>
+        bounds.minX <= union.minX - 0.35 &&
+        bounds.maxX >= union.maxX + 0.35 &&
+        bounds.minZ <= union.minZ - 0.35 &&
+        bounds.maxZ >= union.maxZ + 0.35
+      )
+      .sort((left, right) => rectArea(left.bounds) - rectArea(right.bounds));
+    const anchored = enclosureCandidates[0];
+    if (anchored) {
+      enclosures.push(anchored);
+      continue;
+    }
+
+    // If no single intermediate room can own both axes, keep a closed shell
+    // around the entire claim. This remains preferable to exposing an open
+    // exterior shaft through an unrelated floor plan.
     const xChoices = axisChoices(
-      room.bounds.minX,
-      room.bounds.maxX,
+      assignedRoom.bounds.minX,
+      assignedRoom.bounds.maxX,
       union.minX,
       union.maxX,
+      true,
     );
     const zChoices = axisChoices(
-      room.bounds.minZ,
-      room.bounds.maxZ,
+      assignedRoom.bounds.minZ,
+      assignedRoom.bounds.maxZ,
       union.minZ,
       union.maxZ,
+      true,
     );
-    const candidates = xChoices.flatMap((x) => zChoices.map((z): Rect => ({
+    const bounds = xChoices.flatMap((x) => zChoices.map((z): Rect => ({
       minX: x.min,
       maxX: x.max,
       minZ: z.min,
       maxZ: z.max,
-    }))).filter((bounds) =>
-      bounds.minX <= union.minX - 0.35 &&
-      bounds.maxX >= union.maxX + 0.35 &&
-      bounds.minZ <= union.minZ - 0.35 &&
-      bounds.maxZ >= union.maxZ + 0.35
-    );
-    const bounds = candidates.sort((left, right) => rectArea(left) - rectArea(right))[0];
+    }))).filter((candidate) =>
+      candidate.minX <= union.minX - 0.35 &&
+      candidate.maxX >= union.maxX + 0.35 &&
+      candidate.minZ <= union.minZ - 0.35 &&
+      candidate.maxZ >= union.maxZ + 0.35
+    ).sort((left, right) => rectArea(left) - rectArea(right))[0];
     if (bounds) enclosures.push({ bounds, roomId });
   }
   return enclosures;
@@ -1330,10 +1405,10 @@ const applyInheritedShaftOpenings = (
     const center = rectCenter(opening);
     const thickness = 0.12;
     const sides = [
-      { suffix: 'north', x: center.x, z: opening.minZ, length: rectWidth(opening) + thickness * 2, orientation: 'x' as const },
-      { suffix: 'south', x: center.x, z: opening.maxZ, length: rectWidth(opening) + thickness * 2, orientation: 'x' as const },
-      { suffix: 'west', x: opening.minX, z: center.z, length: rectDepth(opening) + thickness * 2, orientation: 'z' as const },
-      { suffix: 'east', x: opening.maxX, z: center.z, length: rectDepth(opening) + thickness * 2, orientation: 'z' as const },
+      { suffix: 'north', x: center.x, z: opening.minZ - thickness * 0.5, length: rectWidth(opening) + thickness * 2, orientation: 'x' as const },
+      { suffix: 'south', x: center.x, z: opening.maxZ + thickness * 0.5, length: rectWidth(opening) + thickness * 2, orientation: 'x' as const },
+      { suffix: 'west', x: opening.minX - thickness * 0.5, z: center.z, length: rectDepth(opening) + thickness * 2, orientation: 'z' as const },
+      { suffix: 'east', x: opening.maxX + thickness * 0.5, z: center.z, length: rectDepth(opening) + thickness * 2, orientation: 'z' as const },
     ];
     for (const side of sides) {
       const wall: WallSegment = {
@@ -1530,10 +1605,10 @@ const applyCeilingLandingClearance = (
     const center = rectCenter(landing);
     const thickness = 0.1;
     const sides = [
-      { suffix: 'north', x: center.x, z: landing.minZ, length: rectWidth(landing) + thickness * 2, orientation: 'x' as const },
-      { suffix: 'south', x: center.x, z: landing.maxZ, length: rectWidth(landing) + thickness * 2, orientation: 'x' as const },
-      { suffix: 'west', x: landing.minX, z: center.z, length: rectDepth(landing) + thickness * 2, orientation: 'z' as const },
-      { suffix: 'east', x: landing.maxX, z: center.z, length: rectDepth(landing) + thickness * 2, orientation: 'z' as const },
+      { suffix: 'north', x: center.x, z: landing.minZ - thickness * 0.5, length: rectWidth(landing) + thickness * 2, orientation: 'x' as const },
+      { suffix: 'south', x: center.x, z: landing.maxZ + thickness * 0.5, length: rectWidth(landing) + thickness * 2, orientation: 'x' as const },
+      { suffix: 'west', x: landing.minX - thickness * 0.5, z: center.z, length: rectDepth(landing) + thickness * 2, orientation: 'z' as const },
+      { suffix: 'east', x: landing.maxX + thickness * 0.5, z: center.z, length: rectDepth(landing) + thickness * 2, orientation: 'z' as const },
     ];
     for (const side of sides) {
       plan.walls.push({
@@ -2125,9 +2200,28 @@ export const generateInfiniteChunk = (
 
   const biome = getInfiniteBiome(seed, coord);
   const visualBiome = getInfiniteVisualBiome(seed, coord);
-  applyBiome(plan, biome, derivedChunkSeed(seed, normalizedKey));
-  applyVisualBiome(plan, visualBiome, derivedChunkSeed(seed, normalizedKey));
-  applyInheritedShaftOpenings(plan, inheritedShaftOpeningsForChunk(seed, coord));
+  const chunkSeed = derivedChunkSeed(seed, normalizedKey);
+  applyBiome(plan, biome, chunkSeed);
+  const inheritedOpenings = inheritedShaftOpeningsForChunk(seed, coord);
+  applyInheritedShaftOpenings(plan, inheritedOpenings);
+  if (biome === 'pillar-hall' && inheritedOpenings.length > 0) {
+    const hall = [...plan.rooms]
+      .filter((room) => room.kind === 'open-hall')
+      .sort((left, right) => rectArea(right.bounds) - rectArea(left.bounds))[0];
+    if (hall) {
+      const pillars = plan.columns.filter((column) =>
+        pointInRect(column.x, column.z, hall.bounds)
+      );
+      rebuildPillarHallLights(
+        plan,
+        hall,
+        pillars,
+        plan.floorOpenings ?? [],
+        new SeededRandom(`${chunkSeed}::pillar-hall`).fork('ceiling-lights'),
+      );
+    }
+  }
+  applyVisualBiome(plan, visualBiome, chunkSeed);
   // Sparse epics expose many more ordinary coordinates than the old dense
   // paving. A local pit must win over a tall-room shell just like an inherited
   // shaft, otherwise the opening pierces a supposedly closed upper volume.

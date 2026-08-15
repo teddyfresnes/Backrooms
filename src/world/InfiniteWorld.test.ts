@@ -988,8 +988,8 @@ describe('InfiniteWorld chunk contracts', () => {
       collider.id.includes(`${inherited.id}-cage-wall-`) && collider.kind === 'wall'
     )).toHaveLength(
       inherited.layout === 'straight'
-        ? 2
-        : inherited.switchbackJoin === 'divider' ? 4 : 3,
+        ? 4
+        : inherited.switchbackJoin === 'divider' ? 5 : 4,
     );
 
     const lower = generateInfiniteChunk(stairSeed, {
@@ -1040,7 +1040,7 @@ describe('InfiniteWorld chunk contracts', () => {
         const shells = plan.walls.filter((wall) =>
           (wall.detail === 'upper-shell' || wall.detail === 'upper-portal-lintel') &&
           wall.kind === 'wallpaper' &&
-          wall.bottom <= plan.wallHeight + 0.02 &&
+          Math.abs(wall.bottom - plan.wallHeight) < 0.001 &&
           wall.bottom + wall.height >= room.ceilingHeight - 0.03
         );
         for (const side of [
@@ -1299,10 +1299,18 @@ describe('InfiniteWorld chunk contracts', () => {
           ? canonicalOpening.maxX - canonicalOpening.minX + wall.thickness * 2
           : canonicalOpening.maxZ - canonicalOpening.minZ + wall.thickness * 2;
         expect(wall.length).toBeCloseTo(expectedLength, 5);
-        if (wall.id.endsWith('-north')) expect(wall.z).toBeCloseTo(canonicalOpening.minZ, 5);
-        if (wall.id.endsWith('-south')) expect(wall.z).toBeCloseTo(canonicalOpening.maxZ, 5);
-        if (wall.id.endsWith('-west')) expect(wall.x).toBeCloseTo(canonicalOpening.minX, 5);
-        if (wall.id.endsWith('-east')) expect(wall.x).toBeCloseTo(canonicalOpening.maxX, 5);
+        if (wall.id.endsWith('-north')) {
+          expect(wall.z + wall.thickness * 0.5).toBeCloseTo(canonicalOpening.minZ, 5);
+        }
+        if (wall.id.endsWith('-south')) {
+          expect(wall.z - wall.thickness * 0.5).toBeCloseTo(canonicalOpening.maxZ, 5);
+        }
+        if (wall.id.endsWith('-west')) {
+          expect(wall.x + wall.thickness * 0.5).toBeCloseTo(canonicalOpening.minX, 5);
+        }
+        if (wall.id.endsWith('-east')) {
+          expect(wall.x - wall.thickness * 0.5).toBeCloseTo(canonicalOpening.maxX, 5);
+        }
       }
       expect(getInfiniteChunkCeilingOpenings(plan)).toEqual(
         floorOpeningsThatPierceTheStoryBelow(generateInfiniteChunk(shaftSeed, {
@@ -1338,6 +1346,18 @@ describe('InfiniteWorld chunk contracts', () => {
         ? terminalCeilingOpening.maxX - terminalCeilingOpening.minX + wall.thickness * 2
         : terminalCeilingOpening.maxZ - terminalCeilingOpening.minZ + wall.thickness * 2;
       expect(wall.length).toBeCloseTo(expectedLength, 5);
+      if (wall.id.endsWith('-north')) {
+        expect(wall.z + wall.thickness * 0.5).toBeCloseTo(terminalCeilingOpening.minZ, 5);
+      }
+      if (wall.id.endsWith('-south')) {
+        expect(wall.z - wall.thickness * 0.5).toBeCloseTo(terminalCeilingOpening.maxZ, 5);
+      }
+      if (wall.id.endsWith('-west')) {
+        expect(wall.x + wall.thickness * 0.5).toBeCloseTo(terminalCeilingOpening.minX, 5);
+      }
+      if (wall.id.endsWith('-east')) {
+        expect(wall.x - wall.thickness * 0.5).toBeCloseTo(terminalCeilingOpening.maxX, 5);
+      }
     }
   });
 

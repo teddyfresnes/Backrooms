@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as THREE from 'three';
 
 vi.mock('@dimforge/rapier3d', async () =>
   import('../../node_modules/@dimforge/rapier3d/rapier.js'),
@@ -9,7 +10,8 @@ import {
   applyEpicStructure,
   getEpicStairwellLayout,
 } from '../world/EpicStructures';
-import { getStairCollisionShapes } from '../world/StairLayout';
+import { getStairCageWalls, getStairCollisionShapes } from '../world/StairLayout';
+import { rectCenter, rectDepth, rectWidth } from '../world/types';
 import type {
   EpicStructureFeature,
   StairSocketFeature,
@@ -18,6 +20,21 @@ import type {
 } from '../world/types';
 
 const activeWorlds: PhysicsWorld[] = [];
+
+const stairCageColliders = (stairs: StairSocketFeature): StaticCollider[] =>
+  getStairCageWalls(stairs, 2.74).map((wall, index) => ({
+    id: `${stairs.id}-cage-wall-${index}`,
+    center: {
+      ...rectCenter(wall.bounds),
+      y: (wall.bottom + wall.top) * 0.5,
+    },
+    halfExtents: {
+      x: rectWidth(wall.bounds) * 0.5,
+      y: (wall.top - wall.bottom) * 0.5,
+      z: rectDepth(wall.bounds) * 0.5,
+    },
+    kind: 'wall',
+  }));
 
 const makePlan = (colliders: StaticCollider[] = []): WorldPlan => ({
   version: 1,
@@ -405,6 +422,7 @@ describe('PhysicsWorld chunk ownership', () => {
           rotation: shape.rotation,
           kind: 'step',
         })),
+        ...stairCageColliders(stairs),
       ];
       const plan = makePlan(colliders);
       plan.spawn = { x: 0.45, y: 0.865, z: -1.32 };
@@ -452,6 +470,7 @@ describe('PhysicsWorld chunk ownership', () => {
         rotation: shape.rotation,
         kind: 'step',
       })),
+      ...stairCageColliders(stairs),
     ];
     const plan = makePlan(colliders);
     plan.spawn = { x: 0.45, y: 0.865, z: 0 };
@@ -489,6 +508,49 @@ describe('PhysicsWorld chunk ownership', () => {
     expect(physics.hasChunk('sector-a')).toBe(false);
     expect(physics.world.bodies.len()).toBe(initialBodyCount);
     expect(physics.world.colliders.len()).toBe(initialColliderCount);
+  });
+
+  it('owns and removes indexed and non-indexed imported trimesh colliders', async () => {
+    const physics = await createPhysics();
+    const initialBodyCount = physics.world.bodies.len();
+    const initialColliderCount = physics.world.colliders.len();
+    const indexed = new THREE.Mesh(new THREE.BoxGeometry(2, 0.2, 2));
+    indexed.position.set(4, 1, -2);
+    const nonIndexed = new THREE.Mesh(new THREE.BufferGeometry().setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute([
+        -1, 0, -1,
+        1, 0, 1,
+        1, 0, -1,
+        -1, 0, -1,
+        -1, 0, 1,
+        1, 0, 1,
+      ], 3),
+    ));
+    nonIndexed.position.set(-4, 1, -2);
+
+    physics.addTrimeshChunk('imported-shell', [indexed, nonIndexed]);
+
+    expect(physics.hasChunk('imported-shell')).toBe(true);
+    expect(physics.world.bodies.len()).toBe(initialBodyCount + 1);
+    expect(physics.world.colliders.len()).toBe(initialColliderCount + 2);
+    expect(castDownAt(physics, 4, 3, -2)).not.toBeNull();
+    expect(castDownAt(physics, -4, 3, -2)).not.toBeNull();
+    expect(() => physics.addTrimeshChunk('imported-shell', [])).toThrow(/already exists/i);
+
+    expect(physics.removeChunk('imported-shell')).toBe(true);
+    expect(physics.world.bodies.len()).toBe(initialBodyCount);
+    expect(physics.world.colliders.len()).toBe(initialColliderCount);
+    indexed.geometry.dispose();
+    nonIndexed.geometry.dispose();
+  });
+
+  it('normalizes a crouched capsule center for a standing save restore', async () => {
+    const physics = await createPhysics([floorCollider('safe-floor')]);
+    const standing = physics.getStandingPosition();
+    expect(physics.setCrouched(true)).toBe(true);
+    expect(physics.getPosition(new THREE.Vector3()).y).toBeCloseTo(standing.y - 0.3, 7);
+    expect(physics.getStandingPosition().distanceTo(standing)).toBeLessThan(1e-6);
   });
 
   it('synchronizes a batch of stream mutations with a single Rapier step', async () => {
