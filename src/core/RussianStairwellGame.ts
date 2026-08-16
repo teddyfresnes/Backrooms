@@ -16,25 +16,31 @@ import { createStairwellPlan } from '../stairwell/createStairwellPlan';
 import { ExperienceUI } from '../ui/ExperienceUI';
 import type { ConsoleCompletion, ConsoleMode, ConsoleSubmitResult } from '../ui/ExperienceUI';
 import { loadGameSettings, type GameSettings } from '../ui/settings';
+import type { GameSaveStorage } from './GameSave';
 import {
-  loadRussianStairwellSaveMetadata,
-  saveRussianStairwellGame,
-  type GameSaveStorage,
-  type RussianStairwellSave,
-} from './GameSave';
+  getGameSaveSummary,
+  listGameSaves,
+  writeGameSave,
+  type GameSaveEntry,
+  type GameSaveKind,
+} from './SaveHistory';
+
+type RussianStairwellHistorySave = Extract<
+  GameSaveEntry,
+  { readonly experienceId: 'russian-stairwell' }
+>;
 
 export type RussianStairwellLaunch =
   | { readonly kind: 'new' }
-  | { readonly kind: 'load'; readonly save: RussianStairwellSave };
+  | { readonly kind: 'load'; readonly save: RussianStairwellHistorySave };
 
 export interface RussianStairwellGameCallbacks {
   onRequestNewGame(): void;
-  onRequestLoadGame(): void;
+  onRequestLoadGame(id: string): void;
   onEnterBackrooms(): void;
 }
 
 const FIXED_STEP = 1 / 60;
-const AUTOSAVE_INTERVAL = 8;
 
 export class RussianStairwellGame {
   private readonly root = document.createElement('main');
@@ -60,7 +66,6 @@ export class RussianStairwellGame {
   private accumulator = 0;
   private elapsed = 0;
   private playableSeconds = 0;
-  private autosaveElapsed = 0;
   private previousTime = performance.now();
   private fps = 60;
   private saveErrorShown = false;
@@ -102,19 +107,19 @@ export class RussianStairwellGame {
     this.ui = new ExperienceUI(this.root, {
       enter: () => this.enter(),
       regenerate: () => this.callbacks.onRequestNewGame(),
-      loadGame: () => this.callbacks.onRequestLoadGame(),
+      saveGame: () => this.saveNow('manual'),
+      loadGame: (id) => this.callbacks.onRequestLoadGame(id),
       toggleFullscreen: () => void this.toggleFullscreen(),
       settingsChanged: (settings) => this.applySettings(settings),
       submitConsole: (value, mode) => this.submitConsole(value, mode),
       completeConsole: (value, mode) => this.completeConsole(value, mode),
       consoleVisibility: (open) => this.player?.setInputEnabled(!open),
-    }, this.settings);
+    }, this.settings, 'russian-stairwell');
     this.scene.background = new THREE.Color(0x090d11);
     this.scene.fog = new THREE.Fog(0x10161c, 16, 52);
     this.resize();
     window.addEventListener('resize', this.resize);
     window.addEventListener('keydown', this.onConsoleHotkey);
-    window.addEventListener('pagehide', this.onPageHide);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
   }
 
@@ -205,9 +210,9 @@ export class RussianStairwellGame {
     );
 
     if (this.launch.kind === 'load') {
-      this.door.restoreState(this.launch.save.entranceDoor);
-      this.player.teleport(this.launch.save.player.safePosition);
-      this.player.setLookQuaternion(this.launch.save.player.quaternion);
+      this.door.restoreState(this.launch.save.payload.entranceDoor);
+      this.player.teleport(this.launch.save.payload.safePosition);
+      this.player.setLookQuaternion(this.launch.save.payload.quaternion);
       this.playableSeconds = this.launch.save.playTimeSeconds;
     } else {
       this.player.teleport(apartment.entrySpawn);
@@ -227,8 +232,7 @@ export class RussianStairwellGame {
     if (this.disposed) return;
     this.renderer.render(this.scene, this.camera);
     this.initialized = true;
-    if (this.launch.kind === 'new') this.saveNow();
-    this.syncSaveAvailability();
+    this.syncSaveHistory();
     this.ui.setSessionStarted(true);
     this.ui.setReady();
     this.previousTime = performance.now();
@@ -257,7 +261,6 @@ export class RussianStairwellGame {
     this.ui.setLocked(locked);
     this.player?.setInputEnabled(locked && !this.ui.isConsoleOpen);
     void this.audio.setSuspended(!locked || document.hidden);
-    if (!locked && this.initialized) this.saveNow();
     this.previousTime = performance.now();
     this.accumulator = 0;
   }
@@ -290,7 +293,7 @@ export class RussianStairwellGame {
         : { close: false, feedback: 'UTILISE /help', messages: [{ kind: 'error', text: 'UTILISE /help' }] };
     }
     if (trimmed.toLowerCase() === '/save') {
-      const saved = this.saveNow();
+      const saved = this.saveNow('manual');
       const text = saved ? 'PARTIE SAUVEGARDÉE' : 'ÉCHEC DE LA SAUVEGARDE';
       return { close: true, feedback: text, messages: [{ kind: saved ? 'system' : 'error', text }] };
     }
@@ -309,7 +312,7 @@ export class RussianStairwellGame {
     return options.length > 0 ? { hint: `${options.length} COMMANDE(S)`, suggestions: options } : null;
   }
 
-  private saveNow(): boolean {
+  private saveNow(kind: GameSaveKind): boolean {
     if (!this.initialized || !this.player || !this.door) return false;
     if (!this.storage) {
       if (!this.saveErrorShown) {
@@ -319,29 +322,31 @@ export class RussianStairwellGame {
       return false;
     }
     const look = this.player.getLookQuaternion();
-    const result = saveRussianStairwellGame(this.storage, {
+    const result = writeGameSave(this.storage, {
+      experienceId: 'russian-stairwell',
+      kind,
+      levelId: 'building',
+      levelLabel: 'Immeuble',
       playTimeSeconds: this.playableSeconds,
-      player: {
+      payload: {
         safePosition: this.lastSafePosition,
         quaternion: { x: look.x, y: look.y, z: look.z, w: look.w },
+        entranceDoor: this.door.getState(),
       },
-      entranceDoor: this.door.getState(),
     });
     if (!result.ok && !this.saveErrorShown) {
       this.saveErrorShown = true;
       this.ui.showConsoleMessage({ kind: 'error', text: 'SAUVEGARDE LOCALE INDISPONIBLE' });
     }
-    if (result.ok) this.syncSaveAvailability();
+    if (result.ok) this.syncSaveHistory();
     return result.ok;
   }
 
-  private syncSaveAvailability(): void {
-    const metadata = this.storage ? loadRussianStairwellSaveMetadata(this.storage) : null;
-    const date = metadata ? new Date(metadata.savedAt) : null;
-    const detail = date && Number.isFinite(date.getTime())
-      ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(date)
-      : 'Aucune sauvegarde';
-    this.ui.setLoadGameAvailable(metadata !== null, detail);
+  private syncSaveHistory(): void {
+    const summaries = this.storage
+      ? listGameSaves(this.storage).map(getGameSaveSummary)
+      : [];
+    this.ui.setSaveHistory(summaries);
   }
 
   private readonly frame = (now: number): void => {
@@ -352,7 +357,6 @@ export class RussianStairwellGame {
     this.elapsed += delta;
     if (this.player.isLocked) {
       this.playableSeconds += delta;
-      this.autosaveElapsed += delta;
       this.accumulator = Math.min(this.accumulator + delta, FIXED_STEP * 5);
       while (this.accumulator >= FIXED_STEP) {
         this.player.fixedUpdate(FIXED_STEP);
@@ -363,10 +367,6 @@ export class RussianStairwellGame {
       this.player.getViewDirection(this.viewDirection);
       this.door.update(delta, this.player.position, this.viewDirection, true);
       this.hallExit?.update(this.player.position, this.viewDirection, true);
-      if (this.autosaveElapsed >= AUTOSAVE_INTERVAL) {
-        this.autosaveElapsed = 0;
-        this.saveNow();
-      }
     } else {
       this.accumulator = 0;
       this.ui.setInteraction(null);
@@ -398,14 +398,9 @@ export class RussianStairwellGame {
   }
 
   private readonly onVisibilityChange = (): void => {
-    if (document.hidden) this.saveNow();
     void this.audio.setSuspended(document.hidden || !this.player?.isLocked);
     this.previousTime = performance.now();
     this.accumulator = 0;
-  };
-
-  private readonly onPageHide = (): void => {
-    this.saveNow();
   };
 
   private readonly onConsoleHotkey = (event: KeyboardEvent): void => {
@@ -429,12 +424,10 @@ export class RussianStairwellGame {
 
   dispose(): void {
     if (this.disposed) return;
-    if (this.initialized) this.saveNow();
     this.disposed = true;
     this.renderer.setAnimationLoop(null);
     window.removeEventListener('resize', this.resize);
     window.removeEventListener('keydown', this.onConsoleHotkey);
-    window.removeEventListener('pagehide', this.onPageHide);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.door?.dispose();
     this.hallExit?.dispose();

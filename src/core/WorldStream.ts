@@ -524,6 +524,10 @@ export class WorldStream {
     return this.lightingMode;
   }
 
+  getCenterCoord(): Readonly<ChunkCoord> {
+    return { ...this.centerCoord };
+  }
+
   async setLightingMode(
     mode: LightingMode,
     onProgress?: (progress: LightingTransitionProgress) => void,
@@ -590,8 +594,16 @@ export class WorldStream {
 
   /** Prepares and mounts the destination collider before Game teleports. */
   async prepareLocateTarget(target: LocateTarget): Promise<boolean> {
+    return this.prepareAndMountCoords(locateWarmupCoords(target));
+  }
+
+  /** Prepares an exact saved chunk before restoring the player into it. */
+  async prepareSavedChunk(coord: ChunkCoord): Promise<boolean> {
+    return this.prepareAndMountCoords([coord]);
+  }
+
+  private async prepareAndMountCoords(warmupCoords: readonly ChunkCoord[]): Promise<boolean> {
     if (!this.initialized || this.disposed) return false;
-    const warmupCoords = locateWarmupCoords(target);
     const prepared = await Promise.all(warmupCoords.map(async (coord) => {
       const key = createChunkKey(coord);
       if (this.chunks.has(key)) return { coord, key, prepared: undefined };

@@ -42,7 +42,7 @@ blocage.
 | Props | `PropPlacement.test.ts` | build + contrôle visuel si nouvel asset |
 | Qualité/post-FX | `AdaptiveQuality.test.ts` | contrôle visuel |
 | UI/audio/styles | test disponible, sinon build | contrôle navigateur |
-| Sauvegarde russe | `GameSave.test.ts` | accueil sans/avec save + rechargement |
+| Historique de sauvegarde | `SaveHistory.test.ts` | accueil sans/avec save + rechargement des deux runtimes |
 | Escalier/appartement | tests `src/stairwell` et `src/apartment` | `PhysicsWorld.test.ts` + contrôle visuel |
 | Porte du hall / route Backrooms | `HallExitInteraction.test.ts`, `ExperienceRouting.test.ts` | descente au RDC + interaction E |
 
@@ -56,11 +56,13 @@ Pour un changement visuel ou d’interaction :
 4. vérifier la console, le HUD et la zone modifiée ;
 5. conserver le même seed pour comparer avant/après.
 
-Pour Russian Stairwells, partir sans stockage local et vérifier que **Charger**
-est désactivé. Lancer une partie, déplacer/orienter le joueur, ouvrir la porte,
-revenir au menu ou masquer la page, puis recharger et choisir **Charger** : pose,
-vue et porte doivent être restaurées. Corrompre ensuite le slot le plus récent
-pour confirmer le repli sur le second sans erreur console ni requête asset 404.
+Partir sans stockage local et vérifier que **Continuer** ouvre un historique vide.
+Lancer une partie, déplacer/orienter le joueur, ouvrir la porte et utiliser
+**Sauvegarder** dans le menu de pause : la nouvelle ligne doit restaurer pose,
+vue et porte. Masquer la page ou ouvrir la pause ne doit créer aucune autosave.
+Franchir ensuite la porte du hall : une seule autosave **Niveau 0** doit apparaître
+après le chargement. Corrompre une entrée pour confirmer qu’elle est ignorée sans
+erreur console ni requête asset 404.
 
 `window.__BACKROOMS__` expose le même snapshot structuré que `/logs` : session,
 position et orientation joueur, chunk et génération courants, objet regardé,

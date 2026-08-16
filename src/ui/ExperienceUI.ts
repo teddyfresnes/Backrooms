@@ -1,4 +1,5 @@
 import type { DiagnosticsSnapshot } from '../core/Diagnostics';
+import type { GameSaveExperienceId, GameSaveSummary } from '../core/SaveHistory';
 import {
   controlActions,
   defaultControlBindings,
@@ -18,7 +19,8 @@ import {
 interface UIActions {
   enter(): void;
   regenerate(): void;
-  loadGame?(): void;
+  saveGame?(): boolean | Promise<boolean>;
+  loadGame?(id: string): void;
   toggleFullscreen(): void;
   settingsChanged(settings: GameSettings): void | Promise<void>;
   submitConsole(value: string, mode: ConsoleMode): ConsoleSubmitResult;
@@ -50,18 +52,12 @@ export interface ConsoleSubmitResult {
   messages: ConsoleMessage[];
 }
 
-type MenuPage = 'home' | 'settings' | 'controls' | 'credits';
+type MenuPage = 'home' | 'saves' | 'settings';
+type SettingsCategory = 'graphics' | 'audio' | 'game' | 'controls';
 
-const icons = {
-  play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7Z"/></svg>',
-  shuffle: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3c4.5 0 5.5 10 10 10h3M17 4l3 3-3 3M4 17h3c1.7 0 2.9-1.4 4-3.1M15 7.4c.7-.3 1.3-.4 2-.4h3M17 14l3 3-3 3"/></svg>',
-  settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h3M11 12h9M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="14" cy="18" r="2"/></svg>',
-  controls: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8h10a5 5 0 0 1 4.8 6.4l-.7 2.4a2.5 2.5 0 0 1-4.2 1l-1.6-1.8H8.7l-1.6 1.8a2.5 2.5 0 0 1-4.2-1l-.7-2.4A5 5 0 0 1 7 8Z"/><path d="M7 11v4M5 13h4M16 12h.01M19 14h.01"/></svg>',
-  fullscreen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>',
-  info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg>',
-  back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>',
-  exit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></svg>',
-  reset: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8V4m0 0h4M5 4l3 3a7 7 0 1 1-2 7"/></svg>',
+const experienceLabelById: Readonly<Record<GameSaveExperienceId, string>> = {
+  backrooms: 'Backrooms',
+  'russian-stairwell': 'Immeuble',
 };
 
 const bindingLabels: Readonly<Record<ControlAction, string>> = {
@@ -79,6 +75,23 @@ const titleCase = (value: string): string => value
   .replace(/([a-z])([A-Z])/g, '$1 $2')
   .replaceAll('_', ' ')
   .replace(/^./, (character) => character.toUpperCase());
+
+const formatSaveDuration = (seconds: number): string => {
+  const minutes = Math.max(0, Math.floor(seconds / 60));
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (hours > 0) return `${hours} h ${String(remainder).padStart(2, '0')} min`;
+  return minutes === 0 ? 'Moins d’une minute' : `${minutes} min`;
+};
+
+const formatSaveDate = (savedAt: string): string => {
+  const date = new Date(savedAt);
+  if (!Number.isFinite(date.getTime())) return 'Date inconnue';
+  return new Intl.DateTimeFormat('fr-FR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(date);
+};
 
 const formatDiagnosticValue = (value: unknown): string => {
   if (value === null || value === undefined || value === '') return '—';
@@ -98,8 +111,12 @@ const formatDiagnosticValue = (value: unknown): string => {
 
 export class ExperienceUI {
   private readonly root: HTMLElement;
-  private readonly enterButton: HTMLButtonElement;
-  private readonly loadButton: HTMLButtonElement;
+  private readonly enterButtons: readonly HTMLButtonElement[];
+  private readonly continueButton: HTMLButtonElement;
+  private readonly saveButton: HTMLButtonElement;
+  private readonly saveHistoryList: HTMLElement;
+  private readonly saveHistoryEmpty: HTMLElement;
+  private readonly saveStatus: HTMLElement;
   private readonly overlay: HTMLElement;
   private readonly interactionPrompt: HTMLElement;
   private readonly fallFlash: HTMLElement;
@@ -115,6 +132,8 @@ export class ExperienceUI {
   private readonly actions: UIActions;
   private settings: GameSettings;
   private activePage: MenuPage = 'home';
+  private activeSettingsCategory: SettingsCategory = 'graphics';
+  private saveHistory: readonly GameSaveSummary[] = [];
   private readyState = false;
   private enteredOnce = false;
   private mainMenuState = true;
@@ -127,6 +146,7 @@ export class ExperienceUI {
   private historyIndex = 0;
   private historyDraft = '';
   private chatFadeTimer?: number;
+  private saveStatusTimer?: number;
   private pendingBinding?: ControlAction;
   private pendingBindingButton?: HTMLButtonElement;
 
@@ -134,6 +154,7 @@ export class ExperienceUI {
     container: HTMLElement,
     actions: UIActions,
     settings: GameSettings,
+    experienceId: GameSaveExperienceId = 'backrooms',
   ) {
     this.actions = actions;
     this.settings = { ...settings };
@@ -156,129 +177,158 @@ export class ExperienceUI {
 
       <section class="menu-overlay" data-ui="overlay" role="dialog" aria-modal="true" aria-label="Menu principal" aria-hidden="true" inert>
         <div class="menu-panel">
-          <aside class="menu-sidebar">
-            <header class="brand-lockup">
-              <div class="brand-mark" aria-hidden="true">BR</div>
-              <div><h1>Backrooms</h1><p>Random story</p></div>
-            </header>
-
-            <nav class="menu-navigation" aria-label="Navigation du menu">
-              <button class="active" type="button" data-open-page="home" data-nav-page="home" aria-label="Accueil" title="Accueil">${icons.play}<span>Accueil</span></button>
-              <button type="button" data-open-page="settings" data-nav-page="settings" aria-label="Paramètres" title="Paramètres">${icons.settings}<span>Paramètres</span></button>
-              <button type="button" data-open-page="controls" data-nav-page="controls" aria-label="Commandes" title="Commandes">${icons.controls}<span>Commandes</span></button>
-            </nav>
-
-            <footer class="sidebar-footer">
-              <button type="button" data-ui="fullscreen" aria-label="Plein écran" title="Plein écran">${icons.fullscreen}<span>Plein écran</span></button>
-              <button type="button" data-open-page="credits" data-nav-page="credits" aria-label="Crédits" title="Crédits">${icons.info}<span>Crédits</span></button>
-              <button class="pause-only" type="button" data-ui="main-menu" aria-label="Menu principal" title="Menu principal">${icons.exit}<span>Menu principal</span></button>
-            </footer>
-          </aside>
-
           <div class="menu-content">
             <section class="menu-page active" data-page="home" aria-labelledby="home-title">
               <div class="home-stage">
                 <header class="home-title">
-                  <h2 id="home-title">Backrooms<span>.</span></h2>
+                  <div class="home-brand">
+                    <img class="home-logo" src="/favicon.svg" alt="" />
+                    <h2 id="home-title">Backrooms<span>.</span></h2>
+                  </div>
                   <p>Random story</p>
                 </header>
                 <div class="menu-actions" aria-label="Actions principales">
-                  <button class="menu-action primary session-only" type="button" data-ui="enter" disabled>
-                    <span data-ui="enter-copy">Entrer</span>${icons.play}
+                  <div class="continue-action main-menu-only">
+                    <button class="menu-action primary" type="button" data-ui="enter" data-ui-main-continue disabled>
+                      <span>Continuer</span>
+                    </button>
+                    <button class="continue-more" type="button" data-open-page="saves" aria-label="Ouvrir les sauvegardes">+</button>
+                  </div>
+                  <button class="menu-action main-menu-only" type="button" data-ui="regenerate">
+                    <span>Nouvelle partie</span>
                   </button>
-                  <button class="menu-action" type="button" data-ui="regenerate">
-                    <span>Nouvelle partie</span>${icons.shuffle}
+                  <button class="menu-action main-menu-only" type="button" data-open-page="settings">
+                    <span>Paramètres</span>
                   </button>
-                  <button class="menu-action" type="button" data-ui="load" disabled>
-                    <span><strong>Charger</strong><small data-ui="load-copy">Aucune sauvegarde</small></span>${icons.play}
+
+                  <div class="continue-action pause-only" hidden>
+                    <button class="menu-action primary" type="button" data-ui="enter" disabled>
+                      <span>Continuer</span>
+                    </button>
+                    <button class="continue-more" type="button" data-open-page="saves" aria-label="Ouvrir les sauvegardes">+</button>
+                  </div>
+                  <button class="menu-action pause-only" type="button" data-ui="save-game" hidden>
+                    <span>Sauvegarder</span>
+                  </button>
+                  <button class="menu-action pause-only" type="button" data-open-page="saves" hidden>
+                    <span>Charger</span>
+                  </button>
+                  <button class="menu-action pause-only" type="button" data-open-page="settings" hidden>
+                    <span>Paramètres</span>
                   </button>
                 </div>
+                <p class="save-status" data-ui="save-status" role="status" aria-live="polite" hidden></p>
               </div>
             </section>
 
-            <section class="menu-page" data-page="settings" aria-label="Paramètres">
+            <section class="menu-page" data-page="saves" aria-labelledby="saves-title" aria-hidden="true">
               <header class="page-heading">
-                <h2>Paramètres</h2>
-                <button class="reset-settings" type="button" data-ui="reset-settings">${icons.reset}<span>Réinitialiser</span></button>
+                <div>
+                  <button class="text-button" type="button" data-back>Retour</button>
+                  <h2 id="saves-title">Sauvegardes</h2>
+                </div>
               </header>
-              <div class="settings-list">
-                <fieldset class="settings-card">
-                  <legend>Affichage</legend>
-                  <label class="setting-row">
-                    <strong>Éclairage</strong>
-                    <select data-setting="lighting" aria-label="Système d’éclairage">
-                      <option value="modern">Moderne</option>
-                      <option value="legacy">Classique</option>
-                    </select>
-                  </label>
-                  <label class="setting-row">
-                    <strong>Qualité</strong>
-                    <select data-setting="renderQuality" aria-label="Qualité de rendu">
-                      <option value="auto">Automatique</option>
-                      <option value="performance">Performance</option>
-                      <option value="quality">Qualité</option>
-                    </select>
-                  </label>
-                  <label class="setting-row range-row">
-                    <strong>Champ de vision</strong>
-                    <span class="range-control"><input data-setting="fieldOfView" type="range" min="60" max="100" step="1" /><output data-output="fieldOfView"></output></span>
-                  </label>
-                  <label class="setting-row toggle-row">
-                    <strong>Réticule</strong>
-                    <input data-setting="crosshair" type="checkbox" role="switch" />
-                  </label>
-                </fieldset>
-
-                <fieldset class="settings-card">
-                  <legend>Expérience</legend>
-                  <label class="setting-row range-row">
-                    <strong>Volume général</strong>
-                    <span class="range-control"><input data-setting="masterVolume" type="range" min="0" max="1" step="0.01" /><output data-output="masterVolume"></output></span>
-                  </label>
-                  <label class="setting-row range-row">
-                    <strong>Sensibilité souris</strong>
-                    <span class="range-control"><input data-setting="lookSensitivity" type="range" min="0.3" max="2" step="0.05" /><output data-output="lookSensitivity"></output></span>
-                  </label>
-                  <label class="setting-row toggle-row">
-                    <strong>Mouvements de caméra</strong>
-                    <input data-setting="cameraMotion" type="checkbox" role="switch" />
-                  </label>
-                  <label class="setting-row toggle-row">
-                    <strong>Animation du menu</strong>
-                    <input data-setting="menuMotion" type="checkbox" role="switch" />
-                  </label>
-                </fieldset>
+              <div class="save-browser">
+                <button class="save-entry current-session-action" type="button" data-ui="enter" disabled>
+                  <span class="save-entry-heading">
+                    <strong>Session précédente</strong>
+                    <small>${experienceLabelById[experienceId]} · Session chargée</small>
+                  </span>
+                  <span class="save-entry-details"><small>Continuer</small></span>
+                </button>
+                <div class="save-history" data-ui="save-history" aria-label="Historique des sauvegardes"></div>
+                <p class="save-history-empty" data-ui="save-history-empty">Aucune sauvegarde pour le moment.</p>
               </div>
+            </section>
+
+            <section class="menu-page" data-page="settings" aria-labelledby="settings-title" aria-hidden="true">
+              <header class="page-heading">
+                <div>
+                  <button class="text-button" type="button" data-back>Retour</button>
+                  <h2 id="settings-title">Paramètres</h2>
+                </div>
+                <button class="reset-settings" type="button" data-ui="reset-settings">Réinitialiser</button>
+              </header>
+
+              <div class="settings-layout">
+                <nav class="settings-categories" aria-label="Catégories de paramètres" role="tablist">
+                  <button id="settings-tab-graphics" class="active" type="button" role="tab" aria-controls="settings-panel-graphics" aria-selected="true" data-settings-category="graphics">Graphismes</button>
+                  <button id="settings-tab-audio" type="button" role="tab" aria-controls="settings-panel-audio" aria-selected="false" data-settings-category="audio">Audio</button>
+                  <button id="settings-tab-game" type="button" role="tab" aria-controls="settings-panel-game" aria-selected="false" data-settings-category="game">Jeu</button>
+                  <button id="settings-tab-controls" type="button" role="tab" aria-controls="settings-panel-controls" aria-selected="false" data-settings-category="controls">Commandes</button>
+                </nav>
+
+                <div class="settings-list">
+                  <fieldset id="settings-panel-graphics" class="settings-card active" data-settings-panel="graphics" role="tabpanel" aria-labelledby="settings-tab-graphics">
+                    <legend>Graphismes</legend>
+                    <label class="setting-row">
+                      <strong>Éclairage</strong>
+                      <select data-setting="lighting" aria-label="Système d’éclairage">
+                        <option value="modern">Moderne</option>
+                        <option value="legacy">Classique</option>
+                      </select>
+                    </label>
+                    <label class="setting-row">
+                      <strong>Qualité</strong>
+                      <select data-setting="renderQuality" aria-label="Qualité de rendu">
+                        <option value="auto">Automatique</option>
+                        <option value="performance">Performance</option>
+                        <option value="quality">Qualité</option>
+                      </select>
+                    </label>
+                    <label class="setting-row range-row">
+                      <strong>Champ de vision</strong>
+                      <span class="range-control"><input data-setting="fieldOfView" type="range" min="60" max="100" step="1" /><output data-output="fieldOfView"></output></span>
+                    </label>
+                    <div class="setting-row">
+                      <strong>Plein écran</strong>
+                      <button class="setting-button" type="button" data-ui="fullscreen"><span data-ui="fullscreen-label">Activer</span></button>
+                    </div>
+                  </fieldset>
+
+                  <fieldset id="settings-panel-audio" class="settings-card" data-settings-panel="audio" role="tabpanel" aria-labelledby="settings-tab-audio" hidden>
+                    <legend>Audio</legend>
+                    <label class="setting-row range-row">
+                      <strong>Volume général</strong>
+                      <span class="range-control"><input data-setting="masterVolume" type="range" min="0" max="1" step="0.01" /><output data-output="masterVolume"></output></span>
+                    </label>
+                  </fieldset>
+
+                  <fieldset id="settings-panel-game" class="settings-card" data-settings-panel="game" role="tabpanel" aria-labelledby="settings-tab-game" hidden>
+                    <legend>Jeu</legend>
+                    <label class="setting-row range-row">
+                      <strong>Sensibilité souris</strong>
+                      <span class="range-control"><input data-setting="lookSensitivity" type="range" min="0.3" max="2" step="0.05" /><output data-output="lookSensitivity"></output></span>
+                    </label>
+                    <label class="setting-row toggle-row">
+                      <strong>Réticule</strong>
+                      <input data-setting="crosshair" type="checkbox" role="switch" />
+                    </label>
+                    <label class="setting-row toggle-row">
+                      <strong>Mouvements de caméra</strong>
+                      <input data-setting="cameraMotion" type="checkbox" role="switch" />
+                    </label>
+                    <label class="setting-row toggle-row">
+                      <strong>Animation du menu</strong>
+                      <input data-setting="menuMotion" type="checkbox" role="switch" />
+                    </label>
+                  </fieldset>
+
+                  <fieldset id="settings-panel-controls" class="settings-card controls-settings" data-settings-panel="controls" role="tabpanel" aria-labelledby="settings-tab-controls" hidden>
+                    <legend>Commandes</legend>
+                    <div class="keyboard-presets" aria-label="Disposition du clavier">
+                      <button type="button" data-control-preset="azerty">AZERTY</button>
+                      <button type="button" data-control-preset="qwerty">QWERTY</button>
+                    </div>
+                    <p class="binding-help" data-ui="binding-help">Sélectionnez une commande, puis appuyez sur une touche.</p>
+                    <div class="bindings-grid">${bindingRows}</div>
+                  </fieldset>
+                </div>
+              </div>
+
               <div class="settings-progress" data-ui="settings-progress" aria-hidden="true">
                 <div><span data-ui="settings-progress-label">Application</span><b data-ui="settings-progress-value">0%</b></div>
                 <div class="loading-track"><i data-ui="settings-progress-fill"></i></div>
-              </div>
-            </section>
-
-            <section class="menu-page" data-page="controls" aria-label="Commandes">
-              <header class="page-heading">
-                <h2>Commandes</h2>
-                <div class="keyboard-presets" aria-label="Disposition du clavier">
-                  <button type="button" data-control-preset="azerty">AZERTY</button>
-                  <button type="button" data-control-preset="qwerty">QWERTY</button>
-                </div>
-              </header>
-              <p class="binding-help" data-ui="binding-help">Sélectionnez une commande, puis appuyez sur une touche.</p>
-              <div class="bindings-grid">${bindingRows}</div>
-              <footer class="fixed-controls" aria-label="Commandes système">
-                <span><kbd>Souris</kbd> Regarder</span>
-                <span><kbd>Échap</kbd> Pause</span>
-                <span><kbd>C</kbd> Chat</span>
-                <span><kbd>H</kbd> Console</span>
-              </footer>
-            </section>
-
-            <section class="menu-page" data-page="credits" aria-label="Crédits">
-              <header class="page-heading"><h2>Crédits</h2></header>
-              <div class="credits-card">
-                <div class="credits-logo" aria-hidden="true">BR<span>:</span>RS</div>
-                <p>Three.js · Rapier · génération déterministe</p>
-                <small>Licences des assets disponibles dans le projet.</small>
               </div>
             </section>
           </div>
@@ -315,8 +365,12 @@ export class ExperienceUI {
     `;
     container.append(this.root);
 
-    this.enterButton = this.query<HTMLButtonElement>('[data-ui="enter"]');
-    this.loadButton = this.query<HTMLButtonElement>('[data-ui="load"]');
+    this.enterButtons = [...this.root.querySelectorAll<HTMLButtonElement>('[data-ui="enter"]')];
+    this.continueButton = this.query<HTMLButtonElement>('[data-ui-main-continue]');
+    this.saveButton = this.query<HTMLButtonElement>('[data-ui="save-game"]');
+    this.saveHistoryList = this.query('[data-ui="save-history"]');
+    this.saveHistoryEmpty = this.query('[data-ui="save-history-empty"]');
+    this.saveStatus = this.query('[data-ui="save-status"]');
     this.overlay = this.query('[data-ui="overlay"]');
     this.interactionPrompt = this.query('[data-ui="interaction"]');
     this.fallFlash = this.query('[data-ui="fall"]');
@@ -330,11 +384,11 @@ export class ExperienceUI {
     this.diagnosticsPanel = this.query('[data-ui="diagnostics"]');
     this.diagnosticsContent = this.query('[data-ui="diagnostics-content"]');
 
-    this.enterButton.addEventListener('click', actions.enter);
+    for (const button of this.enterButtons) button.addEventListener('click', actions.enter);
     this.query('[data-ui="regenerate"]').addEventListener('click', actions.regenerate);
-    this.loadButton.addEventListener('click', () => actions.loadGame?.());
+    this.saveButton.addEventListener('click', this.requestSave);
+    this.saveButton.disabled = actions.saveGame === undefined;
     this.query('[data-ui="fullscreen"]').addEventListener('click', actions.toggleFullscreen);
-    this.query('[data-ui="main-menu"]').addEventListener('click', this.showMainMenu);
     this.query('[data-ui="reset-settings"]').addEventListener('click', this.resetSettings);
     for (const button of this.root.querySelectorAll<HTMLElement>('[data-open-page]')) {
       button.addEventListener('click', () => this.showPage(button.dataset.openPage as MenuPage));
@@ -358,10 +412,19 @@ export class ExperienceUI {
         this.applyControlPreset(button.dataset.controlPreset as KeyboardPreset);
       });
     }
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-settings-category]')) {
+      button.addEventListener('click', () => {
+        this.showSettingsCategory(button.dataset.settingsCategory as SettingsCategory);
+      });
+      button.addEventListener('keydown', this.onSettingsCategoryKeyDown);
+    }
     this.consoleInput.addEventListener('keydown', this.onConsoleKeyDown);
     this.consoleInput.addEventListener('input', this.onConsoleInput);
     document.addEventListener('keydown', this.onMenuKeyDown);
     document.addEventListener('fullscreenchange', this.onFullscreenChange);
+    this.syncMenuContext();
+    this.showSettingsCategory(this.activeSettingsCategory);
+    this.renderSaveHistory();
     this.syncSettingsControls();
     this.applySettingsPresentation();
   }
@@ -376,17 +439,17 @@ export class ExperienceUI {
 
   setReady(): void {
     this.readyState = true;
-    this.enterButton.disabled = false;
+    for (const button of this.enterButtons) button.disabled = false;
     this.root.classList.add('is-ready');
     this.root.setAttribute('aria-busy', 'false');
     this.overlay.setAttribute('aria-hidden', 'false');
     this.overlay.inert = false;
-    if (document.activeElement === document.body) this.enterButton.focus({ preventScroll: true });
+    if (document.activeElement === document.body) this.continueButton.focus({ preventScroll: true });
   }
 
-  setLoadGameAvailable(available: boolean, detail = 'Aucune sauvegarde'): void {
-    this.loadButton.disabled = !available;
-    this.query('[data-ui="load-copy"]').textContent = detail;
+  setSaveHistory(summaries: readonly GameSaveSummary[]): void {
+    this.saveHistory = [...summaries];
+    this.renderSaveHistory();
   }
 
   setSessionStarted(started: boolean): void {
@@ -403,6 +466,7 @@ export class ExperienceUI {
       this.overlay.setAttribute('aria-hidden', 'true');
       this.overlay.inert = true;
       this.query('[data-ui="hud"]').setAttribute('aria-hidden', 'false');
+      this.syncMenuContext();
       return;
     }
     this.root.classList.remove('is-playing');
@@ -414,7 +478,7 @@ export class ExperienceUI {
       this.root.classList.add('is-paused');
       this.root.classList.remove('is-main-menu');
       this.overlay.setAttribute('aria-label', 'Menu pause');
-      this.query('[data-ui="enter-copy"]').textContent = 'Reprendre';
+      this.syncMenuContext();
       this.showPage('home');
     }
   }
@@ -529,31 +593,146 @@ export class ExperienceUI {
       section.classList.toggle('active', active);
       section.setAttribute('aria-hidden', String(!active));
     }
-    for (const button of this.root.querySelectorAll<HTMLElement>('[data-nav-page]')) {
-      const active = button.dataset.navPage === page;
-      button.classList.toggle('active', active);
-      if (active) button.setAttribute('aria-current', 'page');
-      else button.removeAttribute('aria-current');
-    }
     this.query('[data-ui="escape-hint"]').textContent = page === 'home'
       ? (this.root.classList.contains('is-paused') ? 'Reprendre' : 'Retour')
       : 'Retour';
     requestAnimationFrame(() => {
-      const target = this.root.querySelector<HTMLElement>(
-        `[data-page="${page}"] button:not(:disabled), [data-page="${page}"] select, [data-page="${page}"] input`,
-      ) ?? this.root.querySelector<HTMLElement>(`[data-nav-page="${page}"]`);
+      const targets = this.root.querySelectorAll<HTMLElement>(
+        `[data-page="${page}"] button:not(:disabled):not([hidden]), `
+        + `[data-page="${page}"] select:not(:disabled):not([hidden]), `
+        + `[data-page="${page}"] input:not(:disabled):not([hidden])`,
+      );
+      const target = [...targets].find((element) => element.getClientRects().length > 0);
       target?.focus({ preventScroll: true });
     });
   }
 
-  private readonly showMainMenu = (): void => {
-    this.mainMenuState = true;
-    this.root.classList.add('is-main-menu');
-    this.root.classList.remove('is-paused');
-    this.overlay.setAttribute('aria-label', 'Menu principal');
-    this.query('[data-ui="enter-copy"]').textContent = this.enteredOnce ? 'Continuer' : 'Jouer';
-    this.showPage('home');
+  private syncMenuContext(): void {
+    const paused = this.root.classList.contains('is-paused');
+    for (const element of this.root.querySelectorAll<HTMLElement>('.main-menu-only')) {
+      element.hidden = paused;
+    }
+    for (const element of this.root.querySelectorAll<HTMLElement>('.pause-only')) {
+      element.hidden = !paused;
+    }
+  }
+
+  private showSettingsCategory(category: SettingsCategory): void {
+    this.cancelBinding();
+    this.activeSettingsCategory = category;
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-settings-category]')) {
+      const active = button.dataset.settingsCategory === category;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', String(active));
+      button.tabIndex = active ? 0 : -1;
+    }
+    for (const panel of this.root.querySelectorAll<HTMLElement>('[data-settings-panel]')) {
+      const active = panel.dataset.settingsPanel === category;
+      panel.classList.toggle('active', active);
+      panel.hidden = !active;
+      panel.setAttribute('aria-hidden', String(!active));
+    }
+  }
+
+  private readonly onSettingsCategoryKeyDown = (event: KeyboardEvent): void => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
+      return;
+    }
+    const buttons = [...this.root.querySelectorAll<HTMLButtonElement>('[data-settings-category]')];
+    const current = buttons.indexOf(event.currentTarget as HTMLButtonElement);
+    if (current < 0) return;
+    event.preventDefault();
+    const backwards = event.key === 'ArrowLeft' || event.key === 'ArrowUp';
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? buttons.length - 1
+        : (current + (backwards ? -1 : 1) + buttons.length) % buttons.length;
+    const next = buttons[nextIndex];
+    if (!next) return;
+    this.showSettingsCategory(next.dataset.settingsCategory as SettingsCategory);
+    next.focus();
   };
+
+  private renderSaveHistory(): void {
+    const fragment = document.createDocumentFragment();
+    for (const summary of this.saveHistory) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'save-entry';
+      button.dataset.saveId = summary.id;
+      button.disabled = this.actions.loadGame === undefined;
+      button.setAttribute(
+        'aria-label',
+        `${summary.levelLabel}, ${summary.kind === 'manual' ? 'sauvegarde manuelle' : 'sauvegarde automatique'}, ${formatSaveDate(summary.savedAt)}`,
+      );
+
+      const heading = document.createElement('span');
+      heading.className = 'save-entry-heading';
+      const level = document.createElement('strong');
+      level.textContent = summary.levelLabel;
+      const kind = document.createElement('small');
+      kind.textContent = `${experienceLabelById[summary.experienceId]} · ${
+        summary.kind === 'manual' ? 'Sauvegarde manuelle' : 'Sauvegarde auto'
+      }`;
+      heading.append(level, kind);
+
+      const details = document.createElement('span');
+      details.className = 'save-entry-details';
+      const date = document.createElement('time');
+      date.dateTime = summary.savedAt;
+      date.textContent = formatSaveDate(summary.savedAt);
+      const duration = document.createElement('small');
+      duration.textContent = formatSaveDuration(summary.playTimeSeconds);
+      details.append(date, duration);
+
+      button.append(heading, details);
+      button.addEventListener('click', () => this.actions.loadGame?.(summary.id));
+      fragment.append(button);
+    }
+    this.saveHistoryList.replaceChildren(fragment);
+    const empty = this.saveHistory.length === 0;
+    this.saveHistoryList.hidden = empty;
+    this.saveHistoryEmpty.hidden = !empty;
+  }
+
+  private readonly requestSave = async (): Promise<void> => {
+    if (!this.actions.saveGame) return;
+    this.saveButton.disabled = true;
+    this.setSaveStatus('Sauvegarde en cours…', 'pending');
+    let saved = false;
+    try {
+      saved = await this.actions.saveGame();
+    } catch {
+      saved = false;
+    } finally {
+      this.saveButton.disabled = false;
+    }
+    this.setSaveStatus(
+      saved ? 'Partie sauvegardée' : 'Impossible de sauvegarder',
+      saved ? 'success' : 'error',
+      2400,
+    );
+  };
+
+  private setSaveStatus(
+    message: string,
+    state: 'pending' | 'success' | 'error',
+    clearAfter = 0,
+  ): void {
+    if (this.saveStatusTimer !== undefined) window.clearTimeout(this.saveStatusTimer);
+    this.saveStatusTimer = undefined;
+    this.saveStatus.textContent = message;
+    this.saveStatus.dataset.state = state;
+    this.saveStatus.hidden = false;
+    if (clearAfter <= 0) return;
+    this.saveStatusTimer = window.setTimeout(() => {
+      this.saveStatusTimer = undefined;
+      this.saveStatus.textContent = '';
+      delete this.saveStatus.dataset.state;
+      this.saveStatus.hidden = true;
+    }, clearAfter);
+  }
 
   private syncSettingsControls(): void {
     for (const control of this.root.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-setting]')) {
@@ -633,8 +812,7 @@ export class ExperienceUI {
     }
     if (event.key === 'Tab') {
       const focusable = [...this.root.querySelectorAll<HTMLElement>(
-        `.menu-sidebar button:not(:disabled), ` +
-        `[data-page="${this.activePage}"] button:not(:disabled), ` +
+        `[data-page="${this.activePage}"] button:not(:disabled):not([hidden]), ` +
         `[data-page="${this.activePage}"] select:not(:disabled), ` +
         `[data-page="${this.activePage}"] input:not(:disabled)`,
       )].filter((element) => element.getClientRects().length > 0);
@@ -707,8 +885,8 @@ export class ExperienceUI {
   }
 
   private readonly onFullscreenChange = (): void => {
-    const label = this.query('[data-ui="fullscreen"] span');
-    label.textContent = document.fullscreenElement ? 'Quitter le plein écran' : 'Plein écran';
+    const label = this.query('[data-ui="fullscreen-label"]');
+    label.textContent = document.fullscreenElement ? 'Désactiver' : 'Activer';
   };
 
   private appendMessages(messages: readonly ConsoleMessage[]): void {
@@ -796,6 +974,7 @@ export class ExperienceUI {
     document.removeEventListener('keydown', this.onMenuKeyDown);
     document.removeEventListener('fullscreenchange', this.onFullscreenChange);
     if (this.chatFadeTimer !== undefined) window.clearTimeout(this.chatFadeTimer);
+    if (this.saveStatusTimer !== undefined) window.clearTimeout(this.saveStatusTimer);
     this.root.remove();
   }
 

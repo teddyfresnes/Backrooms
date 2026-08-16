@@ -203,16 +203,19 @@ quand elle est complètement fermée.
 La double porte importée du rez-de-chaussée reste statique et collidable, mais
 `HallExitInteraction` la raycast comme un portail. Un appui sur l’action
 configurable **interagir** déclenche le routeur de `main.ts` : la sauvegarde du
-stairwell est écrite, tous ses systèmes sont détruits, puis le `Game` procédural
-du commit précédent est chargé dynamiquement. La transition est différée à une
-microtâche afin de ne pas détruire Rapier au milieu du tick d’entrée courant.
+stairwell n’est pas réécrite, tous ses systèmes sont détruits, puis le `Game`
+procédural est chargé dynamiquement. La transition est différée à une microtâche
+afin de ne pas détruire Rapier au milieu du tick d’entrée courant. Une fois le
+niveau 0 réellement initialisé, le nouveau runtime écrit son checkpoint
+automatique de destination.
 
-La sauvegarde russe est versionnée par schéma, expérience et version de contenu.
-Deux slots tournants conservent le snapshot valide le plus récent et le dernier
-snapshot écrit dans l’autre slot, afin de reprendre celui-ci si le plus récent
-est corrompu ou si l’écriture suivante échoue. Ne jamais sauvegarder la position
-brute d’une chute : le runtime écrit le dernier ancrage
-sûr transmis par `PlayerController`.
+`SaveHistory` conserve au plus douze entrées versionnées, manuelles ou
+automatiques, communes aux deux expériences. Une autosave est créée à l’entrée
+d’un niveau, jamais sur minuteur, pause, masquage de page ou démontage. Les
+snapshots Backrooms stockent le seed et une position locale à son chunk ; les
+snapshots russes gardent aussi l’état de la porte. Ne jamais sauvegarder la
+position brute d’une chute : chaque runtime écrit le dernier ancrage sûr transmis
+par `PlayerController`.
 
 `PhysicsWorld` possède un personnage cinématique Rapier et des lots de colliders
 indexés par clé de chunk. Les mutations groupées passent par

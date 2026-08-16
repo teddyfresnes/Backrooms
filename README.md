@@ -7,9 +7,9 @@ procédural historique du Level 0 devient la suite de l’expérience : descendr
 au rez-de-chaussée et appuyer sur **E** devant la double porte du hall charge le
 labyrinthe Backrooms du commit précédent.
 
-L’accueil est volontairement léger : la scène 3D et l’appartement ne sont chargés
-qu’après **Nouvelle partie** ou **Charger**. La progression est sauvegardée
-automatiquement dans deux emplacements locaux tournants.
+L’accueil utilise toujours l’identité **Backrooms**, y compris lorsque la session
+courante se trouve encore dans l’immeuble. **Continuer** ouvre l’historique local,
+et le même menu sert ensuite de menu de pause.
 
 ## Lancer
 
@@ -42,10 +42,12 @@ npm run validate
 - souris : regarder
 - `Échap` : libérer la souris / pause
 
-La sauvegarde conserve la dernière position sûre, l’orientation, la durée de jeu
-et l’état animé de la porte. Elle est écrite périodiquement, à la pause, lorsque
-la page devient invisible et avant son déchargement. Une sauvegarde corrompue ou
-incompatible est ignorée proprement ; **Charger** reste alors désactivé.
+La sauvegarde conserve le niveau, la dernière position sûre, l’orientation et la
+durée de jeu ; dans l’immeuble, elle garde aussi l’état animé de la porte. Les
+sauvegardes manuelles sont disponibles dans le menu de pause. Une sauvegarde
+automatique n’est créée qu’après un vrai changement de niveau, notamment à
+l’arrivée dans le niveau 0, et l’historique local conserve au plus douze entrées.
+Une entrée corrompue ou incompatible est ignorée proprement.
 
 ## Fondation procédurale conservée
 

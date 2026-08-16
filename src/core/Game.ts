@@ -13,10 +13,21 @@ import type { ConsoleCompletion, ConsoleMode, ConsoleSubmitResult } from '../ui/
 import { loadGameSettings, type GameSettings } from '../ui/settings';
 import { createReadableSeed } from '../world/SeededRandom';
 import { fingerprintWorld, validateWorldPlan } from '../world/generateWorld';
-import { generateInfiniteChunk } from '../world/InfiniteWorld';
+import {
+  generateInfiniteChunk,
+  getChunkWorldOffset,
+} from '../world/InfiniteWorld';
 import type { DoorOpenMode, VisualBiome, WorldPlan } from '../world/types';
-import { WorldStream } from './WorldStream';
+import { streamChunkCoordAt, WorldStream } from './WorldStream';
 import type { LocateTarget } from './WorldStream';
+import {
+  getGameSaveSummary,
+  listGameSaves,
+  writeGameSave,
+  type BackroomsGameSave,
+  type GameSaveKind,
+  type GameSaveStorage,
+} from './SaveHistory';
 
 export type DebugExperience = DiagnosticsSnapshot;
 
@@ -103,6 +114,11 @@ const LEGACY_ATMOSPHERE: typeof ATMOSPHERE = {
 
 export interface GameOptions {
   onRequestNewGame?(): void;
+  onRequestLoadGame?(id: string): void;
+  launch?:
+    | { readonly kind: 'new' }
+    | { readonly kind: 'load'; readonly save: BackroomsGameSave };
+  autosaveOnReady?: boolean;
 }
 
 export class Game {
@@ -125,6 +141,7 @@ export class Game {
   private readonly ui: ExperienceUI;
   private readonly audio = new AudioSystem();
   private readonly lookDirection = new THREE.Vector3();
+  private readonly lastSafePosition = new THREE.Vector3();
   private readonly drawingBufferSize = new THREE.Vector2();
   private readonly cinematicPosition = new THREE.Vector3();
   private readonly cinematicEuler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -133,6 +150,7 @@ export class Game {
   private readonly systemDiagnostics: SystemDiagnostics;
   private readonly renderScale: RenderScaleLimits;
   private settings: GameSettings;
+  private readonly storage: GameSaveStorage | null;
   private materials?: MaterialLibrary;
   private worldStream?: WorldStream;
   private physics?: PhysicsWorld;
@@ -141,6 +159,9 @@ export class Game {
   private previousTime = performance.now();
   private accumulator = 0;
   private elapsed = 0;
+  private playableSeconds = 0;
+  private activeStory = 0;
+  private pendingAutosaveStory?: number;
   private fps = 60;
   private frameTimeMs = 1000 / 60;
   private frameCounter = 0;
@@ -159,6 +180,11 @@ export class Game {
     private readonly options: GameOptions = {},
   ) {
     this.settings = loadGameSettings();
+    try {
+      this.storage = window.localStorage;
+    } catch {
+      this.storage = null;
+    }
     this.renderScale = renderScaleLimits(
       window.innerWidth,
       window.innerHeight,
@@ -167,7 +193,9 @@ export class Game {
     );
     this.adaptiveRenderScale = new AdaptiveRenderScale(this.renderScale);
     this.pixelRatio = this.pixelRatioForQuality(this.settings.renderQuality);
-    this.seed = resolveSeed();
+    this.seed = this.options.launch?.kind === 'load'
+      ? this.options.launch.save.payload.seed
+      : resolveSeed();
     this.plan = generateInfiniteChunk(this.seed, { x: 0, z: 0, story: 0 });
     this.originFingerprint = fingerprintWorld(this.plan);
     this.cinematicPhase = [...this.originFingerprint]
@@ -199,12 +227,14 @@ export class Game {
     this.ui = new ExperienceUI(this.root, {
       enter: () => this.enter(),
       regenerate: () => this.regenerate(),
+      saveGame: () => this.saveNow('manual'),
+      loadGame: (id) => this.options.onRequestLoadGame?.(id),
       toggleFullscreen: () => void this.toggleFullscreen(),
       settingsChanged: (settings) => this.applySettings(settings),
       submitConsole: (value, mode) => this.submitConsole(value, mode),
       completeConsole: (value, mode) => this.completeConsole(value, mode),
       consoleVisibility: (open) => this.setConsoleVisibility(open),
-    }, this.settings);
+    }, this.settings, 'backrooms');
     this.configureScene();
     this.resize();
     window.addEventListener('resize', this.resize);
@@ -250,16 +280,42 @@ export class Game {
       onFootstep: (strength) => this.audio.footstep(strength),
       onInteract: (mode) => this.tryInteract(mode),
       onLand: () => this.audio.impact(),
-      onSafePosition: (position) => this.worldStream?.protectRecoveryPosition(position),
+      onSafePosition: (position) => {
+        this.lastSafePosition.set(position.x, position.y, position.z);
+        this.worldStream?.protectRecoveryPosition(position);
+        this.flushPendingLevelAutosave();
+      },
       onFallReset: () => {
         if (this.player) this.worldStream?.ensurePositionMounted(this.player.position);
         this.audio.impact();
         this.ui.showFall();
       },
     });
+    if (this.options.launch?.kind === 'load') {
+      const { chunk, localPosition, quaternion } = this.options.launch.save.payload;
+      const offset = getChunkWorldOffset(chunk);
+      const restoredPosition = {
+        x: offset.x + localPosition.x,
+        y: offset.y + localPosition.y,
+        z: offset.z + localPosition.z,
+      };
+      const destinationReady = await this.worldStream.prepareSavedChunk(chunk);
+      if (this.disposed) return;
+      if (!destinationReady) throw new Error('Impossible de préparer la sauvegarde sélectionnée.');
+      this.player.teleport(restoredPosition);
+      this.player.setLookQuaternion(quaternion);
+      this.playableSeconds = this.options.launch.save.playTimeSeconds;
+    }
+    this.lastSafePosition.copy(this.player.position);
+
     // Mount every starting chunk before shader compilation so the first
     // interactive frame already contains the full visible architecture.
     this.worldStream.update(0, 0, this.player.position);
+    this.activeStory = this.worldStream.getCenterCoord().story;
+    if (this.options.launch?.kind === 'load') {
+      await this.worldStream.waitForVisualAssets();
+      if (this.disposed) return;
+    }
 
     this.player.setFieldOfView(this.settings.fieldOfView);
     this.player.setLookSensitivity(this.settings.lookSensitivity);
@@ -280,9 +336,11 @@ export class Game {
     await this.warmupPostFX();
     if (this.disposed) return;
     this.updateDebugState(true);
+    this.syncSaveHistory();
     this.ui.setSessionStarted(true);
     this.ui.setReady();
     this.renderer.setAnimationLoop(this.frame);
+    if (this.options.autosaveOnReady) this.saveNow('autosave');
   }
 
   private configureScene(): void {
@@ -447,6 +505,54 @@ export class Game {
     window.location.assign(url.toString());
   }
 
+  private saveNow(kind: GameSaveKind): boolean {
+    if (!this.storage || !this.player || !this.worldStream) return false;
+    const chunk = this.worldStream.getCenterCoord();
+    const offset = getChunkWorldOffset(chunk);
+    const look = this.player.getLookQuaternion();
+    const result = writeGameSave(this.storage, {
+      experienceId: 'backrooms',
+      kind,
+      levelId: `backrooms-${chunk.story}`,
+      levelLabel: `Niveau ${chunk.story} · Backrooms`,
+      playTimeSeconds: this.playableSeconds,
+      payload: {
+        seed: this.seed,
+        chunk,
+        localPosition: {
+          x: this.lastSafePosition.x - offset.x,
+          y: this.lastSafePosition.y - offset.y,
+          z: this.lastSafePosition.z - offset.z,
+        },
+        quaternion: { x: look.x, y: look.y, z: look.z, w: look.w },
+      },
+    });
+    if (result.ok) this.syncSaveHistory();
+    return result.ok;
+  }
+
+  private syncSaveHistory(): void {
+    const summaries = this.storage
+      ? listGameSaves(this.storage).map(getGameSaveSummary)
+      : [];
+    this.ui.setSaveHistory(summaries);
+  }
+
+  private flushPendingLevelAutosave(): void {
+    const pendingStory = this.pendingAutosaveStory;
+    if (pendingStory === undefined || !this.worldStream) return;
+    const center = this.worldStream.getCenterCoord();
+    const safeCoord = streamChunkCoordAt(this.lastSafePosition);
+    if (
+      center.story !== pendingStory
+      || safeCoord.story !== pendingStory
+      || safeCoord.x !== center.x
+      || safeCoord.z !== center.z
+    ) return;
+    this.pendingAutosaveStory = undefined;
+    this.saveNow('autosave');
+  }
+
   private async toggleFullscreen(): Promise<void> {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await this.root.requestFullscreen();
@@ -465,6 +571,7 @@ export class Game {
     if (!trimmed.startsWith('/')) return null;
     const commandSuggestions = [
       { value: '/help', label: '/help', detail: 'AFFICHE LES COMMANDES DISPONIBLES' },
+      { value: '/save', label: '/save', detail: 'SAUVEGARDE MAINTENANT' },
       { value: '/logs', label: '/logs', detail: 'AFFICHE OU MASQUE LE PANNEAU TECHNIQUE' },
       { value: '/noclip', label: '/noclip', detail: 'ACTIVE OU DESACTIVE LE VOL LIBRE' },
       { value: '/locate ', label: '/locate <cible>', detail: 'TÉLÉPORTE VERS UNE CIBLE CONNUE' },
@@ -530,8 +637,17 @@ export class Game {
         const feedback = 'SYNTAXE: /help';
         return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
       }
-      const feedback = '/locate <cible> - teleportation · /noclip [on|off] - vol libre · /logs [on|off] - diagnostic';
+      const feedback = '/save - sauvegarder · /locate <cible> - teleportation · /noclip [on|off] - vol libre · /logs [on|off] - diagnostic';
       return { close: false, feedback, messages: [echo, { kind: 'system', text: feedback }] };
+    }
+    if (normalizedCommand === 'save') {
+      const saved = args.length === 0 && this.saveNow('manual');
+      const feedback = saved ? 'PARTIE SAUVEGARDÉE' : 'ÉCHEC DE LA SAUVEGARDE';
+      return {
+        close: saved,
+        feedback,
+        messages: [echo, { kind: saved ? 'system' : 'error', text: feedback }],
+      };
     }
     if (normalizedCommand === 'logs') {
       const visible = resolveDiagnosticsVisibility(this.diagnosticsVisible, args);
@@ -715,6 +831,7 @@ export class Game {
     this.wasMainMenuOpen = mainMenuOpen;
 
     if (playing) {
+      this.playableSeconds += rawDelta;
       this.accumulator = Math.min(this.accumulator + rawDelta, 0.12);
       const fixedDelta = 1 / 60;
       while (this.accumulator >= fixedDelta) {
@@ -723,6 +840,12 @@ export class Game {
       }
       this.player.renderUpdate(rawDelta, this.accumulator / fixedDelta);
       this.worldStream.update(this.elapsed, rawDelta, this.player.position);
+      const nextStory = this.worldStream.getCenterCoord().story;
+      if (nextStory !== this.activeStory) {
+        this.activeStory = nextStory;
+        this.pendingAutosaveStory = nextStory;
+        this.flushPendingLevelAutosave();
+      }
     } else {
       this.accumulator = 0;
       this.ui.setInteraction(null);

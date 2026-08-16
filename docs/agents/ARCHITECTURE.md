@@ -8,15 +8,16 @@ localisé, utiliser directement le guide de sous-système indiqué dans
 
 ```text
 src/main.ts
-  ├─ StartMenu (aucun runtime 3D chargé)
+  ├─ choisit la session locale la plus récente, ou un nouveau départ
   ├─ import dynamique de RussianStairwellGame
       ├─ StairwellEnvironment + ImportedApartmentEnvironment
       ├─ PhysicsWorld (plan statique + trimesh de l’appartement)
       ├─ PlayerController + porte interactive
-      ├─ GameSave (pose, porte et temps de jeu)
+      ├─ SaveHistory (niveau, pose, porte et temps de jeu)
       └─ HallExitInteraction -- E sur la porte du RDC ─┐
                                                        ↓
   └─ import dynamique de Game (labyrinthe procédural précédent)
+      └─ SaveHistory (seed, chunk, pose et temps de jeu)
 
 Runtime procédural conservé :
   Game
@@ -30,10 +31,13 @@ Runtime procédural conservé :
       └─ présente la scène via PostFX à chaque frame
 ```
 
-Le runtime russe est la route de lancement par défaut. C’est une scène finie et
-statique : ne pas la faire passer par `WorldStream`, dont les coordonnées de
-chunks et d’étages appartiennent au monde procédural. `src/main.ts` détruit ce
-runtime avant d’instancier `Game` lorsque la porte-portail du hall est activée.
+Sans historique, le runtime russe est la route de lancement par défaut ; sinon
+`main.ts` restaure l’expérience de l’entrée choisie. Les deux runtimes utilisent
+le même `ExperienceUI`, toujours présenté comme le menu Backrooms. La scène russe
+reste finie et statique : ne pas la faire passer par `WorldStream`, dont les
+coordonnées de chunks et d’étages appartiennent au monde procédural. `src/main.ts`
+détruit ce runtime avant d’instancier `Game` lorsque la porte-portail du hall est
+activée.
 Le contrat central du labyrinthe reste `WorldPlan` dans `src/world/types.ts` ;
 la génération ne crée que des données et le rendu et la physique les consomment
 séparément.
@@ -42,7 +46,7 @@ séparément.
 
 | Zone | Responsabilité | Points d’entrée |
 |---|---|---|
-| `src/core` | lancement, sauvegarde, boucles et streaming | `RussianStairwellGame`, `GameSave`, `Game`, `WorldStream` |
+| `src/core` | lancement, historique de sauvegarde, boucles et streaming | `RussianStairwellGame`, `SaveHistory`, `Game`, `WorldStream` |
 | `src/stairwell` | scène statique, matériaux et météo russe | `StairwellEnvironment`, `createStairwellPlan` |
 | `src/apartment` | appartement importé et porte persistante | `ImportedApartmentEnvironment`, `ImportedApartmentDoorInteraction` |
 | `src/world` | plan déterministe, topologie, chunks, props | `generateWorld`, `generateInfiniteChunk` |

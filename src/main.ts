@@ -1,13 +1,15 @@
 import '@fontsource-variable/space-grotesk';
 import '@fontsource-variable/jetbrains-mono';
 import './styles.css';
+import { loadRussianStairwellGame } from './core/GameSave';
 import {
-  getRussianStairwellSaveMetadata,
-  loadRussianStairwellGame,
-  type RussianStairwellSave,
-} from './core/GameSave';
+  listGameSaves,
+  loadGameSave,
+  writeGameSave,
+  type BackroomsGameSave,
+  type GameSaveEntry,
+} from './core/SaveHistory';
 import type { RussianStairwellLaunch } from './core/RussianStairwellGame';
-import { StartMenu } from './ui/StartMenu';
 
 const appElement = document.querySelector<HTMLElement>('#app');
 if (!appElement) throw new Error('Application mount point not found.');
@@ -19,12 +21,38 @@ interface GameRuntime {
 }
 
 let activeGame: GameRuntime | null = null;
-let activeMenu: StartMenu | null = null;
 let transitionId = 0;
 
-const readSave = (): RussianStairwellSave | null => {
+const readHistory = (): readonly GameSaveEntry[] => {
   try {
-    return loadRussianStairwellGame(window.localStorage);
+    const history = listGameSaves(window.localStorage);
+    if (history.length > 0) return history;
+
+    // Import the newest compatible v1 stairwell snapshot once. The old slots
+    // remain untouched so a failed migration never destroys recoverable data.
+    const legacy = loadRussianStairwellGame(window.localStorage);
+    if (!legacy) return history;
+    writeGameSave(window.localStorage, {
+      experienceId: 'russian-stairwell',
+      kind: 'manual',
+      levelId: 'building',
+      levelLabel: 'Immeuble',
+      playTimeSeconds: legacy.playTimeSeconds,
+      payload: {
+        safePosition: legacy.player.safePosition,
+        quaternion: legacy.player.quaternion,
+        entranceDoor: legacy.entranceDoor,
+      },
+    }, new Date(legacy.savedAt));
+    return listGameSaves(window.localStorage);
+  } catch {
+    return [];
+  }
+};
+
+const readSave = (id: string): GameSaveEntry | null => {
+  try {
+    return loadGameSave(window.localStorage, id);
   } catch {
     return null;
   }
@@ -33,45 +61,18 @@ const readSave = (): RussianStairwellSave | null => {
 const clearRuntime = (): void => {
   activeGame?.dispose();
   activeGame = null;
-  activeMenu?.dispose();
-  activeMenu = null;
   app.replaceChildren();
 };
 
-const createBoot = (mark: string, brand: string, detail: string): HTMLElement => {
+const createBoot = (detail: string): HTMLElement => {
   const boot = document.createElement('div');
   boot.className = 'boot-shell';
   boot.innerHTML = `
-    <div class="boot-brand"><span>${mark}</span><div><strong>${brand}</strong><small>${detail}</small></div></div>
+    <div class="boot-brand"><img src="/favicon.svg" alt="" /><div><strong>Backrooms</strong><small>${detail}</small></div></div>
     <div class="boot-track" role="progressbar" aria-label="Chargement de l’environnement"><i></i></div>
   `;
   app.append(boot);
   return boot;
-};
-
-const showLauncher = async (): Promise<void> => {
-  const id = ++transitionId;
-  clearRuntime();
-  const initialSave = readSave();
-  const menu = new StartMenu(
-    app,
-    initialSave ? getRussianStairwellSaveMetadata(initialSave) : null,
-  );
-  activeMenu = menu;
-
-  while (id === transitionId) {
-    const choice = await menu.waitForChoice();
-    if (id !== transitionId) return;
-    const save = choice === 'load' ? readSave() : null;
-    if (choice === 'load' && !save) {
-      menu.setSave(null);
-      menu.setBusy(false);
-      continue;
-    }
-    menu.setBusy(true);
-    void startStairwell(save ? { kind: 'load', save } : { kind: 'new' });
-    return;
-  }
 };
 
 const showBootError = (error: unknown): void => {
@@ -83,30 +84,34 @@ const showBootError = (error: unknown): void => {
   detail.textContent = error instanceof Error ? error.message : String(error);
   const retry = document.createElement('button');
   retry.type = 'button';
-  retry.textContent = 'Retour à l’accueil';
-  retry.addEventListener('click', () => void showLauncher(), { once: true });
+  retry.textContent = 'Réessayer';
+  retry.addEventListener('click', () => void startInitialExperience(), { once: true });
   shell.append(title, detail, retry);
   app.append(shell);
+};
+
+const loadFromHistory = (id: string): void => {
+  const save = readSave(id);
+  if (save) void startSavedExperience(save);
 };
 
 async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
   const id = ++transitionId;
   clearRuntime();
-  const boot = createBoot('RS', 'Russian Stairwells', 'Chargement de l’immeuble');
+  const boot = createBoot('Chargement de la session');
   let game: GameRuntime | null = null;
   try {
     const { RussianStairwellGame } = await import('./core/RussianStairwellGame');
     if (id !== transitionId) return;
     game = new RussianStairwellGame(app, launch, {
       onRequestNewGame: () => void startStairwell({ kind: 'new' }),
-      onRequestLoadGame: () => {
-        const save = readSave();
-        if (save) void startStairwell({ kind: 'load', save });
-        else void showLauncher();
-      },
+      onRequestLoadGame: loadFromHistory,
       // Finish the current input/frame stack before disposing the stairwell
       // runtime that detected the E interaction.
-      onEnterBackrooms: () => queueMicrotask(() => void startBackrooms()),
+      onEnterBackrooms: () => queueMicrotask(() => void startBackrooms(
+        { kind: 'new' },
+        true,
+      )),
     });
     activeGame = game;
     await game.initialize();
@@ -125,10 +130,13 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
   }
 }
 
-async function startBackrooms(): Promise<void> {
+async function startBackrooms(
+  launch: { readonly kind: 'new' } | { readonly kind: 'load'; readonly save: BackroomsGameSave },
+  autosaveOnReady = false,
+): Promise<void> {
   const id = ++transitionId;
   clearRuntime();
-  const boot = createBoot('BR', 'Backrooms', 'Génération du labyrinthe');
+  const boot = createBoot('Génération du niveau');
   let game: GameRuntime | null = null;
   try {
     // Give the transition overlay one frame before the synchronous origin
@@ -138,7 +146,10 @@ async function startBackrooms(): Promise<void> {
     const { Game } = await import('./core/Game');
     if (id !== transitionId) return;
     game = new Game(app, {
-      onRequestNewGame: () => queueMicrotask(() => void startBackrooms()),
+      launch,
+      autosaveOnReady,
+      onRequestNewGame: () => queueMicrotask(() => void startStairwell({ kind: 'new' })),
+      onRequestLoadGame: loadFromHistory,
     });
     activeGame = game;
     await game.initialize();
@@ -157,7 +168,24 @@ async function startBackrooms(): Promise<void> {
   }
 }
 
-requestAnimationFrame(() => void showLauncher());
+async function startSavedExperience(save: GameSaveEntry): Promise<void> {
+  if (save.experienceId === 'backrooms') {
+    await startBackrooms({ kind: 'load', save });
+    return;
+  }
+  await startStairwell({ kind: 'load', save });
+}
+
+async function startInitialExperience(): Promise<void> {
+  const latest = readHistory()[0];
+  if (latest) {
+    await startSavedExperience(latest);
+    return;
+  }
+  await startStairwell({ kind: 'new' });
+}
+
+requestAnimationFrame(() => void startInitialExperience());
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
