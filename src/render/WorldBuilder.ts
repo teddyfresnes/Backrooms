@@ -595,12 +595,14 @@ const createRectFasciaGeometry = (
   bottom: number,
   top: number,
   patternScale = 1,
+  outsideOpening = false,
 ): THREE.BufferGeometry => {
+  const offset = outsideOpening ? 0.01 : 0;
   const geometries = [
-    createTexturedBoxGeometry(rectWidth(rect), top - bottom, 0.02, rectCenter(rect).x, bottom, rect.minZ, 0.94, patternScale),
-    createTexturedBoxGeometry(rectWidth(rect), top - bottom, 0.02, rectCenter(rect).x, bottom, rect.maxZ, 0.94, patternScale),
-    createTexturedBoxGeometry(0.02, top - bottom, rectDepth(rect), rect.minX, bottom, rectCenter(rect).z, 0.94, patternScale),
-    createTexturedBoxGeometry(0.02, top - bottom, rectDepth(rect), rect.maxX, bottom, rectCenter(rect).z, 0.94, patternScale),
+    createTexturedBoxGeometry(rectWidth(rect), top - bottom, 0.02, rectCenter(rect).x, bottom, rect.minZ - offset, 0.94, patternScale),
+    createTexturedBoxGeometry(rectWidth(rect), top - bottom, 0.02, rectCenter(rect).x, bottom, rect.maxZ + offset, 0.94, patternScale),
+    createTexturedBoxGeometry(0.02, top - bottom, rectDepth(rect), rect.minX - offset, bottom, rectCenter(rect).z, 0.94, patternScale),
+    createTexturedBoxGeometry(0.02, top - bottom, rectDepth(rect), rect.maxX + offset, bottom, rectCenter(rect).z, 0.94, patternScale),
   ].map(removeHorizontalCaps);
   return mergeOrSingle(geometries)!;
 };
@@ -1410,6 +1412,7 @@ export class WorldView {
   private readonly materials: MaterialSet;
   private readonly elevatedCeilingMaterial: THREE.MeshStandardMaterial;
   private readonly distantCeilingMaterial: THREE.MeshStandardMaterial;
+  private readonly previewFixtureGlowMaterial: THREE.MeshBasicMaterial;
   private readonly lightingContext?: ZonalLightingContext;
   private readonly bakedLightMaps?: BakedLightMaps;
   private readonly ownedMaterials: THREE.Material[];
@@ -1455,7 +1458,14 @@ export class WorldView {
       'distant-tiled-ceiling',
       0.3,
     );
-    this.ownedMaterials.push(this.elevatedCeilingMaterial, this.distantCeilingMaterial);
+    this.previewFixtureGlowMaterial = this.materials.fixtureGlow.clone();
+    this.previewFixtureGlowMaterial.name = 'preview-fluorescent-diffuser';
+    this.previewFixtureGlowMaterial.side = THREE.FrontSide;
+    this.ownedMaterials.push(
+      this.elevatedCeilingMaterial,
+      this.distantCeilingMaterial,
+      this.previewFixtureGlowMaterial,
+    );
     this.lowerMaterials = {
       wall: createLowerStoreyMaterial(this.materials.wall, 'lower-storey-wallpaper'),
       floor: createLowerStoreyMaterial(this.materials.floor, 'lower-storey-carpet'),
@@ -1552,6 +1562,61 @@ export class WorldView {
     const elevationFeatures = this.plan.features.filter(
       (feature): feature is RaisedZoneFeature => feature.kind === 'raised-zone',
     );
+    const highCeilingRooms = this.plan.rooms.filter(
+      (room) => room.level >= 0 && room.ceilingHeight > this.plan.wallHeight + 0.1,
+    );
+    const portalLintels = this.plan.walls.filter(
+      (wall) => wall.detail === 'upper-portal-lintel',
+    );
+    const lintelDirectlyHasHighCeilingOnBothSides = (wall: WallSegment): boolean => {
+      const along = wall.orientation === 'x' ? wall.x : wall.z;
+      const fixed = wall.orientation === 'x' ? wall.z : wall.x;
+      const sampleOffset = wall.thickness * 0.5 + 0.04;
+      return ([-1, 1] as const).every((side) => {
+        const x = wall.orientation === 'x' ? along : fixed + side * sampleOffset;
+        const z = wall.orientation === 'x' ? fixed + side * sampleOffset : along;
+        return highCeilingRooms.some((room) => pointInRect(x, z, room.bounds, 0.02));
+      });
+    };
+    const lintelGroups = new Map<string, boolean>();
+    const visitedLintelIds = new Set<string>();
+    const lintelsTouch = (left: WallSegment, right: WallSegment): boolean => {
+      if (left.orientation !== right.orientation) return false;
+      if (
+        Math.abs(left.bottom - right.bottom) >= 0.03 ||
+        Math.abs(left.bottom + left.height - right.bottom - right.height) >= 0.03 ||
+        Math.abs(left.thickness - right.thickness) >= 0.03
+      ) return false;
+      const leftFixed = left.orientation === 'x' ? left.z : left.x;
+      const rightFixed = right.orientation === 'x' ? right.z : right.x;
+      if (Math.abs(leftFixed - rightFixed) >= 0.12) return false;
+      const leftAlong = left.orientation === 'x' ? left.x : left.z;
+      const rightAlong = right.orientation === 'x' ? right.x : right.z;
+      const leftMin = leftAlong - left.length * 0.5;
+      const leftMax = leftAlong + left.length * 0.5;
+      const rightMin = rightAlong - right.length * 0.5;
+      const rightMax = rightAlong + right.length * 0.5;
+      return leftMin <= rightMax + 0.03 && leftMax >= rightMin - 0.03;
+    };
+    for (const lintel of portalLintels) {
+      if (visitedLintelIds.has(lintel.id)) continue;
+      const group: WallSegment[] = [];
+      const queue = [lintel];
+      visitedLintelIds.add(lintel.id);
+      for (let cursor = 0; cursor < queue.length; cursor += 1) {
+        const current = queue[cursor]!;
+        group.push(current);
+        for (const candidate of portalLintels) {
+          if (visitedLintelIds.has(candidate.id) || !lintelsTouch(current, candidate)) continue;
+          visitedLintelIds.add(candidate.id);
+          queue.push(candidate);
+        }
+      }
+      const entirelyBetweenHighRooms = group.every(lintelDirectlyHasHighCeilingOnBothSides);
+      for (const member of group) lintelGroups.set(member.id, entirelyBetweenHighRooms);
+    }
+    const portalLintelHasHighCeilingOnBothSides = (wall: WallSegment): boolean =>
+      wall.detail === 'upper-portal-lintel' && lintelGroups.get(wall.id) === true;
     const districtFloorElevations = elevationFeatures.map((feature) => feature.elevation);
     const isInsideBaseboardlessZone = (x: number, z: number): boolean =>
       baseboardlessZones.some((zone) => pointInRect(x, z, zone, 0.02));
@@ -1687,7 +1752,13 @@ export class WorldView {
           ),
         wallpaperPhaseForWall(this.plan.seed, wall),
       );
-      if (restsOnWalkableFloor || wall.detail === 'upper-portal-lintel') {
+      if (
+        restsOnWalkableFloor ||
+        (
+          wall.detail === 'upper-portal-lintel' &&
+          !portalLintelHasHighCeilingOnBothSides(wall)
+        )
+      ) {
         removeBottomCap(geometry);
       }
       const wallMaterial = wall.kind === 'plaster' ? this.materials.plaster : this.materials.wall;
@@ -1912,22 +1983,29 @@ export class WorldView {
     );
     const inheritedCeilingOpenings = [...getInfiniteChunkCeilingOpenings(this.plan)];
     const stairCeilingOpenings = this.plan.stairCeilingOpenings ?? [];
-    // Portal soffits use the same height, world-space UVs and material as the
-    // adjacent office ceiling. Their wallpaper bottom caps were removed above,
-    // and the ceiling is cut over the same footprint, so the two disjoint faces
-    // meet on one plane without either a visible step or any z-fighting.
+    // A portal adjoining a normal-height room continues that room's ceiling.
+    // Between two high rooms, the lintel keeps its wallpaper bottom cap instead,
+    // so the suspended ceiling texture does not float across the opening.
     const portalLintelSoffits = this.plan.walls
-      .filter((wall) => wall.detail === 'upper-portal-lintel')
+      .filter((wall) =>
+        wall.detail === 'upper-portal-lintel' &&
+        !portalLintelHasHighCeilingOnBothSides(wall)
+      )
       .flatMap((wall) => {
         const bounds = intersectRects(worldBounds, wallFootprint(wall));
         return bounds ? [{ bounds, y: this.plan.wallHeight }] : [];
       });
+    const upperShellSoffits = upperShells.flatMap((wall) => {
+      const bounds = intersectRects(worldBounds, wallFootprint(wall));
+      return bounds ? [bounds] : [];
+    });
     const ceilingOpenings = [
       ...inheritedCeilingOpenings,
       ...stairCeilingOpenings,
       ...tallRooms.map((room) => room.bounds),
       ...endlessAbyssFeatures.map((feature) => feature.bounds),
       ...portalLintelSoffits.map((soffit) => soffit.bounds),
+      ...upperShellSoffits,
     ];
     const ceilingRects = ceilingOpenings.length > 0
       ? cellsAroundHoles(worldBounds, ceilingOpenings)
@@ -3497,8 +3575,8 @@ export class WorldView {
           frame.translate(x, ceilingY - 0.0225, z);
           frameTarget.push(frame);
           const light = new THREE.PlaneGeometry(1.72, 0.72);
-          light.rotateX(Math.PI * 0.5);
           if (quarterTurn) light.rotateZ(Math.PI * 0.5);
+          light.rotateX(Math.PI * 0.5);
           light.translate(x, ceilingY - 0.048, z);
           glowTarget.push(light);
         }
@@ -3585,12 +3663,12 @@ export class WorldView {
         const previewFloorY = baseY + STAIR_STORY_RISE;
         const previewCeilingY = previewFloorY + this.plan.wallHeight;
         upperFloorGeometries.push(createFloorGeometry(
-          cellsAroundHoles(previewZone, [opening]),
+          cellsAroundHoles(previewZone, [stairs.bounds]),
           previewFloorY,
           this.surfaceStyle.floorPatternScale,
           this.surfaceStyle.floorQuarterTurn,
         ));
-        upperUndersideGeometries.push(...cellsAroundHoles(previewZone, [opening]).map((rect) =>
+        upperUndersideGeometries.push(...cellsAroundHoles(previewZone, [stairs.bounds]).map((rect) =>
           createCeilingGeometry(
             rect,
             previewFloorY - 0.12,
@@ -3598,10 +3676,11 @@ export class WorldView {
           )
         ));
         upperFloorFasciaGeometries.push(createRectFasciaGeometry(
-          opening,
+          stairs.bounds,
           previewFloorY - 0.12,
           previewFloorY,
           this.surfaceStyle.wallPatternScale,
+          true,
         ));
         // The real cage already lines the shaft through the plenum. Preview
         // walls begin on the next floor; extending this large rectangle down
@@ -3616,17 +3695,17 @@ export class WorldView {
             this.surfaceStyle.wallPatternScale,
           ),
         );
-        upperCeilingGeometries.push(
+        upperCeilingGeometries.push(...cellsAroundHoles(previewZone, [stairs.bounds]).map((rect) =>
           createCeilingGeometry(
-            previewZone,
+            rect,
             previewCeilingY,
             this.surfaceStyle.ceilingPatternScale,
-          ),
-        );
+          )
+        ));
         addPreviewLights(
           previewZone,
           previewCeilingY,
-          [],
+          [stairs.bounds],
           upperLightGeometries,
           upperLightFrameGeometries,
         );
@@ -3650,7 +3729,7 @@ export class WorldView {
           0.96,
           this.surfaceStyle.wallPatternScale,
         ));
-        lowerCeilingGeometries.push(...cellsAroundHoles(previewZone, [opening]).map((rect) =>
+        lowerCeilingGeometries.push(...cellsAroundHoles(previewZone, [stairs.bounds]).map((rect) =>
           createCeilingGeometry(
             rect,
             previewCeilingY,
@@ -3658,10 +3737,11 @@ export class WorldView {
           )
         ));
         lowerArrivalFasciaGeometries.push(createRectFasciaGeometry(
-          opening,
+          stairs.bounds,
           baseY + STAIR_STORY_RISE - 0.12,
           baseY + STAIR_STORY_RISE,
           this.surfaceStyle.wallPatternScale,
+          true,
         ));
         addPreviewLights(
           previewZone,
@@ -3723,7 +3803,7 @@ export class WorldView {
     );
     makeMesh(
       mergeOrSingle(upperLightGeometries),
-      this.materials.fixtureGlow,
+      this.previewFixtureGlowMaterial,
       'upper-stair-preview-lights',
       this.group,
     );
@@ -3759,7 +3839,7 @@ export class WorldView {
     );
     makeMesh(
       mergeOrSingle(lowerLightGeometries),
-      this.materials.fixtureGlow,
+      this.previewFixtureGlowMaterial,
       'lower-stair-preview-lights',
       this.group,
     );

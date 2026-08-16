@@ -82,13 +82,19 @@ Pour `epic3`, seuls les voisins nord et sud restent montés pendant la visite.
   luminaires ont tous `ceilingY` sur le plafond réel, sans panneau lumineux
   décoratif ou hauteur aléatoire supplémentaire ;
 - les escaliers inter-étages rendent des contremarches minces et une sous-face
-  inclinée texturée, jamais des marches remplies jusqu’au sol. Les murs d’une
+  inclinée texturée, jamais des marches remplies jusqu’au sol. Les marches d’une
+  volée droite touchent les deux parois latérales de la cage, sans vide décoratif.
+  Les murs d’une
   preview s’arrêtent à son vrai plafond ; la cage réelle habille seule le
   plénum. Ses extrémités ferment la bande entre le plafond bas et la dalle haute
   sans obstruer les baies praticables des deux stories. Les luminaires de preview
   doivent rester entièrement hors de l’ouverture. Un plancher percé conserve
   une sous-face visible depuis la story inférieure et les ouvertures d’escalier
-  ferment les quatre chants de dalle ;
+  ferment les quatre chants de dalle. Pour une preview d’étage, le sol, sa
+  sous-face et ses chants s’arrêtent tous sur les limites exactes de la cage :
+  aucun liseré de plafond ne doit dépasser à l’intérieur de l’escalier. Le
+  plafond de preview supérieur garde la même ouverture et ses luminaires restent
+  horizontaux, orientés vers la pièce : leur dos est invisible depuis le haut ;
 - plafonds bas des `squeeze-view` construits sur `passageRects` quand ce champ
   existe, afin qu’un passage en L ou en T ne couvre pas son rectangle englobant ;
 - éléments répétitifs en `InstancedMesh` ;
@@ -141,17 +147,19 @@ redondante, pas de lui appliquer un décalage arbitraire.
 - Les fragments de coque haute gardent leurs faces d’extrémité : leur retrait
   produit des fentes verticales noires aux raccords. Leur base rejoint exactement
   le sommet du mur bas pour ne laisser aucune fente horizontale ; le plafond bas
-  voisin se termine sur ce même plan et masque la jonction de son côté.
+  voisin est soustrait sous l’empreinte réelle de la coque, dont la sous-face
+  masque la jonction sans devenir coplanaire avec les dalles.
 - Les parois des passages accroupis gardent leurs plinthes. Une
   `baseboardlessZone` ne retire que la portion de plinthe située sur la face du
   mur qui regarde réellement dans cette zone ; un simple contact d’extrémité ou
   la pièce située de l’autre côté du mur ne doivent jamais perdre leur plinthe.
 - La sous-face rendue d’un `upper-portal-lintel` rejoint exactement le plafond
-  bas et utilise le même matériau ainsi que les mêmes UV en coordonnées monde.
-  Le cap inférieur en papier peint est retiré et le plafond bas est soustrait
-  sur toute l’empreinte du portail : les deux surfaces disjointes partagent un
-  plan continu, sans marche visible ni clignotement à la frontière entre salle
-  haute et salle normale.
+  bas. Elle prolonge le matériau et les UV du plafond lorsqu’une pièce adjacente
+  reste basse ; entre deux pièces hautes, elle conserve le papier peint du mur.
+  Un groupe de linteaux contigus traversant un angle de district emploie le
+  plafond sur toute sa portée dès qu’un de ses fragments borde une pièce basse,
+  afin de ne pas créer un double renfoncement. Les surfaces restent disjointes
+  et coplanaires, sans marche ni clignotement.
 - Une géométrie visible depuis un étage voisin doit avoir les faces/caps
   nécessaires ; ne pas compter uniquement sur le back-face culling.
 - Toute nouvelle ressource détenue par `WorldView` doit être libérée dans
@@ -178,6 +186,12 @@ En mode moderne, le post-traitement ne contient ni normal pass ni SSAO. Son
 pipeline utilise bloom, tone mapping, grain, vignette et SMAA. Le mode classique
 recrée le normal pass, le SSAO et les réglages de bloom historiques ; le composer
 est reconstruit lors de la bascule.
+
+`RussianStairwellGame` réutilise ce même `PostFX` et le même rig global jaune
+(hémisphère, rebond ambiant et clé directionnelle) que le niveau Backrooms. Ses
+néons, lampes d’appartement et éclairages extérieurs restent des sources locales.
+Le réglage moderne/classique reconstruit aussi son composer et applique les
+intensités globales correspondantes, sans recréer la scène statique.
 
 `LightingMode` expose `modern` et `legacy` aux paramètres graphiques. Le mode
 `legacy` restaure le pipeline antérieur à `e6d7e6a` : bake CPU de deux lightmaps
@@ -210,8 +224,10 @@ niveau 0 réellement initialisé, le nouveau runtime écrit son checkpoint
 automatique de destination.
 
 `SaveHistory` conserve au plus douze entrées versionnées, manuelles ou
-automatiques, communes aux deux expériences. Une autosave est créée à l’entrée
-d’un niveau, jamais sur minuteur, pause, masquage de page ou démontage. Les
+automatiques, communes aux deux expériences. Une seule autosave représente la
+session courante et remplace la précédente. Elle est écrite à l’entrée d’un
+niveau, toutes les 30 secondes jouées, au masquage ou à la fermeture de la page,
+et avant un retour confirmé au menu principal. Les
 snapshots Backrooms stockent le seed et une position locale à son chunk ; les
 snapshots russes gardent aussi l’état de la porte. Ne jamais sauvegarder la
 position brute d’une chute : chaque runtime écrit le dernier ancrage sûr transmis
@@ -244,10 +260,12 @@ marches, accroupissement et transitions verticales sont sensibles à cette
 séparation.
 
 Les commandes configurables sont stockées dans `GameSettings.controls` sous
-forme de `KeyboardEvent.code` physiques. `ExperienceUI` garantit une touche
-unique par action, puis `Game` transmet la configuration à `PlayerController`
-et `InputManager`. Les variantes gauche/droite de Maj, Ctrl et Alt sont traitées
-comme une même touche pour les conflits et à l’exécution.
+forme de codes normalisés : les lettres suivent `KeyboardEvent.key` afin que les
+presets AZERTY et QWERTY correspondent aux caractères imprimés, tandis que les
+autres touches gardent leur `KeyboardEvent.code` physique. `ExperienceUI`
+garantit une touche unique par action, puis `Game` transmet la configuration à
+`PlayerController` et `InputManager`. Les variantes gauche/droite de Maj, Ctrl
+et Alt sont traitées comme une même touche pour les conflits et à l’exécution.
 
 ## Props et assets
 

@@ -815,21 +815,19 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
         const objectName = (object.name ?? '').toLowerCase();
         if (materialName.includes('glass') || objectName.includes('glass')) {
           clone.transparent = true;
-          clone.opacity = 0.2;
+          clone.opacity = 0.025;
           clone.depthWrite = false;
           clone.depthTest = true;
           clone.side = THREE.DoubleSide;
           if (clone instanceof THREE.MeshStandardMaterial) {
-            clone.color = new THREE.Color(0xd7e4ef);
-            clone.roughness = 0.055;
+            clone.color = new THREE.Color(0xffffff);
+            clone.roughness = 0.02;
             clone.metalness = 0;
             if (clone instanceof THREE.MeshPhysicalMaterial) {
-              // Physical transmission gives the rain-normal perturbation a subtle refraction
-              // without an extra screen-space pass. Keep opacity at 1 as required by Three.js.
-              clone.opacity = 1;
-              clone.transmission = 0.72;
-              clone.thickness = 0.028;
-              clone.ior = 1.42;
+              // Screen-space transmission turns black with this post-processing pipeline.
+              // Plain low alpha keeps the exterior and its rain directly visible instead.
+              clone.transmission = 0;
+              clone.thickness = 0;
             }
             this.installWindowRainShader(clone, rainSeed * 0.071 + glassMaterialIndex * 13.37);
             glassMaterialIndex += 1;
@@ -1160,6 +1158,10 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
       metalness: 0,
       normalScale: new THREE.Vector2(0.06, 0.06),
     });
+    const apartmentViewSilhouette = this.createExtraBasicMaterial(
+      'apartment-view-building-black',
+      { color: 0x111519, fog: true },
+    );
     const roof = this.cloneStandardMaterial(this.materials.frameMetal, 'exterior-roof', {
       color: new THREE.Color(0x52585d),
       roughness: 0.84,
@@ -1283,6 +1285,24 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
     for (const [x, z, w, d] of puddles) {
       this.group.add(makeBox(`puddle-${x}-${z}`, [w, 0.004, d], [x, 0.018, z], puddle, false, false));
     }
+
+    // Two cheap dark masses fill the apartment's west-window view: one offsets
+    // the sparse left side, while the distant bar hides sky gaps across the
+    // whole background. No facade trim or per-window meshes.
+    this.group.add(
+      makeBox(
+        'apartment-window-view-building-silhouette',
+        [5.2, 15.5, 8.6],
+        [-21.6, 7.75, 3.2],
+        apartmentViewSilhouette,
+      ),
+      makeBox(
+        'apartment-window-view-background-silhouette',
+        [4.2, 19, 140],
+        [-29, 9.5, 18],
+        apartmentViewSilhouette,
+      ),
+    );
 
     this.buildApartmentBlock(
       'near-center-hlm',
@@ -1672,13 +1692,16 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
       { minX: -12.0, maxX: 12.0, minY: 0.8, maxY: 14.2, minZ: exteriorFaceZ - 2.6, maxZ: exteriorFaceZ - 0.055 },
       { minX: -30.0, maxX: 30.0, minY: 1.0, maxY: 18.6, minZ: -24.0, maxZ: exteriorFaceZ - 2.0 },
       { minX: -38.0, maxX: 38.0, minY: 1.2, maxY: 21.5, minZ: -69.0, maxZ: -20.0 },
+      // The apartment's second top-floor window faces west, outside the south-facing
+      // courtyard rain volumes. Keep a compact curtain immediately beyond that pane.
+      { minX: -13.2, maxX: -10.24, minY: 8.7, maxY: 12.8, minZ: -4.4, maxZ: -0.7 },
     );
 
-    const count = 980;
+    const count = 1120;
     const positions = new Float32Array(count * 6);
     this.rainDrops.length = 0;
     for (let index = 0; index < count; index += 1) {
-      const zoneIndex = index < 560 ? 0 : (index < 820 ? 1 : 2);
+      const zoneIndex = index < 560 ? 0 : (index < 820 ? 1 : (index < 980 ? 2 : 3));
       const zone = this.rainZones[zoneIndex]!;
       const drop = this.randomRainDrop(zoneIndex, zone);
       this.rainDrops.push(drop);
@@ -1723,20 +1746,6 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
   }
 
   private buildLighting(): void {
-    const hemisphere = new THREE.HemisphereLight(0x6c7580, 0x24201d, 0.3);
-    hemisphere.name = 'stairwell-night-ambient';
-    this.group.add(hemisphere);
-
-    const ambient = new THREE.AmbientLight(0x55514b, 0.12);
-    ambient.name = 'stairwell-night-fill';
-    this.group.add(ambient);
-
-    const moon = new THREE.DirectionalLight(0x728392, 0.15);
-    moon.name = 'south-facade-moonlight';
-    moon.position.set(5.8, 10.5, -14.5);
-    moon.castShadow = false;
-    this.group.add(moon);
-
     const streetLamp = new THREE.PointLight(0xffca82, 1.35, 14, 2);
     streetLamp.name = 'street-lamp-light';
     streetLamp.position.set(4.42, 4.26, -8.2);

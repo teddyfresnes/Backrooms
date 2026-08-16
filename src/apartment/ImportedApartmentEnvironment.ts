@@ -29,6 +29,34 @@ const MAJOR_COLLIDER_NAMES = [
   'Radiator',
 ] as const;
 
+// The apartment export explicitly groups its two panes under
+// TRANSPARENCY_NEEDED, but still assigns them the opaque main-parts atlas.
+const APARTMENT_WINDOW_GLASS_NAMES = new Set([
+  'polySurface16_M_MainParts_0',
+  'polySurface24_M_MainParts_0',
+]);
+
+export const makeApartmentWindowGlassTransparent = (root: THREE.Object3D): void => {
+  const glass = new THREE.MeshBasicMaterial({
+    name: 'apartment-window-clear-glass',
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.02,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    toneMapped: false,
+  });
+
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || !APARTMENT_WINDOW_GLASS_NAMES.has(mesh.name)) return;
+    mesh.material = glass;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    mesh.renderOrder = 1;
+  });
+};
+
 const colliderFromBox = (id: string, box: THREE.Box3): StaticCollider => {
   const center = box.getCenter(new THREE.Vector3());
   const size = box.getSize(new THREE.Vector3());
@@ -341,6 +369,7 @@ export class ImportedApartmentEnvironment {
       mesh.receiveShadow = false;
       mesh.frustumCulled = true;
     });
+    makeApartmentWindowGlassTransparent(this.model);
 
     this.group.updateMatrixWorld(true);
 

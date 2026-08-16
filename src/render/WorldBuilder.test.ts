@@ -7,6 +7,7 @@ import type {
   EpicStructureIndex,
   GridPitFeature,
   RaisedZoneFeature,
+  WallSegment,
   WorldPlan,
 } from '../world/types';
 import { rectCenter, rectDepth, rectWidth } from '../world/types';
@@ -958,6 +959,17 @@ describe('high-ceiling passage closures', () => {
       THREE.MeshStandardMaterial
     >;
     expect(lowCeiling.material.map).toBe(ceilingMap);
+    const upperShellSoffitRay = new THREE.Raycaster(
+      new THREE.Vector3(3.5, 2.2, 0.2),
+      new THREE.Vector3(0, 1, 0),
+      0,
+      1,
+    );
+    expect(upperShellSoffitRay.intersectObject(walls)).toHaveLength(1);
+    expect(upperShellSoffitRay.intersectObject(lowCeiling)).toHaveLength(0);
+    upperShellSoffitRay.ray.origin.z = 0.5;
+    expect(upperShellSoffitRay.intersectObject(walls)).toHaveLength(0);
+    expect(upperShellSoffitRay.intersectObject(lowCeiling)).toHaveLength(1);
     const thresholdRay = new THREE.Raycaster(
       new THREE.Vector3(0, 2.2, 0.3),
       new THREE.Vector3(0, 1, 0),
@@ -979,6 +991,145 @@ describe('high-ceiling passage closures', () => {
 
     view.dispose();
     ceilingMap.dispose();
+    Object.values(materials).forEach((material) => material.dispose());
+  });
+
+  it('uses wallpaper beneath a passage joining two high-ceiling rooms', () => {
+    const plan: WorldPlan = {
+      version: 1,
+      seed: 'HIGH-TO-HIGH-PORTAL-SOFFIT-RENDER-AUDIT',
+      size: 12,
+      wallHeight: 2.74,
+      rooms: [{
+        id: 'north-tall-room',
+        bounds: { minX: -6, maxX: 6, minZ: -6, maxZ: 0 },
+        kind: 'open-hall',
+        level: 0,
+        ceilingHeight: 8,
+        detailDensity: 0,
+      }, {
+        id: 'south-tall-room',
+        bounds: { minX: -6, maxX: 6, minZ: 0, maxZ: 6 },
+        kind: 'open-hall',
+        level: 0,
+        ceilingHeight: 8,
+        detailDensity: 0,
+      }],
+      walls: [{
+        id: 'portal-lintel',
+        roomId: 'north-tall-room',
+        x: 0,
+        z: 0,
+        length: 2.4,
+        orientation: 'x',
+        bottom: 2.74,
+        height: 5.26,
+        thickness: 1.2,
+        tint: 1,
+        collision: true,
+        kind: 'wallpaper',
+        detail: 'upper-portal-lintel',
+      }],
+      columns: [],
+      solidMasses: [],
+      lights: [],
+      missingCeilingTiles: [],
+      features: [],
+      detailSockets: [],
+      colliders: [],
+      floorRects: [{ minX: -6, maxX: 6, minZ: -6, maxZ: 6 }],
+      spawn: { x: 3, y: 0.9, z: 3 },
+    };
+    const materials = createTestMaterials();
+    const view = new WorldView(plan, materials);
+    const walls = view.group.getObjectByName('merged-wallpaper-walls') as THREE.Mesh;
+    const soffitRay = new THREE.Raycaster(
+      new THREE.Vector3(0, 2.2, 0),
+      new THREE.Vector3(0, 1, 0),
+      0,
+      1,
+    );
+
+    const soffitHits = soffitRay.intersectObject(walls);
+    expect(soffitHits.length).toBeGreaterThan(0);
+    expect(soffitHits[0]!.point.y).toBeCloseTo(plan.wallHeight, 6);
+    expect(view.group.getObjectByName('office-drop-ceiling')).toBeUndefined();
+
+    view.dispose();
+    Object.values(materials).forEach((material) => material.dispose());
+  });
+
+  it('uses one continuous ceiling soffit where a portal crosses a high-room corner', () => {
+    const lintel = (id: string, z: number): WallSegment => ({
+      id,
+      roomId: 'east-tall-room',
+      x: 0,
+      z,
+      length: 2,
+      orientation: 'z',
+      bottom: 2.74,
+      height: 5.26,
+      thickness: 0.3,
+      tint: 1,
+      collision: true,
+      kind: 'wallpaper',
+      detail: 'upper-portal-lintel',
+    });
+    const plan: WorldPlan = {
+      version: 1,
+      seed: 'HIGH-PORTAL-CORNER-SOFFIT-RENDER-AUDIT',
+      size: 12,
+      wallHeight: 2.74,
+      rooms: [{
+        id: 'east-tall-room',
+        bounds: { minX: 0, maxX: 6, minZ: -2, maxZ: 2 },
+        kind: 'open-hall',
+        level: 0,
+        ceilingHeight: 8,
+        detailDensity: 0,
+      }, {
+        id: 'northwest-tall-room',
+        bounds: { minX: -6, maxX: 0, minZ: -2, maxZ: 0 },
+        kind: 'open-hall',
+        level: 0,
+        ceilingHeight: 8,
+        detailDensity: 0,
+      }, {
+        id: 'southwest-low-room',
+        bounds: { minX: -6, maxX: 0, minZ: 0, maxZ: 2 },
+        kind: 'office',
+        level: 0,
+        ceilingHeight: 2.74,
+        detailDensity: 0,
+      }],
+      walls: [lintel('north-corner-lintel', -1), lintel('south-corner-lintel', 1)],
+      columns: [],
+      solidMasses: [],
+      lights: [],
+      missingCeilingTiles: [],
+      features: [],
+      detailSockets: [],
+      colliders: [],
+      floorRects: [{ minX: -6, maxX: 6, minZ: -6, maxZ: 6 }],
+      spawn: { x: -3, y: 0.9, z: 3 },
+    };
+    const materials = createTestMaterials();
+    const view = new WorldView(plan, materials);
+    const walls = view.group.getObjectByName('merged-wallpaper-walls') as THREE.Mesh;
+    const ceiling = view.group.getObjectByName('office-drop-ceiling') as THREE.Mesh;
+
+    for (const z of [-1, 1]) {
+      const ray = new THREE.Raycaster(
+        new THREE.Vector3(0.05, 2.2, z),
+        new THREE.Vector3(0, 1, 0),
+        0,
+        1,
+      );
+      expect(ray.intersectObject(walls)).toHaveLength(0);
+      expect(ray.intersectObject(ceiling)).toHaveLength(1);
+    }
+
+    view.dispose();
     Object.values(materials).forEach((material) => material.dispose());
   });
 });
@@ -1603,6 +1754,23 @@ describe('crouch passages and inter-storey stairs', () => {
     expect(upperWalls.geometry.boundingBox?.min.y).toBeCloseTo(5.4, 5);
     expect(upperWalls.geometry.boundingBox?.max.y).toBeCloseTo(8.14, 5);
     expect(upperCeiling.geometry.boundingBox?.min.y).toBeCloseTo(8.14, 5);
+    const formerCeilingLipRay = new THREE.Raycaster(
+      new THREE.Vector3(stairBounds.minX + 0.04, 5.1, rectCenter(stairBounds).z),
+      new THREE.Vector3(0, 1, 0),
+      0,
+      0.4,
+    );
+    expect(formerCeilingLipRay.intersectObject(upperFloor)).toHaveLength(0);
+    expect(formerCeilingLipRay.intersectObject(upperUnderside)).toHaveLength(0);
+    const openUpperPreviewRay = new THREE.Raycaster(
+      new THREE.Vector3(rectCenter(stairBounds).x, 5, rectCenter(stairBounds).z),
+      new THREE.Vector3(0, 1, 0),
+      0,
+      4,
+    );
+    expect(openUpperPreviewRay.intersectObject(upperFloor)).toHaveLength(0);
+    expect(openUpperPreviewRay.intersectObject(upperUnderside)).toHaveLength(0);
+    expect(openUpperPreviewRay.intersectObject(upperCeiling)).toHaveLength(0);
     const lowerCeilingGapRay = new THREE.Raycaster(
       new THREE.Vector3(1, 4, 0),
       new THREE.Vector3(-1, 0, 0),
@@ -1635,6 +1803,21 @@ describe('crouch passages and inter-storey stairs', () => {
         expect(Math.abs(cageNormals.getY(cageIndex.getX(offset)))).toBeLessThan(0.5);
       }
     }
+
+    const straightMaterials = createTestMaterials();
+    const straightView = new WorldView({
+      ...plan,
+      seed: 'LOW-PASSAGE-STRAIGHT-STAIR-RENDER-AUDIT',
+      features: plan.features.map((feature) =>
+        feature.kind === 'stair-socket' ? { ...feature, layout: 'straight' } : feature
+      ),
+    }, straightMaterials);
+    const straightUpperUnderside = straightView.group.getObjectByName(
+      'upper-stair-preview-floor-underside',
+    ) as THREE.Mesh;
+    expect(formerCeilingLipRay.intersectObject(straightUpperUnderside)).toHaveLength(0);
+    straightView.dispose();
+    Object.values(straightMaterials).forEach((material) => material.dispose());
 
     view.dispose();
     stairCeilingTexture.dispose();
@@ -1696,10 +1879,12 @@ describe('crouch passages and inter-storey stairs', () => {
       detailSockets: [],
       colliders: [],
       floorRects: [
-        { minX: -10, maxX: -4.08, minZ: -10, maxZ: 10 },
-        { minX: 4.08, maxX: 10, minZ: -10, maxZ: 10 },
+        { minX: -10, maxX: -4, minZ: -10, maxZ: 10 },
+        { minX: 4, maxX: 10, minZ: -10, maxZ: 10 },
+        { minX: -4, maxX: 4, minZ: -10, maxZ: -2.5 },
+        { minX: -4, maxX: 4, minZ: 2.5, maxZ: 10 },
       ],
-      floorOpenings: [{ minX: -3.92, maxX: 3.92, minZ: -2.42, maxZ: 2.42 }],
+      floorOpenings: [stairBounds],
       spawn: { x: 7, y: 0.865, z: 0 },
     };
     const materials = createTestMaterials();
@@ -1740,6 +1925,13 @@ describe('crouch passages and inter-storey stairs', () => {
     expect((lowerCeiling.material as THREE.MeshStandardMaterial).map)
       .toBe(lowerCeilingTexture);
     expect((lowerCeiling.material as THREE.MeshStandardMaterial).side).toBe(THREE.DoubleSide);
+    expect((lowerLights.material as THREE.MeshBasicMaterial).side).toBe(THREE.FrontSide);
+    const lowerLightNormals = lowerLights.geometry.getAttribute('normal');
+    for (let index = 0; index < lowerLightNormals.count; index += 1) {
+      expect(lowerLightNormals.getX(index)).toBeCloseTo(0, 6);
+      expect(lowerLightNormals.getY(index)).toBeCloseTo(-1, 6);
+      expect(lowerLightNormals.getZ(index)).toBeCloseTo(0, 6);
+    }
     stairs.geometry.computeBoundingBox();
     lowerFloor.geometry.computeBoundingBox();
     lowerWalls.geometry.computeBoundingBox();
@@ -1787,6 +1979,40 @@ describe('crouch passages and inter-storey stairs', () => {
       4,
     );
     expect(openingLightRay.intersectObject(lowerLights)).toHaveLength(0);
+    const formerLowerCeilingLipRay = new THREE.Raycaster(
+      new THREE.Vector3(stairBounds.minX + 0.04, -2, rectCenter(stairBounds).z),
+      new THREE.Vector3(0, -1, 0),
+      0,
+      1,
+    );
+    expect(formerLowerCeilingLipRay.intersectObject(lowerCeiling)).toHaveLength(0);
+
+    const lowerLightIndex = lowerLights.geometry.getIndex();
+    const lowerLightPositions = lowerLights.geometry.getAttribute('position');
+    expect(lowerLightIndex).not.toBeNull();
+    if (lowerLightIndex) {
+      const firstTriangle = [0, 1, 2].map((offset) => lowerLightIndex.getX(offset));
+      const lightCenter = new THREE.Vector3();
+      for (const index of firstTriangle) {
+        lightCenter.x += lowerLightPositions.getX(index) / 3;
+        lightCenter.y += lowerLightPositions.getY(index) / 3;
+        lightCenter.z += lowerLightPositions.getZ(index) / 3;
+      }
+      const lightFromAbove = new THREE.Raycaster(
+        lightCenter.clone().add(new THREE.Vector3(0, 1, 0)),
+        new THREE.Vector3(0, -1, 0),
+        0,
+        2,
+      );
+      const lightFromBelow = new THREE.Raycaster(
+        lightCenter.clone().add(new THREE.Vector3(0, -1, 0)),
+        new THREE.Vector3(0, 1, 0),
+        0,
+        2,
+      );
+      expect(lightFromAbove.intersectObject(lowerLights)).toHaveLength(0);
+      expect(lightFromBelow.intersectObject(lowerLights).length).toBeGreaterThan(0);
+    }
 
     view.dispose();
     lowerCeilingTexture.dispose();

@@ -6,6 +6,10 @@ import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { PlayerController } from '../player/PlayerController';
 import { AdaptiveRenderScale, renderScaleLimits } from '../render/AdaptiveQuality';
 import type { RenderScaleLimits } from '../render/AdaptiveQuality';
+import {
+  BACKROOMS_ATMOSPHERE as ATMOSPHERE,
+  BACKROOMS_LEGACY_ATMOSPHERE as LEGACY_ATMOSPHERE,
+} from '../render/BackroomsAtmosphere';
 import { MaterialLibrary } from '../render/MaterialLibrary';
 import { PostFX } from '../render/PostFX';
 import { ExperienceUI } from '../ui/ExperienceUI';
@@ -51,75 +55,19 @@ const resolveSeed = (): string => {
   return createReadableSeed();
 };
 
-const ATMOSPHERE: Record<VisualBiome, {
-  background: number;
-  fog: number;
-  hemisphereSky: number;
-  hemisphereGround: number;
-  ambient: number;
-  key: number;
-}> = {
-  yellow: {
-    background: 0x282820,
-    fog: 0x555548,
-    hemisphereSky: 0xfffbef,
-    hemisphereGround: 0x53534c,
-    ambient: 0xfff9ec,
-    key: 0xfff2d2,
-  },
-  red: {
-    background: 0x170706,
-    fog: 0x431512,
-    hemisphereSky: 0xffe9e2,
-    hemisphereGround: 0x6f5f5c,
-    ambient: 0xffeee9,
-    key: 0xffc8bc,
-  },
-  white: {
-    background: 0x62696a,
-    fog: 0xaeb6b6,
-    hemisphereSky: 0xf7fbff,
-    hemisphereGround: 0x6d7678,
-    ambient: 0xf0f6fb,
-    key: 0xe9f5ff,
-  },
-};
-
-const LEGACY_ATMOSPHERE: typeof ATMOSPHERE = {
-  yellow: {
-    background: 0x45452d,
-    fog: 0x77754b,
-    hemisphereSky: 0xfff7d8,
-    hemisphereGround: 0x282619,
-    ambient: 0xfff0c4,
-    key: 0xfff5d8,
-  },
-  red: {
-    background: 0x270503,
-    fog: 0x5c0906,
-    hemisphereSky: 0xff2114,
-    hemisphereGround: 0x190201,
-    ambient: 0xff160d,
-    key: 0xff301d,
-  },
-  white: {
-    background: 0x62696a,
-    fog: 0xaeb6b6,
-    hemisphereSky: 0xf7fbff,
-    hemisphereGround: 0x303738,
-    ambient: 0xeaf3ff,
-    key: 0xf5fbff,
-  },
-};
-
 export interface GameOptions {
+  onRequestContinue?(): void;
   onRequestNewGame?(): void;
+  onRequestMainMenu?(): void;
   onRequestLoadGame?(id: string): void;
   launch?:
     | { readonly kind: 'new' }
     | { readonly kind: 'load'; readonly save: BackroomsGameSave };
   autosaveOnReady?: boolean;
+  autoEnterOnReady?: boolean;
 }
+
+const AUTOSAVE_INTERVAL_SECONDS = 30;
 
 export class Game {
   readonly plan: WorldPlan;
@@ -160,6 +108,7 @@ export class Game {
   private accumulator = 0;
   private elapsed = 0;
   private playableSeconds = 0;
+  private autosaveElapsed = 0;
   private activeStory = 0;
   private pendingAutosaveStory?: number;
   private fps = 60;
@@ -223,10 +172,15 @@ export class Game {
     this.renderer.info.autoReset = false;
     this.systemDiagnostics = this.readSystemDiagnostics();
     this.root.append(this.renderer.domElement);
+    this.renderer.domElement.addEventListener('click', this.onCanvasClick);
 
     this.ui = new ExperienceUI(this.root, {
       enter: () => this.enter(),
       regenerate: () => this.regenerate(),
+      returnToMainMenu: () => {
+        if (!this.options.onRequestContinue) this.saveNow('autosave');
+        this.options.onRequestMainMenu?.();
+      },
       saveGame: () => this.saveNow('manual'),
       loadGame: (id) => this.options.onRequestLoadGame?.(id),
       toggleFullscreen: () => void this.toggleFullscreen(),
@@ -239,6 +193,7 @@ export class Game {
     this.resize();
     window.addEventListener('resize', this.resize);
     window.addEventListener('keydown', this.onConsoleHotkey);
+    window.addEventListener('pagehide', this.onPageHide);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
   }
 
@@ -341,6 +296,7 @@ export class Game {
     this.ui.setReady();
     this.renderer.setAnimationLoop(this.frame);
     if (this.options.autosaveOnReady) this.saveNow('autosave');
+    if (this.options.autoEnterOnReady) this.enter();
   }
 
   private configureScene(): void {
@@ -471,6 +427,11 @@ export class Game {
   }
 
   private enter(): void {
+    if (this.options.onRequestContinue) {
+      this.options.onRequestContinue();
+      return;
+    }
+    this.ui.beginGameplay();
     this.player?.lock();
     void this.audio.start();
   }
@@ -527,7 +488,10 @@ export class Game {
         quaternion: { x: look.x, y: look.y, z: look.z, w: look.w },
       },
     });
-    if (result.ok) this.syncSaveHistory();
+    if (result.ok) {
+      if (kind === 'autosave') this.autosaveElapsed = 0;
+      this.syncSaveHistory();
+    }
     return result.ok;
   }
 
@@ -567,8 +531,8 @@ export class Game {
     value: string,
     _mode: ConsoleMode,
   ): ConsoleCompletion | null {
-    const trimmed = value.trimStart();
-    if (!trimmed.startsWith('/')) return null;
+    if (!value.startsWith('/')) return null;
+    const trimmed = value.trim();
     const commandSuggestions = [
       { value: '/help', label: '/help', detail: 'AFFICHE LES COMMANDES DISPONIBLES' },
       { value: '/save', label: '/save', detail: 'SAUVEGARDE MAINTENANT' },
@@ -612,7 +576,7 @@ export class Game {
 
   private submitConsole(value: string, mode: ConsoleMode): ConsoleSubmitResult {
     const trimmed = value.trim();
-    if (trimmed.startsWith('/')) return this.executeCommand(trimmed);
+    if (value.startsWith('/')) return this.executeCommand(trimmed);
     if (mode === 'command') {
       const feedback = 'UNE COMMANDE DOIT COMMENCER PAR /';
       return {
@@ -832,6 +796,8 @@ export class Game {
 
     if (playing) {
       this.playableSeconds += rawDelta;
+      this.autosaveElapsed += rawDelta;
+      if (this.autosaveElapsed >= AUTOSAVE_INTERVAL_SECONDS) this.saveNow('autosave');
       this.accumulator = Math.min(this.accumulator + rawDelta, 0.12);
       const fixedDelta = 1 / 60;
       while (this.accumulator >= fixedDelta) {
@@ -902,9 +868,18 @@ export class Game {
   };
 
   private readonly onVisibilityChange = (): void => {
+    if (document.hidden && !this.options.onRequestContinue) this.saveNow('autosave');
     void this.audio.setSuspended(document.hidden || !this.player?.isLocked);
     this.previousTime = performance.now();
     this.accumulator = 0;
+  };
+
+  private readonly onCanvasClick = (): void => {
+    if (!this.player?.isLocked && !this.ui.isPaused && !this.ui.isMainMenuOpen) this.enter();
+  };
+
+  private readonly onPageHide = (): void => {
+    if (!this.options.onRequestContinue) this.saveNow('autosave');
   };
 
   private readSystemDiagnostics(): SystemDiagnostics {
@@ -1060,7 +1035,9 @@ export class Game {
     this.renderer.setAnimationLoop(null);
     window.removeEventListener('resize', this.resize);
     window.removeEventListener('keydown', this.onConsoleHotkey);
+    window.removeEventListener('pagehide', this.onPageHide);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    this.renderer.domElement.removeEventListener('click', this.onCanvasClick);
     this.player?.dispose();
     this.worldStream?.dispose();
     this.physics?.dispose();

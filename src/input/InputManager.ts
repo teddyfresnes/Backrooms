@@ -95,14 +95,16 @@ export class InputManager {
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     if (!this.enabled || InputManager.isEditableTarget(event.target)) return;
-    if (!this.pressed.has(event.code)) this.justPressed.add(event.code);
-    this.pressed.add(event.code);
+    const code = controlCodeFromKeyboardEvent(event);
+    if (!this.pressed.has(code)) this.justPressed.add(code);
+    this.pressed.add(code);
   };
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
     if (InputManager.isEditableTarget(event.target)) return;
-    if (this.enabled && this.pressed.has(event.code)) this.justReleased.add(event.code);
-    this.pressed.delete(event.code);
+    const code = controlCodeFromKeyboardEvent(event);
+    if (this.enabled && this.pressed.has(code)) this.justReleased.add(code);
+    this.pressed.delete(code);
   };
 
   private readonly clear = (): void => {
@@ -124,6 +126,7 @@ export class InputManager {
   }
 }
 import {
+  controlCodeFromKeyboardEvent,
   defaultControlBindings,
   equivalentKeyCodes,
   type ControlAction,

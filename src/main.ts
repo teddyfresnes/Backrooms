@@ -75,7 +75,7 @@ const createBoot = (detail: string): HTMLElement => {
   return boot;
 };
 
-const showBootError = (error: unknown): void => {
+const showBootError = (error: unknown, retryAction: () => void): void => {
   const shell = document.createElement('div');
   shell.className = 'boot-error';
   const title = document.createElement('strong');
@@ -85,7 +85,7 @@ const showBootError = (error: unknown): void => {
   const retry = document.createElement('button');
   retry.type = 'button';
   retry.textContent = 'Réessayer';
-  retry.addEventListener('click', () => void startInitialExperience(), { once: true });
+  retry.addEventListener('click', retryAction, { once: true });
   shell.append(title, detail, retry);
   app.append(shell);
 };
@@ -98,13 +98,14 @@ const loadFromHistory = (id: string): void => {
 async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
   const id = ++transitionId;
   clearRuntime();
-  const boot = createBoot('Chargement de la session');
+  const boot = createBoot('random story');
   let game: GameRuntime | null = null;
   try {
     const { RussianStairwellGame } = await import('./core/RussianStairwellGame');
     if (id !== transitionId) return;
     game = new RussianStairwellGame(app, launch, {
-      onRequestNewGame: () => void startStairwell({ kind: 'new' }),
+      onRequestNewGame: () => queueMicrotask(() => void startStairwell({ kind: 'new' })),
+      onRequestMainMenu: () => queueMicrotask(() => void startInitialExperience()),
       onRequestLoadGame: loadFromHistory,
       // Finish the current input/frame stack before disposing the stairwell
       // runtime that detected the E interaction.
@@ -125,7 +126,7 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
     game?.dispose();
     if (id !== transitionId) return;
     boot.remove();
-    showBootError(error);
+    showBootError(error, () => void startStairwell(launch));
     console.error(error);
   }
 }
@@ -133,10 +134,11 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
 async function startBackrooms(
   launch: { readonly kind: 'new' } | { readonly kind: 'load'; readonly save: BackroomsGameSave },
   autosaveOnReady = false,
+  menuBackground = false,
 ): Promise<void> {
   const id = ++transitionId;
   clearRuntime();
-  const boot = createBoot('Génération du niveau');
+  const boot = createBoot('random story');
   let game: GameRuntime | null = null;
   try {
     // Give the transition overlay one frame before the synchronous origin
@@ -148,7 +150,12 @@ async function startBackrooms(
     game = new Game(app, {
       launch,
       autosaveOnReady,
+      autoEnterOnReady: !menuBackground,
+      onRequestContinue: menuBackground
+        ? () => queueMicrotask(() => continueFromMainMenu())
+        : undefined,
       onRequestNewGame: () => queueMicrotask(() => void startStairwell({ kind: 'new' })),
+      onRequestMainMenu: () => queueMicrotask(() => void startInitialExperience()),
       onRequestLoadGame: loadFromHistory,
     });
     activeGame = game;
@@ -163,26 +170,33 @@ async function startBackrooms(
     game?.dispose();
     if (id !== transitionId) return;
     boot.remove();
-    showBootError(error);
+    showBootError(error, () => void startBackrooms(launch, autosaveOnReady, menuBackground));
     console.error(error);
   }
 }
 
 async function startSavedExperience(save: GameSaveEntry): Promise<void> {
   if (save.experienceId === 'backrooms') {
-    await startBackrooms({ kind: 'load', save });
+    await startBackrooms({ kind: 'load', save }, true);
     return;
   }
   await startStairwell({ kind: 'load', save });
 }
 
-async function startInitialExperience(): Promise<void> {
+function continueFromMainMenu(): void {
   const latest = readHistory()[0];
   if (latest) {
-    await startSavedExperience(latest);
+    void startSavedExperience(latest);
     return;
   }
-  await startStairwell({ kind: 'new' });
+  void startStairwell({ kind: 'new' });
+}
+
+async function startInitialExperience(): Promise<void> {
+  // The launcher is always a fresh Level 0 Backrooms scene. It is only a
+  // cinematic menu background: Continue loads history (or a fresh stairwell),
+  // while New Game always starts at the Russian stairwell.
+  await startBackrooms({ kind: 'new' }, false, true);
 }
 
 requestAnimationFrame(() => void startInitialExperience());

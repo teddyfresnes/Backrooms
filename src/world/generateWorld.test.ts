@@ -18,7 +18,12 @@ import type {
   WallSegment,
   WorldPlan,
 } from './types';
-import { getStairCageWalls, getStairSlabs, STAIR_STORY_RISE } from './StairLayout';
+import {
+  getStairCageWalls,
+  getStairFloorOpening,
+  getStairSlabs,
+  STAIR_STORY_RISE,
+} from './StairLayout';
 
 const seeds = Array.from({ length: 32 }, (_, index) => `AUTOTEST-${index.toString().padStart(3, '0')}`);
 const hazardSeeds = Array.from(
@@ -664,6 +669,57 @@ describe('Level 0 procedural generator', () => {
     }
   });
 
+  it('turns final wall clearances into clean high-ceiling lintels', () => {
+    const world = generateWorld('SILENT-TILE-7757::infinite-chunk:v2:0:0:0');
+    const baseWalls = world.walls.filter((wall) =>
+      Math.abs(wall.bottom) < 0.02 &&
+      wall.bottom + wall.height >= world.wallHeight - 0.08
+    );
+    const upperShells = world.walls.filter((wall) => wall.detail === 'upper-shell');
+
+    expect(upperShells.length).toBeGreaterThan(0);
+    for (const shell of upperShells) {
+      const along = shell.orientation === 'x' ? shell.x : shell.z;
+      const fixed = shell.orientation === 'x' ? shell.z : shell.x;
+      const shellMin = along - shell.length * 0.5;
+      const shellMax = along + shell.length * 0.5;
+      const supports = baseWalls
+        .filter((wall) => {
+          if (wall.orientation !== shell.orientation) return false;
+          const wallFixed = wall.orientation === 'x' ? wall.z : wall.x;
+          return Math.abs(wallFixed - fixed) < 0.12;
+        })
+        .map((wall) => {
+          const center = wall.orientation === 'x' ? wall.x : wall.z;
+          return {
+            min: Math.max(shellMin, center - wall.length * 0.5),
+            max: Math.min(shellMax, center + wall.length * 0.5),
+          };
+        })
+        .filter((interval) => interval.max > interval.min)
+        .sort((left, right) => left.min - right.min);
+      let coveredUntil = shellMin;
+      for (const support of supports) {
+        expect(support.min).toBeLessThanOrEqual(coveredUntil + 0.03);
+        coveredUntil = Math.max(coveredUntil, support.max);
+      }
+      expect(coveredUntil).toBeGreaterThanOrEqual(shellMax - 0.03);
+    }
+
+    const repairedCornerLintels = world.walls.filter((wall) =>
+      wall.detail === 'upper-portal-lintel' &&
+      wall.orientation === 'z' &&
+      Math.abs(wall.x - 1.5) < 0.02 &&
+      Math.abs(wall.z - 39.25) < 2
+    );
+    expect(repairedCornerLintels).toHaveLength(2);
+    expect(repairedCornerLintels.map((wall) => wall.length).sort((left, right) => left - right))
+      .toEqual(expect.arrayContaining([
+        expect.closeTo(1.161964914126031, 5),
+        expect.closeTo(2.144846925216086, 5),
+      ]));
+  });
+
   it('keeps one coherent hole size family inside every pit room', () => {
     const worlds = pitAuditSeeds.map(hazardWorld);
     const pits = worlds.flatMap(gridPits);
@@ -1286,6 +1342,7 @@ describe('Level 0 procedural generator', () => {
     )).toEqual(new Set(['joined', 'divider']));
     for (const { world, feature } of samples) {
       const slabs = getStairSlabs(feature);
+      expect(getStairFloorOpening(feature)).toEqual(feature.bounds);
       expect(slabs.filter((slab) => slab.kind === 'step')).toHaveLength(30);
       expect(Math.max(...slabs.map((slab) => slab.top))).toBeCloseTo(STAIR_STORY_RISE, 6);
       expect(world.colliders.filter((collider) =>
@@ -1318,6 +1375,17 @@ describe('Level 0 procedural generator', () => {
       if (feature.layout === 'straight') {
         expect(slabs.some((slab) => slab.kind === 'mid-landing')).toBe(false);
         expect(cageWalls.some((wall) => wall.kind === 'divider')).toBe(false);
+        const alongX = feature.heading.startsWith('x');
+        for (const slab of slabs) {
+          expect(alongX ? slab.bounds.minZ : slab.bounds.minX).toBeCloseTo(
+            alongX ? feature.bounds.minZ : feature.bounds.minX,
+            6,
+          );
+          expect(alongX ? slab.bounds.maxZ : slab.bounds.maxX).toBeCloseTo(
+            alongX ? feature.bounds.maxZ : feature.bounds.maxX,
+            6,
+          );
+        }
       } else if (feature.switchbackJoin === 'divider') {
         expect(cageWalls.filter((wall) => wall.kind === 'divider')).toHaveLength(1);
       } else {

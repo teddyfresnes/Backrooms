@@ -79,6 +79,11 @@ export const defaultControlBindings = (preset: KeyboardPreset = 'azerty'): Contr
   ...(preset === 'qwerty' ? qwertyBindings : azertyBindings),
 });
 
+/** Letter bindings follow the active layout; non-letter keys keep their physical code. */
+export const controlCodeFromKeyboardEvent = (
+  event: Pick<KeyboardEvent, 'code' | 'key'>,
+): string => (/^[a-z]$/i.test(event.key) ? `Key${event.key.toUpperCase()}` : event.code);
+
 export const isBindableCode = (code: string): boolean => {
   if (!code || forbiddenCodes.has(code)) return false;
   return /^(?:Key[A-Z]|Digit[0-9]|Numpad\w+|Arrow(?:Up|Down|Left|Right)|F(?:[1-9]|1[0-2])|[A-Z][A-Za-z0-9]+)$/.test(code);

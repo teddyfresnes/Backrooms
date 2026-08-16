@@ -1,6 +1,7 @@
 import type { DiagnosticsSnapshot } from '../core/Diagnostics';
 import type { GameSaveExperienceId, GameSaveSummary } from '../core/SaveHistory';
 import {
+  controlCodeFromKeyboardEvent,
   controlActions,
   defaultControlBindings,
   detectKeyboardPreset,
@@ -19,6 +20,7 @@ import {
 interface UIActions {
   enter(): void;
   regenerate(): void;
+  returnToMainMenu(): void;
   saveGame?(): boolean | Promise<boolean>;
   loadGame?(id: string): void;
   toggleFullscreen(): void;
@@ -112,12 +114,16 @@ const formatDiagnosticValue = (value: unknown): string => {
 export class ExperienceUI {
   private readonly root: HTMLElement;
   private readonly enterButtons: readonly HTMLButtonElement[];
-  private readonly continueButton: HTMLButtonElement;
   private readonly saveButton: HTMLButtonElement;
   private readonly saveHistoryList: HTMLElement;
   private readonly saveHistoryEmpty: HTMLElement;
   private readonly saveStatus: HTMLElement;
   private readonly overlay: HTMLElement;
+  private readonly confirmation: HTMLElement;
+  private readonly confirmationTitle: HTMLElement;
+  private readonly confirmationMessage: HTMLElement;
+  private readonly confirmationAccept: HTMLButtonElement;
+  private readonly confirmationCancel: HTMLButtonElement;
   private readonly interactionPrompt: HTMLElement;
   private readonly fallFlash: HTMLElement;
   private readonly consolePanel: HTMLElement;
@@ -126,7 +132,6 @@ export class ExperienceUI {
   private readonly consoleSuggestions: HTMLElement;
   private readonly consoleInput: HTMLInputElement;
   private readonly consoleHint: HTMLElement;
-  private readonly consoleModeLabel: HTMLElement;
   private readonly diagnosticsPanel: HTMLElement;
   private readonly diagnosticsContent: HTMLElement;
   private readonly actions: UIActions;
@@ -149,6 +154,7 @@ export class ExperienceUI {
   private saveStatusTimer?: number;
   private pendingBinding?: ControlAction;
   private pendingBindingButton?: HTMLButtonElement;
+  private pendingConfirmation?: () => void;
 
   constructor(
     container: HTMLElement,
@@ -179,13 +185,13 @@ export class ExperienceUI {
         <div class="menu-panel">
           <div class="menu-content">
             <section class="menu-page active" data-page="home" aria-labelledby="home-title">
+              <img class="home-logo main-menu-only" src="/favicon.svg" alt="" />
               <div class="home-stage">
                 <header class="home-title">
-                  <div class="home-brand">
-                    <img class="home-logo" src="/favicon.svg" alt="" />
-                    <h2 id="home-title">Backrooms<span>.</span></h2>
+                  <div class="home-wordmark">
+                    <h2 id="home-title">Backrooms</h2>
+                    <p>Random story</p>
                   </div>
-                  <p>Random story</p>
                 </header>
                 <div class="menu-actions" aria-label="Actions principales">
                   <div class="continue-action main-menu-only">
@@ -210,11 +216,11 @@ export class ExperienceUI {
                   <button class="menu-action pause-only" type="button" data-ui="save-game" hidden>
                     <span>Sauvegarder</span>
                   </button>
-                  <button class="menu-action pause-only" type="button" data-open-page="saves" hidden>
-                    <span>Charger</span>
-                  </button>
                   <button class="menu-action pause-only" type="button" data-open-page="settings" hidden>
                     <span>Paramètres</span>
+                  </button>
+                  <button class="menu-action pause-only danger" type="button" data-ui="main-menu" hidden>
+                    <span>Retour au menu principal</span>
                   </button>
                 </div>
                 <p class="save-status" data-ui="save-status" role="status" aria-live="polite" hidden></p>
@@ -336,6 +342,18 @@ export class ExperienceUI {
         <p class="menu-hint"><kbd>Échap</kbd><span data-ui="escape-hint">Retour</span></p>
       </section>
 
+      <section class="confirmation-layer" data-ui="confirmation" role="dialog" aria-modal="true" aria-labelledby="confirmation-title" aria-describedby="confirmation-message" aria-hidden="true" hidden>
+        <div class="confirmation-card">
+          <small>CONFIRMATION</small>
+          <h2 id="confirmation-title" data-ui="confirmation-title"></h2>
+          <p id="confirmation-message" data-ui="confirmation-message"></p>
+          <div class="confirmation-actions">
+            <button type="button" data-ui="confirmation-cancel">Annuler</button>
+            <button class="danger" type="button" data-ui="confirmation-accept"></button>
+          </div>
+        </div>
+      </section>
+
       <section class="hud" data-ui="hud" aria-hidden="true">
         <div class="reticle" aria-hidden="true"><i></i><b></b><span></span><em></em></div>
         <div class="interaction-prompt" data-ui="interaction" aria-hidden="true"><kbd>E</kbd><span></span></div>
@@ -346,7 +364,6 @@ export class ExperienceUI {
             </div>
             <div class="console-suggestions" data-ui="console-suggestions" aria-label="Suggestions de commandes"></div>
             <div class="console-input-row">
-              <span data-ui="console-mode">/</span>
               <input data-ui="console-input" type="text" spellcheck="false" autocomplete="off" maxlength="180" aria-label="Chat et commandes" />
             </div>
             <small data-ui="console-hint"></small>
@@ -366,12 +383,16 @@ export class ExperienceUI {
     container.append(this.root);
 
     this.enterButtons = [...this.root.querySelectorAll<HTMLButtonElement>('[data-ui="enter"]')];
-    this.continueButton = this.query<HTMLButtonElement>('[data-ui-main-continue]');
     this.saveButton = this.query<HTMLButtonElement>('[data-ui="save-game"]');
     this.saveHistoryList = this.query('[data-ui="save-history"]');
     this.saveHistoryEmpty = this.query('[data-ui="save-history-empty"]');
     this.saveStatus = this.query('[data-ui="save-status"]');
     this.overlay = this.query('[data-ui="overlay"]');
+    this.confirmation = this.query('[data-ui="confirmation"]');
+    this.confirmationTitle = this.query('[data-ui="confirmation-title"]');
+    this.confirmationMessage = this.query('[data-ui="confirmation-message"]');
+    this.confirmationAccept = this.query<HTMLButtonElement>('[data-ui="confirmation-accept"]');
+    this.confirmationCancel = this.query<HTMLButtonElement>('[data-ui="confirmation-cancel"]');
     this.interactionPrompt = this.query('[data-ui="interaction"]');
     this.fallFlash = this.query('[data-ui="fall"]');
     this.consolePanel = this.query('[data-ui="console"]');
@@ -380,12 +401,14 @@ export class ExperienceUI {
     this.consoleSuggestions = this.query('[data-ui="console-suggestions"]');
     this.consoleInput = this.query<HTMLInputElement>('[data-ui="console-input"]');
     this.consoleHint = this.query('[data-ui="console-hint"]');
-    this.consoleModeLabel = this.query('[data-ui="console-mode"]');
     this.diagnosticsPanel = this.query('[data-ui="diagnostics"]');
     this.diagnosticsContent = this.query('[data-ui="diagnostics-content"]');
 
     for (const button of this.enterButtons) button.addEventListener('click', actions.enter);
-    this.query('[data-ui="regenerate"]').addEventListener('click', actions.regenerate);
+    this.query('[data-ui="regenerate"]').addEventListener('click', this.requestNewGame);
+    this.query('[data-ui="main-menu"]').addEventListener('click', this.requestMainMenu);
+    this.confirmationCancel.addEventListener('click', this.closeConfirmation);
+    this.confirmationAccept.addEventListener('click', this.acceptConfirmation);
     this.saveButton.addEventListener('click', this.requestSave);
     this.saveButton.disabled = actions.saveGame === undefined;
     this.query('[data-ui="fullscreen"]').addEventListener('click', actions.toggleFullscreen);
@@ -444,7 +467,6 @@ export class ExperienceUI {
     this.root.setAttribute('aria-busy', 'false');
     this.overlay.setAttribute('aria-hidden', 'false');
     this.overlay.inert = false;
-    if (document.activeElement === document.body) this.continueButton.focus({ preventScroll: true });
   }
 
   setSaveHistory(summaries: readonly GameSaveSummary[]): void {
@@ -456,17 +478,21 @@ export class ExperienceUI {
     this.root.classList.toggle('has-session', started);
   }
 
+  beginGameplay(): void {
+    this.enteredOnce = true;
+    this.mainMenuState = false;
+    this.root.classList.add('is-playing');
+    this.root.classList.remove('is-paused', 'is-main-menu');
+    this.overlay.setAttribute('aria-hidden', 'true');
+    this.overlay.inert = true;
+    this.query('[data-ui="hud"]').setAttribute('aria-hidden', 'false');
+    this.syncMenuContext();
+  }
+
   setLocked(locked: boolean): void {
     if (!locked) this.closeConsole();
     if (locked) {
-      this.enteredOnce = true;
-      this.mainMenuState = false;
-      this.root.classList.add('is-playing');
-      this.root.classList.remove('is-paused', 'is-main-menu');
-      this.overlay.setAttribute('aria-hidden', 'true');
-      this.overlay.inert = true;
-      this.query('[data-ui="hud"]').setAttribute('aria-hidden', 'false');
-      this.syncMenuContext();
+      this.beginGameplay();
       return;
     }
     this.root.classList.remove('is-playing');
@@ -546,7 +572,6 @@ export class ExperienceUI {
   openConsole(mode: ConsoleMode): void {
     this.consoleMode = mode;
     this.consolePanel.dataset.mode = mode;
-    this.consoleModeLabel.textContent = mode === 'command' ? '/' : 'me:';
     this.consoleInput.value = mode === 'command' ? '/' : '';
     this.consoleHint.textContent = mode === 'command'
       ? 'ÉCRIS /HELP · TAB COMPLÈTE · ↑↓ HISTORIQUE'
@@ -596,15 +621,6 @@ export class ExperienceUI {
     this.query('[data-ui="escape-hint"]').textContent = page === 'home'
       ? (this.root.classList.contains('is-paused') ? 'Reprendre' : 'Retour')
       : 'Retour';
-    requestAnimationFrame(() => {
-      const targets = this.root.querySelectorAll<HTMLElement>(
-        `[data-page="${page}"] button:not(:disabled):not([hidden]), `
-        + `[data-page="${page}"] select:not(:disabled):not([hidden]), `
-        + `[data-page="${page}"] input:not(:disabled):not([hidden])`,
-      );
-      const target = [...targets].find((element) => element.getClientRects().length > 0);
-      target?.focus({ preventScroll: true });
-    });
   }
 
   private syncMenuContext(): void {
@@ -799,6 +815,25 @@ export class ExperienceUI {
 
   private readonly onMenuKeyDown = (event: KeyboardEvent): void => {
     if (this.overlay.getAttribute('aria-hidden') === 'true' || this.isConsoleOpen) return;
+    if (!this.confirmation.hidden) {
+      if (event.code === 'Escape') {
+        event.preventDefault();
+        this.closeConfirmation();
+        return;
+      }
+      if (event.key === 'Tab') {
+        const first = this.confirmationCancel;
+        const last = this.confirmationAccept;
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+      return;
+    }
     if (this.pendingBinding) {
       event.preventDefault();
       event.stopPropagation();
@@ -806,8 +841,9 @@ export class ExperienceUI {
         this.cancelBinding();
         return;
       }
-      if (event.repeat || !isBindableCode(event.code)) return;
-      this.commitBinding(event.code);
+      const code = controlCodeFromKeyboardEvent(event);
+      if (event.repeat || !isBindableCode(code)) return;
+      this.commitBinding(code);
       return;
     }
     if (event.key === 'Tab') {
@@ -838,6 +874,55 @@ export class ExperienceUI {
       event.preventDefault();
       this.actions.enter();
     }
+  };
+
+  private readonly requestNewGame = (): void => {
+    this.showConfirmation(
+      'Commencer une nouvelle partie ?',
+      'Toute progression non sauvegardée dans la partie actuelle sera perdue.',
+      'Nouvelle partie',
+      this.actions.regenerate,
+    );
+  };
+
+  private readonly requestMainMenu = (): void => {
+    this.showConfirmation(
+      'Retourner au menu principal ?',
+      'La progression actuelle sera sauvegardée avant de quitter la partie.',
+      'Quitter la partie',
+      this.actions.returnToMainMenu,
+    );
+  };
+
+  private showConfirmation(
+    title: string,
+    message: string,
+    acceptLabel: string,
+    action: () => void,
+  ): void {
+    this.pendingConfirmation = action;
+    this.confirmationTitle.textContent = title;
+    this.confirmationMessage.textContent = message;
+    this.confirmationAccept.textContent = acceptLabel;
+    this.confirmation.hidden = false;
+    this.confirmation.setAttribute('aria-hidden', 'false');
+    this.root.classList.add('confirmation-open');
+    this.overlay.inert = true;
+    requestAnimationFrame(() => this.confirmationCancel.focus({ preventScroll: true }));
+  }
+
+  private readonly closeConfirmation = (): void => {
+    this.pendingConfirmation = undefined;
+    this.confirmation.hidden = true;
+    this.confirmation.setAttribute('aria-hidden', 'true');
+    this.root.classList.remove('confirmation-open');
+    this.overlay.inert = false;
+  };
+
+  private readonly acceptConfirmation = (): void => {
+    const action = this.pendingConfirmation;
+    this.closeConfirmation();
+    action?.();
   };
 
   private startBinding(action: ControlAction, button: HTMLButtonElement): void {
@@ -944,7 +1029,7 @@ export class ExperienceUI {
     const completion = this.actions.completeConsole(this.completionSource, this.consoleMode);
     this.completionSuggestions = completion?.suggestions ?? [];
     if (completion) this.consoleHint.textContent = completion.hint;
-    else if (this.completionSource.trimStart().startsWith('/')) {
+    else if (this.completionSource.startsWith('/')) {
       this.consoleHint.textContent = 'AUCUNE COMMANDE OU CIBLE NE CORRESPOND';
     } else {
       this.consoleHint.textContent = this.consoleMode === 'chat'

@@ -412,7 +412,10 @@ export const writeGameSave = (
   if (!history.ok) return { ok: false, reason: 'storage-error' };
   const entry = createEntry(input, savedAt, createSaveId(savedAt, history.entries));
   if (!entry) return { ok: false, reason: 'invalid-save' };
-  if (!writeHistory(storage, [entry, ...history.entries])) {
+  const retainedEntries = input.kind === 'autosave'
+    ? history.entries.filter((candidate) => candidate.kind !== 'autosave')
+    : history.entries;
+  if (!writeHistory(storage, [entry, ...retainedEntries])) {
     return { ok: false, reason: 'storage-error' };
   }
   return { ok: true, save: entry };

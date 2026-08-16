@@ -1,15 +1,16 @@
 # Backrooms: Random story
 
-L’expérience jouable par défaut est désormais **Russian Stairwells** : quatre
+Le menu principal utilise toujours le **Level 0 des Backrooms** comme décor.
+L’expérience jouable par défaut reste **Russian Stairwells** : quatre
 niveaux d’une cage d’escalier soviétique, un appartement importé, pluie sur les
 vitres, porte interactive et déplacement FPS avec collisions Rapier. Le moteur
 procédural historique du Level 0 devient la suite de l’expérience : descendre
 au rez-de-chaussée et appuyer sur **E** devant la double porte du hall charge le
 labyrinthe Backrooms du commit précédent.
 
-L’accueil utilise toujours l’identité **Backrooms**, y compris lorsque la session
-courante se trouve encore dans l’immeuble. **Continuer** ouvre l’historique local,
-et le même menu sert ensuite de menu de pause.
+**Continuer** charge la dernière sauvegarde, ou un hall d’escalier neuf en
+l’absence d’historique. **Nouvelle partie** commence toujours dans le hall. Le
+même habillage sert ensuite de menu de pause, sur la scène jouée en cours.
 
 ## Lancer
 
@@ -45,8 +46,9 @@ npm run validate
 La sauvegarde conserve le niveau, la dernière position sûre, l’orientation et la
 durée de jeu ; dans l’immeuble, elle garde aussi l’état animé de la porte. Les
 sauvegardes manuelles sont disponibles dans le menu de pause. Une sauvegarde
-automatique n’est créée qu’après un vrai changement de niveau, notamment à
-l’arrivée dans le niveau 0, et l’historique local conserve au plus douze entrées.
+automatique unique représente toujours la session courante : elle est mise à jour
+au chargement, toutes les 30 secondes de jeu, quand l’onglet est masqué et avant
+un retour au menu principal. L’historique local conserve au plus douze entrées.
 Une entrée corrompue ou incompatible est ignorée proprement.
 
 ## Fondation procédurale conservée

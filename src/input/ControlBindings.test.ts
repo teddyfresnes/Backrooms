@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  controlCodeFromKeyboardEvent,
   defaultControlBindings,
   detectKeyboardPreset,
   formatKeyLabel,
@@ -33,6 +34,13 @@ describe('control bindings', () => {
     expect(formatKeyLabel('Space')).toBe('Espace');
     expect(formatKeyLabel('ControlRight')).toBe('Ctrl');
     expect(formatKeyLabel('ArrowUp')).toBe('↑');
+  });
+
+  it('uses the typed letter for alphabetic bindings across keyboard layouts', () => {
+    expect(controlCodeFromKeyboardEvent({ code: 'KeyW', key: 'z' })).toBe('KeyZ');
+    expect(controlCodeFromKeyboardEvent({ code: 'KeyA', key: 'q' })).toBe('KeyQ');
+    expect(controlCodeFromKeyboardEvent({ code: 'KeyW', key: 'w' })).toBe('KeyW');
+    expect(controlCodeFromKeyboardEvent({ code: 'Space', key: ' ' })).toBe('Space');
   });
 
   it('swaps occupied keys instead of creating a conflict', () => {

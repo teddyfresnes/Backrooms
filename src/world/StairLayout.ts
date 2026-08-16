@@ -74,10 +74,7 @@ export const getStairSlabs = (stairs: StairSocketFeature): StairSlab[] => {
   if ((stairs.layout ?? 'switchback') === 'straight') {
     const stepRun = flightRun / STAIR_TOTAL_STEPS;
     const rise = STAIR_STORY_RISE / STAIR_TOTAL_STEPS;
-    const flightWidth = Math.max(
-      1.6,
-      Math.min(crossSpan, crossSpan - Math.min(0.9, crossSpan * 0.18)),
-    );
+    const flightWidth = crossSpan;
     for (let index = 0; index < STAIR_TOTAL_STEPS; index += 1) {
       const longCenter = startLong + direction * stepRun * (index + 0.5);
       slabs.push({
@@ -377,10 +374,7 @@ export const getStairCollisionShapes = (
 };
 
 export const getStairFloorOpening = (stairs: StairSocketFeature): Rect => ({
-  minX: stairs.bounds.minX + 0.08,
-  minZ: stairs.bounds.minZ + 0.08,
-  maxX: stairs.bounds.maxX - 0.08,
-  maxZ: stairs.bounds.maxZ - 0.08,
+  ...stairs.bounds,
 });
 
 export const getStairLandingClearance = (stairs: StairSocketFeature): Rect => {

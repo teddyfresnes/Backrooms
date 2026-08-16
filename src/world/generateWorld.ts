@@ -281,6 +281,90 @@ const enforcePortalClearances = (plan: MutablePlan): void => {
   }
 };
 
+/**
+ * Later room passes can trim ordinary walls after the high-ceiling shell was
+ * emitted. Re-split that shell against the final wall spans so an opened
+ * approach becomes a proper lintel instead of leaving a floating upper wall
+ * with a tiny view of the distant ceiling behind it.
+ */
+const synchronizeUpperCeilingShells = (
+  plan: MutablePlan,
+  world: WorldPlan,
+  rootRng: SeededRandom,
+): void => {
+  const upperWalls = plan.walls.filter(
+    (wall) => wall.detail === 'upper-shell' || wall.detail === 'upper-portal-lintel',
+  );
+  if (upperWalls.length === 0) return;
+
+  const removedIds = new Set(upperWalls.map((wall) => wall.id));
+  const baseWalls = plan.walls.filter(
+    (wall) =>
+      !removedIds.has(wall.id) &&
+      Math.abs(wall.bottom) < 0.02 &&
+      wall.bottom + wall.height >= world.wallHeight - 0.08,
+  );
+  plan.walls = plan.walls.filter((wall) => !removedIds.has(wall.id));
+  plan.colliders = plan.colliders.filter((collider) => {
+    if (!collider.id.startsWith('collider-')) return true;
+    return !removedIds.has(collider.id.slice('collider-'.length));
+  });
+
+  const rng = rootRng.fork('ceiling-variations:final-shell-sync');
+  for (const [wallIndex, wall] of upperWalls.entries()) {
+    const along = wall.orientation === 'x' ? wall.x : wall.z;
+    const fixed = wall.orientation === 'x' ? wall.z : wall.x;
+    const wallMin = along - wall.length * 0.5;
+    const wallMax = along + wall.length * 0.5;
+    const matchingBaseWalls = baseWalls.filter((baseWall) => {
+      if (baseWall.orientation !== wall.orientation) return false;
+      const baseFixed = baseWall.orientation === 'x' ? baseWall.z : baseWall.x;
+      const baseAlong = baseWall.orientation === 'x' ? baseWall.x : baseWall.z;
+      const baseMin = baseAlong - baseWall.length * 0.5;
+      const baseMax = baseAlong + baseWall.length * 0.5;
+      return Math.abs(baseFixed - fixed) < 0.12 &&
+        baseMax > wallMin + 0.01 && baseMin < wallMax - 0.01;
+    });
+    const points = [...new Set([
+      wallMin,
+      wallMax,
+      ...matchingBaseWalls.flatMap((baseWall) => {
+        const center = baseWall.orientation === 'x' ? baseWall.x : baseWall.z;
+        return [
+          clamp(center - baseWall.length * 0.5, wallMin, wallMax),
+          clamp(center + baseWall.length * 0.5, wallMin, wallMax),
+        ];
+      }),
+    ])].sort((left, right) => left - right);
+
+    for (let pieceIndex = 0; pieceIndex < points.length - 1; pieceIndex += 1) {
+      const min = points[pieceIndex]!;
+      const max = points[pieceIndex + 1]!;
+      if (max - min < 0.01) continue;
+      const midpoint = (min + max) * 0.5;
+      const supported = matchingBaseWalls.some((baseWall) => {
+        const center = baseWall.orientation === 'x' ? baseWall.x : baseWall.z;
+        return midpoint > center - baseWall.length * 0.5 + 0.01 &&
+          midpoint < center + baseWall.length * 0.5 - 0.01;
+      });
+      addWall(plan, rng.fork(`${wallIndex}:${pieceIndex}`), {
+        roomId: wall.roomId,
+        x: wall.orientation === 'x' ? midpoint : fixed,
+        z: wall.orientation === 'z' ? midpoint : fixed,
+        length: max - min,
+        orientation: wall.orientation,
+        bottom: wall.bottom,
+        height: wall.height,
+        thickness: wall.thickness,
+        tint: wall.tint,
+        collision: wall.collision,
+        kind: wall.kind,
+        detail: supported ? 'upper-shell' : 'upper-portal-lintel',
+      }, 0.01);
+    }
+  }
+};
+
 const chooseRoomKind = (bounds: Rect, rng: SeededRandom): RoomKind => {
   const width = rectWidth(bounds);
   const depth = rectDepth(bounds);
@@ -5202,6 +5286,7 @@ export const generateWorld = (seed: string): WorldPlan => {
   sealRestrictedRooms(mutable, world, rootRng);
   const interactiveDoors = addInteractiveDoors(mutable, world, rootRng);
   addWallBreaches(mutable, world, rootRng);
+  synchronizeUpperCeilingShells(mutable, world, rootRng);
   world.walls = mutable.walls;
   world.colliders = mutable.colliders;
   addSolidMasses(world, reservedRoomIds, rootRng);

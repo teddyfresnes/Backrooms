@@ -68,12 +68,14 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
   architectural ajouté par une passe ultérieure.
 - Une coque de plafond haut rejoint exactement le sommet du mur bas. Un linteau
   de portail commence légèrement au-dessus et le rendu soustrait son empreinte
-  du plafond bas voisin. Sa sous-face emploie le matériau et les UV monde du
-  plafond, jamais le papier peint, et reste exactement à `wallHeight` pour une
-  jonction plane sans superposer leurs géométries. Si le wrapper rabaisse ensuite
+  du plafond bas voisin. Sa sous-face reste exactement à `wallHeight` : elle
+  continue le plafond si au moins une pièce adjacente est basse, mais emploie le
+  papier peint si les deux pièces ont un plafond haut. Si le wrapper rabaisse ensuite
   la pièce à cause d’une ouverture verticale ou d’une façade incomplète, il
   supprime aussi chaque fragment de `upper-shell` / `upper-portal-lintel` qui ne
-  borde plus aucune pièce haute.
+  borde plus aucune pièce haute. Dans le générateur fini, la coque est redécoupée
+  contre les murs finaux : toute portée devenue libre après les dégagements de
+  portail doit être un linteau, jamais un `upper-shell` flottant.
 - Après mutation de murs ou de zones verticales, appeler le helper de
   reconstruction prévu au bon endroit plutôt que patcher un seul tableau.
 - Le dégagement d’arrivée d’une ouverture de plafond s’applique après les

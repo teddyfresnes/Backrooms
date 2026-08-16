@@ -9,6 +9,11 @@ import {
   renderScaleLimits,
   type RenderScaleLimits,
 } from '../render/AdaptiveQuality';
+import {
+  BACKROOMS_ATMOSPHERE,
+  BACKROOMS_LEGACY_ATMOSPHERE,
+} from '../render/BackroomsAtmosphere';
+import { PostFX } from '../render/PostFX';
 import { HallExitInteraction } from '../stairwell/HallExitInteraction';
 import { StairwellEnvironment } from '../stairwell/StairwellEnvironment';
 import { StairwellMaterials } from '../stairwell/StairwellMaterials';
@@ -36,11 +41,13 @@ export type RussianStairwellLaunch =
 
 export interface RussianStairwellGameCallbacks {
   onRequestNewGame(): void;
+  onRequestMainMenu(): void;
   onRequestLoadGame(id: string): void;
   onEnterBackrooms(): void;
 }
 
 const FIXED_STEP = 1 / 60;
+const AUTOSAVE_INTERVAL_SECONDS = 30;
 
 export class RussianStairwellGame {
   private readonly root = document.createElement('main');
@@ -54,6 +61,9 @@ export class RussianStairwellGame {
   private readonly lastSafePosition = new THREE.Vector3();
   private readonly renderScale: RenderScaleLimits;
   private readonly adaptiveScale: AdaptiveRenderScale;
+  private readonly hemisphere = new THREE.HemisphereLight();
+  private readonly ambientFill = new THREE.AmbientLight();
+  private readonly directionalKey = new THREE.DirectionalLight();
   private settings: GameSettings;
   private physics?: PhysicsWorld;
   private player?: PlayerController;
@@ -62,10 +72,12 @@ export class RussianStairwellGame {
   private apartment?: ImportedApartmentEnvironment;
   private door?: ImportedApartmentDoorInteraction;
   private hallExit?: HallExitInteraction;
+  private postFX?: PostFX;
   private pixelRatio: number;
   private accumulator = 0;
   private elapsed = 0;
   private playableSeconds = 0;
+  private autosaveElapsed = 0;
   private previousTime = performance.now();
   private fps = 60;
   private saveErrorShown = false;
@@ -100,13 +112,19 @@ export class RussianStairwellGame {
     });
     this.renderer.domElement.className = 'world-canvas';
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.93;
+    this.renderer.toneMapping = THREE.NoToneMapping;
+    this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = false;
+    this.renderer.info.autoReset = false;
     this.root.append(this.renderer.domElement);
+    this.renderer.domElement.addEventListener('click', this.onCanvasClick);
     this.ui = new ExperienceUI(this.root, {
       enter: () => this.enter(),
       regenerate: () => this.callbacks.onRequestNewGame(),
+      returnToMainMenu: () => {
+        this.saveNow('autosave');
+        this.callbacks.onRequestMainMenu();
+      },
       saveGame: () => this.saveNow('manual'),
       loadGame: (id) => this.callbacks.onRequestLoadGame(id),
       toggleFullscreen: () => void this.toggleFullscreen(),
@@ -117,9 +135,11 @@ export class RussianStairwellGame {
     }, this.settings, 'russian-stairwell');
     this.scene.background = new THREE.Color(0x090d11);
     this.scene.fog = new THREE.Fog(0x10161c, 16, 52);
+    this.configureBackroomsLighting();
     this.resize();
     window.addEventListener('resize', this.resize);
     window.addEventListener('keydown', this.onConsoleHotkey);
+    window.addEventListener('pagehide', this.onPageHide);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
   }
 
@@ -227,19 +247,24 @@ export class RussianStairwellGame {
     }
     this.lastSafePosition.copy(this.player.position);
 
+    this.postFX = new PostFX(this.renderer, this.scene, this.camera, this.settings.lighting);
     this.resize();
     await this.renderer.compileAsync(this.scene, this.camera);
     if (this.disposed) return;
-    this.renderer.render(this.scene, this.camera);
+    await this.warmupPostFX();
+    if (this.disposed) return;
     this.initialized = true;
     this.syncSaveHistory();
     this.ui.setSessionStarted(true);
     this.ui.setReady();
     this.previousTime = performance.now();
     this.renderer.setAnimationLoop(this.frame);
+    this.saveNow('autosave');
+    this.enter();
   }
 
   private enter(): void {
+    this.ui.beginGameplay();
     this.player?.lock();
     void this.audio.start().catch(() => {
       this.ui.showConsoleMessage({ kind: 'error', text: 'AUDIO INDISPONIBLE' });
@@ -266,6 +291,7 @@ export class RussianStairwellGame {
   }
 
   private applySettings(settings: GameSettings): void {
+    const previousLighting = this.settings.lighting;
     this.settings = { ...settings };
     this.player?.setFieldOfView(settings.fieldOfView);
     this.player?.setLookSensitivity(settings.lookSensitivity);
@@ -277,6 +303,42 @@ export class RussianStairwellGame {
       this.pixelRatio = ratio;
       this.resize();
     }
+    if (previousLighting !== settings.lighting) {
+      this.postFX?.setLightingMode(settings.lighting);
+      this.applyBackroomsLighting();
+    }
+  }
+
+  private configureBackroomsLighting(): void {
+    this.hemisphere.name = 'liminal-ambient-field';
+    this.ambientFill.name = 'indirect-carpet-bounce';
+    this.directionalKey.name = 'soft-fluorescent-key';
+    this.directionalKey.castShadow = false;
+    this.scene.add(this.hemisphere, this.ambientFill, this.directionalKey);
+    this.applyBackroomsLighting();
+  }
+
+  private applyBackroomsLighting(): void {
+    const legacy = this.settings.lighting === 'legacy';
+    const palette = (legacy ? BACKROOMS_LEGACY_ATMOSPHERE : BACKROOMS_ATMOSPHERE).yellow;
+    this.hemisphere.color.setHex(palette.hemisphereSky);
+    this.hemisphere.groundColor.setHex(palette.hemisphereGround);
+    this.ambientFill.color.setHex(palette.ambient);
+    this.directionalKey.color.setHex(palette.key);
+    this.hemisphere.intensity = legacy ? 0.17 : 0.25;
+    this.ambientFill.intensity = legacy ? 0.018 : 0.19;
+    this.directionalKey.intensity = legacy ? 0.07 : 0.34;
+    this.directionalKey.position.set(legacy ? 3.5 : 4.5, legacy ? 8 : 7.5, legacy ? 2.5 : 3.2);
+  }
+
+  private async warmupPostFX(): Promise<void> {
+    if (!this.postFX) return;
+    for (let frame = 0; frame < 3; frame += 1) {
+      if (this.disposed || !this.postFX) return;
+      this.postFX.render(1 / 60);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+    this.previousTime = performance.now();
   }
 
   private pixelRatioForQuality(quality: GameSettings['renderQuality']): number {
@@ -287,7 +349,7 @@ export class RussianStairwellGame {
 
   private submitConsole(value: string, mode: ConsoleMode): ConsoleSubmitResult {
     const trimmed = value.trim();
-    if (!trimmed.startsWith('/')) {
+    if (!value.startsWith('/')) {
       return mode === 'chat'
         ? { close: true, feedback: 'MESSAGE LOCAL', messages: [{ kind: 'chat', text: `me: ${trimmed}` }] }
         : { close: false, feedback: 'UTILISE /help', messages: [{ kind: 'error', text: 'UTILISE /help' }] };
@@ -304,7 +366,7 @@ export class RussianStairwellGame {
   }
 
   private completeConsole(value: string, _mode: ConsoleMode): ConsoleCompletion | null {
-    if (!value.trimStart().startsWith('/')) return null;
+    if (!value.startsWith('/')) return null;
     const options = [
       { value: '/help', label: '/help', detail: 'AFFICHE LES COMMANDES' },
       { value: '/save', label: '/save', detail: 'SAUVEGARDE MAINTENANT' },
@@ -338,7 +400,10 @@ export class RussianStairwellGame {
       this.saveErrorShown = true;
       this.ui.showConsoleMessage({ kind: 'error', text: 'SAUVEGARDE LOCALE INDISPONIBLE' });
     }
-    if (result.ok) this.syncSaveHistory();
+    if (result.ok) {
+      if (kind === 'autosave') this.autosaveElapsed = 0;
+      this.syncSaveHistory();
+    }
     return result.ok;
   }
 
@@ -357,6 +422,8 @@ export class RussianStairwellGame {
     this.elapsed += delta;
     if (this.player.isLocked) {
       this.playableSeconds += delta;
+      this.autosaveElapsed += delta;
+      if (this.autosaveElapsed >= AUTOSAVE_INTERVAL_SECONDS) this.saveNow('autosave');
       this.accumulator = Math.min(this.accumulator + delta, FIXED_STEP * 5);
       while (this.accumulator >= FIXED_STEP) {
         this.player.fixedUpdate(FIXED_STEP);
@@ -380,7 +447,8 @@ export class RussianStairwellGame {
         this.resize();
       }
     }
-    this.renderer.render(this.scene, this.camera);
+    this.renderer.info.reset();
+    this.postFX?.render(delta);
   };
 
   private readonly resize = (): void => {
@@ -390,6 +458,7 @@ export class RussianStairwellGame {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+    this.postFX?.setSize(width, height);
   };
 
   private async toggleFullscreen(): Promise<void> {
@@ -398,9 +467,18 @@ export class RussianStairwellGame {
   }
 
   private readonly onVisibilityChange = (): void => {
+    if (document.hidden) this.saveNow('autosave');
     void this.audio.setSuspended(document.hidden || !this.player?.isLocked);
     this.previousTime = performance.now();
     this.accumulator = 0;
+  };
+
+  private readonly onCanvasClick = (): void => {
+    if (!this.player?.isLocked && !this.ui.isPaused && !this.ui.isMainMenuOpen) this.enter();
+  };
+
+  private readonly onPageHide = (): void => {
+    this.saveNow('autosave');
   };
 
   private readonly onConsoleHotkey = (event: KeyboardEvent): void => {
@@ -428,7 +506,9 @@ export class RussianStairwellGame {
     this.renderer.setAnimationLoop(null);
     window.removeEventListener('resize', this.resize);
     window.removeEventListener('keydown', this.onConsoleHotkey);
+    window.removeEventListener('pagehide', this.onPageHide);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    this.renderer.domElement.removeEventListener('click', this.onCanvasClick);
     this.door?.dispose();
     this.hallExit?.dispose();
     this.player?.dispose();
@@ -436,6 +516,7 @@ export class RussianStairwellGame {
     this.environment?.dispose();
     this.materials?.dispose();
     this.physics?.dispose();
+    this.postFX?.dispose();
     this.audio.dispose();
     this.ui.dispose();
     this.renderer.dispose();

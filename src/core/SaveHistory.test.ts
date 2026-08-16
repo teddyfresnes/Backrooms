@@ -104,7 +104,7 @@ describe('game save history', () => {
     });
   });
 
-  it('creates deterministic collision-safe ids and keeps only the 12 newest entries', () => {
+  it('creates collision-safe ids and keeps one current autosave beside manual saves', () => {
     const storage = new MemoryStorage();
     const sameInstant = new Date('2026-08-15T09:00:00.000Z');
     const first = writeGameSave(storage, russianInput(1), sameInstant);
@@ -120,9 +120,20 @@ describe('game save history', () => {
     }
 
     const saves = listGameSaves(storage);
-    expect(saves).toHaveLength(GAME_SAVE_HISTORY_LIMIT);
-    expect(saves.map((save) => save.playTimeSeconds)).toEqual(
-      Array.from({ length: GAME_SAVE_HISTORY_LIMIT }, (_, index) => 114 - index),
+    expect(saves).toHaveLength(3);
+    expect(saves.filter((save) => save.kind === 'autosave')).toHaveLength(1);
+    expect(saves.map((save) => save.playTimeSeconds)).toEqual([114, 2, 1]);
+
+    const manualStorage = new MemoryStorage();
+    for (let index = 0; index < GAME_SAVE_HISTORY_LIMIT + 3; index += 1) {
+      expect(writeGameSave(
+        manualStorage,
+        russianInput(index),
+        new Date(Date.UTC(2026, 7, 16, 10, index)),
+      ).ok).toBe(true);
+    }
+    expect(listGameSaves(manualStorage).map((save) => save.playTimeSeconds)).toEqual(
+      Array.from({ length: GAME_SAVE_HISTORY_LIMIT }, (_, index) => 14 - index),
     );
   });
 
