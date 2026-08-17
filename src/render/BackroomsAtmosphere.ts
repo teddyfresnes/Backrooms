@@ -18,6 +18,14 @@ export const BACKROOMS_ATMOSPHERE: Record<VisualBiome, BackroomsAtmospherePalett
     ambient: 0xfff9ec,
     key: 0xfff2d2,
   },
+  dim: {
+    background: 0x282820,
+    fog: 0x555548,
+    hemisphereSky: 0xfffbef,
+    hemisphereGround: 0x53534c,
+    ambient: 0xfff9ec,
+    key: 0xfff2d2,
+  },
   red: {
     background: 0x170706,
     fog: 0x431512,
@@ -38,6 +46,14 @@ export const BACKROOMS_ATMOSPHERE: Record<VisualBiome, BackroomsAtmospherePalett
 
 export const BACKROOMS_LEGACY_ATMOSPHERE: typeof BACKROOMS_ATMOSPHERE = {
   yellow: {
+    background: 0x45452d,
+    fog: 0x77754b,
+    hemisphereSky: 0xfff7d8,
+    hemisphereGround: 0x282619,
+    ambient: 0xfff0c4,
+    key: 0xfff5d8,
+  },
+  dim: {
     background: 0x45452d,
     fog: 0x77754b,
     hemisphereSky: 0xfff7d8,

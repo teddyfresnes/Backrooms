@@ -313,6 +313,7 @@ export class MaterialLibrary {
     return new MaterialLibrary(
       {
         yellow: yellowMaterials,
+        dim: yellowMaterials,
         red: redMaterials,
         white: whiteMaterials,
       },

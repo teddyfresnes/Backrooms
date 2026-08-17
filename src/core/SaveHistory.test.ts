@@ -39,6 +39,7 @@ const russianInput = (playTimeSeconds = 83): RussianStairwellGameSaveInput => ({
     safePosition: { x: 3, y: 0.865, z: -4 },
     quaternion: { x: 0, y: 0.5, z: 0, w: 0.5 },
     entranceDoor: { progress: 0.4, targetProgress: 1 },
+    apartmentLightOn: true,
   },
 });
 
@@ -85,6 +86,9 @@ describe('game save history', () => {
     });
     expect(loadedRussian?.payload.quaternion.y).toBeCloseTo(Math.SQRT1_2);
     expect(loadedRussian?.payload.quaternion.w).toBeCloseTo(Math.SQRT1_2);
+    expect(loadedRussian?.experienceId === 'russian-stairwell'
+      ? loadedRussian.payload.apartmentLightOn
+      : undefined).toBe(true);
     expect(loadGameSave(storage, backrooms.save.id)).toMatchObject({
       experienceId: 'backrooms',
       payload: {
@@ -167,6 +171,41 @@ describe('game save history', () => {
     expect(listGameSaves(storage)).toEqual([]);
     storage.setItem(GAME_SAVE_HISTORY_STORAGE_KEY, '{broken');
     expect(listGameSaves(storage)).toEqual([]);
+  });
+
+  it('keeps old stairwell history entries compatible with lights off by default', () => {
+    const storage = new MemoryStorage();
+    const written = writeGameSave(
+      storage,
+      russianInput(),
+      new Date('2026-08-15T10:00:00.000Z'),
+    );
+    if (!written.ok) throw new Error('Expected valid save.');
+    const history = JSON.parse(storage.getItem(GAME_SAVE_HISTORY_STORAGE_KEY)!) as {
+      entries: Array<{ payload: Record<string, unknown> }>;
+    };
+    delete history.entries[0]!.payload.apartmentLightOn;
+    delete history.entries[0]!.payload.windowBlindsOpen;
+    storage.setItem(GAME_SAVE_HISTORY_STORAGE_KEY, JSON.stringify(history));
+
+    expect(listGameSaves(storage)[0]?.payload).toMatchObject({
+      apartmentLightOn: false,
+      windowBlindsOpen: [true, true],
+    });
+  });
+
+  it('round-trips the two independent apartment blind states', () => {
+    const storage = new MemoryStorage();
+    const input = russianInput();
+    const written = writeGameSave(storage, {
+      ...input,
+      payload: { ...input.payload, windowBlindsOpen: [false, true] },
+    });
+
+    expect(written.ok).toBe(true);
+    expect(listGameSaves(storage)[0]?.payload).toMatchObject({
+      windowBlindsOpen: [false, true],
+    });
   });
 
   it.each([

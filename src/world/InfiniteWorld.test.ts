@@ -638,9 +638,9 @@ describe('InfiniteWorld chunk contracts', () => {
     }
   });
 
-  it('assigns coherent 2x2 visual regions with an 80/10/10 distribution', () => {
+  it('assigns coherent 2x2 visual regions with a 70/10/10/10 distribution', () => {
     const biomeSeed = 'VISUAL-BIOME-RATIO-AUDIT';
-    const counts = { yellow: 0, red: 0, white: 0 };
+    const counts = { yellow: 0, red: 0, white: 0, dim: 0 };
     for (let macroX = -30; macroX < 30; macroX += 1) {
       for (let macroZ = -30; macroZ < 30; macroZ += 1) {
         const members = Array.from({ length: 4 }, (_, index): ChunkCoord => ({
@@ -657,13 +657,15 @@ describe('InfiniteWorld chunk contracts', () => {
         counts[biomes[0]!] += 1;
       }
     }
-    const total = counts.yellow + counts.red + counts.white;
-    expect(counts.yellow / total).toBeGreaterThan(0.76);
-    expect(counts.yellow / total).toBeLessThan(0.84);
+    const total = counts.yellow + counts.red + counts.white + counts.dim;
+    expect(counts.yellow / total).toBeGreaterThan(0.66);
+    expect(counts.yellow / total).toBeLessThan(0.74);
     expect(counts.red / total).toBeGreaterThan(0.075);
     expect(counts.red / total).toBeLessThan(0.125);
     expect(counts.white / total).toBeGreaterThan(0.075);
     expect(counts.white / total).toBeLessThan(0.125);
+    expect(counts.dim / total).toBeGreaterThan(0.075);
+    expect(counts.dim / total).toBeLessThan(0.125);
     expect(getInfiniteVisualBiome(biomeSeed, { x: 0, z: 0, story: 0 })).toBe('yellow');
   });
 
@@ -679,7 +681,7 @@ describe('InfiniteWorld chunk contracts', () => {
 
   it('serializes the visual biome and applies its fluorescent palette before rendering', () => {
     const biomeSeed = 'VISUAL-BIOME-PALETTE-AUDIT';
-    const findCoord = (target: 'red' | 'white'): ChunkCoord => {
+    const findCoord = (target: 'red' | 'white' | 'dim'): ChunkCoord => {
       for (let x = -20; x <= 20; x += 2) {
         for (let z = -20; z <= 20; z += 2) {
           const coord = { x, z, story: 0 };
@@ -690,11 +692,14 @@ describe('InfiniteWorld chunk contracts', () => {
     };
     const redPlan = generateInfiniteChunk(biomeSeed, findCoord('red'));
     const whitePlan = generateInfiniteChunk(biomeSeed, findCoord('white'));
+    const dimPlan = generateInfiniteChunk(biomeSeed, findCoord('dim'));
 
     expect(redPlan.visualBiome).toBe('red');
     expect(getInfiniteChunkMetadata(redPlan)?.visualBiome).toBe('red');
     expect(whitePlan.visualBiome).toBe('white');
     expect(getInfiniteChunkMetadata(whitePlan)?.visualBiome).toBe('white');
+    expect(dimPlan.visualBiome).toBe('dim');
+    expect(getInfiniteChunkMetadata(dimPlan)?.visualBiome).toBe('dim');
     for (const light of redPlan.lights) {
       const red = (light.color >> 16) & 0xff;
       const green = (light.color >> 8) & 0xff;

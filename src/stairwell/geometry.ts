@@ -144,7 +144,7 @@ export const batchStaticMeshes = (root: THREE.Group): void => {
     const batch = new THREE.Mesh(merged, material);
     batch.name = `static-batch-${material.name || material.uuid.slice(0, 8)}`;
     batch.receiveShadow = meshes.some((mesh) => mesh.receiveShadow);
-    batch.castShadow = false;
+    batch.castShadow = meshes.some((mesh) => mesh.castShadow);
     meshes.forEach((mesh) => {
       mesh.removeFromParent();
       mesh.geometry.dispose();

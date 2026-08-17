@@ -108,11 +108,16 @@ describe('experience routing', () => {
     ]);
 
     expect(backrooms).toContain('BACKROOMS_ATMOSPHERE as ATMOSPHERE');
-    expect(stairwell).toContain('new PostFX(this.renderer, this.scene, this.camera, this.settings.lighting)');
+    expect(stairwell).toContain('new PostFX(');
+    expect(stairwell).toContain('{ bloom: false }');
     expect(stairwell).toContain('this.postFX?.setLightingMode(settings.lighting)');
     expect(stairwell).toContain('this.postFX?.render(delta)');
     expect(stairwell).toContain('this.postFX?.dispose()');
     expect(stairwell).toContain('BACKROOMS_LEGACY_ATMOSPHERE');
+    expect(stairwell).toContain('ApartmentLightSwitchInteraction');
+    expect(stairwell).toContain('ApartmentWindowBlindsInteraction');
+    expect(stairwell).toContain('apartmentLightOn: this.apartment.areInteriorLightsEnabled');
+    expect(stairwell).toContain('windowBlindsOpen: this.windowBlinds?.getState()');
     expect(atmosphere).toContain('hemisphereSky: 0xfffbef');
     expect(environment).not.toContain('stairwell-night-ambient');
     expect(environment).not.toContain('stairwell-night-fill');

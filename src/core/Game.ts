@@ -81,10 +81,10 @@ export class Game {
   private readonly hemisphere = new THREE.HemisphereLight(
     ATMOSPHERE.yellow.hemisphereSky,
     ATMOSPHERE.yellow.hemisphereGround,
-    0.25,
+    0.14,
   );
-  private readonly ambientFill = new THREE.AmbientLight(ATMOSPHERE.yellow.ambient, 0.19);
-  private readonly directionalKey = new THREE.DirectionalLight(ATMOSPHERE.yellow.key, 0.34);
+  private readonly ambientFill = new THREE.AmbientLight(ATMOSPHERE.yellow.ambient, 0.055);
+  private readonly directionalKey = new THREE.DirectionalLight(ATMOSPHERE.yellow.key, 0.22);
   private readonly atmosphereTargetColor = new THREE.Color();
   private readonly ui: ExperienceUI;
   private readonly audio = new AudioSystem();
@@ -331,9 +331,9 @@ export class Game {
       this.postFX?.setDarkness(0);
       return;
     }
-    this.hemisphere.intensity = THREE.MathUtils.lerp(0.25, 0.15, this.darkness);
-    this.ambientFill.intensity = THREE.MathUtils.lerp(0.19, 0.08, this.darkness);
-    this.directionalKey.intensity = THREE.MathUtils.lerp(0.34, 0.14, this.darkness);
+    this.hemisphere.intensity = THREE.MathUtils.lerp(0.14, 0.07, this.darkness);
+    this.ambientFill.intensity = THREE.MathUtils.lerp(0.055, 0.018, this.darkness);
+    this.directionalKey.intensity = THREE.MathUtils.lerp(0.22, 0.08, this.darkness);
     this.postFX?.setDarkness(this.darkness);
   }
 
@@ -356,9 +356,9 @@ export class Game {
       this.ambientFill.intensity = 0.018;
       this.directionalKey.intensity = 0.07;
     } else {
-      this.hemisphere.intensity = THREE.MathUtils.lerp(0.25, 0.15, this.darkness);
-      this.ambientFill.intensity = THREE.MathUtils.lerp(0.19, 0.08, this.darkness);
-      this.directionalKey.intensity = THREE.MathUtils.lerp(0.34, 0.14, this.darkness);
+      this.hemisphere.intensity = THREE.MathUtils.lerp(0.14, 0.07, this.darkness);
+      this.ambientFill.intensity = THREE.MathUtils.lerp(0.055, 0.018, this.darkness);
+      this.directionalKey.intensity = THREE.MathUtils.lerp(0.22, 0.08, this.darkness);
     }
   }
 

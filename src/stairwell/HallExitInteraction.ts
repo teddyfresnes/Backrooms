@@ -67,7 +67,7 @@ export class HallExitInteraction {
   }
 
   private setPrompt(message: string | null): void {
-    if (message === this.lastPrompt) return;
+    if (message === this.lastPrompt && message === null) return;
     this.lastPrompt = message;
     this.ui.setInteraction(message);
   }

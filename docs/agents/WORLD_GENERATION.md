@@ -45,6 +45,11 @@ les lumières et les props, ou déclencher explicitement leur recalcul.
 7. reconstruit les extensions affectées, place les props rares hors monuments ;
 8. préfixe les IDs et attache les métadonnées runtime.
 
+Les biomes visuels occupent des macro-zones 2×2 stables sur tous les étages.
+Le jaune ordinaire couvre 70 % des macro-zones ; rouge, blanc et jaune sombre
+en couvrent chacun 10 %. Le jaune sombre conserve les textures et couleurs de
+néons jaunes : seul son profil d’éclairage moderne est plus faible.
+
 ## Invariants
 
 ### Déterminisme

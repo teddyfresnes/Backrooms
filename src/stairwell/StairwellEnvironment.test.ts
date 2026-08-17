@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { STAIRWELL_LIGHTING_PROFILES } from './StairwellEnvironment';
 
 const loadNodeFs = async () => {
   // Test-only builtin; the browser tsconfig intentionally omits Node globals.
@@ -33,13 +34,35 @@ describe('Russian stairwell render integration', () => {
     expect(stairwell).toContain('SeededRandom');
   });
 
+  it('keeps the exterior rain muted against the night sky', async () => {
+    const { readFile } = await loadNodeFs();
+    const stairwell = await readFile(new URL('./StairwellEnvironment.ts', import.meta.url), 'utf8');
+
+    expect(stairwell).toContain('color: 0x8296a8');
+    expect(stairwell).toContain('opacity: 0.24');
+    expect(stairwell).not.toContain('material.color.set(0xc7d2d8)');
+    expect(stairwell).not.toContain('material.opacity = 0.3');
+  });
+
+  it('adds a physical collider for the second-floor window table', async () => {
+    const { readFile } = await loadNodeFs();
+    const [stairwell, runtime] = await Promise.all([
+      readFile(new URL('./StairwellEnvironment.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../core/RussianStairwellGame.ts', import.meta.url), 'utf8'),
+    ]);
+
+    expect(stairwell).toContain("colliderFromVisibleObject('second-floor-window-table', table)");
+    expect(runtime).toContain("'stairwell-furniture'");
+    expect(runtime).toContain('environment.furnitureColliders');
+  });
+
   it('uses nearly clear alpha glass so the rainy exterior remains visible', async () => {
     const { readFile } = await loadNodeFs();
     const stairwell = await readFile(new URL('./StairwellEnvironment.ts', import.meta.url), 'utf8');
 
-    expect(stairwell).toContain('clone.opacity = 0.025;');
-    expect(stairwell).toContain('clone.transmission = 0;');
-    expect(stairwell).toContain('clone.depthWrite = false;');
+    expect(stairwell).toContain('color: 0x000000');
+    expect(stairwell).toContain('opacity: 0.004');
+    expect(stairwell).toContain('depthWrite: false');
     expect(stairwell).toContain('maxX: -10.24');
     expect(stairwell).toContain("'apartment-window-view-building-silhouette'");
     expect(stairwell).toContain("'apartment-window-view-background-silhouette'");
@@ -48,5 +71,49 @@ describe('Russian stairwell render integration', () => {
     expect(stairwell).toContain('[4.2, 19, 140]');
     expect(stairwell).toContain('[-29, 9.5, 18]');
     expect(stairwell).not.toContain('apartment-window-view-building-window-');
+  });
+
+  it('forbids PBR reflections and procedural light glints on hall windows', async () => {
+    const { readFile } = await loadNodeFs();
+    const stairwell = await readFile(new URL('./StairwellEnvironment.ts', import.meta.url), 'utf8');
+
+    expect(stairwell).toContain('`${name}-reflection-free-glass`');
+    expect(stairwell).toContain('return this.createExtraBasicMaterial');
+    expect(stairwell).not.toContain('this.installWindowRainShader(clone');
+    expect(stairwell).not.toContain('clone.roughness = 0.02;');
+    expect(stairwell).not.toContain("'exterior-lamp-glow'");
+  });
+
+  it('renders the exterior as a shadowed night scene', async () => {
+    const { readFile } = await loadNodeFs();
+    const [stairwell, runtime] = await Promise.all([
+      readFile(new URL('./StairwellEnvironment.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../core/RussianStairwellGame.ts', import.meta.url), 'utf8'),
+    ]);
+
+    expect(runtime).toContain('this.renderer.shadowMap.enabled = true');
+    expect(runtime).toContain('THREE.PCFSoftShadowMap');
+    expect(stairwell).toContain("moon.name = 'exterior-night-moon-key'");
+    expect(stairwell).toContain('moon.castShadow = true');
+    expect(stairwell).toContain('new THREE.SpotLight(');
+    expect(stairwell).toContain('streetLamp.castShadow = true');
+    expect(stairwell).toContain('configureExteriorShadowCasters');
+    expect(stairwell).toContain('color: 0x2d3943');
+  });
+
+  it('uses source-focused modern lights instead of the flat classic profile', async () => {
+    const { readFile } = await loadNodeFs();
+    const runtime = await readFile(new URL('../core/RussianStairwellGame.ts', import.meta.url), 'utf8');
+    const modern = STAIRWELL_LIGHTING_PROFILES.modern;
+    const legacy = STAIRWELL_LIGHTING_PROFILES.legacy;
+
+    expect(modern.mainIntensity).toBeGreaterThan(legacy.mainIntensity);
+    expect(modern.wallIntensity).toBeGreaterThan(legacy.wallIntensity);
+    expect(modern.corridorFillIntensity).toBeLessThan(legacy.corridorFillIntensity);
+    expect(modern.stairWashIntensity).toBeLessThan(legacy.stairWashIntensity);
+    expect(modern.mainColor).not.toBe(legacy.mainColor);
+    expect(runtime).toContain('environment.setLightingMode(this.settings.lighting)');
+    expect(runtime).toContain('this.environment?.setLightingMode(settings.lighting)');
+    expect(runtime).toContain('{ bloom: false }');
   });
 });

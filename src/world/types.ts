@@ -369,7 +369,7 @@ export interface PropPlacement {
   tone: number;
 }
 
-export type VisualBiome = 'yellow' | 'red' | 'white';
+export type VisualBiome = 'yellow' | 'red' | 'white' | 'dim';
 
 /**
  * Chunk-wide material variation. These values only affect the appearance of

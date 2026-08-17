@@ -675,6 +675,8 @@ describe('open pit shaft rendering', () => {
     const ceilingMap = new THREE.DataTexture(Uint8Array.of(210, 198, 112, 255), 1, 1);
     ceilingMap.needsUpdate = true;
     materials.ceiling.map = ceilingMap;
+    materials.ceiling.emissive.setHex(0x231f12);
+    materials.ceiling.emissiveIntensity = 0.013;
     const view = new WorldView(plan, materials);
     const elevatedCeiling = view.group.getObjectByName(
       'elevated-atrium-ceilings',
@@ -682,10 +684,11 @@ describe('open pit shaft rendering', () => {
     const elevatedMaterial = elevatedCeiling.material as THREE.MeshStandardMaterial;
     expect(elevatedMaterial.name).toBe('elevated-tiled-ceiling');
     expect(elevatedMaterial.map).toBe(ceilingMap);
-    expect(elevatedMaterial.emissiveMap).toBe(ceilingMap);
+    expect(elevatedMaterial.color.getHex()).toBe(materials.ceiling.color.getHex());
+    expect(elevatedMaterial.emissiveMap).toBe(materials.ceiling.emissiveMap);
     expect(elevatedMaterial.lightMap).toBeNull();
-    expect(elevatedMaterial.emissive.getHex()).not.toBe(0);
-    expect(elevatedMaterial.emissiveIntensity).toBeGreaterThanOrEqual(0.22);
+    expect(elevatedMaterial.emissive.getHex()).toBe(materials.ceiling.emissive.getHex());
+    expect(elevatedMaterial.emissiveIntensity).toBe(materials.ceiling.emissiveIntensity);
     expect(elevatedMaterial.side).toBe(THREE.DoubleSide);
     expect(elevatedMaterial.fog).toBe(true);
     const raycaster = new THREE.Raycaster();
@@ -2403,11 +2406,13 @@ describe('epic structure rendering', () => {
     const distantMaterial = distantCeiling.material as THREE.MeshStandardMaterial;
     expect(distantMaterial.name).toBe('distant-tiled-ceiling');
     expect(distantMaterial.map).toBe(materials.ceiling.map);
-    expect(distantMaterial.emissiveMap).toBe(materials.ceiling.map);
+    expect(distantMaterial.color.getHex()).toBe(materials.ceiling.color.getHex());
+    expect(distantMaterial.emissiveMap).toBe(materials.ceiling.emissiveMap);
     expect(distantMaterial.lightMap).toBeNull();
     expect(distantMaterial.side).toBe(THREE.DoubleSide);
     expect(distantMaterial.fog).toBe(true);
-    expect(distantMaterial.emissiveIntensity).toBeGreaterThanOrEqual(0.2);
+    expect(distantMaterial.emissive.getHex()).toBe(materials.ceiling.emissive.getHex());
+    expect(distantMaterial.emissiveIntensity).toBe(materials.ceiling.emissiveIntensity);
 
     distantCeiling.geometry.computeBoundingBox();
     expect(distantCeiling.geometry.boundingBox?.min.y).toBeCloseTo(feature.height, 5);

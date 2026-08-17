@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { ApartmentLightSwitchInteraction } from '../apartment/ApartmentLightSwitchInteraction';
+import { ApartmentWindowBlindsInteraction } from '../apartment/ApartmentWindowBlindsInteraction';
 import { ImportedApartmentDoorInteraction } from '../apartment/ImportedApartmentDoorInteraction';
 import { ImportedApartmentEnvironment } from '../apartment/ImportedApartmentEnvironment';
 import { AudioSystem } from '../audio/AudioSystem';
@@ -71,6 +73,8 @@ export class RussianStairwellGame {
   private environment?: StairwellEnvironment;
   private apartment?: ImportedApartmentEnvironment;
   private door?: ImportedApartmentDoorInteraction;
+  private lightSwitch?: ApartmentLightSwitchInteraction;
+  private windowBlinds?: ApartmentWindowBlindsInteraction;
   private hallExit?: HallExitInteraction;
   private postFX?: PostFX;
   private pixelRatio: number;
@@ -114,7 +118,8 @@ export class RussianStairwellGame {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.toneMappingExposure = 1;
-    this.renderer.shadowMap.enabled = false;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.info.autoReset = false;
     this.root.append(this.renderer.domElement);
     this.renderer.domElement.addEventListener('click', this.onCanvasClick);
@@ -174,8 +179,16 @@ export class RussianStairwellGame {
       environment.dispose();
       return;
     }
+    environment.setLightingMode(this.settings.lighting);
     this.environment = environment;
     this.scene.add(environment.group, apartment.group);
+    if (environment.furnitureColliders.length > 0) {
+      physics.addChunk(
+        'stairwell-furniture',
+        environment.furnitureColliders,
+        { x: 0, y: 0, z: 0 },
+      );
+    }
     apartment.group.updateMatrixWorld(true);
     physics.addTrimeshChunk('imported-apartment-shell', apartment.shellColliderMeshes);
     if (apartment.furnitureColliders.length > 0) {
@@ -218,8 +231,17 @@ export class RussianStairwellGame {
         chunkKey: 'imported-apartment-entry-door',
         closedAngle: apartment.entryDoor.closedAngle,
         openAngle: apartment.entryDoor.openAngle,
+        lockTarget: apartment.doorLock,
+        onLockChange: (locked) => apartment.setEntryDoorLocked(locked),
       },
     );
+    this.lightSwitch = new ApartmentLightSwitchInteraction(
+      apartment.lightSwitch,
+      this.ui,
+      () => apartment.areInteriorLightsEnabled,
+      (enabled) => apartment.setInteriorLightsEnabled(enabled),
+    );
+    this.windowBlinds = new ApartmentWindowBlindsInteraction(apartment.windowBlinds, this.ui);
     if (!environment.hallEntranceDoor) {
       throw new Error('La porte du hall d’escalier est absente.');
     }
@@ -231,6 +253,8 @@ export class RussianStairwellGame {
 
     if (this.launch.kind === 'load') {
       this.door.restoreState(this.launch.save.payload.entranceDoor);
+      apartment.setInteriorLightsEnabled(this.launch.save.payload.apartmentLightOn);
+      this.windowBlinds.restoreState(this.launch.save.payload.windowBlindsOpen ?? [true, true]);
       this.player.teleport(this.launch.save.payload.safePosition);
       this.player.setLookQuaternion(this.launch.save.payload.quaternion);
       this.playableSeconds = this.launch.save.playTimeSeconds;
@@ -247,7 +271,13 @@ export class RussianStairwellGame {
     }
     this.lastSafePosition.copy(this.player.position);
 
-    this.postFX = new PostFX(this.renderer, this.scene, this.camera, this.settings.lighting);
+    this.postFX = new PostFX(
+      this.renderer,
+      this.scene,
+      this.camera,
+      this.settings.lighting,
+      { bloom: false },
+    );
     this.resize();
     await this.renderer.compileAsync(this.scene, this.camera);
     if (this.disposed) return;
@@ -274,6 +304,16 @@ export class RussianStairwellGame {
   private tryInteract(): void {
     if (!this.player || !this.door) return;
     this.player.getViewDirection(this.viewDirection);
+    if (this.lightSwitch?.interact(
+      this.player.position,
+      this.viewDirection,
+      this.player.isLocked,
+    )) return;
+    if (this.windowBlinds?.interact(
+      this.player.position,
+      this.viewDirection,
+      this.player.isLocked,
+    )) return;
     if (this.hallExit?.interact(
       this.player.position,
       this.viewDirection,
@@ -305,6 +345,7 @@ export class RussianStairwellGame {
     }
     if (previousLighting !== settings.lighting) {
       this.postFX?.setLightingMode(settings.lighting);
+      this.environment?.setLightingMode(settings.lighting);
       this.applyBackroomsLighting();
     }
   }
@@ -325,9 +366,12 @@ export class RussianStairwellGame {
     this.hemisphere.groundColor.setHex(palette.hemisphereGround);
     this.ambientFill.color.setHex(palette.ambient);
     this.directionalKey.color.setHex(palette.key);
-    this.hemisphere.intensity = legacy ? 0.17 : 0.25;
-    this.ambientFill.intensity = legacy ? 0.018 : 0.19;
-    this.directionalKey.intensity = legacy ? 0.07 : 0.34;
+    // This runtime is nocturnal. It reuses the Backrooms colour rig and
+    // post-processing modes, but relies on local fixtures for readable spaces
+    // instead of globally filling the exterior and the apartment.
+    this.hemisphere.intensity = legacy ? 0.04 : 0.1;
+    this.ambientFill.intensity = legacy ? 0.004 : 0.016;
+    this.directionalKey.intensity = legacy ? 0.025 : 0.09;
     this.directionalKey.position.set(legacy ? 3.5 : 4.5, legacy ? 8 : 7.5, legacy ? 2.5 : 3.2);
   }
 
@@ -375,7 +419,7 @@ export class RussianStairwellGame {
   }
 
   private saveNow(kind: GameSaveKind): boolean {
-    if (!this.initialized || !this.player || !this.door) return false;
+    if (!this.initialized || !this.player || !this.door || !this.apartment) return false;
     if (!this.storage) {
       if (!this.saveErrorShown) {
         this.saveErrorShown = true;
@@ -394,6 +438,8 @@ export class RussianStairwellGame {
         safePosition: this.lastSafePosition,
         quaternion: { x: look.x, y: look.y, z: look.z, w: look.w },
         entranceDoor: this.door.getState(),
+        apartmentLightOn: this.apartment.areInteriorLightsEnabled,
+        windowBlindsOpen: this.windowBlinds?.getState() ?? [true, true],
       },
     });
     if (!result.ok && !this.saveErrorShown) {
@@ -434,6 +480,8 @@ export class RussianStairwellGame {
       this.player.getViewDirection(this.viewDirection);
       this.door.update(delta, this.player.position, this.viewDirection, true);
       this.hallExit?.update(this.player.position, this.viewDirection, true);
+      this.lightSwitch?.update(this.player.position, this.viewDirection, true);
+      this.windowBlinds?.update(delta, this.player.position, this.viewDirection, true);
     } else {
       this.accumulator = 0;
       this.ui.setInteraction(null);
@@ -510,6 +558,8 @@ export class RussianStairwellGame {
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.renderer.domElement.removeEventListener('click', this.onCanvasClick);
     this.door?.dispose();
+    this.lightSwitch?.dispose();
+    this.windowBlinds?.dispose();
     this.hallExit?.dispose();
     this.player?.dispose();
     this.apartment?.dispose();

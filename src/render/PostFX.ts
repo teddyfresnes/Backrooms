@@ -18,6 +18,10 @@ import {
 } from 'postprocessing';
 import type { LightingMode } from './LightingMode';
 
+export interface PostFXOptions {
+  readonly bloom?: boolean;
+}
+
 export class PostFX {
   private composer: EffectComposer;
   private vignette?: VignetteEffect;
@@ -31,6 +35,7 @@ export class PostFX {
     private readonly scene: THREE.Scene,
     private readonly camera: THREE.PerspectiveCamera,
     private lightingMode: LightingMode = 'modern',
+    private readonly options: PostFXOptions = {},
   ) {
     this.composer = this.createComposer(lightingMode);
   }
@@ -91,7 +96,7 @@ export class PostFX {
           resolutionScale: 0.58,
         }));
       }
-      if (supportsHdrTargets && !coarsePointer) {
+      if (this.options.bloom !== false && supportsHdrTargets && !coarsePointer) {
         effects.push(new BloomEffect({
           blendFunction: BlendFunction.SCREEN,
           intensity: 0.18,
@@ -120,9 +125,10 @@ export class PostFX {
       premultiply: true,
     });
     this.noise.blendMode.opacity.value = 0.018;
+    const contrast = new BrightnessContrastEffect({ brightness: -0.01, contrast: 0.075 });
     const toneMapping = new ToneMappingEffect({ mode: ToneMappingMode.AGX });
     const effects: Effect[] = [];
-    if (supportsHdrTargets && !coarsePointer) {
+    if (this.options.bloom !== false && supportsHdrTargets && !coarsePointer) {
       effects.push(new BloomEffect({
         blendFunction: BlendFunction.SCREEN,
         intensity: 0.14,
@@ -133,7 +139,7 @@ export class PostFX {
         levels: 2,
       }));
     }
-    effects.push(toneMapping, this.grading, this.noise, this.vignette);
+    effects.push(toneMapping, this.grading, contrast, this.noise, this.vignette);
     if (!coarsePointer) effects.push(new SMAAEffect());
     composer.addPass(new EffectPass(this.camera, ...effects));
     return composer;

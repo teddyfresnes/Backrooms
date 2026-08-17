@@ -137,13 +137,13 @@ redondante, pas de lui appliquer un décalage arbitraire.
   palier sépare obligatoirement sa moquette supérieure, sa tranche en papier
   peint et sa dalle de plafond inférieure ; un luminaire de palier s’attache à
   cette dalle et ne doit jamais apparaître sous une face en moquette.
-- Tout plafond au-dessus de la ligne des murs utilise un matériau texturé,
-  double face et légèrement émissif, tout en gardant le même fog léger et le
-  même décorateur zonal que les surfaces voisines.
+- Tout plafond au-dessus de la ligne des murs utilise le même albédo, la même
+  émission et le même fog que les plafonds ordinaires. Seul son rendu double
+  face diffère afin qu’il reste visible depuis les passages verticaux.
   Les plafonds de preview verticale modulent aussi leur émission avec la texture
   de dalles afin que le plafond reste lisible en regardant depuis l’étage bas.
-  À partir de 18 m, la variante distante renforce ce traitement et réduit aussi
-  l’échelle UV des dalles en fonction de la hauteur.
+  À partir de 18 m, la variante distante réduit uniquement l’échelle UV des
+  dalles en fonction de la hauteur, sans renforcer leur luminosité.
 - Les fragments de coque haute gardent leurs faces d’extrémité : leur retrait
   produit des fentes verticales noires aux raccords. Leur base rejoint exactement
   le sommet du mur bas pour ne laisser aucune fente horizontale ; le plafond bas
@@ -183,15 +183,48 @@ la story active. Ne pas piloter une forte densité de fog depuis la seule positi
 du joueur : cela recréerait une bulle visible pendant les transitions.
 
 En mode moderne, le post-traitement ne contient ni normal pass ni SSAO. Son
-pipeline utilise bloom, tone mapping, grain, vignette et SMAA. Le mode classique
-recrée le normal pass, le SSAO et les réglages de bloom historiques ; le composer
-est reconstruit lors de la bascule.
+pipeline utilise bloom, tone mapping, contraste, grain, vignette et SMAA. Le
+champ fluorescent garde un socle sombre entre les panneaux, mais élargit et
+renforce nettement les nappes sous les néons. Le biome visuel `dim` conserve
+l’ancien étalonnage moderne plus sombre sans repasser par le bake classique.
+Les contacts sol/mur/plafond restent renforcés pour éviter un rendu uniformément
+éclairé. Le mode classique recrée le normal pass, le SSAO et les réglages de
+bloom historiques ; le composer est reconstruit lors de la bascule.
 
-`RussianStairwellGame` réutilise ce même `PostFX` et le même rig global jaune
-(hémisphère, rebond ambiant et clé directionnelle) que le niveau Backrooms. Ses
-néons, lampes d’appartement et éclairages extérieurs restent des sources locales.
-Le réglage moderne/classique reconstruit aussi son composer et applique les
-intensités globales correspondantes, sans recréer la scène statique.
+`RussianStairwellGame` réutilise ce même `PostFX`, la même palette et le même
+type de rig global (hémisphère, rebond ambiant et clé directionnelle) que le
+niveau Backrooms. Ses intensités restent volontairement nocturnes : les néons
+de la cage, l’éclairage commutable de l’appartement et les éclairages extérieurs
+sont les sources locales lisibles. Le profil moderne concentre la lumière sous
+les plafonniers et appliques, avec des remplissages froids plus faibles ; le
+profil classique garde des remplissages chauds plus larges et plus plats. Une
+clé lunaire et le lampadaire principal projettent les seules ombres dynamiques
+de cette scène statique. Le réglage moderne/classique reconfigure ces sources
+et reconstruit son composer sans recréer la scène.
+
+L’appartement démarre avec son plafonnier principal éteint. Une unique source
+à longue portée est alignée sur son diffuseur afin d’éclairer aussi l’entrée
+sans créer plusieurs halos au plafond. Un interrupteur raycasté sur la face
+intérieure du mur, à côté de la porte d’entrée, le commande et garde
+un petit repère non éclairé visible dans le noir. Quand il est coupé, les
+matériaux PBR propres à l’intérieur réduisent fortement leur albédo et leur
+émission afin que le rig global de la cage ne rende pas la pièce artificiellement
+claire ; les vitres transparentes et le repère de l’interrupteur restent lisibles.
+Les vitres de l’appartement utilisent un verre PBR très peu opaque, tone-mappé
+et soumis au fog nocturne comme celles du hall ; elles ne doivent jamais ajouter
+un voile blanc non éclairé sur le décor extérieur.
+Son état fait partie de
+`RussianStairwellSavePayload`; les anciennes sauvegardes sans ce champ sont
+relues avec la lumière éteinte.
+Les supports importés `Curtain` et `Curtain1` restent strictement statiques. Les
+toiles déjà partiellement déroulées juste dessous (`polySurface36` et
+`polySurface34`) sont raycastées directement avec l’action **interagir**.
+Chacune est réancrée sur son arête supérieure puis étirée verticalement jusqu’au
+bas de sa propre fenêtre ; leurs hauteurs ouvertes différentes produisent donc
+des facteurs de fermeture distincts. Aucun panneau ou matériau de remplacement
+n’est ajouté. L’échelle 1 restaure exactement la forme ouverte d’origine. Le
+snapshot conserve leurs deux états cibles ; une sauvegarde antérieure les
+recharge ouverts.
 
 `LightingMode` expose `modern` et `legacy` aux paramètres graphiques. Le mode
 `legacy` restaure le pipeline antérieur à `e6d7e6a` : bake CPU de deux lightmaps
@@ -212,7 +245,9 @@ La coque de l’appartement entre dans `PhysicsWorld.addTrimeshChunk()` après m
 à jour de ses matrices monde ; les meubles gardent des AABB économiques. Les
 deux familles sont indexées par clé et suivent le même nettoyage que les chunks
 procéduraux. La porte d’entrée possède son propre collider activé uniquement
-quand elle est complètement fermée.
+quand elle est complètement fermée. Son verrou intérieur est raycasté sur le
+mur côté appartement. Engagé, il conserve ce collider pendant une ouverture
+limitée à 5,5 % de la course, puis ramène automatiquement le vantail au bâti.
 
 La double porte importée du rez-de-chaussée reste statique et collidable, mais
 `HallExitInteraction` la raycast comme un portail. Un appui sur l’action
@@ -229,7 +264,9 @@ session courante et remplace la précédente. Elle est écrite à l’entrée d�
 niveau, toutes les 30 secondes jouées, au masquage ou à la fermeture de la page,
 et avant un retour confirmé au menu principal. Les
 snapshots Backrooms stockent le seed et une position locale à son chunk ; les
-snapshots russes gardent aussi l’état de la porte. Ne jamais sauvegarder la
+snapshots russes gardent aussi l’état de la porte, de son verrou et de
+l’éclairage de l’appartement. Les anciens états de porte sans champ `locked`
+sont relus déverrouillés. Ne jamais sauvegarder la
 position brute d’une chute : chaque runtime écrit le dernier ancrage sûr transmis
 par `PlayerController`.
 

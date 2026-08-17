@@ -7,8 +7,12 @@ const ZONE_EDGE_FEATHER = 0.72;
 const DARK_VISIBILITY_NEAR = 6.5;
 const DARK_VISIBILITY_FAR = 27;
 const LIGHT_FIELD_RESOLUTION = 96;
-const LIGHT_FIELD_BASE = 0.38;
+const LIGHT_FIELD_BASE = 0.22;
 const CONTACT_DISTANCE = 1.7;
+const STANDARD_LIGHT_POOL_MIN = 0.5;
+const STANDARD_LIGHT_POOL_MAX = 1.42;
+const DIM_LIGHT_POOL_MIN = 0.56;
+const DIM_LIGHT_POOL_MAX = 1.05;
 
 const BIOME_LIGHTING: Record<VisualBiome, {
   fluorescentTint: number;
@@ -16,6 +20,11 @@ const BIOME_LIGHTING: Record<VisualBiome, {
   biomeMix: number;
 }> = {
   yellow: {
+    fluorescentTint: 0xffefb8,
+    darknessColor: 0x050504,
+    biomeMix: 0.05,
+  },
+  dim: {
     fluorescentTint: 0xffefb8,
     darknessColor: 0x050504,
     biomeMix: 0.05,
@@ -42,9 +51,9 @@ interface SurfaceLightingProfile {
 }
 
 const DECOR_LIGHTING_PROFILE: SurfaceLightingProfile = {
-  litGain: 0.94,
-  darkFloor: 0.055,
-  fluorescentLift: 0.012,
+  litGain: 0.82,
+  darkFloor: 0.035,
+  fluorescentLift: 0.008,
   surfaceOffset: 0,
   proximityOcclusion: 0,
   verticalRelief: 0,
@@ -70,6 +79,8 @@ interface ZonalShaderUniforms {
   readonly chunkSize: THREE.IUniform<number>;
   readonly proximityOcclusion: THREE.IUniform<number>;
   readonly verticalRelief: THREE.IUniform<number>;
+  readonly lightPoolMin: THREE.IUniform<number>;
+  readonly lightPoolMax: THREE.IUniform<number>;
 }
 
 export interface ZonalLightingContext {
@@ -83,6 +94,8 @@ export interface ZonalLightingContext {
   readonly worldOffset: THREE.Vector3;
   readonly lightField: THREE.DataTexture;
   readonly chunkSize: number;
+  readonly lightPoolMin: number;
+  readonly lightPoolMax: number;
 }
 
 export interface ZonalMaterialSet {
@@ -138,6 +151,7 @@ export const shaderUnlitZones = (zones: readonly Rect[]): readonly Rect[] =>
  * (18 KiB per chunk at the current resolution), with no rays or occlusion bake.
  */
 export const createFluorescentLightField = (plan: WorldPlan): THREE.DataTexture => {
+  const preservesDimProfile = plan.visualBiome === 'dim';
   const pixelCount = LIGHT_FIELD_RESOLUTION * LIGHT_FIELD_RESOLUTION;
   const data = new Uint8Array(pixelCount * 2);
   for (let index = 0; index < pixelCount; index += 1) {
@@ -147,7 +161,9 @@ export const createFluorescentLightField = (plan: WorldPlan): THREE.DataTexture 
   const metresPerPixel = plan.size / LIGHT_FIELD_RESOLUTION;
   for (const light of plan.lights) {
     if (light.dead || light.level !== 0) continue;
-    const radius = THREE.MathUtils.clamp(7 + light.width * 1.6, 8, 11);
+    const radius = preservesDimProfile
+      ? THREE.MathUtils.clamp(7 + light.width * 1.6, 8, 11)
+      : THREE.MathUtils.clamp(8 + light.width * 1.6, 9, 12);
     const minX = Math.max(0, Math.floor((light.x - radius + halfSize) / metresPerPixel));
     const maxX = Math.min(
       LIGHT_FIELD_RESOLUTION - 1,
@@ -158,7 +174,9 @@ export const createFluorescentLightField = (plan: WorldPlan): THREE.DataTexture 
       LIGHT_FIELD_RESOLUTION - 1,
       Math.ceil((light.z + radius + halfSize) / metresPerPixel),
     );
-    const peak = THREE.MathUtils.clamp(0.72 + (light.intensity - 0.8) * 0.35, 0.7, 0.94);
+    const peak = preservesDimProfile
+      ? THREE.MathUtils.clamp(0.72 + (light.intensity - 0.8) * 0.35, 0.7, 0.94)
+      : THREE.MathUtils.clamp(0.8 + (light.intensity - 0.8) * 0.38, 0.78, 1);
     for (let zIndex = minZ; zIndex <= maxZ; zIndex += 1) {
       const z = (zIndex + 0.5) * metresPerPixel - halfSize;
       for (let xIndex = minX; xIndex <= maxX; xIndex += 1) {
@@ -308,6 +326,8 @@ export const createZonalLightingContext = (plan: WorldPlan): ZonalLightingContex
     worldOffset: new THREE.Vector3(),
     lightField: createFluorescentLightField(plan),
     chunkSize: plan.size,
+    lightPoolMin: biome === 'dim' ? DIM_LIGHT_POOL_MIN : STANDARD_LIGHT_POOL_MIN,
+    lightPoolMax: biome === 'dim' ? DIM_LIGHT_POOL_MAX : STANDARD_LIGHT_POOL_MAX,
   };
 };
 
@@ -335,6 +355,8 @@ const makeUniforms = (
     chunkSize: { value: context.chunkSize },
     proximityOcclusion: { value: profile.proximityOcclusion },
     verticalRelief: { value: profile.verticalRelief },
+    lightPoolMin: { value: context.lightPoolMin },
+    lightPoolMax: { value: context.lightPoolMax },
   };
 };
 
@@ -392,6 +414,8 @@ export const applyZonalLighting = (
         uniform float chunkSize;
         uniform float proximityOcclusion;
         uniform float verticalRelief;
+        uniform float lightPoolMin;
+        uniform float lightPoolMax;
         varying vec3 vZonalWorldPosition;
 
         float blackoutInfluence( const in vec2 point ) {
@@ -427,7 +451,7 @@ export const applyZonalLighting = (
         float fluorescentVariation = 1.0
           + (fluorescentBandA - 0.25) * 0.05
           + (fluorescentBandB - 0.25) * 0.035;
-        float poolLight = mix(0.72, 1.08, localExposure);
+        float poolLight = mix(lightPoolMin, lightPoolMax, localExposure);
         float surfaceLight = mix(litGain * fluorescentVariation * poolLight, darkFloor, blackout);
         outgoingLight *= surfaceLight;
         float wallHeight = max(0.1, zoneMaxY - 0.55);
@@ -440,7 +464,7 @@ export const applyZonalLighting = (
         float contactShade = clamp(
           localField.g * proximityOcclusion + verticalContact * verticalRelief,
           0.0,
-          0.18
+          0.28
         );
         outgoingLight *= 1.0 - contactShade * (1.0 - blackout);
         outgoingLight *= mix(vec3(1.0), fluorescentTint, biomeMix);
@@ -454,7 +478,7 @@ export const applyZonalLighting = (
       );
   };
   material.customProgramCacheKey = () =>
-    `zonal-fluorescent-lighting-v4-${supportsSurfaceNormal ? 'lit' : 'basic'}`;
+    `zonal-fluorescent-lighting-v5-${supportsSurfaceNormal ? 'lit' : 'basic'}`;
   material.needsUpdate = true;
 };
 
@@ -474,78 +498,146 @@ export const createZonalMaterialSet = (
   plan: WorldPlan,
 ): ZonalMaterialSet => {
   const context = createZonalLightingContext(plan);
-  const wall = withZonalLighting(source.wall, context, {
-    litGain: 1.12,
-    darkFloor: 0.085,
+  const dim = plan.visualBiome === 'dim';
+  const chooseProfile = (
+    standard: SurfaceLightingProfile,
+    preservedDim: SurfaceLightingProfile,
+  ): SurfaceLightingProfile => dim ? preservedDim : standard;
+  const wall = withZonalLighting(source.wall, context, chooseProfile({
+    litGain: 1.02,
+    darkFloor: 0.045,
     fluorescentLift: 0.012,
     surfaceOffset: 0.24,
     proximityOcclusion: 0,
-    verticalRelief: 0.065,
-  });
-  const plaster = withZonalLighting(source.plaster, context, {
-    litGain: 1.1,
-    darkFloor: 0.08,
+    verticalRelief: 0.12,
+  }, {
+    litGain: 0.96,
+    darkFloor: 0.045,
+    fluorescentLift: 0.009,
+    surfaceOffset: 0.24,
+    proximityOcclusion: 0,
+    verticalRelief: 0.12,
+  }));
+  const plaster = withZonalLighting(source.plaster, context, chooseProfile({
+    litGain: 1,
+    darkFloor: 0.042,
     fluorescentLift: 0.01,
     surfaceOffset: 0.24,
     proximityOcclusion: 0,
-    verticalRelief: 0.06,
-  });
-  const floor = withZonalLighting(source.floor, context, {
-    litGain: 0.92,
-    darkFloor: 0.065,
+    verticalRelief: 0.11,
+  }, {
+    litGain: 0.94,
+    darkFloor: 0.042,
+    fluorescentLift: 0.008,
+    surfaceOffset: 0.24,
+    proximityOcclusion: 0,
+    verticalRelief: 0.11,
+  }));
+  const floor = withZonalLighting(source.floor, context, chooseProfile({
+    litGain: 0.84,
+    darkFloor: 0.035,
     fluorescentLift: 0.006,
     surfaceOffset: 0,
-    proximityOcclusion: 0.12,
+    proximityOcclusion: 0.2,
     verticalRelief: 0,
-  });
-  const ceiling = withZonalLighting(source.ceiling, context, {
-    litGain: 1.12,
-    darkFloor: 0.075,
-    fluorescentLift: 0.02,
-    surfaceOffset: 0,
-    proximityOcclusion: 0.055,
-    verticalRelief: 0,
-  });
-  const baseboard = withZonalLighting(source.baseboard, context, {
-    litGain: 0.9,
-    darkFloor: 0.055,
-    fluorescentLift: 0.005,
-    surfaceOffset: 0.16,
-    proximityOcclusion: 0.04,
-    verticalRelief: 0.02,
-  });
-  const pitWall = withZonalLighting(source.pitWall, context, {
-    litGain: 0.54,
+  }, {
+    litGain: 0.76,
     darkFloor: 0.035,
+    fluorescentLift: 0.004,
+    surfaceOffset: 0,
+    proximityOcclusion: 0.2,
+    verticalRelief: 0,
+  }));
+  const ceiling = withZonalLighting(source.ceiling, context, chooseProfile({
+    litGain: 0.98,
+    darkFloor: 0.04,
+    fluorescentLift: 0.016,
+    surfaceOffset: 0,
+    proximityOcclusion: 0.09,
+    verticalRelief: 0,
+  }, {
+    litGain: 0.9,
+    darkFloor: 0.04,
+    fluorescentLift: 0.012,
+    surfaceOffset: 0,
+    proximityOcclusion: 0.09,
+    verticalRelief: 0,
+  }));
+  const baseboard = withZonalLighting(source.baseboard, context, chooseProfile({
+    litGain: 0.78,
+    darkFloor: 0.03,
+    fluorescentLift: 0.004,
+    surfaceOffset: 0.16,
+    proximityOcclusion: 0.08,
+    verticalRelief: 0.04,
+  }, {
+    litGain: 0.72,
+    darkFloor: 0.03,
+    fluorescentLift: 0.003,
+    surfaceOffset: 0.16,
+    proximityOcclusion: 0.08,
+    verticalRelief: 0.04,
+  }));
+  const pitWall = withZonalLighting(source.pitWall, context, chooseProfile({
+    litGain: 0.52,
+    darkFloor: 0.025,
     fluorescentLift: 0.004,
     surfaceOffset: 0.2,
     proximityOcclusion: 0,
     verticalRelief: 0.045,
-  });
-  const pitBottom = withZonalLighting(source.pitBottom, context, {
+  }, {
+    litGain: 0.46,
+    darkFloor: 0.025,
+    fluorescentLift: 0.003,
+    surfaceOffset: 0.2,
+    proximityOcclusion: 0,
+    verticalRelief: 0.045,
+  }));
+  const pitBottom = withZonalLighting(source.pitBottom, context, chooseProfile({
+    litGain: 0.2,
+    darkFloor: 0.018,
+    fluorescentLift: 0,
+    surfaceOffset: 0,
+    proximityOcclusion: 0.04,
+    verticalRelief: 0,
+  }, {
     litGain: 0.18,
     darkFloor: 0.018,
     fluorescentLift: 0,
     surfaceOffset: 0,
     proximityOcclusion: 0.04,
     verticalRelief: 0,
-  });
-  const metal = withZonalLighting(source.metal, context, {
-    litGain: 0.72,
-    darkFloor: 0.04,
+  }));
+  const metal = withZonalLighting(source.metal, context, chooseProfile({
+    litGain: 0.66,
+    darkFloor: 0.028,
     fluorescentLift: 0.006,
     surfaceOffset: 0.12,
     proximityOcclusion: 0.035,
     verticalRelief: 0,
-  });
-  const fixtureFrame = withZonalLighting(source.fixtureFrame, context, {
-    litGain: 1.04,
-    darkFloor: 0.07,
-    fluorescentLift: 0.008,
+  }, {
+    litGain: 0.58,
+    darkFloor: 0.028,
+    fluorescentLift: 0.004,
+    surfaceOffset: 0.12,
+    proximityOcclusion: 0.035,
+    verticalRelief: 0,
+  }));
+  const fixtureFrame = withZonalLighting(source.fixtureFrame, context, chooseProfile({
+    litGain: 0.98,
+    darkFloor: 0.04,
+    fluorescentLift: 0.01,
     surfaceOffset: 0.08,
     proximityOcclusion: 0,
     verticalRelief: 0.02,
-  });
+  }, {
+    litGain: 0.88,
+    darkFloor: 0.04,
+    fluorescentLift: 0.006,
+    surfaceOffset: 0.08,
+    proximityOcclusion: 0,
+    verticalRelief: 0.02,
+  }));
   const ownedMaterials = [
     wall,
     plaster,

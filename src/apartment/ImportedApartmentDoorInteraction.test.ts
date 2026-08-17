@@ -27,6 +27,9 @@ const makeInteraction = () => {
   pivot.updateMatrixWorld(true);
   const physics = new FakePhysics();
   const ui = { setInteraction: vi.fn() };
+  const lockTarget = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2));
+  lockTarget.position.set(-2, 0, 0);
+  const onLockChange = vi.fn();
   const collider: StaticCollider = {
     id: 'entrance-leaf',
     center: { x: 0, y: 0, z: 0 },
@@ -43,18 +46,43 @@ const makeInteraction = () => {
     collider,
     physics as unknown as PhysicsWorld,
     ui,
-    { chunkKey: 'entrance-door', openAngle: -Math.PI / 2 },
+    {
+      chunkKey: 'entrance-door',
+      openAngle: -Math.PI / 2,
+      lockTarget,
+      onLockChange,
+    },
   );
-  return { interaction, physics, pivot, ui };
+  return { interaction, physics, pivot, ui, lockTarget, onLockChange };
 };
 
 describe('ImportedApartmentDoorInteraction save state', () => {
+  it('opens with a smooth acceleration and settles cleanly at the target', () => {
+    const { interaction, pivot } = makeInteraction();
+    interaction.restoreState({ progress: 0, targetProgress: 1 });
+
+    interaction.update(1 / 60, new THREE.Vector3(4, 0, 4), new THREE.Vector3(0, 0, -1), false);
+    const firstStep = Math.abs(pivot.rotation.y);
+    interaction.update(1 / 60, new THREE.Vector3(4, 0, 4), new THREE.Vector3(0, 0, -1), false);
+    const secondStep = Math.abs(pivot.rotation.y) - firstStep;
+
+    expect(firstStep).toBeGreaterThan(0);
+    expect(secondStep).toBeGreaterThan(firstStep);
+
+    for (let frame = 0; frame < 90; frame += 1) {
+      interaction.update(1 / 60, new THREE.Vector3(4, 0, 4), new THREE.Vector3(0, 0, -1), false);
+    }
+    expect(pivot.rotation.y).toBeCloseTo(-Math.PI / 2, 5);
+    expect(interaction.getState()).toEqual({ progress: 1, targetProgress: 1, locked: false });
+    interaction.dispose();
+  });
+
   it('restores angle, animation target and collider ownership', () => {
     const { interaction, physics, pivot } = makeInteraction();
     expect(physics.chunks.has('entrance-door')).toBe(true);
 
     expect(interaction.restoreState({ progress: 0.4, targetProgress: 0 })).toBe(true);
-    expect(interaction.getState()).toEqual({ progress: 0.4, targetProgress: 0 });
+    expect(interaction.getState()).toEqual({ progress: 0.4, targetProgress: 0, locked: false });
     expect(pivot.rotation.y).toBeCloseTo(-Math.PI * 0.2);
     expect(physics.chunks.has('entrance-door')).toBe(false);
 
@@ -64,7 +92,7 @@ describe('ImportedApartmentDoorInteraction save state', () => {
       new THREE.Vector3(0, 0, -1),
       false,
     );
-    expect(interaction.getState()).toEqual({ progress: 0, targetProgress: 0 });
+    expect(interaction.getState()).toEqual({ progress: 0, targetProgress: 0, locked: false });
     expect(physics.chunks.has('entrance-door')).toBe(true);
 
     expect(interaction.restoreState({ progress: 0, targetProgress: 1 })).toBe(true);
@@ -85,7 +113,7 @@ describe('ImportedApartmentDoorInteraction save state', () => {
       { progress: 0.5, targetProgress: 1, extra: true },
     ]) {
       expect(interaction.restoreState(snapshot as never)).toBe(false);
-      expect(interaction.getState()).toEqual({ progress: 0, targetProgress: 0 });
+      expect(interaction.getState()).toEqual({ progress: 0, targetProgress: 0, locked: false });
       expect(pivot.rotation.y).toBe(initialAngle);
       expect(physics.chunks.has('entrance-door')).toBe(true);
     }
@@ -104,6 +132,57 @@ describe('ImportedApartmentDoorInteraction save state', () => {
     interaction.update(0, player, direction, true);
     expect(ui.setInteraction).toHaveBeenLastCalledWith('Fermer la porte');
     expect(ui.setInteraction.mock.calls.flat().join(' ')).not.toMatch(/\bE\b/);
+    interaction.dispose();
+  });
+
+  it('offers lock controls only from the apartment side and persists their state', () => {
+    const { interaction, ui, lockTarget, onLockChange } = makeInteraction();
+    lockTarget.position.set(0, 0, 1);
+    const player = new THREE.Vector3(-0.5, -0.73, 2);
+    const towardLock = new THREE.Vector3(0.5, 0, -1).normalize();
+
+    interaction.update(0, player, towardLock, true);
+    expect(ui.setInteraction).toHaveBeenLastCalledWith('Verrouiller');
+    expect(interaction.interact(player, towardLock, true)).toBe(true);
+    expect(interaction.getState()).toEqual({ progress: 0, targetProgress: 0, locked: true });
+    expect(onLockChange).toHaveBeenLastCalledWith(true);
+
+    interaction.update(0, player, towardLock, true);
+    expect(ui.setInteraction).toHaveBeenLastCalledWith('Déverrouiller');
+    expect(interaction.interact(
+      new THREE.Vector3(0.5, -0.73, 2),
+      new THREE.Vector3(-0.5, 0, -1).normalize(),
+      true,
+    )).toBe(true);
+    expect(interaction.isLocked()).toBe(true);
+    interaction.dispose();
+  });
+
+  it('hits the engaged lock briefly, returns closed and keeps the collider active', () => {
+    const { interaction, physics, pivot } = makeInteraction();
+    expect(interaction.setLocked(true)).toBe(true);
+    expect(interaction.interact(
+      new THREE.Vector3(0, -0.73, 2),
+      new THREE.Vector3(0, 0, -1),
+      true,
+    )).toBe(true);
+
+    let furthestAngle = 0;
+    for (let frame = 0; frame < 120; frame += 1) {
+      interaction.update(
+        1 / 60,
+        new THREE.Vector3(4, 0, 4),
+        new THREE.Vector3(0, 0, -1),
+        false,
+      );
+      furthestAngle = Math.max(furthestAngle, Math.abs(pivot.rotation.y));
+      expect(physics.chunks.has('entrance-door')).toBe(true);
+    }
+
+    expect(furthestAngle).toBeGreaterThan(0.04);
+    expect(furthestAngle).toBeLessThan(Math.PI * 0.04);
+    expect(pivot.rotation.y).toBeCloseTo(0, 5);
+    expect(interaction.getState()).toEqual({ progress: 0, targetProgress: 0, locked: true });
     interaction.dispose();
   });
 });

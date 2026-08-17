@@ -300,8 +300,10 @@ export const getInfiniteVisualBiome = (
   const roll = new SeededRandom(
     `${seed}::infinite-visual-biome:v${WRAPPER_VERSION}:${macroX}:${macroZ}`,
   ).float(0, 1);
-  if (roll < 0.8) return 'yellow';
-  return roll < 0.9 ? 'red' : 'white';
+  if (roll < 0.7) return 'yellow';
+  if (roll < 0.8) return 'dim';
+  if (roll < 0.9) return 'red';
+  return 'white';
 };
 
 const applyVisualBiome = (
@@ -310,7 +312,9 @@ const applyVisualBiome = (
   seed: string,
 ): void => {
   plan.visualBiome = visualBiome;
-  if (visualBiome === 'yellow') return;
+  // The dim biome deliberately keeps the regular yellow materials and light
+  // colours. Its identity comes from the modern zonal-lighting profile.
+  if (visualBiome === 'yellow' || visualBiome === 'dim') return;
 
   const palette = visualBiome === 'red'
     ? [0xff160d, 0xe30b08, 0xff3218, 0xc60808]

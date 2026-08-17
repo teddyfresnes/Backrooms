@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { StairwellMaterialSet } from './StairwellMaterials';
 import { APARTMENT_ENTRY_DOOR } from '../apartment/layout';
+import type { LightingMode } from '../render/LightingMode';
 import { SeededRandom } from '../world/SeededRandom';
+import type { StaticCollider } from '../world/types';
 import {
   batchStaticMeshes,
   disposeObject3D,
@@ -35,6 +37,35 @@ import {
   STAIRWELL_WINDOW_SILL,
   STAIRWELL_WINDOW_WIDTH,
 } from './layout';
+
+const colliderFromVisibleObject = (id: string, root: THREE.Object3D): StaticCollider | undefined => {
+  root.updateWorldMatrix(true, true);
+  const bounds = new THREE.Box3();
+  const point = new THREE.Vector3();
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const position = mesh.geometry.getAttribute('position');
+    if (!position) return;
+    for (let index = 0; index < position.count; index += 1) {
+      point.fromBufferAttribute(position, index).applyMatrix4(mesh.matrixWorld);
+      bounds.expandByPoint(point);
+    }
+  });
+  if (bounds.isEmpty()) return undefined;
+  const center = bounds.getCenter(new THREE.Vector3());
+  const size = bounds.getSize(new THREE.Vector3());
+  return {
+    id,
+    center: { x: center.x, y: center.y, z: center.z },
+    halfExtents: {
+      x: Math.max(0.025, size.x * 0.5),
+      y: Math.max(0.025, size.y * 0.5),
+      z: Math.max(0.025, size.z * 0.5),
+    },
+    kind: 'barrier',
+  };
+};
 
 interface RainDrop {
   x: number;
@@ -89,8 +120,55 @@ const STAIRWELL_SECOND_FLOOR_TABLE_MODEL_URL = '/assets/stairwell-furniture/sovi
 const WINDOW_RAIN_NORMAL_URL = '/assets/stairwell-window/raindrop-fx.png';
 const STAIRWELL_RANDOM_SEED = 'russian-stairwell-environment:v1';
 
+export interface StairwellLightingProfile {
+  readonly moonIntensity: number;
+  readonly moonColor: number;
+  readonly streetLampIntensity: number;
+  readonly streetLampColor: number;
+  readonly mainIntensity: number;
+  readonly mainColor: number;
+  readonly corridorFillIntensity: number;
+  readonly corridorFillColor: number;
+  readonly wallIntensity: number;
+  readonly wallColor: number;
+  readonly stairWashIntensity: number;
+  readonly stairWashColor: number;
+}
+
+export const STAIRWELL_LIGHTING_PROFILES: Record<LightingMode, StairwellLightingProfile> = {
+  modern: {
+    moonIntensity: 0.085,
+    moonColor: 0x7890a5,
+    streetLampIntensity: 4.2,
+    streetLampColor: 0xffc77d,
+    mainIntensity: 2.65,
+    mainColor: 0xfff0d6,
+    corridorFillIntensity: 0.26,
+    corridorFillColor: 0xb8ccd8,
+    wallIntensity: 1.45,
+    wallColor: 0xffefd5,
+    stairWashIntensity: 0.24,
+    stairWashColor: 0xadc2cf,
+  },
+  legacy: {
+    moonIntensity: 0.035,
+    moonColor: 0x5f6f7b,
+    streetLampIntensity: 2.6,
+    streetLampColor: 0xffa34f,
+    mainIntensity: 2.1,
+    mainColor: 0xffd9a3,
+    corridorFillIntensity: 0.72,
+    corridorFillColor: 0xffd8a0,
+    wallIntensity: 1.05,
+    wallColor: 0xffce91,
+    stairWashIntensity: 0.62,
+    stairWashColor: 0xffd7a2,
+  },
+};
+
 export class StairwellEnvironment {
   readonly group = new THREE.Group();
+  readonly furnitureColliders: StaticCollider[] = [];
   hallEntranceDoor?: THREE.Object3D;
   private readonly importedWindowTemplate?: THREE.Object3D;
   private readonly importedEntranceDoorTemplate?: THREE.Object3D;
@@ -104,6 +182,12 @@ export class StairwellEnvironment {
   private readonly rainDrops: RainDrop[] = [];
   private readonly rainZones: RainZone[] = [];
   private readonly windowRainShaders: WindowRainShaderState[] = [];
+  private moonLight?: THREE.DirectionalLight;
+  private streetLampLight?: THREE.SpotLight;
+  private readonly mainLights: THREE.PointLight[] = [];
+  private readonly corridorFillLights: THREE.PointLight[] = [];
+  private readonly wallLights: THREE.PointLight[] = [];
+  private readonly stairWashLights: THREE.PointLight[] = [];
   private readonly cloudGroups: Array<{ group: THREE.Group; baseX: number; drift: number; phase: number }> = [];
   private readonly skyRandom = new SeededRandom(STAIRWELL_RANDOM_SEED).fork('sky');
   private readonly cloudRandom = new SeededRandom(STAIRWELL_RANDOM_SEED).fork('cloud');
@@ -134,6 +218,7 @@ export class StairwellEnvironment {
     this.buildExteriorDoomer();
     this.buildLighting();
     batchStaticMeshes(this.group);
+    this.configureExteriorShadowCasters();
   }
 
   private cloneStandardMaterial(
@@ -177,9 +262,9 @@ export class StairwellEnvironment {
 
   private createRainMaterial(): THREE.LineBasicMaterial {
     const material = new THREE.LineBasicMaterial({
-      color: 0xa8bfd3,
+      color: 0x8296a8,
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.24,
       depthWrite: false,
       toneMapped: false,
     });
@@ -330,17 +415,7 @@ vec3 windowRainSurface(vec2 uv) {
           '#include <map_fragment>',
           `#include <map_fragment>
 vec3 windowRain = windowRainSurface(vWindowRainUv);
-diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.04 + vec3(0.01), windowRain.z * 0.08);`,
-        )
-        .replace(
-          '#include <roughnessmap_fragment>',
-          `#include <roughnessmap_fragment>
-roughnessFactor = mix(roughnessFactor, 0.018, windowRain.z * 0.62);`,
-        )
-        .replace(
-          '#include <normal_fragment_maps>',
-          `#include <normal_fragment_maps>
-normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
+diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
         );
     };
 
@@ -800,9 +875,6 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
       targetZ - scaledCenter.z,
     );
 
-    let glassMaterialIndex = 0;
-    const rainSeed = [...name].reduce((hash, char) => ((hash * 33) ^ char.charCodeAt(0)) >>> 0, 5381) % 997;
-
     window.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -810,32 +882,23 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
       mesh.receiveShadow = false;
       mesh.frustumCulled = true;
       const tuneMaterial = (material: THREE.Material): THREE.Material => {
-        const clone = this.cloneImportedMaterial(material);
-        const materialName = (clone.name ?? '').toLowerCase();
+        const materialName = (material.name ?? '').toLowerCase();
         const objectName = (object.name ?? '').toLowerCase();
         if (materialName.includes('glass') || objectName.includes('glass')) {
-          clone.transparent = true;
-          clone.opacity = 0.025;
-          clone.depthWrite = false;
-          clone.depthTest = true;
-          clone.side = THREE.DoubleSide;
-          if (clone instanceof THREE.MeshStandardMaterial) {
-            clone.color = new THREE.Color(0xffffff);
-            clone.roughness = 0.02;
-            clone.metalness = 0;
-            if (clone instanceof THREE.MeshPhysicalMaterial) {
-              // Screen-space transmission turns black with this post-processing pipeline.
-              // Plain low alpha keeps the exterior and its rain directly visible instead.
-              clone.transmission = 0;
-              clone.thickness = 0;
-            }
-            this.installWindowRainShader(clone, rainSeed * 0.071 + glassMaterialIndex * 13.37);
-            glassMaterialIndex += 1;
-          }
-        } else {
-          clone.depthWrite = true;
-          clone.depthTest = true;
+          return this.createExtraBasicMaterial(`${name}-reflection-free-glass`, {
+            color: 0x000000,
+            transparent: true,
+            opacity: 0.004,
+            depthWrite: false,
+            depthTest: true,
+            side: THREE.DoubleSide,
+            toneMapped: true,
+            fog: false,
+          });
         }
+        const clone = this.cloneImportedMaterial(material);
+        clone.depthWrite = true;
+        clone.depthTest = true;
         clone.needsUpdate = true;
         return clone;
       };
@@ -945,6 +1008,8 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
     });
 
     this.group.add(table);
+    const collider = colliderFromVisibleObject('second-floor-window-table', table);
+    if (collider) this.furnitureColliders.push(collider);
   }
 
   private buildEntrance(wallFaceZ: number): void {
@@ -1120,40 +1185,40 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
 
   private buildExteriorDoomer(): void {
     const wallFaceZ = STAIRWELL_BOUNDS.minZ - 0.02;
-    const fogTint = 0x5d666f;
+    const fogTint = 0x242c33;
 
     const asphalt = this.cloneStandardMaterial(this.materials.ceiling, 'exterior-asphalt', {
-      color: new THREE.Color(0x23292f),
+      color: new THREE.Color(0x10151a),
       roughness: 0.93,
       metalness: 0.02,
       normalScale: new THREE.Vector2(0.28, 0.28),
     });
     const asphaltWet = this.cloneStandardMaterial(asphalt, 'exterior-asphalt-wet', {
-      color: new THREE.Color(0x1a2026),
+      color: new THREE.Color(0x090d11),
       roughness: 0.42,
       metalness: 0.08,
       normalScale: new THREE.Vector2(0.24, 0.24),
     });
     const sidewalk = this.cloneStandardMaterial(this.materials.ceiling, 'exterior-sidewalk', {
-      color: new THREE.Color(0x676b6e),
+      color: new THREE.Color(0x30363b),
       roughness: 0.88,
       metalness: 0,
       normalScale: new THREE.Vector2(0.18, 0.18),
     });
     const facade = this.cloneStandardMaterial(this.materials.upperPlaster, 'exterior-facade', {
-      color: new THREE.Color(0x697177),
+      color: new THREE.Color(0x2f383f),
       roughness: 0.95,
       metalness: 0,
       normalScale: new THREE.Vector2(0.14, 0.14),
     });
     const facadeAccent = this.cloneStandardMaterial(this.materials.upperPlaster, 'exterior-facade-accent', {
-      color: new THREE.Color(0x596168),
+      color: new THREE.Color(0x252d33),
       roughness: 0.97,
       metalness: 0,
       normalScale: new THREE.Vector2(0.1, 0.1),
     });
     const distantFacade = this.cloneStandardMaterial(this.materials.upperPlaster, 'exterior-distant-facade', {
-      color: new THREE.Color(0x465059),
+      color: new THREE.Color(0x182027),
       roughness: 0.98,
       metalness: 0,
       normalScale: new THREE.Vector2(0.06, 0.06),
@@ -1163,28 +1228,28 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
       { color: 0x111519, fog: true },
     );
     const roof = this.cloneStandardMaterial(this.materials.frameMetal, 'exterior-roof', {
-      color: new THREE.Color(0x52585d),
+      color: new THREE.Color(0x222a30),
       roughness: 0.84,
       metalness: 0.14,
       normalScale: new THREE.Vector2(0.08, 0.08),
     });
     const wetMetal = this.cloneStandardMaterial(this.materials.frameMetal, 'exterior-wet-metal', {
-      color: new THREE.Color(0x70767b),
+      color: new THREE.Color(0x30383e),
       roughness: 0.58,
       metalness: 0.42,
       normalScale: new THREE.Vector2(0.12, 0.12),
     });
     const puddle = this.createExtraStandardMaterial('exterior-puddle', {
-      color: 0x1a2025,
+      color: 0x080c10,
       roughness: 0.09,
       metalness: 0.06,
       transparent: true,
       opacity: 0.92,
     });
     const darkWindow = this.createExtraStandardMaterial('exterior-window-dark', {
-      color: 0x515a61,
-      emissive: 0x0f1418,
-      emissiveIntensity: 0.16,
+      color: 0x1a2228,
+      emissive: 0x05080a,
+      emissiveIntensity: 0.08,
       roughness: 0.08,
       metalness: 0.05,
     });
@@ -1211,18 +1276,11 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
       windowMaterial.polygonOffsetUnits = -2;
       windowMaterial.needsUpdate = true;
     }
-    const lampGlow = this.createExtraBasicMaterial('exterior-lamp-glow', {
-      color: 0xf0cf96,
-      transparent: true,
-      opacity: 0.9,
-      toneMapped: false,
-      depthWrite: false,
-    });
     const hazeMaterial = this.createExtraBasicMaterial('exterior-fog-card', {
       color: fogTint,
       transparent: true,
-      opacity: 0.17,
-      toneMapped: false,
+      opacity: 0.11,
+      toneMapped: true,
       depthWrite: false,
       side: THREE.DoubleSide,
     });
@@ -1506,9 +1564,9 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
     const texture = this.createOvercastSkyTexture();
     const material = new THREE.MeshBasicMaterial({
       map: texture,
-      color: 0x7e8a93,
+      color: 0x2d3943,
       side: THREE.BackSide,
-      toneMapped: false,
+      toneMapped: true,
       fog: false,
     });
     material.name = 'overcast-night-skydome';
@@ -1535,9 +1593,9 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
     if (!ctx) throw new Error('Canvas 2D indisponible pour le skydome extérieur.');
 
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, '#21272c');
-    gradient.addColorStop(0.42, '#2c3339');
-    gradient.addColorStop(1, '#394148');
+    gradient.addColorStop(0, '#080c10');
+    gradient.addColorStop(0.42, '#10171d');
+    gradient.addColorStop(1, '#182229');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -1711,8 +1769,6 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
     this.rainGeometry = new THREE.BufferGeometry();
     this.rainGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const material = this.createRainMaterial();
-    material.color.set(0xc7d2d8);
-    material.opacity = 0.3;
     this.rain = new THREE.LineSegments(this.rainGeometry, material);
     this.rain.name = 'doomer-rain-lines';
     this.rain.frustumCulled = false;
@@ -1746,11 +1802,49 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
   }
 
   private buildLighting(): void {
-    const streetLamp = new THREE.PointLight(0xffca82, 1.35, 14, 2);
+    const profile = STAIRWELL_LIGHTING_PROFILES.modern;
+    const moonTarget = new THREE.Object3D();
+    moonTarget.name = 'exterior-moon-shadow-target';
+    moonTarget.position.set(0, 0, -27);
+    const moon = new THREE.DirectionalLight(profile.moonColor, profile.moonIntensity);
+    moon.name = 'exterior-night-moon-key';
+    moon.position.set(-18, 28, 4);
+    moon.target = moonTarget;
+    moon.castShadow = true;
+    moon.shadow.mapSize.set(1024, 1024);
+    moon.shadow.camera.near = 1;
+    moon.shadow.camera.far = 100;
+    moon.shadow.camera.left = -42;
+    moon.shadow.camera.right = 42;
+    moon.shadow.camera.top = 42;
+    moon.shadow.camera.bottom = -42;
+    moon.shadow.bias = -0.00035;
+    moon.shadow.normalBias = 0.025;
+    this.moonLight = moon;
+    this.group.add(moonTarget, moon);
+
+    const streetLampTarget = new THREE.Object3D();
+    streetLampTarget.name = 'street-lamp-shadow-target';
+    streetLampTarget.position.set(5.1, 0, -10.6);
+    const streetLamp = new THREE.SpotLight(
+      profile.streetLampColor,
+      profile.streetLampIntensity,
+      18,
+      Math.PI * 0.34,
+      0.62,
+      1.7,
+    );
     streetLamp.name = 'street-lamp-light';
-    streetLamp.position.set(4.42, 4.26, -8.2);
-    streetLamp.castShadow = false;
-    this.group.add(streetLamp);
+    streetLamp.position.set(5.07, 4.72, -8.1);
+    streetLamp.target = streetLampTarget;
+    streetLamp.castShadow = true;
+    streetLamp.shadow.mapSize.set(512, 512);
+    streetLamp.shadow.camera.near = 0.4;
+    streetLamp.shadow.camera.far = 18;
+    streetLamp.shadow.bias = -0.0005;
+    streetLamp.shadow.normalBias = 0.02;
+    this.streetLampLight = streetLamp;
+    this.group.add(streetLampTarget, streetLamp);
 
     for (let level = 0; level < STAIRWELL_LEVEL_COUNT; level += 1) {
       const ceilingBottom = level < STAIRWELL_LEVEL_COUNT - 1
@@ -1758,16 +1852,23 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
         : STAIRWELL_ROOF_Y;
       this.addCeilingFixture(`main-fixture-${level}`, ceilingBottom - 0.024, -2.35);
 
-      const mainLight = new THREE.PointLight(0xfbe7c4, 2.2, 9.4, 2);
+      const mainLight = new THREE.PointLight(profile.mainColor, profile.mainIntensity, 9.4, 2);
       mainLight.position.set(0, ceilingBottom - 0.17, -2.35);
       mainLight.name = `main-fixture-light-${level}`;
       mainLight.castShadow = false;
+      this.mainLights.push(mainLight);
       this.group.add(mainLight);
 
-      const corridorFill = new THREE.PointLight(0xf3e5cc, 0.6, 10.5, 2);
+      const corridorFill = new THREE.PointLight(
+        profile.corridorFillColor,
+        profile.corridorFillIntensity,
+        10.5,
+        2,
+      );
       corridorFill.position.set(0, ceilingBottom - 0.12, 0.7);
       corridorFill.name = `main-fixture-fill-${level}`;
       corridorFill.castShadow = false;
+      this.corridorFillLights.push(corridorFill);
       this.group.add(corridorFill);
     }
 
@@ -1775,18 +1876,71 @@ normal = normalize(normal + vec3(windowRain.xy * 0.16, 0.0));`,
       const y = midLandingY(level) + 2.02;
       this.addNorthWallFixture(`mid-fixture-${level}`, y);
 
-      const wallLight = new THREE.PointLight(0xf6e4c2, 1.18, 6.8, 2);
+      const wallLight = new THREE.PointLight(profile.wallColor, profile.wallIntensity, 6.8, 2);
       wallLight.position.set(0, y - 0.02, STAIRWELL_BOUNDS.maxZ - 0.64);
       wallLight.name = `mid-fixture-light-${level}`;
       wallLight.castShadow = false;
+      this.wallLights.push(wallLight);
       this.group.add(wallLight);
 
-      const stairWash = new THREE.PointLight(0xe9dbc0, 0.5, 7.6, 2);
+      const stairWash = new THREE.PointLight(
+        profile.stairWashColor,
+        profile.stairWashIntensity,
+        7.6,
+        2,
+      );
       stairWash.position.set(0, y - 0.28, 1.1);
       stairWash.name = `mid-fixture-stair-wash-${level}`;
       stairWash.castShadow = false;
+      this.stairWashLights.push(stairWash);
       this.group.add(stairWash);
     }
+  }
+
+  setLightingMode(mode: LightingMode): void {
+    const profile = STAIRWELL_LIGHTING_PROFILES[mode];
+    const apply = (
+      lights: readonly THREE.Light[],
+      intensity: number,
+      color: number,
+    ): void => {
+      for (const light of lights) {
+        light.intensity = intensity;
+        light.color.setHex(color);
+      }
+    };
+    if (this.moonLight) apply([this.moonLight], profile.moonIntensity, profile.moonColor);
+    if (this.streetLampLight) {
+      apply([this.streetLampLight], profile.streetLampIntensity, profile.streetLampColor);
+    }
+    apply(this.mainLights, profile.mainIntensity, profile.mainColor);
+    apply(
+      this.corridorFillLights,
+      profile.corridorFillIntensity,
+      profile.corridorFillColor,
+    );
+    apply(this.wallLights, profile.wallIntensity, profile.wallColor);
+    apply(this.stairWashLights, profile.stairWashIntensity, profile.stairWashColor);
+  }
+
+  private configureExteriorShadowCasters(): void {
+    const casterMaterials = new Set([
+      'exterior-facade',
+      'exterior-facade-accent',
+      'exterior-distant-facade',
+      'exterior-roof',
+      'exterior-wet-metal',
+      'exterior-tree',
+      'apartment-view-building-black',
+    ]);
+    this.group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      if (materials.some((material) => casterMaterials.has(material.name))) {
+        mesh.castShadow = true;
+      }
+    });
   }
 
   private addCeilingFixture(name: string, y: number, z: number): void {

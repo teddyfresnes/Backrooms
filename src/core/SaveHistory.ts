@@ -17,12 +17,15 @@ export type GameSaveExperienceId = 'russian-stairwell' | 'backrooms';
 export interface GameSaveDoorState {
   readonly progress: number;
   readonly targetProgress: 0 | 1;
+  readonly locked?: boolean;
 }
 
 export interface RussianStairwellSavePayload {
   readonly safePosition: Readonly<GameSaveVec3>;
   readonly quaternion: Readonly<GameSaveQuaternion>;
   readonly entranceDoor: Readonly<GameSaveDoorState>;
+  readonly apartmentLightOn: boolean;
+  readonly windowBlindsOpen?: readonly [boolean, boolean];
 }
 
 export interface BackroomsSavePayload {
@@ -211,28 +214,62 @@ const sanitizePlayTime = (value: unknown): number | null =>
   isFiniteNumber(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER ? value : null;
 
 const sanitizeDoorState = (value: unknown): GameSaveDoorState | null => {
-  if (!isRecord(value) || !hasExactKeys(value, ['progress', 'targetProgress'])) return null;
+  if (!isRecord(value)) return null;
+  const hasCurrentKeys = hasExactKeys(value, ['progress', 'targetProgress', 'locked']);
+  const hasLegacyKeys = hasExactKeys(value, ['progress', 'targetProgress']);
+  if (!hasCurrentKeys && !hasLegacyKeys) return null;
   if (
     !isFiniteNumber(value.progress)
     || value.progress < 0
     || value.progress > 1
     || (value.targetProgress !== 0 && value.targetProgress !== 1)
+    || (hasCurrentKeys && typeof value.locked !== 'boolean')
   ) return null;
   return Object.freeze({
     progress: value.progress,
     targetProgress: value.targetProgress,
+    locked: hasCurrentKeys ? value.locked as boolean : false,
   });
 };
 
 const sanitizeRussianPayload = (value: unknown): RussianStairwellSavePayload | null => {
-  if (!isRecord(value) || !hasExactKeys(value, ['safePosition', 'quaternion', 'entranceDoor'])) {
+  if (!isRecord(value)) return null;
+  const hasCurrentKeys = hasExactKeys(
+    value,
+    ['safePosition', 'quaternion', 'entranceDoor', 'apartmentLightOn', 'windowBlindsOpen'],
+  );
+  const hasLightKeys = hasExactKeys(
+    value,
+    ['safePosition', 'quaternion', 'entranceDoor', 'apartmentLightOn'],
+  );
+  const hasLegacyKeys = hasExactKeys(value, ['safePosition', 'quaternion', 'entranceDoor']);
+  if (!hasCurrentKeys && !hasLightKeys && !hasLegacyKeys) {
     return null;
   }
   const safePosition = sanitizePosition(value.safePosition);
   const quaternion = sanitizeQuaternion(value.quaternion);
   const entranceDoor = sanitizeDoorState(value.entranceDoor);
-  if (!safePosition || !quaternion || !entranceDoor) return null;
-  return Object.freeze({ safePosition, quaternion, entranceDoor });
+  const apartmentLightOn = hasCurrentKeys || hasLightKeys ? value.apartmentLightOn : false;
+  const windowBlindsOpen = hasCurrentKeys ? value.windowBlindsOpen : [true, true];
+  if (
+    !safePosition
+    || !quaternion
+    || !entranceDoor
+    || typeof apartmentLightOn !== 'boolean'
+    || !Array.isArray(windowBlindsOpen)
+    || windowBlindsOpen.length !== 2
+    || windowBlindsOpen.some((open) => typeof open !== 'boolean')
+  ) return null;
+  return Object.freeze({
+    safePosition,
+    quaternion,
+    entranceDoor,
+    apartmentLightOn,
+    windowBlindsOpen: Object.freeze([
+      windowBlindsOpen[0] as boolean,
+      windowBlindsOpen[1] as boolean,
+    ]) as readonly [boolean, boolean],
+  });
 };
 
 const sanitizeChunk = (value: unknown): BackroomsSavePayload['chunk'] | null => {

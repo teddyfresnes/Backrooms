@@ -42,6 +42,7 @@ const readHistory = (): readonly GameSaveEntry[] => {
         safePosition: legacy.player.safePosition,
         quaternion: legacy.player.quaternion,
         entranceDoor: legacy.entranceDoor,
+        apartmentLightOn: false,
       },
     }, new Date(legacy.savedAt));
     return listGameSaves(window.localStorage);

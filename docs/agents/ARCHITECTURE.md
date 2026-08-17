@@ -13,8 +13,8 @@ src/main.ts
   ├─ import dynamique de RussianStairwellGame
       ├─ StairwellEnvironment + ImportedApartmentEnvironment
       ├─ PhysicsWorld (plan statique + trimesh de l’appartement)
-      ├─ PlayerController + porte interactive
-      ├─ SaveHistory (niveau, pose, porte et temps de jeu)
+      ├─ PlayerController + porte, verrou, interrupteur et stores interactifs
+      ├─ SaveHistory (niveau, pose, porte/verrou, lumière, stores et temps de jeu)
       └─ HallExitInteraction -- E sur la porte du RDC ─┐
                                                        ↓
   └─ import dynamique de Game (labyrinthe procédural précédent)

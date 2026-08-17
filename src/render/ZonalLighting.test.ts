@@ -111,16 +111,22 @@ describe('zonal fluorescent materials', () => {
       level: 0,
     });
     const field = createFluorescentLightField(plan);
+    plan.visualBiome = 'dim';
+    const dimField = createFluorescentLightField(plan);
     const pixels = field.image.data as Uint8Array;
+    const dimPixels = dimField.image.data as Uint8Array;
     const exposure = pixels.filter((_, index) => index % 2 === 0);
+    const dimExposure = dimPixels.filter((_, index) => index % 2 === 0);
     const contact = pixels.filter((_, index) => index % 2 === 1);
     expect(field.image.width).toBe(96);
     expect(field.image.height).toBe(96);
     expect(field.format).toBe(THREE.RGFormat);
     expect(Math.max(...exposure)).toBeGreaterThan(Math.min(...exposure));
+    expect(Math.max(...exposure)).toBeGreaterThan(Math.max(...dimExposure));
     expect(Math.max(...contact)).toBeGreaterThan(Math.min(...contact));
     expect(field.generateMipmaps).toBe(false);
     field.dispose();
+    dimField.dispose();
   });
 
   it('removes lightmaps and installs a world-anchored, story-gated shader', () => {
@@ -144,6 +150,31 @@ describe('zonal fluorescent materials', () => {
     expect(shader.fragmentShader).toContain('storyMask');
     expect(shader.fragmentShader).toContain('blackoutInfluence');
     expect(shader.fragmentShader).not.toContain('lightMapTexel');
+    expect(shader.fragmentShader).toContain('mix(lightPoolMin, lightPoolMax, localExposure)');
+    expect((shader.uniforms.lightPoolMin as THREE.IUniform<number>).value).toBeCloseTo(0.5);
+    expect((shader.uniforms.lightPoolMax as THREE.IUniform<number>).value).toBeCloseTo(1.42);
+    expect((shader.uniforms.litGain as THREE.IUniform<number>).value).toBeCloseTo(1.02);
+    expect((shader.uniforms.verticalRelief as THREE.IUniform<number>).value).toBeCloseTo(0.12);
+
+    created.ownedMaterials.forEach((material) => material.dispose());
+    Object.values(source).forEach((material) => material.dispose());
+  });
+
+  it('preserves the previous darker modern calibration in the rare dim biome', () => {
+    const source = testMaterials();
+    const created = createZonalMaterialSet(source, planWithZones([], 'dim'));
+    const wall = created.materials.wall;
+    const shader = {
+      uniforms: {},
+      vertexShader: '#include <common>\n#include <begin_vertex>',
+      fragmentShader: '#include <common>\n#include <opaque_fragment>',
+    } as Parameters<typeof wall.onBeforeCompile>[0];
+    wall.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+
+    expect((shader.uniforms.lightPoolMin as THREE.IUniform<number>).value).toBeCloseTo(0.56);
+    expect((shader.uniforms.lightPoolMax as THREE.IUniform<number>).value).toBeCloseTo(1.05);
+    expect((shader.uniforms.litGain as THREE.IUniform<number>).value).toBeCloseTo(0.96);
+    expect((shader.uniforms.fluorescentLift as THREE.IUniform<number>).value).toBeCloseTo(0.009);
 
     created.ownedMaterials.forEach((material) => material.dispose());
     Object.values(source).forEach((material) => material.dispose());

@@ -1342,22 +1342,14 @@ const distantCeilingPatternScale = (
 const createElevatedCeilingMaterial = (
   source: THREE.MeshStandardMaterial,
   name: string,
-  minimumEmissiveIntensity: number,
 ): THREE.MeshStandardMaterial => {
-  const legacyBakedSource = source.lightMap !== null;
   const material = source.clone();
   material.name = name;
-  // Preserve the real tile albedo; giant ceilings use a stronger emissive lift
-  // so the grid remains readable at distance.
+  // Elevated ceilings must react to light exactly like the ordinary ceiling.
+  // Only the double-sided rendering differs because these planes can also be
+  // seen from connecting shafts and upper passages.
   material.lightMap = null;
-  if (legacyBakedSource) material.fog = false;
   material.side = THREE.DoubleSide;
-  if (material.map) material.emissiveMap = material.map;
-  if (material.emissive.getHex() === 0) material.emissive.setHex(0x8a823c);
-  material.emissiveIntensity = Math.max(
-    material.emissiveIntensity,
-    minimumEmissiveIntensity,
-  );
   material.onBeforeCompile = source.onBeforeCompile;
   material.customProgramCacheKey = source.customProgramCacheKey;
   material.needsUpdate = true;
@@ -1451,12 +1443,10 @@ export class WorldView {
     this.elevatedCeilingMaterial = createElevatedCeilingMaterial(
       this.materials.ceiling,
       'elevated-tiled-ceiling',
-      0.22,
     );
     this.distantCeilingMaterial = createElevatedCeilingMaterial(
       this.materials.ceiling,
       'distant-tiled-ceiling',
-      0.3,
     );
     this.previewFixtureGlowMaterial = this.materials.fixtureGlow.clone();
     this.previewFixtureGlowMaterial.name = 'preview-fluorescent-diffuser';
