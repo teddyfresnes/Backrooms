@@ -1,5 +1,6 @@
 import type { DiagnosticsSnapshot } from '../core/Diagnostics';
 import type { GameSaveExperienceId, GameSaveSummary } from '../core/SaveHistory';
+import '../wardrobe/developer.css';
 import {
   controlCodeFromKeyboardEvent,
   controlActions,
@@ -54,8 +55,15 @@ export interface ConsoleSubmitResult {
   messages: ConsoleMessage[];
 }
 
-type MenuPage = 'home' | 'saves' | 'settings';
-type SettingsCategory = 'graphics' | 'audio' | 'game' | 'controls';
+type MenuPage = 'home' | 'saves' | 'wardrobe' | 'settings';
+type SettingsCategory = 'graphics' | 'audio' | 'game' | 'controls' | 'developer';
+
+interface WardrobePreviewProgress {
+  completed: number;
+  total: number;
+  current: string;
+  percent: number;
+}
 
 const experienceLabelById: Readonly<Record<GameSaveExperienceId, string>> = {
   backrooms: 'Backrooms',
@@ -134,6 +142,20 @@ export class ExperienceUI {
   private readonly consoleHint: HTMLElement;
   private readonly diagnosticsPanel: HTMLElement;
   private readonly diagnosticsContent: HTMLElement;
+  private readonly developerGate: HTMLElement;
+  private readonly developerConsole: HTMLElement;
+  private readonly developerCode: HTMLInputElement;
+  private readonly developerUnlock: HTMLButtonElement;
+  private readonly developerCodeError: HTMLElement;
+  private readonly developerLock: HTMLButtonElement;
+  private readonly developerDownload: HTMLButtonElement;
+  private readonly developerProgress: HTMLElement;
+  private readonly developerProgressCurrent: HTMLElement;
+  private readonly developerProgressPercent: HTMLOutputElement;
+  private readonly developerProgressTrack: HTMLElement;
+  private readonly developerProgressFill: HTMLElement;
+  private readonly developerProgressFoot: HTMLElement;
+  private readonly developerExporter: HTMLElement;
   private readonly actions: UIActions;
   private settings: GameSettings;
   private activePage: MenuPage = 'home';
@@ -152,6 +174,10 @@ export class ExperienceUI {
   private historyDraft = '';
   private chatFadeTimer?: number;
   private saveStatusTimer?: number;
+  private developerCodeErrorTimer?: number;
+  private developerExportRunning = false;
+  private developerPreviewCompleted = 0;
+  private developerPreviewTotal = 0;
   private pendingBinding?: ControlAction;
   private pendingBindingButton?: HTMLButtonElement;
   private pendingConfirmation?: () => void;
@@ -203,6 +229,9 @@ export class ExperienceUI {
                   <button class="menu-action main-menu-only" type="button" data-ui="regenerate">
                     <span>Nouvelle partie</span>
                   </button>
+                  <button class="menu-action main-menu-only" type="button" data-open-page="wardrobe">
+                    <span>Garde-robe</span>
+                  </button>
                   <button class="menu-action main-menu-only" type="button" data-open-page="settings">
                     <span>Paramètres</span>
                   </button>
@@ -215,6 +244,9 @@ export class ExperienceUI {
                   </div>
                   <button class="menu-action pause-only" type="button" data-ui="save-game" hidden>
                     <span>Sauvegarder</span>
+                  </button>
+                  <button class="menu-action pause-only" type="button" data-open-page="wardrobe" hidden>
+                    <span>Garde-robe</span>
                   </button>
                   <button class="menu-action pause-only" type="button" data-open-page="settings" hidden>
                     <span>Paramètres</span>
@@ -247,6 +279,18 @@ export class ExperienceUI {
               </div>
             </section>
 
+            <section class="menu-page wardrobe-menu-page" data-page="wardrobe" aria-labelledby="wardrobe-title" aria-hidden="true">
+              <header class="page-heading">
+                <div>
+                  <button class="text-button" type="button" data-back>Retour</button>
+                  <h2 id="wardrobe-title">Garde-robe</h2>
+                </div>
+              </header>
+              <div class="wardrobe-page-host">
+                <backrooms-wardrobe data-ui="wardrobe-host"></backrooms-wardrobe>
+              </div>
+            </section>
+
             <section class="menu-page" data-page="settings" aria-labelledby="settings-title" aria-hidden="true">
               <header class="page-heading">
                 <div>
@@ -262,6 +306,7 @@ export class ExperienceUI {
                   <button id="settings-tab-audio" type="button" role="tab" aria-controls="settings-panel-audio" aria-selected="false" data-settings-category="audio">Audio</button>
                   <button id="settings-tab-game" type="button" role="tab" aria-controls="settings-panel-game" aria-selected="false" data-settings-category="game">Jeu</button>
                   <button id="settings-tab-controls" type="button" role="tab" aria-controls="settings-panel-controls" aria-selected="false" data-settings-category="controls">Commandes</button>
+                  <button id="settings-tab-developer" type="button" role="tab" aria-controls="settings-panel-developer" aria-selected="false" data-settings-category="developer">Développeur</button>
                 </nav>
 
                 <div class="settings-list">
@@ -328,6 +373,48 @@ export class ExperienceUI {
                     </div>
                     <p class="binding-help" data-ui="binding-help">Sélectionnez une commande, puis appuyez sur une touche.</p>
                     <div class="bindings-grid">${bindingRows}</div>
+                  </fieldset>
+
+                  <fieldset id="settings-panel-developer" class="settings-card developer-settings" data-settings-panel="developer" role="tabpanel" aria-labelledby="settings-tab-developer" hidden>
+                    <legend>Développeur</legend>
+                    <div class="developer-gate" data-ui="developer-gate">
+                      <div class="developer-security-line"><span>DEV CONSOLE</span><b>LOCKED</b></div>
+                      <div class="developer-lock-mark" aria-hidden="true"><span>◈</span></div>
+                      <h3>Accès restreint</h3>
+                      <p>Les outils ci-dessous lancent des opérations de rendu lourdes. Entrez le code développeur pour continuer.</p>
+                      <form class="developer-code-form" data-ui="developer-code-form">
+                        <label>
+                          <span>CODE D’ACCÈS</span>
+                          <input data-ui="developer-code" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" autocomplete="off" aria-label="Code développeur" />
+                        </label>
+                        <button data-ui="developer-unlock" type="submit" disabled>Déverrouiller</button>
+                      </form>
+                      <small class="developer-code-error" data-ui="developer-code-error" aria-live="polite">AUTH / LOCAL ONLY</small>
+                    </div>
+
+                    <div class="developer-console" data-ui="developer-console" hidden>
+                      <div class="developer-console-head">
+                        <div><span class="developer-live-dot"></span><small>DEVELOPER MODE</small><strong>Console déverrouillée</strong></div>
+                        <button type="button" data-ui="developer-lock">Verrouiller</button>
+                      </div>
+                      <div class="developer-export-box">
+                        <div class="developer-export-copy">
+                          <small>CHARACTER / BATCH RENDER</small>
+                          <h3>Download previews</h3>
+                          <p>Rend tous les personnages un par un avec le vrai runtime MakeHuman, les textures, cheveux, vêtements et la pose Breathing Idle. À la fin, un ZIP contenant les captures WebP est téléchargé automatiquement.</p>
+                        </div>
+                        <button class="developer-download-button" data-ui="developer-download" type="button">Download previews</button>
+                        <div class="developer-progress-zone" data-ui="developer-progress" aria-live="polite" hidden>
+                          <div class="developer-progress-meta">
+                            <span data-ui="developer-progress-current">En attente</span>
+                            <output data-ui="developer-progress-percent">0%</output>
+                          </div>
+                          <div class="developer-progress-track" data-ui="developer-progress-track"><i data-ui="developer-progress-fill" style="width:0%"></i></div>
+                          <div class="developer-progress-foot" data-ui="developer-progress-foot">0 / … personnages</div>
+                        </div>
+                      </div>
+                    </div>
+                    <backrooms-wardrobe-preview-exporter data-ui="developer-exporter"></backrooms-wardrobe-preview-exporter>
                   </fieldset>
                 </div>
               </div>
@@ -403,6 +490,20 @@ export class ExperienceUI {
     this.consoleHint = this.query('[data-ui="console-hint"]');
     this.diagnosticsPanel = this.query('[data-ui="diagnostics"]');
     this.diagnosticsContent = this.query('[data-ui="diagnostics-content"]');
+    this.developerGate = this.query('[data-ui="developer-gate"]');
+    this.developerConsole = this.query('[data-ui="developer-console"]');
+    this.developerCode = this.query<HTMLInputElement>('[data-ui="developer-code"]');
+    this.developerUnlock = this.query<HTMLButtonElement>('[data-ui="developer-unlock"]');
+    this.developerCodeError = this.query('[data-ui="developer-code-error"]');
+    this.developerLock = this.query<HTMLButtonElement>('[data-ui="developer-lock"]');
+    this.developerDownload = this.query<HTMLButtonElement>('[data-ui="developer-download"]');
+    this.developerProgress = this.query('[data-ui="developer-progress"]');
+    this.developerProgressCurrent = this.query('[data-ui="developer-progress-current"]');
+    this.developerProgressPercent = this.query<HTMLOutputElement>('[data-ui="developer-progress-percent"]');
+    this.developerProgressTrack = this.query('[data-ui="developer-progress-track"]');
+    this.developerProgressFill = this.query('[data-ui="developer-progress-fill"]');
+    this.developerProgressFoot = this.query('[data-ui="developer-progress-foot"]');
+    this.developerExporter = this.query('[data-ui="developer-exporter"]');
 
     for (const button of this.enterButtons) button.addEventListener('click', actions.enter);
     this.query('[data-ui="regenerate"]').addEventListener('click', this.requestNewGame);
@@ -413,11 +514,24 @@ export class ExperienceUI {
     this.saveButton.disabled = actions.saveGame === undefined;
     this.query('[data-ui="fullscreen"]').addEventListener('click', actions.toggleFullscreen);
     this.query('[data-ui="reset-settings"]').addEventListener('click', this.resetSettings);
+    this.query<HTMLFormElement>('[data-ui="developer-code-form"]').addEventListener('submit', this.unlockDeveloper);
+    this.developerCode.addEventListener('input', this.onDeveloperCodeInput);
+    this.developerLock.addEventListener('click', this.lockDeveloper);
+    this.developerDownload.addEventListener('click', this.startPreviewExport);
+    this.developerExporter.addEventListener('wardrobe-preview-progress', this.onPreviewExportProgress);
+    this.developerExporter.addEventListener('wardrobe-preview-complete', this.onPreviewExportComplete);
+    this.developerExporter.addEventListener('wardrobe-preview-error', this.onPreviewExportError);
     for (const button of this.root.querySelectorAll<HTMLElement>('[data-open-page]')) {
       button.addEventListener('click', () => this.showPage(button.dataset.openPage as MenuPage));
     }
     for (const button of this.root.querySelectorAll<HTMLElement>('[data-back]')) {
-      button.addEventListener('click', () => this.showPage('home'));
+      button.addEventListener('click', () => {
+        if (this.activePage === 'wardrobe') {
+          const host = this.root.querySelector<HTMLElement & { navigateBack?: () => boolean }>('[data-ui="wardrobe-host"]');
+          if (host?.navigateBack?.()) return;
+        }
+        this.showPage('home');
+      });
     }
     for (const control of this.root.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-setting]')) {
       const eventName = control instanceof HTMLInputElement && control.type === 'range'
@@ -613,6 +727,11 @@ export class ExperienceUI {
     this.cancelBinding();
     this.activePage = page;
     this.root.dataset.menuPage = page;
+    const wardrobeHost = this.root.querySelector<HTMLElement>('[data-ui="wardrobe-host"]');
+    wardrobeHost?.toggleAttribute('active', page === 'wardrobe');
+    if (page === 'wardrobe' && !customElements.get('backrooms-wardrobe')) {
+      void import('../wardrobe/BackroomsWardrobeElement');
+    }
     for (const section of this.root.querySelectorAll<HTMLElement>('[data-page]')) {
       const active = section.dataset.page === page;
       section.classList.toggle('active', active);
@@ -806,6 +925,109 @@ export class ExperienceUI {
     this.commitSettings();
   };
 
+  private readonly onDeveloperCodeInput = (): void => {
+    const sanitized = this.developerCode.value.replace(/\D/g, '').slice(0, 4);
+    if (this.developerCode.value !== sanitized) this.developerCode.value = sanitized;
+    this.developerUnlock.disabled = sanitized.length !== 4;
+  };
+
+  private readonly unlockDeveloper = (event: SubmitEvent): void => {
+    event.preventDefault();
+    if (this.developerCode.value === '1234') {
+      this.developerGate.classList.remove('error');
+      this.developerCodeError.textContent = 'AUTH / LOCAL ONLY';
+      this.developerCode.value = '';
+      this.developerUnlock.disabled = true;
+      this.developerGate.hidden = true;
+      this.developerConsole.hidden = false;
+      return;
+    }
+    this.developerGate.classList.add('error');
+    this.developerCodeError.textContent = 'Code refusé — accès bloqué.';
+    if (this.developerCodeErrorTimer !== undefined) window.clearTimeout(this.developerCodeErrorTimer);
+    this.developerCodeErrorTimer = window.setTimeout(() => {
+      this.developerCodeErrorTimer = undefined;
+      this.developerGate.classList.remove('error');
+      this.developerCodeError.textContent = 'AUTH / LOCAL ONLY';
+    }, 850);
+  };
+
+  private readonly lockDeveloper = (): void => {
+    if (this.developerExportRunning) return;
+    this.developerConsole.hidden = true;
+    this.developerGate.hidden = false;
+    this.developerCode.focus();
+  };
+
+  private setPreviewExportRunning(running: boolean): void {
+    this.developerExportRunning = running;
+    this.developerDownload.disabled = running;
+    this.developerDownload.textContent = running ? 'Rendu en cours…' : 'Download previews';
+    this.developerLock.disabled = running;
+  }
+
+  private updatePreviewExportProgress(progress: WardrobePreviewProgress): void {
+    const percent = Math.max(0, Math.min(100, Math.round(progress.percent)));
+    this.developerPreviewCompleted = progress.completed;
+    this.developerPreviewTotal = progress.total;
+    this.developerProgressCurrent.textContent = progress.current;
+    this.developerProgressPercent.value = `${percent}%`;
+    this.developerProgressFill.style.width = `${percent}%`;
+    this.developerProgressFoot.textContent = `${progress.completed} / ${progress.total || '…'} personnages`;
+  }
+
+  private readonly startPreviewExport = (): void => {
+    if (this.developerExportRunning) return;
+    this.setPreviewExportRunning(true);
+    this.developerProgress.hidden = false;
+    this.developerProgressTrack.classList.remove('error');
+    this.updatePreviewExportProgress({ completed: 0, total: 0, current: 'Préparation du renderer…', percent: 0 });
+    void import('../wardrobe/BackroomsWardrobePreviewExporterElement')
+      .then(() => this.developerExporter.setAttribute('active', ''))
+      .catch((error: unknown) => this.failPreviewExport(error instanceof Error ? error.message : 'Impossible de charger le renderer'));
+  };
+
+  private readonly onPreviewExportProgress = (event: Event): void => {
+    this.updatePreviewExportProgress((event as CustomEvent<WardrobePreviewProgress>).detail);
+  };
+
+  private readonly onPreviewExportComplete = (event: Event): void => {
+    const zip = (event as CustomEvent<Blob>).detail;
+    const url = URL.createObjectURL(zip);
+    const anchor = document.createElement('a');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    anchor.href = url;
+    anchor.download = `backrooms-character-previews-${stamp}.zip`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    this.setPreviewExportRunning(false);
+    this.updatePreviewExportProgress({
+      completed: this.developerPreviewTotal || this.developerPreviewCompleted,
+      total: this.developerPreviewTotal,
+      current: 'ZIP téléchargé',
+      percent: 100,
+    });
+    this.developerProgressFoot.textContent = '✓ ZIP prêt et téléchargé. Envoie-moi ce fichier pour intégrer les previews statiques.';
+    queueMicrotask(() => this.developerExporter.removeAttribute('active'));
+  };
+
+  private readonly onPreviewExportError = (event: Event): void => {
+    this.failPreviewExport(String((event as CustomEvent<unknown>).detail ?? 'Erreur pendant le rendu'));
+  };
+
+  private failPreviewExport(message: string): void {
+    this.setPreviewExportRunning(false);
+    this.developerProgress.hidden = false;
+    this.developerProgressCurrent.textContent = 'Erreur';
+    this.developerProgressPercent.value = '!';
+    this.developerProgressTrack.classList.add('error');
+    this.developerProgressFill.style.width = '100%';
+    this.developerProgressFoot.textContent = message;
+    queueMicrotask(() => this.developerExporter.removeAttribute('active'));
+  }
+
   private readonly resetSettings = (): void => {
     this.cancelBinding();
     this.settings = defaultGameSettings();
@@ -867,6 +1089,10 @@ export class ExperienceUI {
     if (event.code !== 'Escape') return;
     if (this.activePage !== 'home') {
       event.preventDefault();
+      if (this.activePage === 'wardrobe') {
+        const host = this.root.querySelector<HTMLElement & { navigateBack?: () => boolean }>('[data-ui="wardrobe-host"]');
+        if (host?.navigateBack?.()) return;
+      }
       this.showPage('home');
       return;
     }
@@ -1060,6 +1286,8 @@ export class ExperienceUI {
     document.removeEventListener('fullscreenchange', this.onFullscreenChange);
     if (this.chatFadeTimer !== undefined) window.clearTimeout(this.chatFadeTimer);
     if (this.saveStatusTimer !== undefined) window.clearTimeout(this.saveStatusTimer);
+    if (this.developerCodeErrorTimer !== undefined) window.clearTimeout(this.developerCodeErrorTimer);
+    this.developerExporter.removeAttribute('active');
     this.root.remove();
   }
 

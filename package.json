@@ -15,10 +15,17 @@
     "@dimforge/rapier3d": "0.19.3",
     "@fontsource-variable/jetbrains-mono": "5.3.0",
     "@fontsource-variable/space-grotesk": "5.3.0",
+    "@react-three/drei": "10.7.4",
+    "@react-three/fiber": "9.3.0",
     "postprocessing": "6.39.3",
-    "three": "0.185.1"
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "three": "0.185.1",
+    "zustand": "5.0.7"
   },
   "devDependencies": {
+    "@types/react": "19.1.10",
+    "@types/react-dom": "19.1.7",
     "@types/three": "0.185.1",
     "typescript": "6.0.3",
     "vite": "8.1.5",

@@ -1,0 +1,3322 @@
+{
+  "version": 8,
+  "environment": {
+    "studioHDRI": null
+  },
+  "baseCharacters": [
+    {
+      "id": "makehuman-hm08",
+      "label": "MakeHuman HM08 · MPFB",
+      "slot": "base",
+      "url": "/assets/mpfb/base.runtime.json.gz",
+      "thumbnail": "/assets/characters/thumbnails/base.svg",
+      "rig": "mixamo",
+      "skinMaterialNames": [
+        "Skin"
+      ],
+      "tags": [
+        "MakeHuman",
+        "HM08",
+        "MPFB",
+        "CC0",
+        "morphable"
+      ]
+    }
+  ],
+  "hair": [
+    {
+      "id": "mh-hair-cortu_shaggy_green_hair",
+      "label": "Shaggy",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/cortu_shaggy_green_hair/shaggy_green.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/cortu_shaggy_green_hair/cortu_shaggy_green_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/cortu_shaggy_green_hair/shaggy_green.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/cortu_shaggy_green_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "Cortu"
+      ]
+    },
+    {
+      "id": "mh-hair-cortu_short_messy_hair",
+      "label": "Court décoiffé",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/cortu_short_messy_hair/short_messy.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/cortu_short_messy_hair/cortu_short_messy_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/cortu_short_messy_hair/short_messy.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/cortu_short_messy_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "Cortu"
+      ]
+    },
+    {
+      "id": "mh-hair-cortu_straight_bangs",
+      "label": "Frange droite",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/cortu_straight_bangs/straight_bangs.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/cortu_straight_bangs/cortu_straight_bangs.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/cortu_straight_bangs/straight_bangs.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/cortu_straight_bangs/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "Cortu"
+      ]
+    },
+    {
+      "id": "mh-hair-cortu_strawberry_cloud_hair",
+      "label": "Boucles cloud",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/cortu_strawberry_cloud_hair/strawberry_cloud.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/cortu_strawberry_cloud_hair/cortu_strawberry_cloud_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/cortu_strawberry_cloud_hair/strawberry_cloud.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/cortu_strawberry_cloud_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "Cortu"
+      ]
+    },
+    {
+      "id": "mh-hair-culturalibre_hair_01",
+      "label": "Style 01",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/culturalibre_hair_01/fhair01.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/culturalibre_hair_01/culturalibre_hair_01.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/culturalibre_hair_01/fhair01.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/culturalibre_hair_01/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "culturalibre",
+        "material-family:long01"
+      ],
+      "materials": [
+        {
+          "id": "mh-hairmat-joepal_long_01_blond",
+          "label": "Long 01 Blond",
+          "materialUrl": "/assets/characters/hair/materials/long01/joepal_long_01_blond/joepal_long_01_blond.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/joepal_long_01_blond/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_ash",
+          "label": "Long 01 Cendré",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_ash/toigo_long_01_ash.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_ash/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_black",
+          "label": "Long 01 Noir",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_black/toigo_long_01_black.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_black/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_fuchsia",
+          "label": "Long 01 Fuchsia",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_fuchsia/toigo_long_01_fuchsia.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_fuchsia/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_ginger",
+          "label": "Long 01 Roux",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_ginger/toigo_long_01_ginger.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_ginger/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_gray",
+          "label": "Long 01 Gris",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_gray/toigo_long_01_gray.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_gray/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_red",
+          "label": "Long 01 Rouge",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_red/toigo_long_01_red.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_red/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_teal",
+          "label": "Long 01 Sarcelle",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_teal/toigo_long_01_teal.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_teal/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_violet",
+          "label": "Long 01 Violet",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_violet/toigo_long_01_violet.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_violet/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-punkduck_blond_for_long01",
+          "label": "",
+          "materialUrl": "/assets/characters/hair/materials/long01/punkduck_blond_for_long01/punkduck_blond_for_long01.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/punkduck_blond_for_long01/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mh-hair-culturalibre_hair_02",
+      "label": "Style 02",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/culturalibre_hair_02/mhair02.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/culturalibre_hair_02/culturalibre_hair_02.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/culturalibre_hair_02/mhair02.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/culturalibre_hair_02/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "culturalibre",
+        "material-family:short02"
+      ],
+      "materials": [
+        {
+          "id": "mh-hairmat-bogdan666_short_02_brown",
+          "label": "Short 02 Brun",
+          "materialUrl": "/assets/characters/hair/materials/short02/bogdan666_short_02_brown/bogdan666_short_02_brown.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/short02/bogdan666_short_02_brown/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "short02"
+          ]
+        },
+        {
+          "id": "mh-hairmat-bogdan666_short_02_gray",
+          "label": "Short 02 Gris",
+          "materialUrl": "/assets/characters/hair/materials/short02/bogdan666_short_02_gray/bogdan666_short_02_gray.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/short02/bogdan666_short_02_gray/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "short02"
+          ]
+        },
+        {
+          "id": "mh-hairmat-bogdan666_short_02_red",
+          "label": "Short 02 Rouge",
+          "materialUrl": "/assets/characters/hair/materials/short02/bogdan666_short_02_red/bogdan666_short_02_red.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/short02/bogdan666_short_02_red/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "short02"
+          ]
+        },
+        {
+          "id": "mh-hairmat-culturalibre_short_02_green",
+          "label": "Short 02 Vert",
+          "materialUrl": "/assets/characters/hair/materials/short02/culturalibre_short_02_green/culturalibre_short_02_green.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/short02/culturalibre_short_02_green/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "short02"
+          ]
+        },
+        {
+          "id": "mh-hairmat-jartur69_short02_blond",
+          "label": "Blond",
+          "materialUrl": "/assets/characters/hair/materials/short02/jartur69_short02_blond/jartur69_short02_blond.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/short02/jartur69_short02_blond/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "short02"
+          ]
+        },
+        {
+          "id": "mh-hairmat-jartur69_short02_blond_for_female",
+          "label": "Blond For Femme",
+          "materialUrl": "/assets/characters/hair/materials/short02/jartur69_short02_blond_for_female/jartur69_short02_blond_for_female.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/short02/jartur69_short02_blond_for_female/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "short02"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mh-hair-culturalibre_hair_05",
+      "label": "Style 05",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/culturalibre_hair_05/hair_05.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/culturalibre_hair_05/culturalibre_hair_05.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/culturalibre_hair_05/hair_05.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/culturalibre_hair_05/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "culturalibre"
+      ]
+    },
+    {
+      "id": "mh-hair-culturalibre_hair_06",
+      "label": "Style 06",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/culturalibre_hair_06/hair_06.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/culturalibre_hair_06/culturalibre_hair_06.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/culturalibre_hair_06/hair_06.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/culturalibre_hair_06/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "culturalibre"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_double_mh_braid",
+      "label": "Double tresse",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_double_mh_braid/double_mhbraid.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_double_mh_braid/elvs_double_mh_braid.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_double_mh_braid/double_mhbraid.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_double_mh_braid/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "Elvaerwyn",
+        "material-family:braid01"
+      ],
+      "materials": [
+        {
+          "id": "mh-hairmat-toigo_braid01_ash",
+          "label": "Cendré",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_ash/toigo_braid01_ash.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_ash/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_black",
+          "label": "Noir",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_black/toigo_braid01_black.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_black/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_fuchsia",
+          "label": "Fuchsia",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_fuchsia/toigo_braid01_fuchsia.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_fuchsia/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_ginger",
+          "label": "Roux",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_ginger/toigo_braid01_ginger.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_ginger/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_golden",
+          "label": "Doré",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_golden/toigo_braid01_golden.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_golden/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_gray",
+          "label": "Gris",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_gray/toigo_braid01_gray.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_gray/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_red",
+          "label": "Rouge",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_red/toigo_braid01_red.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_red/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_strawberry",
+          "label": "Fraise",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_strawberry/toigo_braid01_strawberry.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_strawberry/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_teal",
+          "label": "Sarcelle",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_teal/toigo_braid01_teal.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_teal/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_violet",
+          "label": "Violet",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_violet/toigo_braid01_violet.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_violet/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_french_braid_variation",
+      "label": "Tresse française",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_french_braid_variation/frenchbraid1mh01.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_french_braid_variation/elvs_french_braid_variation.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_french_braid_variation/frenchbraid1mh01.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_french_braid_variation/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "Elvaerwyn",
+        "material-family:braid01"
+      ],
+      "materials": [
+        {
+          "id": "mh-hairmat-toigo_braid01_ash",
+          "label": "Cendré",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_ash/toigo_braid01_ash.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_ash/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_black",
+          "label": "Noir",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_black/toigo_braid01_black.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_black/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_fuchsia",
+          "label": "Fuchsia",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_fuchsia/toigo_braid01_fuchsia.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_fuchsia/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_ginger",
+          "label": "Roux",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_ginger/toigo_braid01_ginger.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_ginger/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_golden",
+          "label": "Doré",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_golden/toigo_braid01_golden.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_golden/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_gray",
+          "label": "Gris",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_gray/toigo_braid01_gray.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_gray/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_red",
+          "label": "Rouge",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_red/toigo_braid01_red.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_red/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_strawberry",
+          "label": "Fraise",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_strawberry/toigo_braid01_strawberry.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_strawberry/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_teal",
+          "label": "Sarcelle",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_teal/toigo_braid01_teal.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_teal/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_violet",
+          "label": "Violet",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_violet/toigo_braid01_violet.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_violet/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_reverse_french_braid_bun",
+      "label": "Chignon tressé",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_reverse_french_braid_bun/rev_fr_braidbun1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_reverse_french_braid_bun/elvs_reverse_french_braid_bun.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_reverse_french_braid_bun/rev_fr_braidbun1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_reverse_french_braid_bun/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "Elvaerwyn",
+        "material-family:braid01"
+      ],
+      "materials": [
+        {
+          "id": "mh-hairmat-toigo_braid01_ash",
+          "label": "Cendré",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_ash/toigo_braid01_ash.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_ash/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_black",
+          "label": "Noir",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_black/toigo_braid01_black.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_black/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_fuchsia",
+          "label": "Fuchsia",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_fuchsia/toigo_braid01_fuchsia.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_fuchsia/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_ginger",
+          "label": "Roux",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_ginger/toigo_braid01_ginger.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_ginger/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_golden",
+          "label": "Doré",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_golden/toigo_braid01_golden.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_golden/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_gray",
+          "label": "Gris",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_gray/toigo_braid01_gray.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_gray/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_red",
+          "label": "Rouge",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_red/toigo_braid01_red.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_red/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_strawberry",
+          "label": "Fraise",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_strawberry/toigo_braid01_strawberry.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_strawberry/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_teal",
+          "label": "Sarcelle",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_teal/toigo_braid01_teal.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_teal/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_violet",
+          "label": "Violet",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_violet/toigo_braid01_violet.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_violet/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_unkempt_french_braid",
+      "label": "Tresse décoiffée",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_unkempt_french_braid/unkempt_mhbraidfr.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_unkempt_french_braid/elvs_unkempt_french_braid.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_unkempt_french_braid/unkempt_mhbraidfr.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_unkempt_french_braid/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "Elvaerwyn",
+        "material-family:braid01"
+      ],
+      "materials": [
+        {
+          "id": "mh-hairmat-toigo_braid01_ash",
+          "label": "Cendré",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_ash/toigo_braid01_ash.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_ash/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_black",
+          "label": "Noir",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_black/toigo_braid01_black.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_black/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_fuchsia",
+          "label": "Fuchsia",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_fuchsia/toigo_braid01_fuchsia.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_fuchsia/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_ginger",
+          "label": "Roux",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_ginger/toigo_braid01_ginger.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_ginger/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_golden",
+          "label": "Doré",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_golden/toigo_braid01_golden.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_golden/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_gray",
+          "label": "Gris",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_gray/toigo_braid01_gray.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_gray/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_red",
+          "label": "Rouge",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_red/toigo_braid01_red.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_red/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_strawberry",
+          "label": "Fraise",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_strawberry/toigo_braid01_strawberry.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_strawberry/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_teal",
+          "label": "Sarcelle",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_teal/toigo_braid01_teal.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_teal/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_braid01_violet",
+          "label": "Violet",
+          "materialUrl": "/assets/characters/hair/materials/braid01/toigo_braid01_violet/toigo_braid01_violet.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/braid01/toigo_braid01_violet/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "braid01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mh-hair-faydaen_hair_1",
+      "label": "Classique blond",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/faydaen_hair_1/hair1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/faydaen_hair_1/faydaen_hair_1.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/faydaen_hair_1/hair1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/faydaen_hair_1/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "Faydaen"
+      ]
+    },
+    {
+      "id": "mh-hair-littleright_bobcut_hair",
+      "label": "Carré court",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/littleright_bobcut_hair/littleright_hair_bobcut.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/littleright_bobcut_hair/littleright_bobcut_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/littleright_bobcut_hair/littleright_hair_bobcut.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/littleright_bobcut_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "littleright"
+      ]
+    },
+    {
+      "id": "mh-hair-o4saken_long01",
+      "label": "Long 01",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/o4saken_long01/o4saken_long01.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/o4saken_long01/o4saken_long01.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/o4saken_long01/o4saken_long01.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/o4saken_long01/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "punkduck",
+        "material-family:long01"
+      ],
+      "materials": [
+        {
+          "id": "mh-hairmat-joepal_long_01_blond",
+          "label": "Long 01 Blond",
+          "materialUrl": "/assets/characters/hair/materials/long01/joepal_long_01_blond/joepal_long_01_blond.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/joepal_long_01_blond/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_ash",
+          "label": "Long 01 Cendré",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_ash/toigo_long_01_ash.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_ash/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_black",
+          "label": "Long 01 Noir",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_black/toigo_long_01_black.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_black/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_fuchsia",
+          "label": "Long 01 Fuchsia",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_fuchsia/toigo_long_01_fuchsia.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_fuchsia/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_ginger",
+          "label": "Long 01 Roux",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_ginger/toigo_long_01_ginger.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_ginger/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_gray",
+          "label": "Long 01 Gris",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_gray/toigo_long_01_gray.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_gray/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_red",
+          "label": "Long 01 Rouge",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_red/toigo_long_01_red.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_red/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_teal",
+          "label": "Long 01 Sarcelle",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_teal/toigo_long_01_teal.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_teal/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-toigo_long_01_violet",
+          "label": "Long 01 Violet",
+          "materialUrl": "/assets/characters/hair/materials/long01/toigo_long_01_violet/toigo_long_01_violet.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/toigo_long_01_violet/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        },
+        {
+          "id": "mh-hairmat-punkduck_blond_for_long01",
+          "label": "",
+          "materialUrl": "/assets/characters/hair/materials/long01/punkduck_blond_for_long01/punkduck_blond_for_long01.mhmat",
+          "thumbnail": "/assets/characters/hair/materials/long01/punkduck_blond_for_long01/thumbnail.webp",
+          "tags": [
+            "MakeHuman",
+            "hair-material",
+            "CC0",
+            "long01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mh-hair-rehmanpolanski_hair_bun_brown",
+      "label": "Chignon brun",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/rehmanpolanski_hair_bun_brown/hair_bun_brown.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/rehmanpolanski_hair_bun_brown/rehmanpolanski_hair_bun_brown.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/rehmanpolanski_hair_bun_brown/hair_bun_brown.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/rehmanpolanski_hair_bun_brown/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "RehmanPolanski"
+      ]
+    },
+    {
+      "id": "mh-hair-sonntag78_blond_with_headband",
+      "label": "Blond + bandeau",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/sonntag78_blond_with_headband/blondwithheadband.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/sonntag78_blond_with_headband/sonntag78_blond_with_headband.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/sonntag78_blond_with_headband/blondwithheadband.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/sonntag78_blond_with_headband/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "sonntag78"
+      ]
+    },
+    {
+      "id": "mh-hair-sonntag78_junglebook_hair",
+      "label": "Jungle",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/sonntag78_junglebook_hair/junglebookhair.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/sonntag78_junglebook_hair/sonntag78_junglebook_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/sonntag78_junglebook_hair/junglebookhair.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/sonntag78_junglebook_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "sonntag78"
+      ]
+    },
+    {
+      "id": "mh-hair-toigo_blunt_bob",
+      "label": "Carré droit",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/toigo_blunt_bob/bob_blunt.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/toigo_blunt_bob/toigo_blunt_bob.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/toigo_blunt_bob/bob_blunt.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/toigo_blunt_bob/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "MargaretToigo"
+      ]
+    },
+    {
+      "id": "mh-hair-toigo_blunt_bob_with_bangs",
+      "label": "Carré droit + frange",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/toigo_blunt_bob_with_bangs/bob_blunt_bangs.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/toigo_blunt_bob_with_bangs/toigo_blunt_bob_with_bangs.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/toigo_blunt_bob_with_bangs/bob_blunt_bangs.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/toigo_blunt_bob_with_bangs/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "MargaretToigo"
+      ]
+    },
+    {
+      "id": "mh-hair-toigo_curled_under_bob",
+      "label": "Carré arrondi",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/toigo_curled_under_bob/bob_curled_under.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/toigo_curled_under_bob/toigo_curled_under_bob.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/toigo_curled_under_bob/bob_curled_under.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/toigo_curled_under_bob/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "MargaretToigo"
+      ]
+    },
+    {
+      "id": "mh-hair-toigo_curled_under_bob_with_bangs",
+      "label": "Carré arrondi + frange",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/toigo_curled_under_bob_with_bangs/bob_curled_under_bangs.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/toigo_curled_under_bob_with_bangs/toigo_curled_under_bob_with_bangs.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/toigo_curled_under_bob_with_bangs/bob_curled_under_bangs.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/toigo_curled_under_bob_with_bangs/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "MargaretToigo"
+      ]
+    },
+    {
+      "id": "mh-hair-toigo_inverted_bob",
+      "label": "Carré plongeant",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/toigo_inverted_bob/bob_inverted.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/toigo_inverted_bob/toigo_inverted_bob.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/toigo_inverted_bob/bob_inverted.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/toigo_inverted_bob/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "MargaretToigo"
+      ]
+    },
+    {
+      "id": "mh-hair-toigo_inverted_bob_with_bangs",
+      "label": "Carré plongeant + frange",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/toigo_inverted_bob_with_bangs/bob_inverted_bangs.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/toigo_inverted_bob_with_bangs/toigo_inverted_bob_with_bangs.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/toigo_inverted_bob_with_bangs/bob_inverted_bangs.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/toigo_inverted_bob_with_bangs/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "MargaretToigo"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_50s_updo",
+      "label": "Années 50",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_50s_updo/elv_50supdo1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_50s_updo/elvs_50s_updo.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_50s_updo/elv_50supdo1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_50s_updo/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_adrienne_hair",
+      "label": "Adrienne",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_adrienne_hair/elvs_adrienne_hair1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_adrienne_hair/elvs_adrienne_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_adrienne_hair/elvs_adrienne_hair1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_adrienne_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_ashley_may_hair",
+      "label": "Ashley",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_ashley_may_hair/elvs_ashley_mayhair1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_ashley_may_hair/elvs_ashley_may_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_ashley_may_hair/elvs_ashley_mayhair1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_ashley_may_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_braid_bun",
+      "label": "Chignon tressé 2",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_braid_bun/elvs_braid_bun_q1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_braid_bun/elvs_braid_bun.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_braid_bun/elvs_braid_bun_q1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_braid_bun/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_braided_rows",
+      "label": "Tresses rangées",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_braided_rows/cornrowsofelv5.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_braided_rows/elvs_braided_rows.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_braided_rows/cornrowsofelv5.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_braided_rows/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_daisy_hair",
+      "label": "Daisy long",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_daisy_hair/elvs_daisyhair1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_daisy_hair/elvs_daisy_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_daisy_hair/elvs_daisyhair1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_daisy_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_grump_hair",
+      "label": "Grump",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_grump_hair/elvs_grumphair.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_grump_hair/elvs_grump_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_grump_hair/elvs_grumphair.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_grump_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_hazel_hair",
+      "label": "Hazel",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_hazel_hair/elvs_hazel_hair.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_hazel_hair/elvs_hazel_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_hazel_hair/elvs_hazel_hair.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_hazel_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_inverted_curly_bob",
+      "label": "Carré bouclé",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_inverted_curly_bob/elvs_inverted_curlybob1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_inverted_curly_bob/elvs_inverted_curly_bob.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_inverted_curly_bob/elvs_inverted_curlybob1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_inverted_curly_bob/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_island_princess_hair",
+      "label": "Island",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_island_princess_hair/elvs_island_princess1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_island_princess_hair/elvs_island_princess_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_island_princess_hair/elvs_island_princess1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_island_princess_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_katherine_hair",
+      "label": "Katherine",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_katherine_hair/elvs_katherinehair1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_katherine_hair/elvs_katherine_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_katherine_hair/elvs_katherinehair1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_katherine_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_keylth_hair",
+      "label": "Keylth",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_keylth_hair/elvs_keylth_hair_m1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_keylth_hair/elvs_keylth_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_keylth_hair/elvs_keylth_hair_m1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_keylth_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_lady_hippy_hair",
+      "label": "Hippy",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_lady_hippy_hair/elvs_ladies_hippyhair1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_lady_hippy_hair/elvs_lady_hippy_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_lady_hippy_hair/elvs_ladies_hippyhair1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_lady_hippy_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_lara_hair",
+      "label": "Lara",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_lara_hair/elvs_laracroft_hair1a.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_lara_hair/elvs_lara_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_lara_hair/elvs_laracroft_hair1a.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_lara_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_maxwell_hair",
+      "label": "Maxwell",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_maxwell_hair/maxwell_hair_mh.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_maxwell_hair/elvs_maxwell_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_maxwell_hair/maxwell_hair_mh.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_maxwell_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_micky_afro",
+      "label": "Afro",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_micky_afro/elvs_mickey_afro.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_micky_afro/elvs_micky_afro.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_micky_afro/elvs_mickey_afro.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_micky_afro/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_short_daisy_hair",
+      "label": "Daisy court",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_short_daisy_hair/elvs_short_daisyh1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_short_daisy_hair/elvs_short_daisy_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_short_daisy_hair/elvs_short_daisyh1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_short_daisy_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_short_side_do",
+      "label": "Court côté",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_short_side_do/elvs_thejournalist1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_short_side_do/elvs_short_side_do.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_short_side_do/elvs_thejournalist1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_short_side_do/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_that_80s_babe_hair",
+      "label": "Années 80",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_that_80s_babe_hair/elvs_that80sbabe_m1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_that_80s_babe_hair/elvs_that_80s_babe_hair.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_that_80s_babe_hair/elvs_that80sbabe_m1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_that_80s_babe_hair/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_wavy_bob",
+      "label": "Carré ondulé",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_wavy_bob/elvscurly_bob1.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_wavy_bob/elvs_wavy_bob.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_wavy_bob/elvscurly_bob1.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_wavy_bob/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-elvs_witchy_lil_bob",
+      "label": "Petit carré",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/elvs_witchy_lil_bob/witchybob_elv2.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/elvs_witchy_lil_bob/elvs_witchy_lil_bob.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/elvs_witchy_lil_bob/witchybob_elv2.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/elvs_witchy_lil_bob/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "Elvaerwyn"
+      ]
+    },
+    {
+      "id": "mh-hair-culturalibre_hair_11",
+      "label": "Iroh",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/culturalibre_hair_11/hair_01.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/culturalibre_hair_11/culturalibre_hair_11.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/culturalibre_hair_11/hair_01.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/culturalibre_hair_11/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "culturalibre"
+      ]
+    },
+    {
+      "id": "mh-hair-culturalibre_hair_12",
+      "label": "Cartoon",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/culturalibre_hair_12/hair_02.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/culturalibre_hair_12/culturalibre_hair_12.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/culturalibre_hair_12/hair_02.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/culturalibre_hair_12/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "culturalibre"
+      ]
+    },
+    {
+      "id": "mh-hair-culturalibre_hair_13",
+      "label": "Rigide brun",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/culturalibre_hair_13/hair_03.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/culturalibre_hair_13/culturalibre_hair_13.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/culturalibre_hair_13/hair_03.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/culturalibre_hair_13/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "culturalibre"
+      ]
+    },
+    {
+      "id": "mh-hair-culturalibre_hair_14",
+      "label": "Reeve",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/culturalibre_hair_14/hair_04.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/culturalibre_hair_14/culturalibre_hair_14.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/culturalibre_hair_14/hair_04.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/culturalibre_hair_14/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "culturalibre"
+      ]
+    },
+    {
+      "id": "mh-hair-culturalibre_hair_17",
+      "label": "Style 17",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/culturalibre_hair_17/hair_07.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/culturalibre_hair_17/culturalibre_hair_17.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/culturalibre_hair_17/hair_07.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/culturalibre_hair_17/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "culturalibre"
+      ]
+    },
+    {
+      "id": "mh-hair-culturalibre_hair_18",
+      "label": "Style 18",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/culturalibre_hair_18/hair_08.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/culturalibre_hair_18/culturalibre_hair_18.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/culturalibre_hair_18/hair_08.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/culturalibre_hair_18/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "culturalibre"
+      ]
+    },
+    {
+      "id": "mh-hair-grinsegold_wig_bow_tie",
+      "label": "Perruque nœud",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/grinsegold_wig_bow_tie/wig_bow_tie.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/grinsegold_wig_bow_tie/grinsegold_wig_bow_tie.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/grinsegold_wig_bow_tie/wig_bow_tie.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/grinsegold_wig_bow_tie/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "grinsegold"
+      ]
+    },
+    {
+      "id": "mh-hair-grinsegold_wig_bun_blonde_braids",
+      "label": "Chignon blond",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/grinsegold_wig_bun_blonde_braids/wig_bun_blonde.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/grinsegold_wig_bun_blonde_braids/grinsegold_wig_bun_blonde_braids.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/grinsegold_wig_bun_blonde_braids/wig_bun_blonde.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/grinsegold_wig_bun_blonde_braids/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "grinsegold"
+      ]
+    },
+    {
+      "id": "mh-hair-o4saken_chinesebob01",
+      "label": "Carré chinois",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/o4saken_chinesebob01/o4saken_chinesebob01.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/o4saken_chinesebob01/o4saken_chinesebob01.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/o4saken_chinesebob01/o4saken_chinesebob01.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/o4saken_chinesebob01/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "punkduck"
+      ]
+    },
+    {
+      "id": "mh-hair-o4saken_curly01",
+      "label": "Bouclé 01",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/o4saken_curly01/o4saken_curly01.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/o4saken_curly01/o4saken_curly01.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/o4saken_curly01/o4saken_curly01.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/o4saken_curly01/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "punkduck"
+      ]
+    },
+    {
+      "id": "mh-hair-punkduck_alpha7_curly",
+      "label": "Bouclé Alpha",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/punkduck_alpha7_curly/curly.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/punkduck_alpha7_curly/punkduck_alpha7_curly.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/punkduck_alpha7_curly/curly.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/punkduck_alpha7_curly/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "punkduck"
+      ]
+    },
+    {
+      "id": "mh-hair-punkduck_alpha7_curly2",
+      "label": "Bouclé Alpha 2",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/punkduck_alpha7_curly2/curly2.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/punkduck_alpha7_curly2/punkduck_alpha7_curly2.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/punkduck_alpha7_curly2/curly2.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/punkduck_alpha7_curly2/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "punkduck"
+      ]
+    },
+    {
+      "id": "mh-hair-punkduck_alpha7_long",
+      "label": "Long Alpha",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/punkduck_alpha7_long/long_alpha7.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/punkduck_alpha7_long/punkduck_alpha7_long.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/punkduck_alpha7_long/long_alpha7.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/punkduck_alpha7_long/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "punkduck"
+      ]
+    },
+    {
+      "id": "mh-hair-punkduck_alpha7_long2",
+      "label": "Long Alpha 2",
+      "slot": "hair",
+      "url": "/assets/characters/hair/makehuman/punkduck_alpha7_long2/long2_alpha7.obj.gz",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/hair/makehuman/punkduck_alpha7_long2/punkduck_alpha7_long2.mhclo.gz",
+      "objUrl": "/assets/characters/hair/makehuman/punkduck_alpha7_long2/long2_alpha7.obj.gz",
+      "thumbnail": "/assets/characters/hair/makehuman/punkduck_alpha7_long2/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC-BY",
+        "punkduck"
+      ]
+    }
+  ],
+  "beards": [
+    {
+      "id": "mh-beard-culturalibre_faun_beard",
+      "label": "Barbe faune",
+      "slot": "beard",
+      "url": "/assets/characters/bodyparts/makehuman/culturalibre_faun_beard/faun_beard.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/culturalibre_faun_beard/culturalibre_faun_beard.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/culturalibre_faun_beard/faun_beard.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/culturalibre_faun_beard/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "barbe"
+      ]
+    },
+    {
+      "id": "mh-beard-grinsegold_beard_sigmund_wip",
+      "label": "Barbe Sigmund",
+      "slot": "beard",
+      "url": "/assets/characters/bodyparts/makehuman/grinsegold_beard_sigmund_wip/beard_sigmund.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/grinsegold_beard_sigmund_wip/grinsegold_beard_sigmund_wip.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/grinsegold_beard_sigmund_wip/beard_sigmund.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/grinsegold_beard_sigmund_wip/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "barbe"
+      ]
+    },
+    {
+      "id": "mh-beard-rehmanpolanski_beard_viking",
+      "label": "Barbe viking",
+      "slot": "beard",
+      "url": "/assets/characters/bodyparts/makehuman/rehmanpolanski_beard_viking/beardviking.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/rehmanpolanski_beard_viking/rehmanpolanski_beard_viking.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/rehmanpolanski_beard_viking/beardviking.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/rehmanpolanski_beard_viking/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "barbe"
+      ]
+    },
+    {
+      "id": "mh-beard-rehmanpolanski_moustache_viking",
+      "label": "Moustache viking",
+      "slot": "beard",
+      "url": "/assets/characters/bodyparts/makehuman/rehmanpolanski_moustache_viking/moustacheviking.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/rehmanpolanski_moustache_viking/rehmanpolanski_moustache_viking.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/rehmanpolanski_moustache_viking/moustacheviking.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/rehmanpolanski_moustache_viking/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "barbe"
+      ]
+    },
+    {
+      "id": "mh-beard-wdg_scruffy_beard",
+      "label": "Barbe courte",
+      "slot": "beard",
+      "url": "/assets/characters/bodyparts/makehuman/wdg_scruffy_beard/scruffy_beard.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/wdg_scruffy_beard/wdg_scruffy_beard.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/wdg_scruffy_beard/scruffy_beard.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/wdg_scruffy_beard/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "MHCLO",
+        "CC0",
+        "barbe"
+      ]
+    }
+  ],
+  "clothes": {
+    "tops": [
+      {
+        "id": "mh-top-punkduck_lace_up_blouse",
+        "label": "Blouse lacée",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/punkduck_lace_up_blouse/lace_up_blouse.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/punkduck_lace_up_blouse/punkduck_lace_up_blouse.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/punkduck_lace_up_blouse/lace_up_blouse.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/punkduck_lace_up_blouse/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "punkduck"
+        ]
+      },
+      {
+        "id": "mh-top-elvs_ruffle_sleeve_peasant_blouse_1",
+        "label": "Blouse volantée",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/elvs_ruffle_sleeve_peasant_blouse_1/ruffle_sleeve_peasantblouse.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/elvs_ruffle_sleeve_peasant_blouse_1/elvs_ruffle_sleeve_peasant_blouse_1.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/elvs_ruffle_sleeve_peasant_blouse_1/ruffle_sleeve_peasantblouse.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/elvs_ruffle_sleeve_peasant_blouse_1/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-top-toigo_camisole_top",
+        "label": "Caraco",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/toigo_camisole_top/camisole_top.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/toigo_camisole_top/toigo_camisole_top.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/toigo_camisole_top/camisole_top.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/toigo_camisole_top/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-top-mindfront_cardigan_long_open_front",
+        "label": "Cardigan long",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/mindfront_cardigan_long_open_front/f_cardigan_long_open_front.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/mindfront_cardigan_long_open_front/mindfront_cardigan_long_open_front.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/mindfront_cardigan_long_open_front/f_cardigan_long_open_front.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/mindfront_cardigan_long_open_front/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Mindfront"
+        ]
+      },
+      {
+        "id": "mh-top-elvs_male_shirt_tie_tucked1",
+        "label": "Chemise + cravate",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/elvs_male_shirt_tie_tucked1/mens_shirt_tie_tuck_elv1f.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/elvs_male_shirt_tie_tucked1/elvs_male_shirt_tie_tucked1.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/elvs_male_shirt_tie_tucked1/mens_shirt_tie_tuck_elv1f.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/elvs_male_shirt_tie_tucked1/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-top-ews_striped_shirt",
+        "label": "Chemise rayée",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/ews_striped_shirt/striped_shirt.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/ews_striped_shirt/ews_striped_shirt.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/ews_striped_shirt/striped_shirt.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/ews_striped_shirt/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "EWS"
+        ]
+      },
+      {
+        "id": "mh-top-punkduck_sleeveless_shirt",
+        "label": "Chemise sans manches",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/punkduck_sleeveless_shirt/sleeveless.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/punkduck_sleeveless_shirt/punkduck_sleeveless_shirt.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/punkduck_sleeveless_shirt/sleeveless.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/punkduck_sleeveless_shirt/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "punkduck"
+        ]
+      },
+      {
+        "id": "mh-top-elvs_male_shirt_untucked_bd1",
+        "label": "Chemise sortie",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/elvs_male_shirt_untucked_bd1/mens_shirt_untuck_elvbhp1f.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/elvs_male_shirt_untucked_bd1/elvs_male_shirt_untucked_bd1.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/elvs_male_shirt_untucked_bd1/mens_shirt_untuck_elvbhp1f.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/elvs_male_shirt_untucked_bd1/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-top-toigo_bodice-style_top",
+        "label": "Corsage",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/toigo_bodice-style_top/bodice_style_top.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/toigo_bodice-style_top/toigo_bodice-style_top.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/toigo_bodice-style_top/bodice_style_top.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/toigo_bodice-style_top/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-top-punkduck_high_neck_crop_top",
+        "label": "Crop top col haut",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/punkduck_high_neck_crop_top/highneckcroptop.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/punkduck_high_neck_crop_top/punkduck_high_neck_crop_top.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/punkduck_high_neck_crop_top/highneckcroptop.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/punkduck_high_neck_crop_top/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "punkduck"
+        ]
+      },
+      {
+        "id": "mh-top-punkduck_sleeveless_crop_top",
+        "label": "Crop top sans manches",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/punkduck_sleeveless_crop_top/sleevelesscroptop.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/punkduck_sleeveless_crop_top/punkduck_sleeveless_crop_top.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/punkduck_sleeveless_crop_top/sleevelesscroptop.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/punkduck_sleeveless_crop_top/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "punkduck"
+        ]
+      },
+      {
+        "id": "mh-top-mindfront_tank_top_01",
+        "label": "Débardeur",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/mindfront_tank_top_01/tank_top_01.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/mindfront_tank_top_01/mindfront_tank_top_01.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/mindfront_tank_top_01/tank_top_01.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/mindfront_tank_top_01/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Mindfront"
+        ]
+      },
+      {
+        "id": "mh-top-elvs_ladies_tank1",
+        "label": "Débardeur femme",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/elvs_ladies_tank1/ladiestank1elv.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/elvs_ladies_tank1/elvs_ladies_tank1.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/elvs_ladies_tank1/ladiestank1elv.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/elvs_ladies_tank1/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-top-elvs_male_tankshirt1",
+        "label": "Débardeur homme",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/elvs_male_tankshirt1/mens_tanks_elv1f.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/elvs_male_tankshirt1/elvs_male_tankshirt1.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/elvs_male_tankshirt1/mens_tanks_elv1f.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/elvs_male_tankshirt1/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-top-elvs_lara_tank1",
+        "label": "Débardeur Lara",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/elvs_lara_tank1/elvs_lara_top1.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/elvs_lara_tank1/elvs_lara_tank1.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/elvs_lara_tank1/elvs_lara_top1.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/elvs_lara_tank1/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-top-elvs_male_muscle_shirt1",
+        "label": "Débardeur muscle",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/elvs_male_muscle_shirt1/mens_tanks_elvmuscle1f.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/elvs_male_muscle_shirt1/elvs_male_muscle_shirt1.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/elvs_male_muscle_shirt1/mens_tanks_elvmuscle1f.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/elvs_male_muscle_shirt1/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-top-elvs_male_athletic_tank1",
+        "label": "Débardeur sport",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/elvs_male_athletic_tank1/m_wifebeater_elv1.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/elvs_male_athletic_tank1/elvs_male_athletic_tank1.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/elvs_male_athletic_tank1/m_wifebeater_elv1.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/elvs_male_athletic_tank1/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-top-namuhekam_male_polo_shirt",
+        "label": "Polo",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/namuhekam_male_polo_shirt/Polo_t-shirt.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/namuhekam_male_polo_shirt/namuhekam_male_polo_shirt.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/namuhekam_male_polo_shirt/Polo_t-shirt.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/namuhekam_male_polo_shirt/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "namuhekam"
+        ]
+      },
+      {
+        "id": "mh-top-toigo_fisherman_sweater",
+        "label": "Pull marin",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/toigo_fisherman_sweater/sweater_fisherman.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/toigo_fisherman_sweater/toigo_fisherman_sweater.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/toigo_fisherman_sweater/sweater_fisherman.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/toigo_fisherman_sweater/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-top-mindfront_lusekofta",
+        "label": "Pull nordique",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/mindfront_lusekofta/f_lusekofta.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/mindfront_lusekofta/mindfront_lusekofta.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/mindfront_lusekofta/f_lusekofta.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/mindfront_lusekofta/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Mindfront"
+        ]
+      },
+      {
+        "id": "mh-top-mindfront_knitted_sweater_01",
+        "label": "Pull tricot 1",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/mindfront_knitted_sweater_01/knitted_sweater_01.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/mindfront_knitted_sweater_01/mindfront_knitted_sweater_01.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/mindfront_knitted_sweater_01/knitted_sweater_01.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/mindfront_knitted_sweater_01/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Mindfront"
+        ]
+      },
+      {
+        "id": "mh-top-mindfront_knitted_sweater_02",
+        "label": "Pull tricot 2",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/mindfront_knitted_sweater_02/knitted_sweater_02.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/mindfront_knitted_sweater_02/mindfront_knitted_sweater_02.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/mindfront_knitted_sweater_02/knitted_sweater_02.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/mindfront_knitted_sweater_02/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Mindfront"
+        ]
+      },
+      {
+        "id": "mh-top-janexx_old_female_sweater",
+        "label": "Pull usé",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/janexx_old_female_sweater/Worn_out_sweater.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/janexx_old_female_sweater/janexx_old_female_sweater.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/janexx_old_female_sweater/Worn_out_sweater.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/janexx_old_female_sweater/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "janexx"
+        ]
+      },
+      {
+        "id": "mh-top-elvs_hooded_sweat_jacket1",
+        "label": "Sweat zippé",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/elvs_hooded_sweat_jacket1/ladieshoodiedown1.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/elvs_hooded_sweat_jacket1/elvs_hooded_sweat_jacket1.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/elvs_hooded_sweat_jacket1/ladieshoodiedown1.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/elvs_hooded_sweat_jacket1/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-top-drednicolson_short-tail_camo_tee",
+        "label": "T-shirt camo",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/drednicolson_short-tail_camo_tee/short_tail_camo_tee.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/drednicolson_short-tail_camo_tee/drednicolson_short-tail_camo_tee.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/drednicolson_short-tail_camo_tee/short_tail_camo_tee.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/drednicolson_short-tail_camo_tee/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "DredNicolson"
+        ]
+      },
+      {
+        "id": "mh-top-joepal_crude_t-shirt_female",
+        "label": "T-shirt femme",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/joepal_crude_t-shirt_female/crudefemaletshirt.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/joepal_crude_t-shirt_female/joepal_crude_t-shirt_female.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/joepal_crude_t-shirt_female/crudefemaletshirt.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/joepal_crude_t-shirt_female/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "Joel Palmius"
+        ]
+      },
+      {
+        "id": "mh-top-punkduck_deathnote_t-shirt",
+        "label": "T-shirt graphique",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/punkduck_deathnote_t-shirt/deathnote.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/punkduck_deathnote_t-shirt/punkduck_deathnote_t-shirt.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/punkduck_deathnote_t-shirt/deathnote.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/punkduck_deathnote_t-shirt/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "punkduck"
+        ]
+      },
+      {
+        "id": "mh-top-elvs_crude_t-shirt_male",
+        "label": "T-shirt homme",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/elvs_crude_t-shirt_male/crude_male_shirt.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/elvs_crude_t-shirt_male/elvs_crude_t-shirt_male.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/elvs_crude_t-shirt_male/crude_male_shirt.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/elvs_crude_t-shirt_male/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-top-elvs_male_logo_tshirt1",
+        "label": "T-shirt logo",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/elvs_male_logo_tshirt1/mens_teeshirt1j.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/elvs_male_logo_tshirt1/elvs_male_logo_tshirt1.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/elvs_male_logo_tshirt1/mens_teeshirt1j.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/elvs_male_logo_tshirt1/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-top-toigo_basic_tucked_t-shirt",
+        "label": "T-shirt rentré",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/toigo_basic_tucked_t-shirt/t_shirt_basic_tucked.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/toigo_basic_tucked_t-shirt/toigo_basic_tucked_t-shirt.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/toigo_basic_tucked_t-shirt/t_shirt_basic_tucked.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/toigo_basic_tucked_t-shirt/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-top-skalldyrssuppe_tube_top_funky_colors",
+        "label": "Top bandeau",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/skalldyrssuppe_tube_top_funky_colors/tube_top.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/skalldyrssuppe_tube_top_funky_colors/skalldyrssuppe_tube_top_funky_colors.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/skalldyrssuppe_tube_top_funky_colors/tube_top.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/skalldyrssuppe_tube_top_funky_colors/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "skalldyrssuppe"
+        ]
+      },
+      {
+        "id": "mh-top-punkduck_tube_top",
+        "label": "Top bandeau",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/punkduck_tube_top/tubetop.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/punkduck_tube_top/punkduck_tube_top.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/punkduck_tube_top/tubetop.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/punkduck_tube_top/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "punkduck"
+        ]
+      },
+      {
+        "id": "mh-top-elvs_male_boho_top1",
+        "label": "Top bohème",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/elvs_male_boho_top1/mens_boho_top1elv.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/elvs_male_boho_top1/elvs_male_boho_top1.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/elvs_male_boho_top1/mens_boho_top1elv.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/elvs_male_boho_top1/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-top-toigo_turtleneck_halter_top",
+        "label": "Top col roulé",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/toigo_turtleneck_halter_top/turtleneck_halter.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/toigo_turtleneck_halter_top/toigo_turtleneck_halter_top.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/toigo_turtleneck_halter_top/turtleneck_halter.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/toigo_turtleneck_halter_top/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-top-punkduck_v_neck_top",
+        "label": "Top col V",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/punkduck_v_neck_top/vnecktop.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/punkduck_v_neck_top/punkduck_v_neck_top.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/punkduck_v_neck_top/vnecktop.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/punkduck_v_neck_top/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "punkduck"
+        ]
+      },
+      {
+        "id": "mh-top-elvs_disco_top2",
+        "label": "Top disco",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/elvs_disco_top2/elvs_discotop2.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/elvs_disco_top2/elvs_disco_top2.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/elvs_disco_top2/elvs_discotop2.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/elvs_disco_top2/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-top-elvs_disco_top_1_butterfly",
+        "label": "Top disco papillon",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/elvs_disco_top_1_butterfly/elvs_butterflydiscotop1.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/elvs_disco_top_1_butterfly/elvs_disco_top_1_butterfly.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/elvs_disco_top_1_butterfly/elvs_butterflydiscotop1.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/elvs_disco_top_1_butterfly/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-top-punkduck_spaghetti_strap_tank_top",
+        "label": "Top fines bretelles",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/punkduck_spaghetti_strap_tank_top/spaghetti_top.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/punkduck_spaghetti_strap_tank_top/punkduck_spaghetti_strap_tank_top.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/punkduck_spaghetti_strap_tank_top/spaghetti_top.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/punkduck_spaghetti_strap_tank_top/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "punkduck"
+        ]
+      },
+      {
+        "id": "mh-top-toigo_keyhole_tank_top",
+        "label": "Top goutte",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/toigo_keyhole_tank_top/tank_keyhole_neck.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/toigo_keyhole_tank_top/toigo_keyhole_tank_top.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/toigo_keyhole_tank_top/tank_keyhole_neck.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/toigo_keyhole_tank_top/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-top-punkduck_retro_top",
+        "label": "Top rétro",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/punkduck_retro_top/vintagetop.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/punkduck_retro_top/punkduck_retro_top.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/punkduck_retro_top/vintagetop.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/punkduck_retro_top/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "punkduck"
+        ]
+      },
+      {
+        "id": "mh-top-punkduck_off-shoulder_long-sleeve_top",
+        "label": "Top épaules nues",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/punkduck_off-shoulder_long-sleeve_top/offshoulder_top.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/punkduck_off-shoulder_long-sleeve_top/punkduck_off-shoulder_long-sleeve_top.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/punkduck_off-shoulder_long-sleeve_top/offshoulder_top.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/punkduck_off-shoulder_long-sleeve_top/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "punkduck"
+        ]
+      },
+      {
+        "id": "mh-top-drednicolson_asymmetric_tunic_and_sash",
+        "label": "Tunique asymétrique",
+        "slot": "top",
+        "url": "/assets/characters/clothes/makehuman/tops/drednicolson_asymmetric_tunic_and_sash/asymmetric_tunic_and_sash.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/tops/drednicolson_asymmetric_tunic_and_sash/drednicolson_asymmetric_tunic_and_sash.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/tops/drednicolson_asymmetric_tunic_and_sash/asymmetric_tunic_and_sash.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/tops/drednicolson_asymmetric_tunic_and_sash/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "DredNicolson"
+        ]
+      }
+    ],
+    "bottoms": [
+      {
+        "id": "mh-bottom-elvs_disco_pants_double_ruffles",
+        "label": "Disco double volant",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/elvs_disco_pants_double_ruffles/elvs_disco_pant_druffles.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_disco_pants_double_ruffles/elvs_disco_pants_double_ruffles.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_disco_pants_double_ruffles/elvs_disco_pant_druffles.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/elvs_disco_pants_double_ruffles/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-bottom-elvs_disco_pants_skinny",
+        "label": "Disco slim",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/elvs_disco_pants_skinny/elvs_disco_pant1.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_disco_pants_skinny/elvs_disco_pants_skinny.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_disco_pants_skinny/elvs_disco_pant1.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/elvs_disco_pants_skinny/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-bottom-elvs_disco_pants_single_ruffles",
+        "label": "Disco volant",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/elvs_disco_pants_single_ruffles/elvs_discopant_sruffle1.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_disco_pants_single_ruffles/elvs_disco_pants_single_ruffles.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_disco_pants_single_ruffles/elvs_discopant_sruffle1.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/elvs_disco_pants_single_ruffles/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-bottom-elvs_jeans_bootcut",
+        "label": "Jean bootcut",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/elvs_jeans_bootcut/mens_elv_jeans1f.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_jeans_bootcut/elvs_jeans_bootcut.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_jeans_bootcut/mens_elv_jeans1f.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/elvs_jeans_bootcut/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-bottom-punkduck_male_classic_jeans",
+        "label": "Jean classique",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/punkduck_male_classic_jeans/male-classic-jeans.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/punkduck_male_classic_jeans/punkduck_male_classic_jeans.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/punkduck_male_classic_jeans/male-classic-jeans.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/punkduck_male_classic_jeans/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "punkduck"
+        ]
+      },
+      {
+        "id": "mh-bottom-elvs_jeans_straight_leg",
+        "label": "Jean droit",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/elvs_jeans_straight_leg/mens_elv_jeans2slf.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_jeans_straight_leg/elvs_jeans_straight_leg.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_jeans_straight_leg/mens_elv_jeans2slf.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/elvs_jeans_straight_leg/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-bottom-punkduck_female_tight_jeans",
+        "label": "Jean slim",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/punkduck_female_tight_jeans/tightjeans.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/punkduck_female_tight_jeans/punkduck_female_tight_jeans.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/punkduck_female_tight_jeans/tightjeans.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/punkduck_female_tight_jeans/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "punkduck"
+        ]
+      },
+      {
+        "id": "mh-bottom-cortu_cargo_pants",
+        "label": "Pantalon cargo",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/cortu_cargo_pants/cargo_pants.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/cortu_cargo_pants/cortu_cargo_pants.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/cortu_cargo_pants/cargo_pants.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/cortu_cargo_pants/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "Cortu"
+        ]
+      },
+      {
+        "id": "mh-bottom-elvs_male_trouser_with_chain",
+        "label": "Pantalon chaîne",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/elvs_male_trouser_with_chain/mens_trouser_f_elv_chr.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_male_trouser_with_chain/elvs_male_trouser_with_chain.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_male_trouser_with_chain/mens_trouser_f_elv_chr.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/elvs_male_trouser_with_chain/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-bottom-mindfront_female_trousers_1",
+        "label": "Pantalon femme",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/mindfront_female_trousers_1/f_trousers_01.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/mindfront_female_trousers_1/mindfront_female_trousers_1.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/mindfront_female_trousers_1/f_trousers_01.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/mindfront_female_trousers_1/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Mindfront"
+        ]
+      },
+      {
+        "id": "mh-bottom-toigo_harem_pants",
+        "label": "Pantalon harem",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/toigo_harem_pants/pants_harem.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/toigo_harem_pants/toigo_harem_pants.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/toigo_harem_pants/pants_harem.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/toigo_harem_pants/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-bottom-elvs_male_trouser",
+        "label": "Pantalon homme",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/elvs_male_trouser/mens_trouser_f_elv1.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_male_trouser/elvs_male_trouser.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_male_trouser/mens_trouser_f_elv1.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/elvs_male_trouser/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-bottom-mindfront_male_trousers_1",
+        "label": "Pantalon homme 1",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/mindfront_male_trousers_1/m_trousers_01.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/mindfront_male_trousers_1/mindfront_male_trousers_1.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/mindfront_male_trousers_1/m_trousers_01.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/mindfront_male_trousers_1/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Mindfront"
+        ]
+      },
+      {
+        "id": "mh-bottom-mindfront_male_trousers_2",
+        "label": "Pantalon homme 2",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/mindfront_male_trousers_2/m_trousers_02.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/mindfront_male_trousers_2/mindfront_male_trousers_2.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/mindfront_male_trousers_2/m_trousers_02.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/mindfront_male_trousers_2/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Mindfront"
+        ]
+      },
+      {
+        "id": "mh-bottom-toigo_wool_pants",
+        "label": "Pantalon laine",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/toigo_wool_pants/pants_wool.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/toigo_wool_pants/toigo_wool_pants.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/toigo_wool_pants/pants_wool.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/toigo_wool_pants/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-bottom-elvs_gored_elephant_pants",
+        "label": "Pantalon évasé",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/elvs_gored_elephant_pants/elvs_gored_elephantpant1.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_gored_elephant_pants/elvs_gored_elephant_pants.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/elvs_gored_elephant_pants/elvs_gored_elephantpant1.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/elvs_gored_elephant_pants/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC-BY",
+          "Elvaerwyn"
+        ]
+      },
+      {
+        "id": "mh-bottom-cortu_jeans_shorts",
+        "label": "Short jean",
+        "slot": "bottom",
+        "url": "/assets/characters/clothes/makehuman/bottoms/cortu_jeans_shorts/jean_shorts.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/bottoms/cortu_jeans_shorts/cortu_jeans_shorts.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/bottoms/cortu_jeans_shorts/jean_shorts.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/bottoms/cortu_jeans_shorts/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "Cortu"
+        ]
+      }
+    ],
+    "shoes": [
+      {
+        "id": "mh-shoes-toigo_ballet_flats",
+        "label": "Ballerines",
+        "slot": "shoes",
+        "url": "/assets/characters/clothes/makehuman/shoes/toigo_ballet_flats/flats_ballet.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/shoes/toigo_ballet_flats/toigo_ballet_flats.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/shoes/toigo_ballet_flats/flats_ballet.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/shoes/toigo_ballet_flats/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-shoes-toigo_ballet_flats_with_flowers",
+        "label": "Ballerines fleurs",
+        "slot": "shoes",
+        "url": "/assets/characters/clothes/makehuman/shoes/toigo_ballet_flats_with_flowers/flats_ballet_flower.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/shoes/toigo_ballet_flats_with_flowers/toigo_ballet_flats_with_flowers.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/shoes/toigo_ballet_flats_with_flowers/flats_ballet_flower.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/shoes/toigo_ballet_flats_with_flowers/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-shoes-toigo_ballet_flats_with_bows",
+        "label": "Ballerines nœud",
+        "slot": "shoes",
+        "url": "/assets/characters/clothes/makehuman/shoes/toigo_ballet_flats_with_bows/flats_ballet_bow.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/shoes/toigo_ballet_flats_with_bows/toigo_ballet_flats_with_bows.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/shoes/toigo_ballet_flats_with_bows/flats_ballet_bow.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/shoes/toigo_ballet_flats_with_bows/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-shoes-scailman_semitransparent_water_boots",
+        "label": "Bottes de pluie",
+        "slot": "shoes",
+        "url": "/assets/characters/clothes/makehuman/shoes/scailman_semitransparent_water_boots/botas_102.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/shoes/scailman_semitransparent_water_boots/scailman_semitransparent_water_boots.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/shoes/scailman_semitransparent_water_boots/botas_102.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/shoes/scailman_semitransparent_water_boots/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "scailman"
+        ]
+      },
+      {
+        "id": "mh-shoes-cortu_floppy_overknee_shoes",
+        "label": "Bottes hautes souples",
+        "slot": "shoes",
+        "url": "/assets/characters/clothes/makehuman/shoes/cortu_floppy_overknee_shoes/floppy_overknee_shoe.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/shoes/cortu_floppy_overknee_shoes/cortu_floppy_overknee_shoes.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/shoes/cortu_floppy_overknee_shoes/floppy_overknee_shoe.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/shoes/cortu_floppy_overknee_shoes/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "Cortu"
+        ]
+      },
+      {
+        "id": "mh-shoes-culturalibre_male_boots",
+        "label": "Bottes homme",
+        "slot": "shoes",
+        "url": "/assets/characters/clothes/makehuman/shoes/culturalibre_male_boots/male_boots.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/shoes/culturalibre_male_boots/culturalibre_male_boots.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/shoes/culturalibre_male_boots/male_boots.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/shoes/culturalibre_male_boots/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "culturalibre"
+        ]
+      },
+      {
+        "id": "mh-shoes-grinsegold_female_pirate_boots",
+        "label": "Bottes pirate",
+        "slot": "shoes",
+        "url": "/assets/characters/clothes/makehuman/shoes/grinsegold_female_pirate_boots/leatherboots_2cm.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/shoes/grinsegold_female_pirate_boots/grinsegold_female_pirate_boots.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/shoes/grinsegold_female_pirate_boots/leatherboots_2cm.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/shoes/grinsegold_female_pirate_boots/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "grinsegold"
+        ]
+      },
+      {
+        "id": "mh-shoes-scailman_gogo_platform_boots",
+        "label": "Bottes plateforme",
+        "slot": "shoes",
+        "url": "/assets/characters/clothes/makehuman/shoes/scailman_gogo_platform_boots/gogo_boots.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/shoes/scailman_gogo_platform_boots/scailman_gogo_platform_boots.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/shoes/scailman_gogo_platform_boots/gogo_boots.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/shoes/scailman_gogo_platform_boots/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "scailman"
+        ]
+      },
+      {
+        "id": "mh-shoes-toigo_ankle_boots_female",
+        "label": "Bottines",
+        "slot": "shoes",
+        "url": "/assets/characters/clothes/makehuman/shoes/toigo_ankle_boots_female/boots_ankle.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/shoes/toigo_ankle_boots_female/toigo_ankle_boots_female.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/shoes/toigo_ankle_boots_female/boots_ankle.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/shoes/toigo_ankle_boots_female/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-shoes-toigo_ankle_boots_male",
+        "label": "Bottines homme",
+        "slot": "shoes",
+        "url": "/assets/characters/clothes/makehuman/shoes/toigo_ankle_boots_male/boots_ankle_male.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/shoes/toigo_ankle_boots_male/toigo_ankle_boots_male.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/shoes/toigo_ankle_boots_male/boots_ankle_male.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/shoes/toigo_ankle_boots_male/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-shoes-toigo_stiletto_booties",
+        "label": "Bottines talon",
+        "slot": "shoes",
+        "url": "/assets/characters/clothes/makehuman/shoes/toigo_stiletto_booties/booties_stiletto.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/shoes/toigo_stiletto_booties/toigo_stiletto_booties.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/shoes/toigo_stiletto_booties/booties_stiletto.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/shoes/toigo_stiletto_booties/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-shoes-toigo_flats",
+        "label": "Chaussures plates",
+        "slot": "shoes",
+        "url": "/assets/characters/clothes/makehuman/shoes/toigo_flats/flats.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/shoes/toigo_flats/toigo_flats.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/shoes/toigo_flats/flats.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/shoes/toigo_flats/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-shoes-toigo_mj_cloth_shoes",
+        "label": "Chaussures toile",
+        "slot": "shoes",
+        "url": "/assets/characters/clothes/makehuman/shoes/toigo_mj_cloth_shoes/mj_shoes.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/shoes/toigo_mj_cloth_shoes/toigo_mj_cloth_shoes.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/shoes/toigo_mj_cloth_shoes/mj_shoes.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/shoes/toigo_mj_cloth_shoes/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "MargaretToigo"
+        ]
+      },
+      {
+        "id": "mh-shoes-cortu_t-bar",
+        "label": "T-bar",
+        "slot": "shoes",
+        "url": "/assets/characters/clothes/makehuman/shoes/cortu_t-bar/tbar.obj",
+        "sourceType": "mhclo",
+        "mhcloUrl": "/assets/characters/clothes/makehuman/shoes/cortu_t-bar/cortu_t-bar.mhclo",
+        "objUrl": "/assets/characters/clothes/makehuman/shoes/cortu_t-bar/tbar.obj",
+        "thumbnail": "/assets/characters/clothes/makehuman/shoes/cortu_t-bar/thumbnail.webp",
+        "tags": [
+          "MakeHuman",
+          "MHCLO",
+          "CC0",
+          "Cortu"
+        ]
+      }
+    ]
+  },
+  "accessories": [],
+  "skins": [
+    {
+      "id": "mh-skin-blindsaypatten_uniform_skin_texture",
+      "label": "Uniforme Texture",
+      "materialUrl": "/assets/characters/skins/makehuman/blindsaypatten_uniform_skin_texture/blindsaypatten_uniform_skin_texture.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/blindsaypatten_uniform_skin_texture/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "blindsaypatten"
+      ]
+    },
+    {
+      "id": "mh-skin-bobby_03_young_female_hairless",
+      "label": "03 Jeune Femme Naturelle",
+      "materialUrl": "/assets/characters/skins/makehuman/bobby_03_young_female_hairless/bobby_03_young_female_hairless.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/bobby_03_young_female_hairless/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "bobby_03"
+      ]
+    },
+    {
+      "id": "mh-skin-callharvey3d_midtoned_female",
+      "label": "Médium Femme",
+      "materialUrl": "/assets/characters/skins/makehuman/callharvey3d_midtoned_female/callharvey3d_midtoned_female.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/callharvey3d_midtoned_female/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "callharvey3d"
+      ]
+    },
+    {
+      "id": "mh-skin-cutoff3d_indian_female_enhanced",
+      "label": "Indienne Femme Détaillée",
+      "materialUrl": "/assets/characters/skins/makehuman/cutoff3d_indian_female_enhanced/cutoff3d_indian_female_enhanced.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/cutoff3d_indian_female_enhanced/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "CutOff3D"
+      ]
+    },
+    {
+      "id": "mh-skin-cutoff3d_indian_female_skin",
+      "label": "Indienne Femme",
+      "materialUrl": "/assets/characters/skins/makehuman/cutoff3d_indian_female_skin/cutoff3d_indian_female_skin.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/cutoff3d_indian_female_skin/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "CutOff3D"
+      ]
+    },
+    {
+      "id": "mh-skin-darthfurby_caucasian_female",
+      "label": "Claire Femme",
+      "materialUrl": "/assets/characters/skins/makehuman/darthfurby_caucasian_female/darthfurby_caucasian_female.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/darthfurby_caucasian_female/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "darthfurby"
+      ]
+    },
+    {
+      "id": "mh-skin-flower-angel_red_head_skin",
+      "label": "Rouge Rousse",
+      "materialUrl": "/assets/characters/skins/makehuman/flower-angel_red_head_skin/flower-angel_red_head_skin.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/flower-angel_red_head_skin/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "flower-angel"
+      ]
+    },
+    {
+      "id": "mh-skin-nyloseth_zoeyskin",
+      "label": "Zoey",
+      "materialUrl": "/assets/characters/skins/makehuman/nyloseth_zoeyskin/nyloseth_zoeyskin.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/nyloseth_zoeyskin/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "Nyloseth"
+      ]
+    },
+    {
+      "id": "mh-skin-onlytheghosts_middle_aged_eurasian_female",
+      "label": "Mature Eurasienne Femme",
+      "materialUrl": "/assets/characters/skins/makehuman/onlytheghosts_middle_aged_eurasian_female/onlytheghosts_middle_aged_eurasian_female.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/onlytheghosts_middle_aged_eurasian_female/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "OnlyTheGhosts"
+      ]
+    },
+    {
+      "id": "mh-skin-onlytheghosts_old_eurasian_female",
+      "label": "Ancien Eurasienne Femme",
+      "materialUrl": "/assets/characters/skins/makehuman/onlytheghosts_old_eurasian_female/onlytheghosts_old_eurasian_female.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/onlytheghosts_old_eurasian_female/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "OnlyTheGhosts"
+      ]
+    },
+    {
+      "id": "mh-skin-onlytheghosts_young_eurasian_female",
+      "label": "Jeune Eurasienne Femme",
+      "materialUrl": "/assets/characters/skins/makehuman/onlytheghosts_young_eurasian_female/onlytheghosts_young_eurasian_female.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/onlytheghosts_young_eurasian_female/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "OnlyTheGhosts"
+      ]
+    },
+    {
+      "id": "mh-skin-saltycowdawg_genuine_caucasian_female_with_genitals",
+      "label": "Naturelle Claire Femme",
+      "materialUrl": "/assets/characters/skins/makehuman/saltycowdawg_genuine_caucasian_female_with_genitals/saltycowdawg_genuine_caucasian_female_with_genitals.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/saltycowdawg_genuine_caucasian_female_with_genitals/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "saltycowdawg"
+      ]
+    },
+    {
+      "id": "mh-skin-skalldyrssuppe_creamy_female",
+      "label": "Crème Femme",
+      "materialUrl": "/assets/characters/skins/makehuman/skalldyrssuppe_creamy_female/skalldyrssuppe_creamy_female.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/skalldyrssuppe_creamy_female/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "skalldyrssuppe"
+      ]
+    },
+    {
+      "id": "mh-skin-spreadcore_alana_caucasian_female_with_genitals_skin",
+      "label": "Alana Claire Femme",
+      "materialUrl": "/assets/characters/skins/makehuman/spreadcore_alana_caucasian_female_with_genitals_skin/spreadcore_alana_caucasian_female_with_genitals_skin.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/spreadcore_alana_caucasian_female_with_genitals_skin/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "spreadcore"
+      ]
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_female_bronze",
+      "label": "Clair Femme Bronzé",
+      "materialUrl": "/assets/characters/skins/makehuman/toigo_light_skin_female_bronze/toigo_light_skin_female_bronze.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/toigo_light_skin_female_bronze/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "MargaretToigo"
+      ]
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_female_bronze_with_makeup",
+      "label": "Clair Femme Bronzé Maquillage",
+      "materialUrl": "/assets/characters/skins/makehuman/toigo_light_skin_female_bronze_with_makeup/toigo_light_skin_female_bronze_with_makeup.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/toigo_light_skin_female_bronze_with_makeup/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "MargaretToigo"
+      ]
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_female_freckles",
+      "label": "Clair Femme Taches de rousseur",
+      "materialUrl": "/assets/characters/skins/makehuman/toigo_light_skin_female_freckles/toigo_light_skin_female_freckles.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/toigo_light_skin_female_freckles/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "MargaretToigo"
+      ]
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_female_ginger",
+      "label": "Clair Femme Roux",
+      "materialUrl": "/assets/characters/skins/makehuman/toigo_light_skin_female_ginger/toigo_light_skin_female_ginger.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/toigo_light_skin_female_ginger/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "MargaretToigo"
+      ]
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_female_ginger_2",
+      "label": "Clair Femme Roux 2",
+      "materialUrl": "/assets/characters/skins/makehuman/toigo_light_skin_female_ginger_2/toigo_light_skin_female_ginger_2.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/toigo_light_skin_female_ginger_2/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "MargaretToigo"
+      ]
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_female_ginger_with_makeup",
+      "label": "Clair Femme Roux Maquillage",
+      "materialUrl": "/assets/characters/skins/makehuman/toigo_light_skin_female_ginger_with_makeup/toigo_light_skin_female_ginger_with_makeup.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/toigo_light_skin_female_ginger_with_makeup/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "MargaretToigo"
+      ]
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_female_with_violet_makeup",
+      "label": "Clair Femme Violet Maquillage",
+      "materialUrl": "/assets/characters/skins/makehuman/toigo_light_skin_female_with_violet_makeup/toigo_light_skin_female_with_violet_makeup.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/toigo_light_skin_female_with_violet_makeup/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "MargaretToigo"
+      ]
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_with_makeup",
+      "label": "Clair Maquillage",
+      "materialUrl": "/assets/characters/skins/makehuman/toigo_light_skin_with_makeup/toigo_light_skin_with_makeup.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/toigo_light_skin_with_makeup/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "MargaretToigo"
+      ]
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_with_natural_makeup",
+      "label": "Clair Naturel Maquillage",
+      "materialUrl": "/assets/characters/skins/makehuman/toigo_light_skin_with_natural_makeup/toigo_light_skin_with_natural_makeup.mhmat",
+      "thumbnail": "/assets/characters/skins/makehuman/toigo_light_skin_with_natural_makeup/thumbnail.webp",
+      "tags": [
+        "MakeHuman",
+        "skin",
+        "CC0",
+        "MargaretToigo"
+      ]
+    }
+  ]
+}

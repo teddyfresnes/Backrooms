@@ -1,0 +1,26 @@
+# MakeHuman Material definition
+
+name knitted_sweater_02
+
+// Color shading attributes
+diffuseColor  1 1 1
+specularColor  0 0 0
+shininess 0.1961
+opacity 1
+
+// Textures and properties
+diffuseTexture Knitted_Sweater_02.webp
+normalmapTexture Knitted_Sweater_02_NRM.webp
+specularTexture Knitted_Sweater_02_SPEC.webp
+
+// Shader programme
+shader data/shaders/glsl/normalmap
+backfaceCull False
+
+// Configure built-in shader defines
+shaderConfig diffuse true
+shaderConfig bump false
+shaderConfig normal  true
+shaderConfig displacement  false
+shaderConfig spec  true
+shaderConfig vertexColors false

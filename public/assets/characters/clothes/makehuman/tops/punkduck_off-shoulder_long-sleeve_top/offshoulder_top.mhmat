@@ -1,0 +1,39 @@
+# Material definition for off_shoulder_top
+
+name off_shoulder_top
+description Offshoulder_top material
+ambientColor 0.505882352941 0.505882352941 0.505882352941
+diffuseColor 1.0 1.0 1.0
+specularColor 0.145098039216 0.145098039216 0.145098039216
+shininess 0.1961
+emissiveColor 0.0 0.0 0.0
+opacity 1.0
+translucency 0.0
+
+shadeless False
+wireframe False
+transparent True
+alphaToCoverage True
+backfaceCull False
+depthless False
+
+castShadows True
+
+receiveShadows True
+
+diffuseTexture offshoulder_top.webp
+normalmapTexture offshoulder_top_normals.webp
+normalmapIntensity 1.0
+
+shader shaders/glsl/litsphere
+
+shaderParam litsphereTexture litspheres/lit_leather.png
+
+shaderConfig ambientOcclusion True
+shaderConfig normal True
+shaderConfig bump False
+shaderConfig displacement False
+shaderConfig vertexColors False
+shaderConfig spec False
+shaderConfig transparency True
+shaderConfig diffuse True

@@ -1,0 +1,39 @@
+# Material definition for Lace_up_blouse
+
+name Lace_up_blouse
+description Lace_up_blouse material
+ambientColor 0.533333333333 0.533333333333 0.533333333333
+diffuseColor 1.0 1.0 1.0
+specularColor 0.254901960784 0.254901960784 0.254901960784
+shininess 0.5
+emissiveColor 0.0 0.0 0.0
+opacity 1.0
+translucency 0.0
+
+shadeless False
+wireframe False
+transparent True
+alphaToCoverage True
+backfaceCull False
+depthless False
+
+castShadows True
+
+receiveShadows True
+
+diffuseTexture lace_up_blouse.webp
+normalmapTexture lace_up_blouse_norm.webp
+normalmapIntensity 1.0
+
+shader shaders/glsl/litsphere
+
+shaderParam litsphereTexture litspheres/lit_leather.png
+
+shaderConfig ambientOcclusion True
+shaderConfig normal True
+shaderConfig bump True
+shaderConfig displacement True
+shaderConfig vertexColors True
+shaderConfig spec True
+shaderConfig transparency True
+shaderConfig diffuse True

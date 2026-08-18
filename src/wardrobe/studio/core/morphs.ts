@@ -1,0 +1,156 @@
+import type { MorphDefinition } from './types'
+
+// UI ranges stay intentionally narrower than the raw MakeHuman target range.
+// The browser runtime still applies the real HM08 sparse targets; these limits
+// keep the editor useful without making ordinary characters collapse into
+// extreme or obviously broken shapes.
+export const MORPHS: MorphDefinition[] = [
+  // Simple / global body controls.
+  { key: 'gender', label: 'Sexe', section: 'body', min: -1, max: 1, step: 2, default: 1, tooltip: 'Femme / homme.' },
+  { key: 'age', label: 'Âge', section: 'body', min: 0.5, max: 0.84, step: 0.005, default: 0.56, tooltip: 'Adultes uniquement.' },
+  { key: 'height', label: 'Taille', section: 'body', min: -0.42, max: 0.44, step: 0.01, default: 0.11, tooltip: 'Taille calibrée sur HM08.' },
+  { key: 'weight', label: 'Poids', section: 'body', min: -0.65, max: 0.75, step: 0.01, default: -0.03, tooltip: 'Corpulence MakeHuman exprimée en masse approximative.' },
+  { key: 'muscle', label: 'Musculature', section: 'body', min: -0.4, max: 0.58, step: 0.01, default: 0, tooltip: 'Macro musculaire MakeHuman.' },
+  { key: 'bodyFat', label: 'Masse grasse', section: 'body', min: -0.32, max: 0.42, step: 0.01, default: 0, tooltip: 'Répartition locale de volume.' },
+  { key: 'proportions', label: 'Proportions', section: 'body', min: -0.08, max: 0.12, step: 0.01, default: 0, tooltip: 'Proportions globales.' },
+
+  // Shoulder / torso / trunk.
+  { key: 'shoulders', label: 'Largeur', section: 'body', min: -0.4, max: 0.42, step: 0.01, default: 0, tooltip: 'Largeur d’épaules.' },
+  { key: 'shoulderMuscle', label: 'Deltoïdes', section: 'body', min: -0.34, max: 0.4, step: 0.01, default: 0, tooltip: 'Volume des épaules.' },
+  { key: 'chest', label: 'Profondeur', section: 'body', min: -0.34, max: 0.38, step: 0.01, default: 0, tooltip: 'Profondeur du torse.' },
+  { key: 'torsoWidth', label: 'Largeur', section: 'body', min: -0.34, max: 0.38, step: 0.01, default: 0, tooltip: 'Largeur du torse.' },
+  { key: 'torsoHeight', label: 'Longueur', section: 'body', min: -0.12, max: 0.12, step: 0.01, default: 0, tooltip: 'Hauteur du torse.' },
+  { key: 'torsoVShape', label: 'Forme en V', section: 'body', min: -0.38, max: 0.42, step: 0.01, default: 0, tooltip: 'Silhouette du torse.' },
+  { key: 'pectoralMuscle', label: 'Pectoraux', section: 'body', min: -0.34, max: 0.42, step: 0.01, default: 0, tooltip: 'Volume pectoral.' },
+  { key: 'backMuscle', label: 'Dos', section: 'body', min: -0.32, max: 0.4, step: 0.01, default: 0, tooltip: 'Volume dorsal.' },
+  { key: 'bustCirc', label: 'Tour poitrine', section: 'body', min: -0.22, max: 0.28, step: 0.01, default: 0, tooltip: 'Circonférence de poitrine.' },
+  { key: 'underBust', label: 'Sous-poitrine', section: 'body', min: -0.2, max: 0.24, step: 0.01, default: 0, tooltip: 'Circonférence sous la poitrine.' },
+  { key: 'frontChest', label: 'Avant du torse', section: 'body', min: -0.16, max: 0.2, step: 0.01, default: 0, tooltip: 'Distance de poitrine avant.' },
+  { key: 'stomachTone', label: 'Tonicité', section: 'body', min: -0.26, max: 0.3, step: 0.01, default: 0, tooltip: 'Tonicité du ventre.' },
+  { key: 'bellyProjection', label: 'Volume', section: 'body', min: -0.18, max: 0.3, step: 0.01, default: 0, tooltip: 'Projection du ventre.' },
+  { key: 'waist', label: 'Tour', section: 'body', min: -0.44, max: 0.46, step: 0.01, default: 0, tooltip: 'Tour de taille.' },
+  { key: 'waistHeight', label: 'Hauteur', section: 'body', min: -0.12, max: 0.12, step: 0.01, default: 0, tooltip: 'Position de la taille.' },
+  { key: 'hips', label: 'Largeur', section: 'body', min: -0.42, max: 0.44, step: 0.01, default: 0, tooltip: 'Largeur des hanches.' },
+  { key: 'hipDepth', label: 'Profondeur', section: 'body', min: -0.34, max: 0.38, step: 0.01, default: 0, tooltip: 'Profondeur des hanches.' },
+  { key: 'hipHeight', label: 'Hauteur', section: 'body', min: -0.12, max: 0.12, step: 0.01, default: 0, tooltip: 'Hauteur du bassin.' },
+  { key: 'buttocks', label: 'Volume', section: 'body', min: -0.42, max: 0.48, step: 0.01, default: 0, tooltip: 'Volume des fesses.' },
+  { key: 'pelvisTone', label: 'Tonicité', section: 'body', min: -0.2, max: 0.24, step: 0.01, default: 0, tooltip: 'Tonicité du bassin.' },
+
+  // Native MakeHuman breast controls. The size/firmness controls use the
+  // macro-dependent breast target families in MacroTargets.ts.
+  { key: 'breastSize', label: 'Taille seins', section: 'body', min: -0.65, max: 0.65, step: 0.01, default: 0, tooltip: 'Taille de bonnet autour de la moyenne.' },
+  { key: 'breastFirmness', label: 'Fermeté', section: 'body', min: -0.65, max: 0.65, step: 0.01, default: 0, tooltip: 'Fermeté des seins.' },
+  { key: 'breastSeparation', label: 'Écartement', section: 'body', min: -0.28, max: 0.3, step: 0.01, default: 0, tooltip: 'Distance entre les seins.' },
+  { key: 'breastProjection', label: 'Projection', section: 'body', min: -0.22, max: 0.28, step: 0.01, default: 0, tooltip: 'Projection vers l’avant.' },
+  { key: 'breastHeight', label: 'Position', section: 'body', min: -0.18, max: 0.18, step: 0.01, default: 0, tooltip: 'Position verticale.' },
+  { key: 'breastVerticalShape', label: 'Forme verticale', section: 'body', min: -0.22, max: 0.22, step: 0.01, default: 0, tooltip: 'Répartition verticale du volume.' },
+
+  // Limbs.
+  { key: 'armLength', label: 'Longueur bras', section: 'body', min: -0.16, max: 0.16, step: 0.01, default: 0, tooltip: 'Longueur totale du bras.' },
+  { key: 'upperArmCirc', label: 'Tour bras', section: 'body', min: -0.36, max: 0.42, step: 0.01, default: 0, tooltip: 'Circonférence du bras.' },
+  { key: 'upperArmMuscle', label: 'Bras', section: 'body', min: -0.38, max: 0.44, step: 0.01, default: 0, tooltip: 'Muscle du bras.' },
+  { key: 'forearmMuscle', label: 'Avant-bras', section: 'body', min: -0.36, max: 0.42, step: 0.01, default: 0, tooltip: 'Muscle de l’avant-bras.' },
+  { key: 'armFullness', label: 'Volume souple', section: 'body', min: -0.34, max: 0.4, step: 0.01, default: 0, tooltip: 'Volume graisseux des bras.' },
+  { key: 'legLength', label: 'Longueur jambes', section: 'body', min: -0.07, max: 0.07, step: 0.01, default: 0, tooltip: 'Longueur totale des jambes.' },
+  { key: 'thighCirc', label: 'Tour cuisses', section: 'body', min: -0.38, max: 0.44, step: 0.01, default: 0, tooltip: 'Circonférence des cuisses.' },
+  { key: 'calfCirc', label: 'Tour mollets', section: 'body', min: -0.36, max: 0.42, step: 0.01, default: 0, tooltip: 'Circonférence des mollets.' },
+  { key: 'kneeCirc', label: 'Genoux', section: 'body', min: -0.16, max: 0.18, step: 0.01, default: 0, tooltip: 'Circonférence des genoux.' },
+  { key: 'thighMuscle', label: 'Cuisses', section: 'body', min: -0.38, max: 0.44, step: 0.01, default: 0, tooltip: 'Muscle des cuisses.' },
+  { key: 'calfMuscle', label: 'Mollets', section: 'body', min: -0.38, max: 0.44, step: 0.01, default: 0, tooltip: 'Muscle des mollets.' },
+  { key: 'legFullness', label: 'Volume souple', section: 'body', min: -0.34, max: 0.4, step: 0.01, default: 0, tooltip: 'Volume graisseux des jambes.' },
+  { key: 'hands', label: 'Longueur mains', section: 'body', min: -0.42, max: 0.42, step: 0.01, default: 0, tooltip: 'Longueur de la main.' },
+  { key: 'fingerLength', label: 'Longueur doigts', section: 'body', min: -0.34, max: 0.36, step: 0.01, default: 0, tooltip: 'Longueur des doigts.' },
+  { key: 'fingerThickness', label: 'Épaisseur doigts', section: 'body', min: -0.32, max: 0.34, step: 0.01, default: 0, tooltip: 'Diamètre des doigts.' },
+  { key: 'fingerSpread', label: 'Écart doigts', section: 'body', min: -0.24, max: 0.26, step: 0.01, default: 0, tooltip: 'Espacement au repos.' },
+  { key: 'wristCirc', label: 'Poignet', section: 'body', min: -0.3, max: 0.32, step: 0.01, default: 0, tooltip: 'Circonférence du poignet.' },
+  { key: 'feet', label: 'Pointure', section: 'body', min: -0.22, max: 0.22, step: 0.01, default: 0, tooltip: 'Pointure EU approximative.' },
+  { key: 'footWidth', label: 'Largeur', section: 'body', min: -0.18, max: 0.2, step: 0.01, default: 0, tooltip: 'Largeur du pied.' },
+  { key: 'footDepth', label: 'Longueur locale', section: 'body', min: -0.18, max: 0.2, step: 0.01, default: 0, tooltip: 'Profondeur du pied.' },
+  { key: 'footHeight', label: 'Hauteur', section: 'body', min: -0.14, max: 0.16, step: 0.01, default: 0, tooltip: 'Hauteur du pied.' },
+  { key: 'ankleCirc', label: 'Cheville', section: 'body', min: -0.18, max: 0.2, step: 0.01, default: 0, tooltip: 'Circonférence de cheville.' },
+  { key: 'neckCirc', label: 'Tour cou', section: 'body', min: -0.3, max: 0.34, step: 0.01, default: 0, tooltip: 'Circonférence du cou.' },
+  { key: 'neckHeight', label: 'Hauteur cou', section: 'body', min: -0.12, max: 0.14, step: 0.01, default: 0, tooltip: 'Hauteur du cou.' },
+  { key: 'neckWidth', label: 'Largeur cou', section: 'body', min: -0.28, max: 0.32, step: 0.01, default: 0, tooltip: 'Largeur du cou.' },
+  { key: 'neckDepth', label: 'Profondeur cou', section: 'body', min: -0.28, max: 0.32, step: 0.01, default: 0, tooltip: 'Profondeur du cou.' },
+
+  // Head / face.
+  { key: 'faceShape', label: 'Rondeur', section: 'face', min: -0.28, max: 0.28, step: 0.01, default: 0, tooltip: 'Carré ↔ rond.' },
+  { key: 'headWidth', label: 'Largeur tête', section: 'face', min: -0.22, max: 0.22, step: 0.01, default: 0, tooltip: 'Largeur globale de la tête.' },
+  { key: 'headDepth', label: 'Profondeur tête', section: 'face', min: -0.22, max: 0.22, step: 0.01, default: 0, tooltip: 'Profondeur globale de la tête.' },
+  { key: 'headHeight', label: 'Hauteur tête', section: 'face', min: -0.18, max: 0.18, step: 0.01, default: 0, tooltip: 'Hauteur globale de la tête.' },
+  { key: 'headBackDepth', label: 'Arrière crâne', section: 'face', min: -0.22, max: 0.22, step: 0.01, default: 0, tooltip: 'Profondeur arrière du crâne.' },
+  { key: 'headFat', label: 'Volume visage', section: 'face', min: -0.24, max: 0.28, step: 0.01, default: 0, tooltip: 'Volume graisseux du visage.' },
+
+  { key: 'jaw', label: 'Largeur mâchoire', section: 'face', min: -0.3, max: 0.3, step: 0.01, default: 0, tooltip: 'Largeur de la mâchoire.' },
+  { key: 'jawProjection', label: 'Projection mâchoire', section: 'face', min: -0.24, max: 0.24, step: 0.01, default: 0, tooltip: 'Prognathisme.' },
+  { key: 'jawHeight', label: 'Hauteur mâchoire', section: 'face', min: -0.18, max: 0.18, step: 0.01, default: 0, tooltip: 'Hauteur de la partie basse.' },
+  { key: 'chin', label: 'Projection menton', section: 'face', min: -0.25, max: 0.25, step: 0.01, default: 0, tooltip: 'Projection du menton.' },
+  { key: 'chinHeight', label: 'Hauteur menton', section: 'face', min: -0.22, max: 0.22, step: 0.01, default: 0, tooltip: 'Hauteur du menton.' },
+  { key: 'chinCleft', label: 'Fossette', section: 'face', min: -0.22, max: 0.24, step: 0.01, default: 0, tooltip: 'Fossette du menton.' },
+  { key: 'chinBones', label: 'Structure', section: 'face', min: -0.22, max: 0.24, step: 0.01, default: 0, tooltip: 'Structure osseuse du menton.' },
+
+  { key: 'cheekbones', label: 'Pommettes', section: 'face', min: -0.3, max: 0.3, step: 0.01, default: 0, tooltip: 'Proéminence des pommettes.' },
+  { key: 'cheekVolume', label: 'Volume joues', section: 'face', min: -0.28, max: 0.3, step: 0.01, default: 0, tooltip: 'Volume des joues.' },
+  { key: 'cheekHeight', label: 'Hauteur joues', section: 'face', min: -0.2, max: 0.2, step: 0.01, default: 0, tooltip: 'Position verticale des joues.' },
+  { key: 'cheekInner', label: 'Creux joues', section: 'face', min: -0.24, max: 0.24, step: 0.01, default: 0, tooltip: 'Creux interne des joues.' },
+
+  { key: 'forehead', label: 'Hauteur front', section: 'face', min: -0.18, max: 0.18, step: 0.01, default: 0, tooltip: 'Hauteur du front.' },
+  { key: 'foreheadProjection', label: 'Projection front', section: 'face', min: -0.18, max: 0.18, step: 0.01, default: 0, tooltip: 'Projection du front.' },
+  { key: 'foreheadTemple', label: 'Tempes', section: 'face', min: -0.22, max: 0.22, step: 0.01, default: 0, tooltip: 'Volume des tempes.' },
+  { key: 'foreheadNubian', label: 'Courbure', section: 'face', min: -0.18, max: 0.18, step: 0.01, default: 0, tooltip: 'Courbure frontale.' },
+
+  { key: 'eyeSize', label: 'Taille', section: 'face', min: -0.18, max: 0.18, step: 0.01, default: 0, tooltip: 'Taille des yeux.' },
+  { key: 'eyeHeight', label: 'Hauteur', section: 'face', min: -0.15, max: 0.15, step: 0.01, default: 0, tooltip: 'Position verticale.' },
+  { key: 'eyeSpacing', label: 'Écartement', section: 'face', min: -0.17, max: 0.17, step: 0.01, default: 0, tooltip: 'Écartement des yeux.' },
+  { key: 'eyeInnerHeight', label: 'Coin interne', section: 'face', min: -0.14, max: 0.14, step: 0.01, default: 0, tooltip: 'Ouverture interne.' },
+  { key: 'eyeOuterHeight', label: 'Coin externe', section: 'face', min: -0.14, max: 0.14, step: 0.01, default: 0, tooltip: 'Ouverture externe.' },
+  { key: 'eyeFold', label: 'Pli paupière', section: 'face', min: -0.18, max: 0.18, step: 0.01, default: 0, tooltip: 'Pli de la paupière.' },
+  { key: 'epicanthus', label: 'Épicanthus', section: 'face', min: -0.18, max: 0.18, step: 0.01, default: 0, tooltip: 'Pli interne.' },
+  { key: 'eyeBags', label: 'Poches', section: 'face', min: -0.2, max: 0.22, step: 0.01, default: 0, tooltip: 'Poches sous les yeux.' },
+  { key: 'eyeBagHeight', label: 'Position poches', section: 'face', min: -0.16, max: 0.16, step: 0.01, default: 0, tooltip: 'Hauteur des poches.' },
+
+  { key: 'brows', label: 'Hauteur', section: 'face', min: -0.2, max: 0.2, step: 0.01, default: 0, tooltip: 'Hauteur des sourcils.' },
+  { key: 'browProjection', label: 'Projection', section: 'face', min: -0.18, max: 0.18, step: 0.01, default: 0, tooltip: 'Projection des sourcils.' },
+  { key: 'browAngle', label: 'Angle', section: 'face', min: -0.2, max: 0.2, step: 0.01, default: 0, tooltip: 'Inclinaison des sourcils.' },
+
+  { key: 'noseSize', label: 'Volume', section: 'face', min: -0.28, max: 0.28, step: 0.01, default: 0, tooltip: 'Volume nasal.' },
+  { key: 'noseWidth', label: 'Largeur', section: 'face', min: -0.28, max: 0.28, step: 0.01, default: 0, tooltip: 'Largeur du nez.' },
+  { key: 'noseLength', label: 'Projection', section: 'face', min: -0.26, max: 0.26, step: 0.01, default: 0, tooltip: 'Projection du nez.' },
+  { key: 'noseHeight', label: 'Hauteur', section: 'face', min: -0.22, max: 0.22, step: 0.01, default: 0, tooltip: 'Hauteur du nez.' },
+  { key: 'noseTip', label: 'Pointe', section: 'face', min: -0.22, max: 0.22, step: 0.01, default: 0, tooltip: 'Pointe vers le bas / haut.' },
+  { key: 'noseTipWidth', label: 'Largeur pointe', section: 'face', min: -0.22, max: 0.22, step: 0.01, default: 0, tooltip: 'Largeur de la pointe.' },
+  { key: 'nostrilWidth', label: 'Largeur narines', section: 'face', min: -0.22, max: 0.24, step: 0.01, default: 0, tooltip: 'Largeur des narines.' },
+  { key: 'nostrilAngle', label: 'Angle narines', section: 'face', min: -0.2, max: 0.2, step: 0.01, default: 0, tooltip: 'Angle des narines.' },
+  { key: 'noseFlare', label: 'Évasement', section: 'face', min: -0.2, max: 0.22, step: 0.01, default: 0, tooltip: 'Évasement des ailes.' },
+  { key: 'noseCurve', label: 'Courbure', section: 'face', min: -0.2, max: 0.2, step: 0.01, default: 0, tooltip: 'Profil concave / convexe.' },
+  { key: 'noseHump', label: 'Bosse', section: 'face', min: -0.18, max: 0.2, step: 0.01, default: 0, tooltip: 'Bosse du nez.' },
+  { key: 'noseCompression', label: 'Compression', section: 'face', min: -0.2, max: 0.2, step: 0.01, default: 0, tooltip: 'Compression du nez.' },
+
+  // Legacy composite mouth key remains for old saves; new UI uses the detailed keys.
+  { key: 'mouth', label: 'Bouche / lèvres', section: 'face', min: -0.26, max: 0.26, step: 0.01, default: 0, tooltip: 'Ancien contrôle composite.' },
+  { key: 'mouthWidth', label: 'Largeur', section: 'face', min: -0.24, max: 0.24, step: 0.01, default: 0, tooltip: 'Largeur de la bouche.' },
+  { key: 'mouthHeight', label: 'Hauteur', section: 'face', min: -0.2, max: 0.2, step: 0.01, default: 0, tooltip: 'Hauteur de la bouche.' },
+  { key: 'mouthProjection', label: 'Projection', section: 'face', min: -0.2, max: 0.2, step: 0.01, default: 0, tooltip: 'Projection avant/arrière.' },
+  { key: 'mouthPosition', label: 'Position', section: 'face', min: -0.16, max: 0.16, step: 0.01, default: 0, tooltip: 'Position verticale.' },
+  { key: 'upperLipVolume', label: 'Lèvre haute', section: 'face', min: -0.26, max: 0.28, step: 0.01, default: 0, tooltip: 'Volume de la lèvre supérieure.' },
+  { key: 'lowerLipVolume', label: 'Lèvre basse', section: 'face', min: -0.26, max: 0.28, step: 0.01, default: 0, tooltip: 'Volume de la lèvre inférieure.' },
+  { key: 'upperLipHeight', label: 'Hauteur lèvre haute', section: 'face', min: -0.2, max: 0.2, step: 0.01, default: 0, tooltip: 'Hauteur de lèvre supérieure.' },
+  { key: 'lowerLipHeight', label: 'Hauteur lèvre basse', section: 'face', min: -0.2, max: 0.2, step: 0.01, default: 0, tooltip: 'Hauteur de lèvre inférieure.' },
+  { key: 'cupidBow', label: 'Arc de Cupidon', section: 'face', min: -0.2, max: 0.22, step: 0.01, default: 0, tooltip: 'Définition de l’arc.' },
+  { key: 'cupidBowWidth', label: 'Largeur arc', section: 'face', min: -0.2, max: 0.22, step: 0.01, default: 0, tooltip: 'Largeur de l’arc de Cupidon.' },
+  { key: 'mouthCorners', label: 'Commissures', section: 'face', min: -0.16, max: 0.16, step: 0.01, default: 0, tooltip: 'Orientation des commissures.' },
+  { key: 'philtrum', label: 'Philtrum', section: 'face', min: -0.2, max: 0.2, step: 0.01, default: 0, tooltip: 'Volume du philtrum.' },
+  { key: 'dimples', label: 'Fossettes', section: 'face', min: -0.16, max: 0.18, step: 0.01, default: 0, tooltip: 'Fossettes des joues.' },
+
+  { key: 'ears', label: 'Taille', section: 'face', min: -0.26, max: 0.26, step: 0.01, default: 0, tooltip: 'Taille des oreilles.' },
+  { key: 'earDepth', label: 'Profondeur', section: 'face', min: -0.22, max: 0.22, step: 0.01, default: 0, tooltip: 'Profondeur des oreilles.' },
+  { key: 'earHeight', label: 'Hauteur', section: 'face', min: -0.22, max: 0.22, step: 0.01, default: 0, tooltip: 'Hauteur des oreilles.' },
+  { key: 'earWing', label: 'Décollement', section: 'face', min: -0.24, max: 0.28, step: 0.01, default: 0, tooltip: 'Décollement des oreilles.' },
+  { key: 'earFlap', label: 'Pavillon', section: 'face', min: -0.22, max: 0.24, step: 0.01, default: 0, tooltip: 'Forme du pavillon.' },
+  { key: 'earLobe', label: 'Lobe', section: 'face', min: -0.22, max: 0.24, step: 0.01, default: 0, tooltip: 'Volume du lobe.' },
+  { key: 'earRotation', label: 'Rotation', section: 'face', min: -0.22, max: 0.22, step: 0.01, default: 0, tooltip: 'Orientation avant/arrière.' },
+]
+
+export const morphDefaults = (section: 'body' | 'face') => Object.fromEntries(
+  MORPHS.filter((m) => m.section === section).map((m) => [m.key, m.default]),
+)

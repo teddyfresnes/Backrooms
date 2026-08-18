@@ -1,0 +1,38 @@
+# Material definition for fhair02_blond
+
+name fhair02_blond
+ambientColor 0.501960784314 0.501960784314 0.501960784314
+diffuseColor 1.0 1.0 1.0
+specularColor 0.109803921569 0.109803921569 0.109803921569
+shininess 0.96
+emissiveColor 0.666666666667 0.666666666667 0.666666666667
+opacity 1.0
+translucency 0.0
+
+shadeless False
+wireframe False
+transparent True
+alphaToCoverage True
+backfaceCull False
+depthless False
+
+castShadows True
+
+receiveShadows True
+
+diffuseTexture fhair02_blond.webp
+
+# Sub-surface scattering parameters
+sssEnabled True
+sssRScale 5.0
+sssGScale 2.5
+sssBScale 1.0
+
+shaderConfig ambientOcclusion True
+shaderConfig normal False
+shaderConfig bump True
+shaderConfig displacement False
+shaderConfig vertexColors True
+shaderConfig spec True
+shaderConfig transparency True
+shaderConfig diffuse True

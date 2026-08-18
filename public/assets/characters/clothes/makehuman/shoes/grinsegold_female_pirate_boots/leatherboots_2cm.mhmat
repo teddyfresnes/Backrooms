@@ -1,0 +1,27 @@
+# MakeHuman Material definition
+
+name bootsMaterial
+
+// Color shading attributes
+diffuseColor  0.64 0.64 0.64
+specularColor  0.5 0.5 0.5
+shininess 0.1961
+opacity 1
+
+// Textures and properties
+diffuseTexture BootsDiff.webp
+displacementTexture Boots_Bump.webp
+bumpTexture BootsNormals.webp
+specularTexture BootsSpec.webp
+specularTexture Tileable_metal_scratch_rust_texture_SPECULAR.webp
+
+// Shader programme
+shader data/shaders/glsl/phong
+
+// Configure built-in shader defines
+shaderConfig diffuse true
+shaderConfig bump true
+shaderConfig normal  false
+shaderConfig displacement  true
+shaderConfig spec  true
+shaderConfig vertexColors false
