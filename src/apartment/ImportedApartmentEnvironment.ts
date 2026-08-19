@@ -50,6 +50,15 @@ const APARTMENT_WINDOW_GLASS_NAMES = new Set([
   'polySurface24_M_MainParts_0',
 ]);
 
+const APARTMENT_EXTERIOR_DOOR_MESH_NAMES = new Set([
+  'front-door-authored-back-face',
+  'front-door-exterior-handle-clone',
+]);
+
+export const isApartmentInteriorLightResponsiveMesh = (mesh: THREE.Mesh): boolean => (
+  !APARTMENT_EXTERIOR_DOOR_MESH_NAMES.has(mesh.name)
+);
+
 export const makeApartmentWindowGlassTransparent = (root: THREE.Object3D): void => {
   const glass = new THREE.MeshBasicMaterial({
     name: 'apartment-window-reflection-free-glass',
@@ -244,7 +253,13 @@ export const closeDoorLeafWithBackFace = (leaf: THREE.Object3D): THREE.Mesh | nu
   backGeometry.computeBoundingBox();
   backGeometry.computeBoundingSphere();
 
-  const backFace = new THREE.Mesh(backGeometry, sourceMesh.material);
+  // This is the stairwell-facing skin. It needs its own material instances so
+  // switching off the apartment can darken the authored interior face without
+  // also multiplying the exterior albedo by the interior blackout factor.
+  const exteriorMaterial = Array.isArray(sourceMesh.material)
+    ? sourceMesh.material.map((material) => material.clone())
+    : sourceMesh.material.clone();
+  const backFace = new THREE.Mesh(backGeometry, exteriorMaterial);
   backFace.name = 'front-door-authored-back-face';
   backFace.position.copy(sourceMesh.position);
   backFace.quaternion.copy(sourceMesh.quaternion);
@@ -417,7 +432,9 @@ const cloneInteriorDoorHardwareToExterior = (leaf: THREE.Object3D): void => {
   interiorHandle.renderOrder = 3;
   interiorHandle.frustumCulled = true;
 
-  const mirroredHandle = new THREE.Mesh(copyHardwareGeometry(true), hardwareMaterial);
+  const exteriorHardwareMaterial = hardwareMaterial.clone();
+  exteriorHardwareMaterial.name = 'apartment-door-exterior-hardware-brushed-nickel';
+  const mirroredHandle = new THREE.Mesh(copyHardwareGeometry(true), exteriorHardwareMaterial);
   mirroredHandle.name = 'front-door-exterior-handle-clone';
   mirroredHandle.position.copy(sourceMesh.position);
   // The imported assembly embeds roughly 10 mm of its base in the front face.
@@ -1011,6 +1028,9 @@ export class ImportedApartmentEnvironment {
       root.traverse((object) => {
         const mesh = object as THREE.Mesh;
         if (!mesh.isMesh) return;
+        // The generated rear skin and mirrored handle face the lit stairwell,
+        // so they must not inherit the apartment-only lights-off calibration.
+        if (!isApartmentInteriorLightResponsiveMesh(mesh)) return;
         mesh.material = Array.isArray(mesh.material)
           ? mesh.material.map((material) => cloneMaterial(material))
           : cloneMaterial(mesh.material);

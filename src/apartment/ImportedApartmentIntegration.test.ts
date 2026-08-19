@@ -6,6 +6,7 @@ import {
   createApartmentDoorHardwareMaterial,
   createApartmentMainLight,
   hideObjectsRestingOnSupport,
+  isApartmentInteriorLightResponsiveMesh,
   makeApartmentMainFixtureLuminous,
   makeApartmentWindowGlassTransparent,
   preciseBoxFromObject,
@@ -51,7 +52,8 @@ describe('imported apartment integration', () => {
       12, 13, 14, 12, 14, 15,
     ]);
     const leaf = new THREE.Group();
-    leaf.add(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial()));
+    const interiorMaterial = new THREE.MeshStandardMaterial({ color: 0x8a6a49 });
+    leaf.add(new THREE.Mesh(geometry, interiorMaterial));
 
     const backFace = closeDoorLeafWithBackFace(leaf);
 
@@ -63,6 +65,16 @@ describe('imported apartment integration', () => {
     expect(box.max.y).toBeCloseTo(2, 6);
     expect(box.min.z).toBeCloseTo(-0.45, 6);
     expect(box.max.z).toBeCloseTo(0.45, 6);
+    expect(backFace?.material).not.toBe(interiorMaterial);
+    expect(isApartmentInteriorLightResponsiveMesh(backFace!)).toBe(false);
+
+    const interiorFace = new THREE.Mesh(geometry, interiorMaterial);
+    interiorFace.name = 'front-door-interior-face';
+    expect(isApartmentInteriorLightResponsiveMesh(interiorFace)).toBe(true);
+
+    const exteriorHandle = new THREE.Mesh(geometry, interiorMaterial);
+    exteriorHandle.name = 'front-door-exterior-handle-clone';
+    expect(isApartmentInteriorLightResponsiveMesh(exteriorHandle)).toBe(false);
   });
 
   it('suppresses sharp interior highlights without disabling local lights', () => {
