@@ -8,6 +8,7 @@ localisé, utiliser directement le guide de sous-système indiqué dans
 
 ```text
 src/main.ts
+  ├─ joue l'introduction d'ouverture pendant le chargement du fond de menu
   ├─ monte un Game Level 0 neuf comme fond non jouable du menu principal
   ├─ Continuer choisit la session locale la plus récente, ou un nouveau départ
   ├─ import dynamique de RussianStairwellGame
@@ -41,6 +42,11 @@ reste finie et statique : ne pas la faire passer par `WorldStream`, dont les
 coordonnées de chunks et d’étages appartiennent au monde procédural. `src/main.ts`
 détruit ce runtime avant d’instancier `Game` lorsque la porte-portail du hall est
 activée.
+
+Au premier chargement de la page, `OpeningIntro` joue au-dessus de `#app`
+pendant que le fond Level 0 s'initialise. Sa durée minimale et le chargement du
+runtime se rejoignent avant que le logo animé converge vers le menu. Les retours
+ultérieurs au menu principal ne rejouent pas cette introduction.
 
 Une session jouable masque l’overlay avant de demander le verrouillage de souris :
 le refus asynchrone du navigateur ne doit jamais rouvrir le menu de pause. Le

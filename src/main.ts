@@ -10,6 +10,7 @@ import {
   type GameSaveEntry,
 } from './core/SaveHistory';
 import type { RussianStairwellLaunch } from './core/RussianStairwellGame';
+import { OpeningIntro } from './ui/OpeningIntro';
 
 const appElement = document.querySelector<HTMLElement>('#app');
 if (!appElement) throw new Error('Application mount point not found.');
@@ -200,11 +201,20 @@ async function startInitialExperience(): Promise<void> {
   await startBackrooms({ kind: 'new' }, false, true);
 }
 
-requestAnimationFrame(() => void startInitialExperience());
+const openingIntro = new OpeningIntro();
+requestAnimationFrame(() => {
+  void Promise.all([startInitialExperience(), openingIntro.minimumDuration])
+    .then(() => openingIntro.finish())
+    .catch((error) => {
+      openingIntro.dispose();
+      console.error(error);
+    });
+});
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     transitionId += 1;
+    openingIntro.dispose();
     clearRuntime();
   });
 }

@@ -18,7 +18,29 @@ describe('experience routing', () => {
     expect(stairwell).toContain('this.callbacks.onEnterBackrooms()');
     expect(stairwell).toContain("this.renderer.setAnimationLoop(this.frame);\n    this.saveNow('autosave');\n    this.enter();");
     expect(main).toContain("await import('./core/Game')");
+    expect(main).toContain("import { OpeningIntro } from './ui/OpeningIntro'");
     expect(main).toContain('onEnterBackrooms: () => queueMicrotask');
+  });
+
+  it('plays the opening sequence once while the menu runtime loads behind it', async () => {
+    const { readFile } = await loadNodeFs();
+    const [main, intro, styles] = await Promise.all([
+      readFile(new URL('../main.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../ui/OpeningIntro.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../styles.css', import.meta.url), 'utf8'),
+    ]);
+
+    expect(main).toContain('const openingIntro = new OpeningIntro()');
+    expect(main).toContain('Promise.all([startInitialExperience(), openingIntro.minimumDuration])');
+    expect(intro).toContain('PHOTOSENSIBILITÉ');
+    expect(intro).toContain('UTILISEZ UN CASQUE');
+    expect(intro).toContain('Made by');
+    expect(intro).toContain('teddyfresnes');
+    expect(intro).toContain('Backrooms');
+    expect(intro).toContain('Random story');
+    expect(intro).toContain("document.querySelector<HTMLElement>('.experience-ui .home-logo')");
+    expect(styles).toContain('.opening-intro.is-running .opening-warning');
+    expect(styles).toContain('.opening-intro.is-leaving .opening-curtain');
   });
 
   it('uses the Backrooms shell as the only launcher and routes history entries by experience', async () => {
