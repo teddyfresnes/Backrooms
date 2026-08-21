@@ -18,6 +18,7 @@ import {
   Vector3,
 } from 'three'
 import type { CharacterConfig } from '../core/types'
+import { expressionTargets, type FacialExpressionId } from '../core/expressions'
 import { calculateDetailTargets } from './DetailTargets'
 import { calculateMacroTargets, macroInfoFromBody } from './MacroTargets'
 import { loadSparseTarget } from './TargetLoader'
@@ -36,6 +37,7 @@ export interface MakeHumanInstance {
   eyeMaterial: MeshPhysicalMaterial
   irisMaterial: MeshPhysicalMaterial
   eyeGroups: Group[]
+  mouthGroup: Group
   basePositions: Float32Array
   currentPositions: Float32Array
   renderSource: Uint32Array
@@ -115,6 +117,7 @@ function applyBoneMatrices(instance: MakeHumanInstance, full: Float32Array, init
   instance.root.updateMatrixWorld(true)
   if (!initial) instance.skeleton.calculateInverses()
   refitEyes(instance, full)
+  refitMouthInterior(instance, full)
 }
 
 export function setMakeHumanBodyDeleteMask(instance: MakeHumanInstance, key: string, sourceVertices: number[] | Uint32Array | null) {
@@ -215,9 +218,28 @@ function refitEyes(instance: MakeHumanInstance, full: Float32Array) {
   })
 }
 
+function refitMouthInterior(instance: MakeHumanInstance, full: Float32Array) {
+  const head = instance.boneByName.get('mixamorig:Head')
+  const mouth = instance.mouthGroup
+  if (!head || mouth.parent !== head) return
+  const center = averageVertices(full, instance.data.jointGroups['joint-tongue-1'] ?? instance.data.jointGroups['joint-mouth'] ?? [])
+  if (!center) return
+
+  // Keep one flat, black backing surface behind the lips. A previous 3D shell
+  // was large enough to intersect the nose and eye sockets on some faces.
+  center.z += .067
+  head.updateWorldMatrix(true, false)
+  const rootWorldRotation = instance.root.getWorldQuaternion(new Quaternion())
+  const headWorldRotation = head.getWorldQuaternion(new Quaternion())
+  const headRootRotation = rootWorldRotation.clone().invert().multiply(headWorldRotation)
+  mouth.position.copy(head.worldToLocal(instance.root.localToWorld(center)))
+  mouth.quaternion.copy(headRootRotation.clone().invert())
+}
+
 export function refitMakeHumanEyes(instance: MakeHumanInstance) {
   instance.root.updateMatrixWorld(true)
   refitEyes(instance, instance.currentPositions)
+  refitMouthInterior(instance, instance.currentPositions)
   instance.root.updateMatrixWorld(true)
 }
 
@@ -259,6 +281,40 @@ function createEyes(instance: MakeHumanInstance) {
   }
   instance.root.updateMatrixWorld(true)
   refitEyes(instance, instance.currentPositions)
+}
+
+function createMouthInterior(instance: MakeHumanInstance) {
+  const head = instance.boneByName.get('mixamorig:Head') ?? instance.root
+  const mouth = instance.mouthGroup
+  mouth.name = 'MouthInterior'
+
+  const cavityMaterial = new MeshBasicMaterial({
+    name: 'MouthCavity',
+    color: '#030202',
+    side: DoubleSide,
+    depthTest: true,
+    depthWrite: true,
+  })
+  const cavity = new Mesh(new CircleGeometry(1, 48), cavityMaterial)
+  cavity.name = 'MouthCavityBacking'
+  cavity.scale.set(.034, .021, 1)
+
+  mouth.add(cavity)
+  head.add(mouth)
+  instance.root.updateMatrixWorld(true)
+  refitMouthInterior(instance, instance.currentPositions)
+}
+
+export function disposeMakeHumanMouth(instance: MakeHumanInstance) {
+  instance.mouthGroup.traverse((object) => {
+    const mesh = object as Mesh
+    if (!mesh.isMesh) return
+    mesh.geometry.dispose()
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+    for (const material of materials) material.dispose()
+  })
+  instance.mouthGroup.clear()
+  instance.mouthGroup.removeFromParent()
 }
 
 export function createMakeHumanInstance(data: MakeHumanBaseData): MakeHumanInstance {
@@ -308,7 +364,7 @@ export function createMakeHumanInstance(data: MakeHumanBaseData): MakeHumanInsta
   const skeleton = new Skeleton(bones)
   const instance: MakeHumanInstance = {
     root, body, geometry, skeleton, bones, boneByName, skinMaterial, eyeMaterial, irisMaterial,
-    eyeGroups: [], basePositions, currentPositions, renderSource, baseIndices, bodyDeleteMasks: new Map(), data,
+    eyeGroups: [], mouthGroup: new Group(), basePositions, currentPositions, renderSource, baseIndices, bodyDeleteMasks: new Map(), data,
   }
   updateRenderGeometry(instance, currentPositions)
   applyBoneMatrices(instance, currentPositions, true)
@@ -316,13 +372,15 @@ export function createMakeHumanInstance(data: MakeHumanBaseData): MakeHumanInsta
   body.bind(skeleton, new Matrix4())
   skeleton.calculateInverses()
   createEyes(instance)
+  createMouthInterior(instance)
   return instance
 }
 
-async function resolveTargets(config: CharacterConfig) {
+async function resolveTargets(config: CharacterConfig, expression: FacialExpressionId) {
   const stack = [
     ...calculateMacroTargets(macroInfoFromBody(config.body)),
     ...calculateDetailTargets(config.body, config.face),
+    ...expressionTargets(expression, config.body),
   ]
   // Merge duplicates (possible when composite controls share a detail target).
   const merged = new Map<string, number>()
@@ -346,8 +404,8 @@ async function applyTargetStack(base: Float32Array, stack: WeightedTarget[]) {
   return result
 }
 
-export async function morphMakeHuman(instance: MakeHumanInstance, config: CharacterConfig, isCurrent: () => boolean = () => true) {
-  const stack = await resolveTargets(config)
+export async function morphMakeHuman(instance: MakeHumanInstance, config: CharacterConfig, isCurrent: () => boolean = () => true, expression: FacialExpressionId = 'neutral') {
+  const stack = await resolveTargets(config, expression)
   const full = await applyTargetStack(instance.basePositions, stack)
   if (!isCurrent()) return stack.length
   groundPositions(full, instance.data.bodyVertexCount)

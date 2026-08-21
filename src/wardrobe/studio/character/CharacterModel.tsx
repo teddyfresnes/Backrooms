@@ -2,11 +2,12 @@ import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTexture } from '@react-three/drei'
 import { SRGBColorSpace } from 'three'
 import type { CharacterConfig } from '../core/types'
+import type { FacialExpressionId } from '../core/expressions'
 import { useAssetLibrary } from '../assets/AssetLibrary'
 import { useCharacterState } from '../state/CharacterState'
 import { WardrobeManager } from './WardrobeManager'
 import { captureAnimatedPose, IdleAnimation, recalibrateAfterMorph, type CharacterAnimationMode } from './IdleAnimation'
-import { createMakeHumanInstance, morphMakeHuman, type MakeHumanInstance } from '../makehuman/MakeHumanRuntime'
+import { createMakeHumanInstance, disposeMakeHumanMouth, morphMakeHuman, type MakeHumanInstance } from '../makehuman/MakeHumanRuntime'
 import { loadMhmat } from '../makehuman/MhmatRuntime'
 import { loadMakeHumanBase } from '../makehuman/TargetLoader'
 
@@ -69,10 +70,11 @@ function SkinSurface({ instance, config }: { instance: MakeHumanInstance; config
 export interface CharacterModelProps {
   config?: CharacterConfig
   animationMode?: CharacterAnimationMode
+  expression?: FacialExpressionId
   onReady?: () => void
 }
 
-export function CharacterModel({ config: configOverride, animationMode = 'sequence', onReady }: CharacterModelProps = {}) {
+export function CharacterModel({ config: configOverride, animationMode = 'sequence', expression = 'neutral', onReady }: CharacterModelProps = {}) {
   const data = use(loadMakeHumanBase())
   const liveConfig = useCharacterState((s) => s.config)
   const addAssetError = useCharacterState((s) => s.addAssetError)
@@ -81,6 +83,7 @@ export function CharacterModel({ config: configOverride, animationMode = 'sequen
   const morphVersion = useRef(0)
   const lastBodyRef = useRef(config.body)
   const lastFaceRef = useRef(config.face)
+  const lastExpressionRef = useRef(expression)
   const [morphRevision, setMorphRevision] = useState(0)
   const [bodyRevision, setBodyRevision] = useState(0)
   const [faceRevision, setFaceRevision] = useState(0)
@@ -89,6 +92,8 @@ export function CharacterModel({ config: configOverride, animationMode = 'sequen
   const readyReported = useRef(false)
   const onReadyRef = useRef(onReady)
   onReadyRef.current = onReady
+
+  useEffect(() => () => disposeMakeHumanMouth(instance), [instance])
 
   const reportReady = useCallback(() => {
     if (readyReported.current || !animationReady.current || !wardrobeReady.current) return
@@ -115,23 +120,25 @@ export function CharacterModel({ config: configOverride, animationMode = 'sequen
     const version = ++morphVersion.current
     const bodyChanged = lastBodyRef.current !== config.body
     const faceChanged = lastFaceRef.current !== config.face
+    const expressionChanged = lastExpressionRef.current !== expression
     lastBodyRef.current = config.body
     lastFaceRef.current = config.face
+    lastExpressionRef.current = expression
     const timer = window.setTimeout(() => {
       const pose = morphRevision > 0 ? captureAnimatedPose(instance) : null
-      void morphMakeHuman(instance, config, () => version === morphVersion.current)
+      void morphMakeHuman(instance, config, () => version === morphVersion.current, expression)
         .then(async () => {
           if (version !== morphVersion.current) return
           await recalibrateAfterMorph(instance, pose)
           if (version !== morphVersion.current) return
           if (bodyChanged || morphRevision === 0) setBodyRevision((current) => current + 1)
-          if (faceChanged || morphRevision === 0) setFaceRevision((current) => current + 1)
+          if (faceChanged || expressionChanged || morphRevision === 0) setFaceRevision((current) => current + 1)
           setMorphRevision((current) => current + 1)
         })
         .catch((error) => addAssetError(`Morph MakeHuman: ${error instanceof Error ? error.message : String(error)}`))
     }, 38)
     return () => window.clearTimeout(timer)
-  }, [instance, config.body, config.face, addAssetError])
+  }, [instance, config.body, config.face, expression, addAssetError])
 
   return <group>
     <SkinSurface instance={instance} config={config} />

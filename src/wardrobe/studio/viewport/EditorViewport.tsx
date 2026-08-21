@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ContactShadows, Environment, Html, Lightformer } from '@react-three/drei'
 import { ACESFilmicToneMapping, Group, MathUtils, PerspectiveCamera, SRGBColorSpace, Vector3 } from 'three'
 import { CharacterModel } from '../character/CharacterModel'
+import type { FacialExpressionId } from '../core/expressions'
 import { useAssetLibrary } from '../assets/AssetLibrary'
 
 export type WardrobeCameraFocus =
@@ -122,7 +123,7 @@ function CameraRig({ focus }: { focus: WardrobeCameraFocus }) {
   return null
 }
 
-function CharacterTurntable({ visible = true, onReady, animationMode = 'sequence' }: { visible?: boolean; onReady?: () => void; animationMode?: 'sequence' | 'breathing-loop' }) {
+function CharacterTurntable({ visible = true, onReady, animationMode = 'sequence', expression = 'neutral' }: { visible?: boolean; onReady?: () => void; animationMode?: 'sequence' | 'breathing-loop'; expression?: FacialExpressionId }) {
   const group = useRef<Group>(null)
   const dragging = useRef(false)
   const pointerX = useRef(0)
@@ -174,7 +175,7 @@ function CharacterTurntable({ visible = true, onReady, animationMode = 'sequence
   }, [gl])
 
   return <group ref={group} visible={visible}>
-    <CharacterModel onReady={onReady} animationMode={animationMode} />
+    <CharacterModel onReady={onReady} animationMode={animationMode} expression={expression} />
   </group>
 }
 
@@ -189,18 +190,18 @@ export function StudioEnvironment() {
   </>
 }
 
-function Scene({ focus, ready, onReady, animationMode, modelKey }: { focus: WardrobeCameraFocus; ready: boolean; onReady: () => void; animationMode: 'sequence' | 'breathing-loop'; modelKey: number }) {
+function Scene({ focus, ready, onReady, animationMode, modelKey, expression }: { focus: WardrobeCameraFocus; ready: boolean; onReady: () => void; animationMode: 'sequence' | 'breathing-loop'; modelKey: number; expression: FacialExpressionId }) {
   return <>
     <StudioEnvironment />
     <Suspense fallback={<Html center><div className="viewport-message">Chargement…</div></Html>}>
-      <ViewportErrorBoundary><CharacterTurntable key={modelKey} visible={ready} onReady={onReady} animationMode={animationMode} /></ViewportErrorBoundary>
+      <ViewportErrorBoundary><CharacterTurntable key={modelKey} visible={ready} onReady={onReady} animationMode={animationMode} expression={expression} /></ViewportErrorBoundary>
     </Suspense>
     <ContactShadows position={[0, 0.005, 0]} opacity={0.42} scale={4} blur={2.2} far={3} />
     <CameraRig focus={focus} />
   </>
 }
 
-export function EditorViewport({ focus = 'overview', externalLoading = false, onCharacterReady, modelKey = 0 }: { focus?: WardrobeCameraFocus; externalLoading?: boolean; onCharacterReady?: () => void; modelKey?: number }) {
+export function EditorViewport({ focus = 'overview', externalLoading = false, onCharacterReady, modelKey = 0, expression = 'neutral' }: { focus?: WardrobeCameraFocus; externalLoading?: boolean; onCharacterReady?: () => void; modelKey?: number; expression?: FacialExpressionId }) {
   const [ready, setReady] = useState(false)
   const activeModelKey = useRef(modelKey)
 
@@ -222,7 +223,7 @@ export function EditorViewport({ focus = 'overview', externalLoading = false, on
   return <main className={`viewport-shell viewport-shell-studio${showLoading ? ' is-loading' : ''}`}>
     <div className="viewport-studio-bg" aria-hidden="true" />
     <Canvas shadows camera={{ position: MEDIUM.position, fov: MEDIUM.fov, near: 0.05, far: 100 }} dpr={[1, 1.25]} gl={{ antialias: true, alpha: true }} onCreated={({ gl }) => { gl.toneMapping = ACESFilmicToneMapping; gl.toneMappingExposure = 0.94; gl.outputColorSpace = SRGBColorSpace; gl.setClearAlpha(0) }}>
-      <Scene focus={focus} ready={ready} onReady={handleReady} animationMode={animationMode} modelKey={modelKey} />
+      <Scene focus={focus} ready={ready} onReady={handleReady} animationMode={animationMode} modelKey={modelKey} expression={expression} />
     </Canvas>
     {showLoading ? <div className="viewport-loading-overlay" aria-live="polite">
       <div className="viewport-loading-badge">Chargement du personnage…</div>

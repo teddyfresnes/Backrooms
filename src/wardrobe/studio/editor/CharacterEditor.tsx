@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AssetLibrary, useAssetLibrary } from '../assets/AssetLibrary'
 import { MORPHS } from '../core/morphs'
+import { EXPRESSION_PULSE_INTERVAL_MS, expressionPulseMs, FACIAL_EXPRESSIONS, type FacialExpressionId } from '../core/expressions'
 import { morphUiModel, sexFromGenderMorph } from '../core/humanMeasurements'
 import type { AssetDefinition, ClothingSlot, MaterialVariantDefinition, MorphSection } from '../core/types'
 import { useCharacterState } from '../state/CharacterState'
@@ -111,6 +112,25 @@ function ChoiceThumb({ option }: { option: (typeof CHARACTER_OPTIONS)[number] })
   return <span className="choice-thumb ready">
     <img src={option.previewImage} alt="" loading="lazy" decoding="async" draggable={false} />
   </span>
+}
+
+function ExpressionRail({ value, onChange }: { value: FacialExpressionId; onChange: (expression: FacialExpressionId) => void }) {
+  return <aside className="wardrobe-expression-rail" aria-label="Expressions du personnage">
+    <div className="wardrobe-expression-list">
+      {FACIAL_EXPRESSIONS.map((expression) => <button
+        key={expression.id}
+        type="button"
+        className={value === expression.id ? 'selected' : ''}
+        aria-label={expression.label}
+        aria-pressed={value === expression.id}
+        title={expression.label}
+        onClick={() => onChange(expression.id)}
+      >
+        <span aria-hidden="true">{expression.icon}</span>
+        <small>{expression.label}</small>
+      </button>)}
+    </div>
+  </aside>
 }
 
 function AssetButtons({ assets, selected, onSelect, allowNone = false }: { assets: AssetDefinition[]; selected: string | null; onSelect: (id: string | null) => void; allowNone?: boolean }) {
@@ -464,9 +484,32 @@ function EditorSurface({ navigationBridge }: { navigationBridge?: WardrobeNaviga
   const [advanced, setAdvanced] = useState(false)
   const [switchingPreset, setSwitchingPreset] = useState<string | null>(null)
   const [runtimeEpoch, setRuntimeEpoch] = useState(0)
+  const [expression, setExpression] = useState<FacialExpressionId>('neutral')
+  const [activeExpression, setActiveExpression] = useState<FacialExpressionId>('neutral')
   const [customPreviewBakeReady, setCustomPreviewBakeReady] = useState(false)
   const lastConfigRef = useRef(currentConfig)
   const suppressCustomTracking = useRef(false)
+
+  useEffect(() => {
+    const pulseMs = expressionPulseMs(expression)
+    if (pulseMs === null) {
+      setActiveExpression(expression)
+      return
+    }
+
+    let releaseTimer: number | undefined
+    const play = () => {
+      window.clearTimeout(releaseTimer)
+      setActiveExpression(expression)
+      releaseTimer = window.setTimeout(() => setActiveExpression('neutral'), pulseMs)
+    }
+    play()
+    const repeatTimer = window.setInterval(play, EXPRESSION_PULSE_INTERVAL_MS)
+    return () => {
+      window.clearInterval(repeatTimer)
+      window.clearTimeout(releaseTimer)
+    }
+  }, [expression])
 
   const sex = sexFromGenderMorph(currentConfig.body.gender)
   const simpleCategories = SIMPLE_CATEGORIES.filter((item) =>
@@ -625,7 +668,10 @@ function EditorSurface({ navigationBridge }: { navigationBridge?: WardrobeNaviga
   return <div className="wardrobe-editor">
     {screen === 'select' && customOption && customPreviewDirty && customPreviewBakeReady ? <PresetThumbnailGenerator options={[customOption]} images={{}} onGenerated={handleCustomPreview} /> : null}
     <div className="wardrobe-editor-main">
-      <EditorViewport modelKey={runtimeEpoch} focus={screen === 'edit' ? category : 'overview'} externalLoading={switchingPreset !== null} onCharacterReady={() => setSwitchingPreset(null)} />
+      <div className="wardrobe-preview-area">
+        <ExpressionRail value={expression} onChange={setExpression} />
+        <EditorViewport expression={activeExpression} modelKey={runtimeEpoch} focus={screen === 'edit' ? category : 'overview'} externalLoading={switchingPreset !== null} onCharacterReady={() => setSwitchingPreset(null)} />
+      </div>
       <aside className="wardrobe-controls">
         {screen === 'select' ? <>
           <div className="character-choice-grid">
