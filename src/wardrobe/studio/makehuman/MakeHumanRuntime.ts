@@ -18,7 +18,7 @@ import {
   Vector3,
 } from 'three'
 import type { CharacterConfig } from '../core/types'
-import { expressionTargets, type FacialExpressionId } from '../core/expressions'
+import { expressionMouthOpening, expressionTargets, type FacialExpressionId } from '../core/expressions'
 import { calculateDetailTargets } from './DetailTargets'
 import { calculateMacroTargets, macroInfoFromBody } from './MacroTargets'
 import { loadSparseTarget } from './TargetLoader'
@@ -225,15 +225,28 @@ function refitMouthInterior(instance: MakeHumanInstance, full: Float32Array) {
   const center = averageVertices(full, instance.data.jointGroups['joint-tongue-1'] ?? instance.data.jointGroups['joint-mouth'] ?? [])
   if (!center) return
 
-  // Keep one flat, black backing surface behind the lips. A previous 3D shell
-  // was large enough to intersect the nose and eye sockets on some faces.
-  center.z += .067
+  // Keep the backing inside the head, behind the lip surface. Putting it on the
+  // face plane makes the black disc bleed through cheeks and closed lips.
+  center.z += .054
   head.updateWorldMatrix(true, false)
   const rootWorldRotation = instance.root.getWorldQuaternion(new Quaternion())
   const headWorldRotation = head.getWorldQuaternion(new Quaternion())
   const headRootRotation = rootWorldRotation.clone().invert().multiply(headWorldRotation)
   mouth.position.copy(head.worldToLocal(instance.root.localToWorld(center)))
   mouth.quaternion.copy(headRootRotation.clone().invert())
+}
+
+function updateMouthInterior(instance: MakeHumanInstance, expression: FacialExpressionId) {
+  const cavity = instance.mouthGroup.getObjectByName('MouthCavityBacking') as Mesh | undefined
+  if (!cavity?.isMesh) return
+  const opening = Math.max(0, Math.min(1, expressionMouthOpening(expression)))
+  cavity.visible = opening >= .1
+  if (!cavity.visible) return
+
+  // Match the backing to the actual expression aperture instead of leaving a
+  // full-size oval behind every face. Width varies only a little; height tracks
+  // the mouth-open unit so sleepy/dead/scream remain proportionate.
+  cavity.scale.set(.024 + opening * .005, .0025 + opening * .0155, 1)
 }
 
 export function refitMakeHumanEyes(instance: MakeHumanInstance) {
@@ -297,12 +310,14 @@ function createMouthInterior(instance: MakeHumanInstance) {
   })
   const cavity = new Mesh(new CircleGeometry(1, 48), cavityMaterial)
   cavity.name = 'MouthCavityBacking'
-  cavity.scale.set(.034, .021, 1)
+  cavity.visible = false
+  cavity.scale.set(.024, .0025, 1)
 
   mouth.add(cavity)
   head.add(mouth)
   instance.root.updateMatrixWorld(true)
   refitMouthInterior(instance, instance.currentPositions)
+  updateMouthInterior(instance, 'neutral')
 }
 
 export function disposeMakeHumanMouth(instance: MakeHumanInstance) {
@@ -412,6 +427,7 @@ export async function morphMakeHuman(instance: MakeHumanInstance, config: Charac
   instance.currentPositions = full
   updateRenderGeometry(instance, full)
   applyBoneMatrices(instance, full)
+  updateMouthInterior(instance, expression)
   if (!config.appearance.skinMaterialId) instance.skinMaterial.color.set(config.appearance.skinColor)
   instance.irisMaterial.color.set(config.appearance.eyeColor)
   instance.root.userData.characterStudio = {

@@ -22,6 +22,26 @@ describe('experience routing', () => {
     expect(main).toContain('onEnterBackrooms: () => queueMicrotask');
   });
 
+  it('prebundles shared Three.js helpers before switching dynamic experiences', async () => {
+    const { readFile } = await loadNodeFs();
+    const [viteConfig, stairwell, wardrobeAnimation, wardrobeManager] = await Promise.all([
+      readFile(new URL('../../vite.config.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../stairwell/StairwellEnvironment.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../wardrobe/studio/character/IdleAnimation.tsx', import.meta.url), 'utf8'),
+      readFile(new URL('../wardrobe/studio/character/WardrobeManager.tsx', import.meta.url), 'utf8'),
+    ]);
+
+    expect(viteConfig).toContain('optimizeDeps');
+    for (const helper of [
+      'three/addons/loaders/FBXLoader.js',
+      'three/addons/loaders/GLTFLoader.js',
+      'three/addons/utils/SkeletonUtils.js',
+    ]) expect(viteConfig).toContain(helper);
+    expect(stairwell).toContain("from 'three/addons/loaders/GLTFLoader.js'");
+    expect(wardrobeAnimation).toContain("from 'three/addons/loaders/FBXLoader.js'");
+    expect(wardrobeManager).toContain("from 'three/addons/utils/SkeletonUtils.js'");
+  });
+
   it('plays the opening sequence once while the menu runtime loads behind it', async () => {
     const { readFile } = await loadNodeFs();
     const [main, intro, styles] = await Promise.all([
@@ -36,11 +56,25 @@ describe('experience routing', () => {
     expect(intro).toContain('UTILISEZ UN CASQUE');
     expect(intro).toContain('Made by');
     expect(intro).toContain('teddyfresnes');
+    expect(intro).not.toContain('creatorIcon');
+    expect(intro).not.toContain('Une création originale');
     expect(intro).toContain('Backrooms');
     expect(intro).toContain('Random story');
-    expect(intro).toContain("document.querySelector<HTMLElement>('.experience-ui .home-logo')");
+    expect(intro).not.toContain('animateIntoTarget');
+    expect(intro).not.toContain('getBoundingClientRect');
     expect(styles).toContain('.opening-intro.is-running .opening-warning');
     expect(styles).toContain('.opening-intro.is-leaving .opening-curtain');
+    expect(styles).toContain('@keyframes opening-text-glitch');
+    expect(styles).toContain('@keyframes opening-audio-meter');
+    expect(styles).toContain('@keyframes opening-brand-static');
+    expect(styles).toContain('@keyframes opening-mark-interference');
+    expect(styles).toContain('.opening-intro.is-running .opening-warning::after');
+    expect(styles).toContain('animation: opening-brand-arrive .52s 4.84s steps(1, end) both;');
+    expect(styles).not.toContain('.opening-credit .opening-card-copy > strong { animation:');
+    expect(styles).toContain('animation: opening-brand-out .18s ease-out both;');
+    expect(styles).not.toContain('15% { opacity: .12; transform: translate3d(13px, 0, 0); }');
+    expect(styles).not.toContain('45% { opacity: .7; filter: brightness(2.4) contrast(2); }');
+    expect(styles).toMatch(/\.opening-intro \{[\s\S]*?cursor: default;/);
   });
 
   it('uses the Backrooms shell as the only launcher and routes history entries by experience', async () => {
@@ -49,14 +83,18 @@ describe('experience routing', () => {
 
     expect(main).not.toContain('StartMenu');
     expect(main).not.toContain('Russian Stairwells');
-    expect(main).toContain('<strong>Backrooms</strong>');
+    expect(main).toContain('<p>Backrooms</p><h1>Random Story</h1>');
     expect(main).toContain("save.experienceId === 'backrooms'");
     expect(main).toContain("startStairwell({ kind: 'load', save })");
     expect(main).toContain("await startBackrooms({ kind: 'new' }, false, true)");
     expect(main).toContain('onRequestContinue: menuBackground');
     expect(main).toContain('continueFromMainMenu()');
     expect(main).toContain('autoEnterOnReady: !menuBackground');
-    expect(main.match(/createBoot\('random story'\)/g)).toHaveLength(2);
+    expect(main).toContain("launch.kind === 'load' ? 'Chargement de la sauvegarde'");
+    expect(main).toContain("? 'Initialisation du menu'");
+    expect(main).toContain("<div class=\"boot-wordmark\"><p>Backrooms</p><h1>Random Story</h1></div>");
+    expect(main).not.toContain('boot-loading-heading');
+    expect(main).not.toContain('boot-loading-foot');
     expect(main).toContain('showBootError(error, () => void startStairwell(launch))');
     expect(main).toContain('showBootError(error, () => void startBackrooms(launch, autosaveOnReady, menuBackground))');
   });
@@ -70,21 +108,24 @@ describe('experience routing', () => {
     ]);
 
     expect(main).toContain('/favicon.svg');
-    expect(ui).toContain('class="home-logo main-menu-only" src="/favicon.svg"');
+    expect(ui).toContain('class="home-logo" src="/favicon.svg"');
     expect(ui).not.toContain('/assets/ui/');
     expect(ui).toContain('data-ui="enter" data-ui-main-continue');
     expect(ui).toContain('class="continue-more"');
-    expect(ui).toContain('<h2 id="home-title">Backrooms</h2>');
+    expect(ui).toContain('<p>Backrooms</p>');
+    expect(ui).toContain('<h2 id="home-title">Random Story</h2>');
     expect(ui).not.toContain('Backrooms<span>.</span>');
     expect(ui).toContain('class="home-wordmark"');
     expect(ui).not.toContain('class="home-brand"');
-    expect(ui).toContain('<p>Random story</p>');
     expect(styles).not.toContain('border-left: 2px solid rgba(251, 247, 229, 0.68)');
-    expect(styles).toMatch(/\.experience-ui \.home-logo \{[\s\S]*?position: fixed;[\s\S]*?top:[\s\S]*?left:/);
+    expect(styles).toMatch(/\.experience-ui\.is-main-menu\[data-menu-page='home'\] \.home-title \{[\s\S]*?display: flex;/);
+    expect(styles).toContain(".experience-ui.is-main-menu[data-menu-page='home'] .menu-action::after");
+    expect(styles).not.toContain(".experience-ui.is-main-menu[data-menu-page='home'] .menu-action.primary:not(:disabled)");
+    expect(styles).toMatch(/\.experience-ui \.text-button \{[\s\S]*?min-height: 42px;[\s\S]*?border-color: rgba\(229, 211, 108, \.28\);/);
     expect(ui).toContain('data-ui="main-menu"');
     expect(ui).toContain('data-ui="confirmation"');
     expect(ui).toContain('this.showConfirmation(');
-    expect(ui).not.toContain('<span>Charger</span>');
+    expect(ui).toContain('<span>Charger</span>');
     expect(ui).not.toContain('this.continueButton.focus');
     expect(ui).not.toContain('target?.focus({ preventScroll: true })');
     expect(styles).toMatch(/\.experience-ui \.confirmation-layer \{[\s\S]*?pointer-events: auto;/);

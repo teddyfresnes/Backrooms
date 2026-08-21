@@ -32,6 +32,7 @@ import {
   type GameSaveKind,
   type GameSaveStorage,
 } from './SaveHistory';
+import { captureGameSavePreview } from './SavePreview';
 
 export type DebugExperience = DiagnosticsSnapshot;
 
@@ -471,12 +472,15 @@ export class Game {
     const chunk = this.worldStream.getCenterCoord();
     const offset = getChunkWorldOffset(chunk);
     const look = this.player.getLookQuaternion();
+    this.postFX?.render(0);
+    const previewImage = captureGameSavePreview(this.renderer.domElement);
     const result = writeGameSave(this.storage, {
       experienceId: 'backrooms',
       kind,
       levelId: `backrooms-${chunk.story}`,
       levelLabel: `Niveau ${chunk.story} · Backrooms`,
       playTimeSeconds: this.playableSeconds,
+      ...(previewImage ? { previewImage } : {}),
       payload: {
         seed: this.seed,
         chunk,

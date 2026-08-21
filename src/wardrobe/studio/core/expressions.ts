@@ -51,6 +51,11 @@ export function expressionPulseMs(expressionId: FacialExpressionId): number | nu
   return EXPRESSIONS_BY_ID.get(expressionId)?.pulseMs ?? null
 }
 
+export function expressionMouthOpening(expressionId: FacialExpressionId): number {
+  const expression = EXPRESSIONS_BY_ID.get(expressionId)
+  return expression?.units.find(([unit]) => unit === 'mouth-open')?.[1] ?? 0
+}
+
 export function expressionTargets(expressionId: FacialExpressionId, body: Record<string, number>): WeightedTarget[] {
   const expression = EXPRESSIONS_BY_ID.get(expressionId)
   if (!expression?.units.length) return []

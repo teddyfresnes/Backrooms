@@ -1,33 +1,35 @@
 const INTRO_MINIMUM_MS = 5900
 const INTRO_REDUCED_MOTION_MS = 900
-const INTRO_EXIT_MS = 1250
+const INTRO_EXIT_MS = 900
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
-function headphoneIcon(): string {
+function photosensitivityIcon(): string {
   return `
-    <svg viewBox="0 0 96 96" role="img" aria-label="Casque audio">
-      <path d="M18 51V43C18 25.3 31.4 12 48 12s30 13.3 30 31v8" />
-      <path d="M22 47h7c4.4 0 8 3.6 8 8v18c0 4.4-3.6 8-8 8h-7c-5.5 0-10-4.5-10-10V57c0-5.5 4.5-10 10-10Z" />
-      <path d="M74 47h-7c-4.4 0-8 3.6-8 8v18c0 4.4 3.6 8 8 8h7c5.5 0 10-4.5 10-10V57c0-5.5-4.5-10-10-10Z" />
-      <path d="M59 79c-3 3.3-6.7 5-11 5" />
+    <svg viewBox="0 0 64 64" role="img" aria-label="Avertissement photosensibilité">
+      <path d="M32 8 57 53H7L32 8Z" />
+      <path d="M32 23v15" />
+      <path d="M32 46h.01" />
     </svg>
   `
 }
 
-function animateIntoTarget(source: HTMLElement, target: HTMLElement, duration: number): Animation {
-  const from = source.getBoundingClientRect()
-  const to = target.getBoundingClientRect()
-  const dx = to.left + to.width / 2 - (from.left + from.width / 2)
-  const dy = to.top + to.height / 2 - (from.top + from.height / 2)
-  const scale = Math.min(to.width / Math.max(from.width, 1), to.height / Math.max(from.height, 1))
-  return source.animate([
-    { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)', filter: 'blur(0)' },
-    { opacity: 1, offset: .76, transform: `translate3d(${dx}px, ${dy}px, 0) scale(${scale})`, filter: 'blur(0)' },
-    { opacity: 0, transform: `translate3d(${dx}px, ${dy}px, 0) scale(${scale})`, filter: 'blur(2px)' },
-  ], { duration, easing: 'cubic-bezier(.2,.82,.16,1)', fill: 'forwards' })
+function headphoneIcon(): string {
+  return `
+    <svg viewBox="0 0 64 64" role="img" aria-label="Casque audio">
+      <path d="M13 35v-5c0-12 8.2-21 19-21s19 9 19 21v5" />
+      <rect x="9" y="31" width="11" height="21" rx="5.5" />
+      <rect x="44" y="31" width="11" height="21" rx="5.5" />
+      <path d="M20 36h4v12h-4M44 36h-4v12h4" />
+      <g class="opening-audio-meter" aria-hidden="true">
+        <path d="M27 42v4" />
+        <path d="M32 39v10" />
+        <path d="M37 42v4" />
+      </g>
+    </svg>
+  `
 }
 
 export class OpeningIntro {
@@ -44,26 +46,34 @@ export class OpeningIntro {
       <div class="opening-scan" aria-hidden="true"></div>
 
       <div class="opening-card opening-warning">
-        <span>Avertissement</span>
-        <strong>PHOTOSENSIBILITÉ</strong>
-        <p>Ce jeu contient des lumières vacillantes et des contrastes intenses.</p>
+        <div class="opening-illustration">${photosensitivityIcon()}</div>
+        <div class="opening-card-copy">
+          <span>Avertissement</span>
+          <strong>PHOTOSENSIBILITÉ</strong>
+          <p>Ce jeu contient des lumières vacillantes et des contrastes intenses.</p>
+        </div>
       </div>
 
       <div class="opening-card opening-audio">
-        <div class="opening-headphones">${headphoneIcon()}</div>
-        <strong>UTILISEZ UN CASQUE</strong>
-        <p>Pour une immersion optimale</p>
+        <div class="opening-illustration opening-headphones">${headphoneIcon()}</div>
+        <div class="opening-card-copy">
+          <span>Audio recommandé</span>
+          <strong>UTILISEZ UN CASQUE</strong>
+          <p>Pour une immersion optimale</p>
+        </div>
       </div>
 
       <div class="opening-card opening-credit">
-        <span>Made by</span>
-        <strong>teddyfresnes</strong>
+        <div class="opening-card-copy">
+          <span>Made by</span>
+          <strong>teddyfresnes</strong>
+        </div>
       </div>
 
       <div class="opening-brand" aria-label="Backrooms Random Story">
         <img class="opening-brand-mark" src="/favicon.svg" alt="" />
         <div class="opening-brand-copy">
-          <strong>Backrooms</strong>
+          <strong data-text="Backrooms">Backrooms</strong>
           <small>Random story</small>
         </div>
       </div>
@@ -81,19 +91,12 @@ export class OpeningIntro {
     if (this.disposed) return
     this.root.classList.add('is-leaving')
 
-    const animations: Animation[] = []
-    const introMark = this.root.querySelector<HTMLElement>('.opening-brand-mark')
-    const introCopy = this.root.querySelector<HTMLElement>('.opening-brand-copy')
-    const menuMark = document.querySelector<HTMLElement>('.experience-ui .home-logo')
-    const menuCopy = document.querySelector<HTMLElement>('.experience-ui .home-wordmark')
-    if (introMark && menuMark) animations.push(animateIntoTarget(introMark, menuMark, INTRO_EXIT_MS))
-    if (introCopy && menuCopy) animations.push(animateIntoTarget(introCopy, menuCopy, INTRO_EXIT_MS))
+    const revealTimer = window.setTimeout(() => {
+      if (!this.disposed) document.documentElement.classList.remove('opening-intro-active')
+    }, 160)
 
-    if (animations.length) {
-      await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)))
-    } else {
-      await wait(INTRO_EXIT_MS)
-    }
+    await wait(INTRO_EXIT_MS)
+    window.clearTimeout(revealTimer)
     if (this.disposed) return
     this.root.remove()
     document.documentElement.classList.remove('opening-intro-active')

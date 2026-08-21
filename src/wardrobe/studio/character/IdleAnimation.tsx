@@ -9,9 +9,10 @@ import {
   LoopRepeat,
   Object3D,
   Quaternion,
+  type SkinnedMesh,
   Vector3,
 } from 'three'
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
 import { refitMakeHumanEyes, type MakeHumanInstance } from '../makehuman/MakeHumanRuntime'
 
 const MOTIONS = [
@@ -148,8 +149,18 @@ function calibrateTargetRig(instance: MakeHumanInstance, reference: LoadedMotion
 
   instance.root.updateMatrixWorld(true)
   instance.skeleton.calculateInverses()
-  instance.body.bindMatrix.copy(instance.body.matrixWorld)
-  instance.body.bindMatrixInverse.copy(instance.body.bindMatrix).invert()
+
+  // The body and every MHCLO asset are authored in CharacterRoot-local space.
+  // Never capture matrixWorld here: it also contains the interactive turntable
+  // yaw, so recalibrating while viewed from the side made the body and newly
+  // mounted clothes use different bind spaces. Keep every mesh sharing this
+  // skeleton on the same root-local identity bind.
+  instance.root.traverse((object) => {
+    const mesh = object as SkinnedMesh
+    if (!mesh.isSkinnedMesh || mesh.skeleton !== instance.skeleton) return
+    mesh.bindMatrix.identity()
+    mesh.bindMatrixInverse.identity()
+  })
   instance.root.updateMatrixWorld(true)
 }
 
@@ -345,4 +356,3 @@ export function IdleAnimation({
   useFrame((_, dt) => mixerRef.current?.update(Math.min(dt, 0.05)))
   return null
 }
-

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EXPRESSION_PULSE_INTERVAL_MS, expressionPulseMs, FACIAL_EXPRESSIONS, expressionTargets } from './expressions'
+import { EXPRESSION_PULSE_INTERVAL_MS, expressionMouthOpening, expressionPulseMs, FACIAL_EXPRESSIONS, expressionTargets } from './expressions'
 
 describe('wardrobe facial expressions', () => {
   it('offers the requested expressions plus a broad preview selection', () => {
@@ -38,6 +38,10 @@ describe('wardrobe facial expressions', () => {
     const smirk = FACIAL_EXPRESSIONS.find((expression) => expression.id === 'smirk')!
     expect(smirk.units.map(([unit]) => unit)).not.toContain('mouth-open')
     expect(smirk.units.map(([unit]) => unit)).not.toContain('mouth-part-later')
+    expect(expressionMouthOpening('smirk')).toBe(0)
+    expect(expressionMouthOpening('angry')).toBe(0)
+    expect(expressionMouthOpening('surprised')).toBeCloseTo(.65)
+    expect(expressionMouthOpening('scream')).toBe(1)
   })
 
 })

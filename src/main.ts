@@ -69,9 +69,18 @@ const clearRuntime = (): void => {
 const createBoot = (detail: string): HTMLElement => {
   const boot = document.createElement('div');
   boot.className = 'boot-shell';
+  boot.setAttribute('role', 'status');
+  boot.setAttribute('aria-live', 'polite');
   boot.innerHTML = `
-    <div class="boot-brand"><img src="/favicon.svg" alt="" /><div><strong>Backrooms</strong><small>${detail}</small></div></div>
-    <div class="boot-track" role="progressbar" aria-label="Chargement de l’environnement"><i></i></div>
+    <div class="boot-content">
+      <header class="boot-brand">
+        <img src="/favicon.svg" alt="" />
+        <div class="boot-wordmark"><p>Backrooms</p><h1>Random Story</h1></div>
+      </header>
+      <div class="boot-loading">
+        <div class="boot-track" role="progressbar" aria-label="${detail}"><i></i></div>
+      </div>
+    </div>
   `;
   app.append(boot);
   return boot;
@@ -80,6 +89,9 @@ const createBoot = (detail: string): HTMLElement => {
 const showBootError = (error: unknown, retryAction: () => void): void => {
   const shell = document.createElement('div');
   shell.className = 'boot-error';
+  const brand = document.createElement('div');
+  brand.className = 'boot-error-brand';
+  brand.innerHTML = '<img src="/favicon.svg" alt=""><span><small>Backrooms</small><strong>Random Story</strong></span>';
   const title = document.createElement('strong');
   title.textContent = 'ÉCHEC DU CHARGEMENT';
   const detail = document.createElement('span');
@@ -88,7 +100,7 @@ const showBootError = (error: unknown, retryAction: () => void): void => {
   retry.type = 'button';
   retry.textContent = 'Réessayer';
   retry.addEventListener('click', retryAction, { once: true });
-  shell.append(title, detail, retry);
+  shell.append(brand, title, detail, retry);
   app.append(shell);
 };
 
@@ -100,7 +112,9 @@ const loadFromHistory = (id: string): void => {
 async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
   const id = ++transitionId;
   clearRuntime();
-  const boot = createBoot('random story');
+  const boot = createBoot(
+    launch.kind === 'load' ? 'Chargement de la sauvegarde' : 'Préparation du niveau',
+  );
   let game: GameRuntime | null = null;
   try {
     const { RussianStairwellGame } = await import('./core/RussianStairwellGame');
@@ -140,7 +154,13 @@ async function startBackrooms(
 ): Promise<void> {
   const id = ++transitionId;
   clearRuntime();
-  const boot = createBoot('random story');
+  const boot = createBoot(
+    launch.kind === 'load'
+      ? 'Chargement de la sauvegarde'
+      : menuBackground
+        ? 'Initialisation du menu'
+        : 'Génération des Backrooms',
+  );
   let game: GameRuntime | null = null;
   try {
     // Give the transition overlay one frame before the synchronous origin

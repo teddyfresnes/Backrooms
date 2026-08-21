@@ -20,7 +20,8 @@ describe('wardrobe shell integration', () => {
     expect(ui).toContain("wardrobeHost?.toggleAttribute('active', page === 'wardrobe');")
     expect(ui).toContain("void import('../wardrobe/BackroomsWardrobeElement');")
 
-    expect(ui.match(/data-open-page="wardrobe"/g)).toHaveLength(2)
+    expect(ui.match(/data-open-page="wardrobe"/g)).toHaveLength(1)
+    expect(ui).not.toMatch(/class="menu-action pause-only"[^>]+data-open-page="wardrobe"/)
     expect(ui).toContain('<span>Garde-robe</span>')
     expect(ui).toContain('<span>Continuer</span>')
     expect(ui).toContain('<span>Nouvelle partie</span>')
@@ -30,8 +31,11 @@ describe('wardrobe shell integration', () => {
     expect(ui).toContain("this.developerCode.value === '1234'")
     expect(ui).toContain("void import('../wardrobe/BackroomsWardrobePreviewExporterElement')")
     expect(ui).toContain('backrooms-character-previews-${stamp}.zip')
+    expect(ui).toContain('button.append(createSavePreview(summary.previewImage), heading, details)')
 
     expect(styles).toContain(".experience-ui[data-menu-page='wardrobe'] .menu-panel")
+    expect(styles).toContain('.experience-ui .save-entry-preview img')
+    expect(styles).toMatch(/\.experience-ui\.is-paused\[data-menu-page='home'\] \.home-stage \{\s+justify-content: flex-end;/)
     expect(styles).toContain('border: 1px solid var(--menu-border)')
     expect(styles).toContain('--accent: #daca73')
     expect(developerStyles).toContain('.experience-ui .developer-gate')

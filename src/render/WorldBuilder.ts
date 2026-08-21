@@ -10,7 +10,11 @@ import {
 } from './BakedLighting';
 import type { BakedLightMapData, BakedLightMaps } from './BakedLighting';
 import type { LightingMode } from './LightingMode';
-import { applyZonalLighting, createZonalMaterialSet } from './ZonalLighting';
+import {
+  applyZonalLighting,
+  createZonalMaterialSet,
+  pinZonalLightingStoryHeight,
+} from './ZonalLighting';
 import type { ZonalLightingContext } from './ZonalLighting';
 import { createGraffitiMesh, selectWallGraffiti } from './WallGraffiti';
 import { WorldDoorLayer } from './WorldDoors';
@@ -1342,16 +1346,17 @@ const distantCeilingPatternScale = (
 const createElevatedCeilingMaterial = (
   source: THREE.MeshStandardMaterial,
   name: string,
+  ordinaryCeilingHeight: number,
 ): THREE.MeshStandardMaterial => {
   const material = source.clone();
   material.name = name;
   // Elevated ceilings must react to light exactly like the ordinary ceiling.
   // Only the double-sided rendering differs because these planes can also be
   // seen from connecting shafts and upper passages.
-  material.lightMap = null;
   material.side = THREE.DoubleSide;
   material.onBeforeCompile = source.onBeforeCompile;
   material.customProgramCacheKey = source.customProgramCacheKey;
+  pinZonalLightingStoryHeight(material, ordinaryCeilingHeight);
   material.needsUpdate = true;
   return material;
 };
@@ -1443,10 +1448,12 @@ export class WorldView {
     this.elevatedCeilingMaterial = createElevatedCeilingMaterial(
       this.materials.ceiling,
       'elevated-tiled-ceiling',
+      plan.wallHeight,
     );
     this.distantCeilingMaterial = createElevatedCeilingMaterial(
       this.materials.ceiling,
       'distant-tiled-ceiling',
+      plan.wallHeight,
     );
     this.previewFixtureGlowMaterial = this.materials.fixtureGlow.clone();
     this.previewFixtureGlowMaterial.name = 'preview-fluorescent-diffuser';

@@ -482,6 +482,41 @@ export const applyZonalLighting = (
   material.needsUpdate = true;
 };
 
+/**
+ * Evaluates the blackout story mask at the ordinary ceiling plane while the
+ * surface keeps its real world height. Tall-room ceilings otherwise sit above
+ * zoneMaxY and incorrectly bypass every unlit zone, making them much brighter
+ * than the surrounding drop ceiling.
+ */
+export const pinZonalLightingStoryHeight = (
+  material: THREE.MeshStandardMaterial,
+  sampleHeight: number,
+): void => {
+  if (!material.userData.zonalLighting || !Number.isFinite(sampleHeight)) return;
+  const previousOnBeforeCompile = material.onBeforeCompile.bind(material);
+  const previousProgramCacheKey = material.customProgramCacheKey.bind(material);
+  material.userData.zonalLightingStoryHeight = sampleHeight;
+  material.onBeforeCompile = (shader, renderer) => {
+    previousOnBeforeCompile(shader, renderer);
+    shader.uniforms.zonalStorySampleHeight = { value: sampleHeight };
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        'uniform float zoneMaxY;',
+        `uniform float zoneMaxY;
+        uniform float zonalStorySampleHeight;`,
+      )
+      .replace(
+        `float storyMask = step(zoneMinY, zonalChunkPosition.y)
+          * step(zonalChunkPosition.y, zoneMaxY);`,
+        `float storyMask = step(zoneMinY, zonalStorySampleHeight)
+          * step(zonalStorySampleHeight, zoneMaxY);`,
+      );
+  };
+  material.customProgramCacheKey = () =>
+    `${previousProgramCacheKey()}|story-sample-height-${sampleHeight.toFixed(4)}`;
+  material.needsUpdate = true;
+};
+
 const withZonalLighting = <T extends THREE.MeshStandardMaterial>(
   source: T,
   context: ZonalLightingContext,

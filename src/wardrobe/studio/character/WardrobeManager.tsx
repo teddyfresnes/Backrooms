@@ -1,6 +1,6 @@
 import { Component, use, useEffect, useMemo, type ErrorInfo, type PropsWithChildren } from 'react'
 import { useGLTF } from '@react-three/drei'
-import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js'
 import { DoubleSide, Matrix4, MeshBasicMaterial, SkinnedMesh, Vector3, type Object3D } from 'three'
 import type { AssetDefinition, CharacterConfig } from '../core/types'
 import { useAssetLibrary } from '../assets/AssetLibrary'

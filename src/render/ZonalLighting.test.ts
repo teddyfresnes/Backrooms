@@ -6,6 +6,7 @@ import {
   createFluorescentLightField,
   createZonalLightingContext,
   createZonalMaterialSet,
+  pinZonalLightingStoryHeight,
   shaderUnlitZones,
   signedDistanceInsideRect,
   unlitZoneInfluence,
@@ -156,6 +157,35 @@ describe('zonal fluorescent materials', () => {
     expect((shader.uniforms.litGain as THREE.IUniform<number>).value).toBeCloseTo(1.02);
     expect((shader.uniforms.verticalRelief as THREE.IUniform<number>).value).toBeCloseTo(0.12);
 
+    created.ownedMaterials.forEach((material) => material.dispose());
+    Object.values(source).forEach((material) => material.dispose());
+  });
+
+  it('pins a tall ceiling to the ordinary story mask without moving its surface', () => {
+    const source = testMaterials();
+    const created = createZonalMaterialSet(source, planWithZones([zone]));
+    const ceiling = created.materials.ceiling.clone();
+    ceiling.onBeforeCompile = created.materials.ceiling.onBeforeCompile;
+    ceiling.customProgramCacheKey = created.materials.ceiling.customProgramCacheKey;
+    pinZonalLightingStoryHeight(ceiling, 2.74);
+    const shader = {
+      uniforms: {},
+      vertexShader: '#include <common>\n#include <begin_vertex>',
+      fragmentShader: '#include <common>\n#include <opaque_fragment>',
+    } as Parameters<typeof ceiling.onBeforeCompile>[0];
+    ceiling.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+
+    expect(shader.fragmentShader).toContain(
+      'step(zoneMinY, zonalStorySampleHeight)',
+    );
+    expect(shader.fragmentShader).toContain(
+      'step(zonalStorySampleHeight, zoneMaxY)',
+    );
+    expect((shader.uniforms.zonalStorySampleHeight as THREE.IUniform<number>).value)
+      .toBeCloseTo(2.74);
+    expect(ceiling.customProgramCacheKey()).toContain('story-sample-height-2.7400');
+
+    ceiling.dispose();
     created.ownedMaterials.forEach((material) => material.dispose());
     Object.values(source).forEach((material) => material.dispose());
   });

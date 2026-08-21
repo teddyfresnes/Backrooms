@@ -103,6 +103,22 @@ const formatSaveDate = (savedAt: string): string => {
   }).format(date);
 };
 
+const createSavePreview = (previewImage?: string): HTMLSpanElement => {
+  const preview = document.createElement('span');
+  preview.className = 'save-entry-preview';
+  preview.setAttribute('aria-hidden', 'true');
+  if (previewImage) {
+    const image = document.createElement('img');
+    image.src = previewImage;
+    image.alt = '';
+    image.loading = 'lazy';
+    image.decoding = 'async';
+    preview.classList.add('has-image');
+    preview.append(image);
+  }
+  return preview;
+};
+
 const formatDiagnosticValue = (value: unknown): string => {
   if (value === null || value === undefined || value === '') return '—';
   if (typeof value === 'boolean') return value ? 'oui' : 'non';
@@ -211,12 +227,12 @@ export class ExperienceUI {
         <div class="menu-panel">
           <div class="menu-content">
             <section class="menu-page active" data-page="home" aria-labelledby="home-title">
-              <img class="home-logo main-menu-only" src="/favicon.svg" alt="" />
               <div class="home-stage">
-                <header class="home-title">
+                <header class="home-title main-menu-only">
+                  <img class="home-logo" src="/favicon.svg" alt="" />
                   <div class="home-wordmark">
-                    <h2 id="home-title">Backrooms</h2>
-                    <p>Random story</p>
+                    <p>Backrooms</p>
+                    <h2 id="home-title">Random Story</h2>
                   </div>
                 </header>
                 <div class="menu-actions" aria-label="Actions principales">
@@ -224,16 +240,18 @@ export class ExperienceUI {
                     <button class="menu-action primary" type="button" data-ui="enter" data-ui-main-continue disabled>
                       <span>Continuer</span>
                     </button>
-                    <button class="continue-more" type="button" data-open-page="saves" aria-label="Ouvrir les sauvegardes">+</button>
                   </div>
                   <button class="menu-action main-menu-only" type="button" data-ui="regenerate">
                     <span>Nouvelle partie</span>
+                  </button>
+                  <button class="menu-action main-menu-only" type="button" data-open-page="saves">
+                    <span>Charger</span>
                   </button>
                   <button class="menu-action main-menu-only" type="button" data-open-page="wardrobe">
                     <span>Garde-robe</span>
                   </button>
                   <button class="menu-action main-menu-only" type="button" data-open-page="settings">
-                    <span>Paramètres</span>
+                    <span>Options</span>
                   </button>
 
                   <div class="continue-action pause-only" hidden>
@@ -244,9 +262,6 @@ export class ExperienceUI {
                   </div>
                   <button class="menu-action pause-only" type="button" data-ui="save-game" hidden>
                     <span>Sauvegarder</span>
-                  </button>
-                  <button class="menu-action pause-only" type="button" data-open-page="wardrobe" hidden>
-                    <span>Garde-robe</span>
                   </button>
                   <button class="menu-action pause-only" type="button" data-open-page="settings" hidden>
                     <span>Paramètres</span>
@@ -268,6 +283,7 @@ export class ExperienceUI {
               </header>
               <div class="save-browser">
                 <button class="save-entry current-session-action" type="button" data-ui="enter" disabled>
+                  <span class="save-entry-preview" data-ui="current-session-preview" aria-hidden="true"></span>
                   <span class="save-entry-heading">
                     <strong>Session précédente</strong>
                     <small>${experienceLabelById[experienceId]} · Session chargée</small>
@@ -790,6 +806,11 @@ export class ExperienceUI {
   };
 
   private renderSaveHistory(): void {
+    const currentPreview = this.query<HTMLElement>('[data-ui="current-session-preview"]');
+    const currentImage = createSavePreview(this.saveHistory[0]?.previewImage);
+    currentPreview.className = currentImage.className;
+    currentPreview.replaceChildren(...currentImage.childNodes);
+
     const fragment = document.createDocumentFragment();
     for (const summary of this.saveHistory) {
       const button = document.createElement('button');
@@ -821,7 +842,7 @@ export class ExperienceUI {
       duration.textContent = formatSaveDuration(summary.playTimeSeconds);
       details.append(date, duration);
 
-      button.append(heading, details);
+      button.append(createSavePreview(summary.previewImage), heading, details);
       button.addEventListener('click', () => this.actions.loadGame?.(summary.id));
       fragment.append(button);
     }

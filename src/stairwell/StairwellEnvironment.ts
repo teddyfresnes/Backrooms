@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { StairwellMaterialSet } from './StairwellMaterials';
 import { APARTMENT_ENTRY_DOOR } from '../apartment/layout';
 import type { LightingMode } from '../render/LightingMode';

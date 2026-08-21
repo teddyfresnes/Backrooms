@@ -31,6 +31,7 @@ import {
   type GameSaveEntry,
   type GameSaveKind,
 } from './SaveHistory';
+import { captureGameSavePreview } from './SavePreview';
 
 type RussianStairwellHistorySave = Extract<
   GameSaveEntry,
@@ -428,12 +429,15 @@ export class RussianStairwellGame {
       return false;
     }
     const look = this.player.getLookQuaternion();
+    this.postFX?.render(0);
+    const previewImage = captureGameSavePreview(this.renderer.domElement);
     const result = writeGameSave(this.storage, {
       experienceId: 'russian-stairwell',
       kind,
       levelId: 'building',
       levelLabel: 'Immeuble',
       playTimeSeconds: this.playableSeconds,
+      ...(previewImage ? { previewImage } : {}),
       payload: {
         safePosition: this.lastSafePosition,
         quaternion: { x: look.x, y: look.y, z: look.z, w: look.w },

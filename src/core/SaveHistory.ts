@@ -44,6 +44,7 @@ interface GameSaveInputBase {
   readonly levelId: string;
   readonly levelLabel: string;
   readonly playTimeSeconds: number;
+  readonly previewImage?: string;
 }
 
 export interface RussianStairwellGameSaveInput extends GameSaveInputBase {
@@ -84,6 +85,7 @@ export interface GameSaveSummary {
   readonly levelLabel: string;
   readonly savedAt: string;
   readonly playTimeSeconds: number;
+  readonly previewImage?: string;
 }
 
 export type WriteGameSaveResult =
@@ -104,7 +106,7 @@ interface StoredGameSaveHistory {
 
 type JsonRecord = Record<string, unknown>;
 
-const ENTRY_KEYS = [
+const LEGACY_ENTRY_KEYS = [
   'schemaVersion',
   'id',
   'experienceId',
@@ -115,7 +117,8 @@ const ENTRY_KEYS = [
   'playTimeSeconds',
   'payload',
 ] as const;
-const INPUT_KEYS = [
+const ENTRY_KEYS = [...LEGACY_ENTRY_KEYS, 'previewImage'] as const;
+const LEGACY_INPUT_KEYS = [
   'experienceId',
   'kind',
   'levelId',
@@ -123,6 +126,7 @@ const INPUT_KEYS = [
   'playTimeSeconds',
   'payload',
 ] as const;
+const INPUT_KEYS = [...LEGACY_INPUT_KEYS, 'previewImage'] as const;
 const MAX_POSITION_COORDINATE = 1_000_000;
 const MAX_CHUNK_COORDINATE = 1_000_000;
 const MAX_LEVEL_ID_LENGTH = 96;
@@ -130,6 +134,7 @@ const MAX_LEVEL_LABEL_LENGTH = 160;
 const MAX_SAVE_ID_LENGTH = 128;
 const MAX_SEED_LENGTH = 64;
 const MIN_QUATERNION_LENGTH = 1e-8;
+const MAX_PREVIEW_IMAGE_LENGTH = 180_000;
 
 const isRecord = (value: unknown): value is JsonRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -212,6 +217,11 @@ const sanitizeSaveId = (value: unknown): string | null => {
 
 const sanitizePlayTime = (value: unknown): number | null =>
   isFiniteNumber(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER ? value : null;
+
+const sanitizePreviewImage = (value: unknown): string | null => {
+  if (typeof value !== 'string' || value.length > MAX_PREVIEW_IMAGE_LENGTH) return null;
+  return /^data:image\/(?:webp|png|jpeg);base64,[a-zA-Z0-9+/]+=*$/.test(value) ? value : null;
+};
 
 const sanitizeDoorState = (value: unknown): GameSaveDoorState | null => {
   if (!isRecord(value)) return null;
@@ -300,7 +310,10 @@ const sanitizeBackroomsPayload = (value: unknown): BackroomsSavePayload | null =
 };
 
 const sanitizeEntry = (value: unknown): GameSaveEntry | null => {
-  if (!isRecord(value) || !hasExactKeys(value, ENTRY_KEYS)) return null;
+  if (
+    !isRecord(value)
+    || (!hasExactKeys(value, ENTRY_KEYS) && !hasExactKeys(value, LEGACY_ENTRY_KEYS))
+  ) return null;
   if (value.schemaVersion !== GAME_SAVE_HISTORY_SCHEMA_VERSION) return null;
   const id = sanitizeSaveId(value.id);
   const savedAt = sanitizeTimestamp(value.savedAt);
@@ -308,6 +321,10 @@ const sanitizeEntry = (value: unknown): GameSaveEntry | null => {
   const levelLabel = sanitizeLevelLabel(value.levelLabel);
   const playTimeSeconds = sanitizePlayTime(value.playTimeSeconds);
   const kind = value.kind === 'manual' || value.kind === 'autosave' ? value.kind : null;
+  const previewImage = Object.hasOwn(value, 'previewImage')
+    ? sanitizePreviewImage(value.previewImage)
+    : undefined;
+  if (Object.hasOwn(value, 'previewImage') && !previewImage) return null;
   if (!id || !savedAt || !levelId || !levelLabel || playTimeSeconds === null || !kind) return null;
 
   if (value.experienceId === 'russian-stairwell') {
@@ -322,6 +339,7 @@ const sanitizeEntry = (value: unknown): GameSaveEntry | null => {
       levelLabel,
       savedAt,
       playTimeSeconds,
+      ...(previewImage ? { previewImage } : {}),
       payload,
     });
   }
@@ -337,6 +355,7 @@ const sanitizeEntry = (value: unknown): GameSaveEntry | null => {
       levelLabel,
       savedAt,
       playTimeSeconds,
+      ...(previewImage ? { previewImage } : {}),
       payload,
     });
   }
@@ -417,7 +436,10 @@ const createEntry = (
   savedAt: string,
   id: string,
 ): GameSaveEntry | null => {
-  if (!isRecord(input) || !hasExactKeys(input, INPUT_KEYS)) return null;
+  if (
+    !isRecord(input)
+    || (!hasExactKeys(input, INPUT_KEYS) && !hasExactKeys(input, LEGACY_INPUT_KEYS))
+  ) return null;
   return sanitizeEntry({
     schemaVersion: GAME_SAVE_HISTORY_SCHEMA_VERSION,
     id,
@@ -427,6 +449,7 @@ const createEntry = (
     levelLabel: input.levelLabel,
     savedAt,
     playTimeSeconds: input.playTimeSeconds,
+    ...(input.previewImage ? { previewImage: input.previewImage } : {}),
     payload: input.payload,
   });
 };
@@ -488,4 +511,5 @@ export const getGameSaveSummary = (entry: GameSaveEntry): GameSaveSummary => Obj
   levelLabel: entry.levelLabel,
   savedAt: entry.savedAt,
   playTimeSeconds: entry.playTimeSeconds,
+  ...(entry.previewImage ? { previewImage: entry.previewImage } : {}),
 });

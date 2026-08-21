@@ -67,7 +67,10 @@ describe('game save history', () => {
     );
     const backrooms = writeGameSave(
       storage,
-      backroomsInput(),
+      {
+        ...backroomsInput(),
+        previewImage: 'data:image/webp;base64,QUJDRA==',
+      },
       new Date('2026-08-15T10:05:00.000Z'),
     );
 
@@ -105,6 +108,7 @@ describe('game save history', () => {
       levelLabel: 'Niveau 0',
       savedAt: '2026-08-15T10:05:00.000Z',
       playTimeSeconds: 120,
+      previewImage: 'data:image/webp;base64,QUJDRA==',
     });
   });
 
@@ -213,6 +217,7 @@ describe('game save history', () => {
     ['unknown kind', { ...russianInput(), kind: 'quick' }],
     ['empty level id', { ...russianInput(), levelId: '' }],
     ['negative play time', { ...russianInput(), playTimeSeconds: -1 }],
+    ['invalid preview image', { ...russianInput(), previewImage: 'https://example.com/save.webp' }],
     ['invalid door progress', {
       ...russianInput(),
       payload: { ...russianInput().payload, entranceDoor: { progress: 2, targetProgress: 1 } },

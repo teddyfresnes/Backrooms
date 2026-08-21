@@ -677,18 +677,31 @@ describe('open pit shaft rendering', () => {
     materials.ceiling.map = ceilingMap;
     materials.ceiling.emissive.setHex(0x231f12);
     materials.ceiling.emissiveIntensity = 0.013;
-    const view = new WorldView(plan, materials);
+    const view = new WorldView(plan, materials, {
+      lightingMode: 'legacy',
+      bakedLightMaps: {
+        resolution: 1,
+        general: Uint8Array.of(92, 86, 51, 255),
+        ceiling: Uint8Array.of(84, 78, 46, 255),
+      },
+    });
     const elevatedCeiling = view.group.getObjectByName(
       'elevated-atrium-ceilings',
     ) as THREE.Mesh;
+    const ordinaryCeiling = view.group.getObjectByName(
+      'office-drop-ceiling',
+    ) as THREE.Mesh;
     const elevatedMaterial = elevatedCeiling.material as THREE.MeshStandardMaterial;
+    const ordinaryMaterial = ordinaryCeiling.material as THREE.MeshStandardMaterial;
     expect(elevatedMaterial.name).toBe('elevated-tiled-ceiling');
-    expect(elevatedMaterial.map).toBe(ceilingMap);
-    expect(elevatedMaterial.color.getHex()).toBe(materials.ceiling.color.getHex());
-    expect(elevatedMaterial.emissiveMap).toBe(materials.ceiling.emissiveMap);
-    expect(elevatedMaterial.lightMap).toBeNull();
-    expect(elevatedMaterial.emissive.getHex()).toBe(materials.ceiling.emissive.getHex());
-    expect(elevatedMaterial.emissiveIntensity).toBe(materials.ceiling.emissiveIntensity);
+    expect(elevatedMaterial.map).toBe(ordinaryMaterial.map);
+    expect(elevatedMaterial.color.getHex()).toBe(ordinaryMaterial.color.getHex());
+    expect(elevatedMaterial.emissiveMap).toBe(ordinaryMaterial.emissiveMap);
+    expect(elevatedMaterial.lightMap).toBe(ordinaryMaterial.lightMap);
+    expect(elevatedMaterial.lightMap).not.toBeNull();
+    expect(elevatedMaterial.lightMapIntensity).toBe(ordinaryMaterial.lightMapIntensity);
+    expect(elevatedMaterial.emissive.getHex()).toBe(ordinaryMaterial.emissive.getHex());
+    expect(elevatedMaterial.emissiveIntensity).toBe(ordinaryMaterial.emissiveIntensity);
     expect(elevatedMaterial.side).toBe(THREE.DoubleSide);
     expect(elevatedMaterial.fog).toBe(true);
     const raycaster = new THREE.Raycaster();
@@ -2408,7 +2421,7 @@ describe('epic structure rendering', () => {
     expect(distantMaterial.map).toBe(materials.ceiling.map);
     expect(distantMaterial.color.getHex()).toBe(materials.ceiling.color.getHex());
     expect(distantMaterial.emissiveMap).toBe(materials.ceiling.emissiveMap);
-    expect(distantMaterial.lightMap).toBeNull();
+    expect(distantMaterial.lightMap).toBe(materials.ceiling.lightMap);
     expect(distantMaterial.side).toBe(THREE.DoubleSide);
     expect(distantMaterial.fog).toBe(true);
     expect(distantMaterial.emissive.getHex()).toBe(materials.ceiling.emissive.getHex());
@@ -2819,6 +2832,8 @@ describe('epic structure rendering', () => {
     expect(architecturalWalls).toBeDefined();
     expect(ceiling).toBeDefined();
     expect(fixtures).toBeDefined();
+    expect((ceiling.material as THREE.MeshStandardMaterial).userData.zonalLightingStoryHeight)
+      .toBe(plan.wallHeight);
     expect(root.getObjectByName('epic-light-cathedral-vault-ribs')).toBeUndefined();
     expect(root.getObjectByName('epic-light-cathedral-fluorescent-nave')).toBeUndefined();
 
