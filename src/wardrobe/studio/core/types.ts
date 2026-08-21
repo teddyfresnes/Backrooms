@@ -1,7 +1,7 @@
 import type { Object3D } from 'three'
 
 export type ClothingSlot = 'top' | 'bottom' | 'shoes'
-export type AssetSlot = 'base' | 'hair' | 'beard' | 'eyebrows' | 'eyelashes' | ClothingSlot | 'accessory'
+export type AssetSlot = 'base' | 'hair' | 'beard' | 'nails' | 'eyebrows' | 'eyelashes' | ClothingSlot | 'accessory'
 export type MorphSection = 'body' | 'face'
 
 export interface MorphDefinition {
@@ -52,6 +52,7 @@ export interface AssetManifest {
   skins: MaterialVariantDefinition[]
   hair: AssetDefinition[]
   beards: AssetDefinition[]
+  nails?: AssetDefinition[]
   eyebrows?: AssetDefinition[]
   eyelashes?: AssetDefinition[]
   environment?: { studioHDRI?: string | null }
@@ -73,6 +74,8 @@ export interface AppearanceConfig {
   eyebrowsId: string | null
   eyelashesId: string | null
   beardId: string | null
+  moustacheId: string | null
+  nailsId: string | null
   beardColor: string
 }
 

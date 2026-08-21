@@ -7,7 +7,7 @@ interface AssetLibraryValue {
   loading: boolean
   error: string | null
   find: (id: string | null | undefined) => AssetDefinition | null
-  bySlot: (slot: 'top' | 'bottom' | 'shoes' | 'hair' | 'beard' | 'eyebrows' | 'eyelashes' | 'accessory') => AssetDefinition[]
+  bySlot: (slot: 'top' | 'bottom' | 'shoes' | 'hair' | 'beard' | 'nails' | 'eyebrows' | 'eyelashes' | 'accessory') => AssetDefinition[]
 }
 
 const AssetLibraryContext = createContext<AssetLibraryValue | null>(null)
@@ -47,6 +47,7 @@ export function AssetLibrary({ children }: PropsWithChildren) {
         ...mergedManifest.baseCharacters,
         ...mergedManifest.hair,
         ...mergedManifest.beards,
+        ...(mergedManifest.nails ?? []),
         ...(mergedManifest.eyebrows ?? []),
         ...(mergedManifest.eyelashes ?? []),
         ...mergedManifest.clothes.tops,
@@ -56,10 +57,11 @@ export function AssetLibrary({ children }: PropsWithChildren) {
       ]
       return all.find((asset) => asset.id === id) ?? null
     },
-    bySlot: (slot: 'top' | 'bottom' | 'shoes' | 'hair' | 'beard' | 'eyebrows' | 'eyelashes' | 'accessory') => {
+    bySlot: (slot: 'top' | 'bottom' | 'shoes' | 'hair' | 'beard' | 'nails' | 'eyebrows' | 'eyelashes' | 'accessory') => {
       if (!mergedManifest) return []
       if (slot === 'hair') return mergedManifest.hair
       if (slot === 'beard') return mergedManifest.beards
+      if (slot === 'nails') return mergedManifest.nails ?? []
       if (slot === 'eyebrows') return mergedManifest.eyebrows ?? []
       if (slot === 'eyelashes') return mergedManifest.eyelashes ?? []
       if (slot === 'accessory') return mergedManifest.accessories

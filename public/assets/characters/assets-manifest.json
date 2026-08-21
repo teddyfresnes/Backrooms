@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "environment": {
     "studioHDRI": null
   },
@@ -1862,6 +1862,129 @@
         "CC0",
         "barbe"
       ]
+    },
+    {
+      "id": "mh-beard-elvs_scruffy_beard1",
+      "label": "Barbe longue ébouriffée",
+      "slot": "beard",
+      "url": "/assets/characters/bodyparts/makehuman/elvs_scruffy_beard1/elvs_beard1_longscruffy3.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/elvs_scruffy_beard1/elvs_scruffy_beard1.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/elvs_scruffy_beard1/elvs_beard1_longscruffy3.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/elvs_scruffy_beard1/thumbnail.webp",
+      "tags": ["MakeHuman", "MHCLO", "CC-BY", "barbe"]
+    },
+    {
+      "id": "mh-beard-grinsegold_moustache",
+      "label": "Moustache fine",
+      "slot": "beard",
+      "url": "/assets/characters/bodyparts/makehuman/grinsegold_moustache/moustache.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/grinsegold_moustache/grinsegold_moustache.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/grinsegold_moustache/moustache.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/grinsegold_moustache/thumbnail.webp",
+      "tags": ["MakeHuman", "MHCLO", "CC-BY", "barbe"]
+    },
+    {
+      "id": "mh-beard-grinsegold_full_beard",
+      "label": "Barbe complète",
+      "slot": "beard",
+      "url": "/assets/characters/bodyparts/makehuman/grinsegold_full_beard/full_beard.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/grinsegold_full_beard/grinsegold_full_beard.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/grinsegold_full_beard/full_beard.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/grinsegold_full_beard/thumbnail.webp",
+      "tags": ["MakeHuman", "MHCLO", "CC-BY", "barbe"]
+    },
+    {
+      "id": "mh-beard-culturalibre_dal_moustache",
+      "label": "Moustache Dalí",
+      "slot": "beard",
+      "url": "/assets/characters/bodyparts/makehuman/culturalibre_dal_moustache/dali_moustache.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/culturalibre_dal_moustache/culturalibre_dal_moustache.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/culturalibre_dal_moustache/dali_moustache.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/culturalibre_dal_moustache/thumbnail.webp",
+      "tags": ["MakeHuman", "MHCLO", "CC-BY", "barbe"]
+    }
+  ],
+  "nails": [
+    {
+      "id": "mh-nails-toigo_long_fingernails_blue_butterfly",
+      "label": "Longs papillon bleu",
+      "slot": "nails",
+      "url": "/assets/characters/bodyparts/makehuman/toigo_long_fingernails_blue_butterfly/longfingernails_bluebutterfly.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/toigo_long_fingernails_blue_butterfly/toigo_long_fingernails_blue_butterfly.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/toigo_long_fingernails_blue_butterfly/longfingernails_bluebutterfly.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/toigo_long_fingernails_blue_butterfly/thumbnail.webp",
+      "tags": ["MakeHuman", "MHCLO", "CC0", "ongles"]
+    },
+    {
+      "id": "mh-nails-grinsegold_fingernails_female_natural",
+      "label": "Ongles naturels",
+      "slot": "nails",
+      "url": "/assets/characters/bodyparts/makehuman/grinsegold_fingernails_female_natural/fingernails_elegant.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/grinsegold_fingernails_female_natural/grinsegold_fingernails_female_natural.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/grinsegold_fingernails_female_natural/fingernails_elegant.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/grinsegold_fingernails_female_natural/thumbnail.webp",
+      "tags": ["MakeHuman", "MHCLO", "CC0", "ongles"]
+    },
+    {
+      "id": "mh-nails-wolgade_female_fingernails",
+      "label": "Ongles féminins",
+      "slot": "nails",
+      "url": "/assets/characters/bodyparts/makehuman/wolgade_female_fingernails/female_fingernails.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/wolgade_female_fingernails/wolgade_female_fingernails.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/wolgade_female_fingernails/female_fingernails.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/wolgade_female_fingernails/thumbnail.webp",
+      "tags": ["MakeHuman", "MHCLO", "CC0", "ongles"]
+    },
+    {
+      "id": "mh-nails-mindfront_nails_toes_01",
+      "label": "Ongles de pieds",
+      "slot": "nails",
+      "url": "/assets/characters/bodyparts/makehuman/mindfront_nails_toes_01/mind_nails_toes_01.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/mindfront_nails_toes_01/mindfront_nails_toes_01.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/mindfront_nails_toes_01/mind_nails_toes_01.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/mindfront_nails_toes_01/thumbnail.webp",
+      "tags": ["MakeHuman", "MHCLO", "CC0", "ongles"]
+    },
+    {
+      "id": "mh-nails-mindfront_nails_01_short",
+      "label": "Ongles courts",
+      "slot": "nails",
+      "url": "/assets/characters/bodyparts/makehuman/mindfront_nails_01_short/mind_nails_01_short.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/mindfront_nails_01_short/mindfront_nails_01_short.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/mindfront_nails_01_short/mind_nails_01_short.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/mindfront_nails_01_short/thumbnail.webp",
+      "tags": ["MakeHuman", "MHCLO", "CC0", "ongles"]
+    },
+    {
+      "id": "mh-nails-mindfront_nails_02_medium",
+      "label": "Ongles moyens",
+      "slot": "nails",
+      "url": "/assets/characters/bodyparts/makehuman/mindfront_nails_02_medium/mind_nails_02_medium.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/mindfront_nails_02_medium/mindfront_nails_02_medium.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/mindfront_nails_02_medium/mind_nails_02_medium.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/mindfront_nails_02_medium/thumbnail.webp",
+      "tags": ["MakeHuman", "MHCLO", "CC0", "ongles"]
+    },
+    {
+      "id": "mh-nails-mindfront_nails_03_long",
+      "label": "Ongles longs",
+      "slot": "nails",
+      "url": "/assets/characters/bodyparts/makehuman/mindfront_nails_03_long/mind_nails_03_long.obj",
+      "sourceType": "mhclo",
+      "mhcloUrl": "/assets/characters/bodyparts/makehuman/mindfront_nails_03_long/mindfront_nails_03_long.mhclo",
+      "objUrl": "/assets/characters/bodyparts/makehuman/mindfront_nails_03_long/mind_nails_03_long.obj",
+      "thumbnail": "/assets/characters/bodyparts/makehuman/mindfront_nails_03_long/thumbnail.webp",
+      "tags": ["MakeHuman", "MHCLO", "CC0", "ongles"]
     }
   ],
   "clothes": {

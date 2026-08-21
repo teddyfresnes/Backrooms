@@ -194,7 +194,12 @@ function refitEyes(instance: MakeHumanInstance, full: Float32Array) {
   if (!head) return
   instance.currentPositions = full
   head.updateWorldMatrix(true, false)
+  // MakeHuman joint centers are expressed in CharacterRoot-local coordinates.
+  // Convert them through CharacterRoot before asking the head for local space;
+  // otherwise a rotated turntable parent is applied a second time on edits.
+  const rootWorldRotation = instance.root.getWorldQuaternion(new Quaternion())
   const headWorldRotation = head.getWorldQuaternion(new Quaternion())
+  const headRootRotation = rootWorldRotation.clone().invert().multiply(headWorldRotation)
   ;(['l', 'r'] as const).forEach((side, i) => {
     // During createMakeHumanInstance(), the rig is fitted before createEyes()
     // has populated eyeGroups. Re-fitting the skeleton must therefore tolerate
@@ -204,9 +209,9 @@ function refitEyes(instance: MakeHumanInstance, full: Float32Array) {
     if (!eyeGroup) return
     const center = eyeCenter(instance, side)
     if (!center) return
-    const local = head.worldToLocal(center.clone())
+    const local = head.worldToLocal(instance.root.localToWorld(center.clone()))
     eyeGroup.position.copy(local)
-    eyeGroup.quaternion.copy(headWorldRotation.clone().invert())
+    eyeGroup.quaternion.copy(headRootRotation.clone().invert())
   })
 }
 

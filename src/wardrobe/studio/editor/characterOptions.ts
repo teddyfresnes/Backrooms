@@ -79,6 +79,7 @@ function variant(label: string, values: Variant): CharacterOption {
     eyebrowsId: values.eyebrows ?? (values.sex === 'female' ? 'mh-eyebrows-mindfront_eyebrows_09' : 'mh-eyebrows-mindfront_eyebrows_03'),
     eyelashesId: values.eyelashes ?? (values.sex === 'female' ? 'mh-eyelashes-mindfront_eyelashes_03' : 'mh-eyelashes-mindfront_eyelashes_01'),
     beardId: null,
+    moustacheId: null,
   }
   config.wardrobe = {
     top: values.top,

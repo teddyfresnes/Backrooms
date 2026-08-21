@@ -6,7 +6,7 @@ import { CharacterModel } from '../character/CharacterModel'
 import { useAssetLibrary } from '../assets/AssetLibrary'
 
 export type WardrobeCameraFocus =
-  | 'overview' | 'general' | 'skin' | 'eyes' | 'hair' | 'eyebrows' | 'eyelashes' | 'beard' | 'top' | 'bottom' | 'shoes'
+  | 'overview' | 'general' | 'skin' | 'eyes' | 'hair' | 'eyebrows' | 'eyelashes' | 'beard' | 'nails' | 'top' | 'bottom' | 'shoes'
   | 'head' | 'nose' | 'mouth' | 'jaw' | 'cheeks' | 'chin' | 'forehead' | 'brows' | 'ears'
   | 'breast' | 'shoulders' | 'torso' | 'stomach' | 'waist' | 'hips' | 'buttocks'
   | 'arms' | 'legs' | 'hands' | 'feet' | 'neck'
@@ -36,6 +36,7 @@ const CAMERA_BY_FOCUS: Readonly<Partial<Record<WardrobeCameraFocus, CameraProfil
   eyebrows: EYES,
   eyelashes: EYES,
   beard: HEAD,
+  nails: HANDS,
   head: HEAD,
   nose: EYES,
   mouth: HEAD,
@@ -64,7 +65,7 @@ const CAMERA_BY_FOCUS: Readonly<Partial<Record<WardrobeCameraFocus, CameraProfil
 
 const EYE_FOCUSES = new Set<WardrobeCameraFocus>(['eyes', 'eyebrows', 'eyelashes', 'brows'])
 const HEAD_FOCUSES = new Set<WardrobeCameraFocus>(['skin', 'hair', 'head', 'nose', 'mouth', 'jaw', 'cheeks', 'chin', 'forehead', 'ears', 'neck', ...EYE_FOCUSES])
-const INSPECTION_FOCUSES = new Set<WardrobeCameraFocus>([...HEAD_FOCUSES, 'hands'])
+const INSPECTION_FOCUSES = new Set<WardrobeCameraFocus>([...HEAD_FOCUSES, 'hands', 'nails'])
 
 class ViewportErrorBoundary extends Component<PropsWithChildren, { error: boolean }> {
   state = { error: false }

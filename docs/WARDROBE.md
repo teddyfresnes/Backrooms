@@ -17,7 +17,9 @@ sont rendus avec le runtime MakeHuman puis téléchargés dans un ZIP WebP.
 Navigation :
 - personnage par défaut + six alternatives ;
 - `Modifier` ouvre une seule interface ;
-- catégories simples : Général, Peau, Yeux, Coiffure, Barbe, Haut, Bas, Chaussures ;
+- catégories simples communes : Général, Peau, Yeux, Coiffure, Sourcils, Cils, Haut, Bas, Chaussures ;
+- la catégorie Barbe est réservée aux hommes et sépare les barbes des moustaches (sélection indépendante) ;
+- la catégorie Ongles est réservée aux femmes ;
 - `Options avancées` est un toggle dans cette même interface ;
 - les catégories avancées apparaissent à la suite dans la navigation, sans nouvelle page ;
 - `Retour` revient au choix des personnages ; l'hôte futur pourra ensuite

@@ -104,6 +104,134 @@
   ],
   "models": [
     {
+      "name": "Faun beard",
+      "author": "culturalibre",
+      "source": "http://www.makehumancommunity.org/node/2356",
+      "license": "CC0",
+      "files": ["characters/bodyparts/makehuman/culturalibre_faun_beard/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Sigmund beard",
+      "author": "grinsegold",
+      "source": "http://www.makehumancommunity.org/node/877",
+      "license": "CC0",
+      "files": ["characters/bodyparts/makehuman/grinsegold_beard_sigmund_wip/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Viking beard",
+      "author": "RehmanPolanski",
+      "source": "http://www.makehumancommunity.org/node/2614",
+      "license": "CC0",
+      "files": ["characters/bodyparts/makehuman/rehmanpolanski_beard_viking/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Viking moustache",
+      "author": "RehmanPolanski",
+      "source": "http://www.makehumancommunity.org/node/2615",
+      "license": "CC0",
+      "files": ["characters/bodyparts/makehuman/rehmanpolanski_moustache_viking/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Scruffy beard",
+      "author": "WDG",
+      "source": "http://www.makehumancommunity.org/node/1769",
+      "license": "CC0",
+      "files": ["characters/bodyparts/makehuman/wdg_scruffy_beard/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Long fingernails — blue butterfly",
+      "author": "MargaretToigo",
+      "source": "http://www.makehumancommunity.org/node/976",
+      "license": "CC0",
+      "files": ["characters/bodyparts/makehuman/toigo_long_fingernails_blue_butterfly/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Female fingernails — natural",
+      "author": "grinsegold",
+      "source": "http://www.makehumancommunity.org/node/195",
+      "license": "CC0",
+      "files": ["characters/bodyparts/makehuman/grinsegold_fingernails_female_natural/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Female fingernails",
+      "author": "wolgade",
+      "source": "http://www.makehumancommunity.org/node/70",
+      "license": "CC0",
+      "files": ["characters/bodyparts/makehuman/wolgade_female_fingernails/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Nails and toenails 01",
+      "author": "Mindfront",
+      "source": "http://www.makehumancommunity.org/node/1371",
+      "license": "CC0",
+      "files": ["characters/bodyparts/makehuman/mindfront_nails_toes_01/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Short nails 01",
+      "author": "Mindfront",
+      "source": "http://www.makehumancommunity.org/node/1368",
+      "license": "CC0",
+      "files": ["characters/bodyparts/makehuman/mindfront_nails_01_short/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Medium nails 02",
+      "author": "Mindfront",
+      "source": "http://www.makehumancommunity.org/node/1369",
+      "license": "CC0",
+      "files": ["characters/bodyparts/makehuman/mindfront_nails_02_medium/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Long nails 03",
+      "author": "Mindfront",
+      "source": "http://www.makehumancommunity.org/node/1370",
+      "license": "CC0",
+      "files": ["characters/bodyparts/makehuman/mindfront_nails_03_long/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Long scruffy beard",
+      "author": "Elvaerwyn",
+      "source": "http://www.makehumancommunity.org/node/2611",
+      "license": "CC-BY",
+      "files": ["characters/bodyparts/makehuman/elvs_scruffy_beard1/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Thin moustache",
+      "author": "grinsegold",
+      "source": "http://www.makehumancommunity.org/node/187",
+      "license": "CC-BY",
+      "files": ["characters/bodyparts/makehuman/grinsegold_moustache/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Full beard",
+      "author": "grinsegold",
+      "source": "http://www.makehumancommunity.org/node/188",
+      "license": "CC-BY",
+      "files": ["characters/bodyparts/makehuman/grinsegold_full_beard/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
+      "name": "Dalí-style moustache",
+      "author": "culturalibre",
+      "source": "http://www.makehumancommunity.org/node/2872",
+      "license": "CC-BY",
+      "files": ["characters/bodyparts/makehuman/culturalibre_dal_moustache/**"],
+      "changes": "MakeHuman MHCLO asset; PNG textures and thumbnail converted to WebP."
+    },
+    {
       "name": "Modern door",
       "author": "Kenney",
       "source": "https://poly.pizza/m/919pouyoML",

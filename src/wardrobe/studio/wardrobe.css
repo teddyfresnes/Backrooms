@@ -34,7 +34,7 @@ button:focus-visible, input:focus-visible { outline:2px solid #fff3a6; outline-o
 .wardrobe-controls { min-width:0; min-height:0; display:flex; flex-direction:column; gap:14px; padding:18px; overflow:hidden; background:rgba(16,17,13,.98); }
 .wardrobe-panel-scroll { min-height:0; flex:1; overflow:auto; scrollbar-width:thin; scrollbar-color:rgba(229,211,108,.22) transparent; padding-right:3px; }
 
-.character-choice-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; min-height:0; flex:1; overflow:auto; padding:1px; }
+.character-choice-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; min-height:0; flex:1; overflow:auto; padding:1px; }
 .character-choice-grid > button { min-height:174px; display:flex; align-items:stretch; justify-content:flex-start; flex-direction:column; gap:7px; padding:7px; border:1px solid var(--border); border-radius:3px; background:rgba(245,240,216,.025); color:var(--muted); overflow:hidden; }
 .character-choice-grid > button:hover { border-color:var(--border-strong); background:rgba(245,240,216,.05); }
 .character-choice-grid > button.selected { border-color:rgba(229,211,108,.72); background:rgba(229,211,108,.08); color:#fff3a6; }
@@ -54,12 +54,15 @@ button:focus-visible, input:focus-visible { outline:2px solid #fff3a6; outline-o
 .simple-content, .advanced-content { display:flex; flex-direction:column; gap:14px; padding:2px 0 8px; }
 .simple-content h3 { margin:0; color:#f5f0d8; font-size:16px; font-weight:540; }
 .simple-content h4 { margin:2px 0 -4px; color:var(--muted); font-size:9px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; }
-.simple-assets { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.simple-assets { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
 .simple-assets > button { min-width:0; padding:0; overflow:hidden; border:1px solid var(--border); border-radius:3px; background:rgba(245,240,216,.025); color:var(--muted); text-align:left; }
 .simple-assets > button:hover { border-color:var(--border-strong); }
 .simple-assets > button.selected { border-color:rgba(229,211,108,.65); box-shadow:inset 0 0 0 1px rgba(229,211,108,.13); color:#fff3a6; }
-.simple-asset-thumb, .empty-asset { height:76px; display:grid; place-items:center; background:#171811; }
-.simple-asset-thumb img { width:100%; height:100%; object-fit:cover; }
+.simple-asset-thumb, .empty-asset { height:132px; display:grid; place-items:center; background:#171811; }
+/* Bodypart thumbnails are square close-ups. A wider card with a short strip
+   crops the actual feature (especially brows and lashes) out of view, so keep
+   three narrower columns and give the image enough vertical room to breathe. */
+.simple-asset-thumb img { width:100%; height:100%; object-fit:cover; object-position:50% 45%; }
 .empty-asset::after { content:'—'; color:#676657; font-size:18px; }
 .material-original { background:radial-gradient(circle at 50% 45%,rgba(229,211,108,.15),rgba(245,240,216,.025)); }
 .simple-assets small { display:block; padding:8px 9px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; }

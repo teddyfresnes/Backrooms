@@ -46,6 +46,8 @@ export function makeDefaultCharacter(): CharacterConfig {
       eyebrowsId: 'mh-eyebrows-mindfront_eyebrows_03',
       eyelashesId: 'mh-eyelashes-mindfront_eyelashes_01',
       beardId: null,
+      moustacheId: null,
+      nailsId: null,
       beardColor: '#2b2521',
     },
     wardrobe: {

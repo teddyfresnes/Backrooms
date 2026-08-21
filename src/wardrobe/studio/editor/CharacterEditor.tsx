@@ -62,7 +62,7 @@ export interface WardrobeNavigationBridge {
   screen?: WardrobeScreen
 }
 
-type SimpleCategory = 'general' | 'skin' | 'eyes' | 'hair' | 'eyebrows' | 'eyelashes' | 'top' | 'bottom' | 'shoes'
+type SimpleCategory = 'general' | 'skin' | 'eyes' | 'hair' | 'beard' | 'nails' | 'eyebrows' | 'eyelashes' | 'top' | 'bottom' | 'shoes'
 type AdvancedCategory =
   | 'head' | 'nose' | 'mouth' | 'jaw' | 'cheeks' | 'chin' | 'forehead' | 'brows' | 'ears'
   | 'breast' | 'shoulders' | 'torso' | 'stomach' | 'waist' | 'hips' | 'buttocks'
@@ -74,6 +74,8 @@ const SIMPLE_CATEGORIES: Array<{ id: SimpleCategory; label: string }> = [
   { id: 'skin', label: 'Peau' },
   { id: 'eyes', label: 'Yeux' },
   { id: 'hair', label: 'Coiffure' },
+  { id: 'beard', label: 'Barbe' },
+  { id: 'nails', label: 'Ongles' },
   { id: 'eyebrows', label: 'Sourcils' },
   { id: 'eyelashes', label: 'Cils' },
   { id: 'top', label: 'Haut' },
@@ -284,6 +286,8 @@ function EyeEditor({ advanced }: { advanced: boolean }) {
   </div>
 }
 
+const isMoustacheAsset = (asset: AssetDefinition) => /moustache/i.test(`${asset.id} ${asset.label}`)
+
 function SimpleEditor({ category, advanced }: { category: SimpleCategory; advanced: boolean }) {
   const { manifest } = useAssetLibrary()
   const appearance = useCharacterState((s) => s.config.appearance)
@@ -293,6 +297,18 @@ function SimpleEditor({ category, advanced }: { category: SimpleCategory; advanc
   if (category === 'skin') return <div className="simple-content"><h3>Peau</h3><MaterialButtons materials={manifest.skins} selected={appearance.skinMaterialId} originalLabel="Standard" onSelect={(id) => setAppearance('skinMaterialId', id)} /></div>
   if (category === 'eyes') return <EyeEditor advanced={advanced} />
   if (category === 'hair') return <HairEditor />
+  if (category === 'beard') {
+    const beards = manifest.beards.filter((asset) => !isMoustacheAsset(asset))
+    const moustaches = manifest.beards.filter(isMoustacheAsset)
+    return <div className="simple-content">
+      <h3>Barbe</h3>
+      <h4>Barbes</h4>
+      <AssetButtons assets={beards} selected={appearance.beardId} onSelect={(id) => setAppearance('beardId', id)} allowNone />
+      <h4>Moustaches</h4>
+      <AssetButtons assets={moustaches} selected={appearance.moustacheId} onSelect={(id) => setAppearance('moustacheId', id)} allowNone />
+    </div>
+  }
+  if (category === 'nails') return <div className="simple-content"><h3>Ongles</h3><AssetButtons assets={manifest.nails ?? []} selected={appearance.nailsId} onSelect={(id) => setAppearance('nailsId', id)} allowNone /></div>
   if (category === 'eyebrows') return <div className="simple-content"><h3>Sourcils</h3><AssetButtons assets={manifest.eyebrows ?? []} selected={appearance.eyebrowsId} onSelect={(id) => setAppearance('eyebrowsId', id)} allowNone /></div>
   if (category === 'eyelashes') return <div className="simple-content"><h3>Cils</h3><AssetButtons assets={manifest.eyelashes ?? []} selected={appearance.eyelashesId} onSelect={(id) => setAppearance('eyelashesId', id)} allowNone /></div>
   if (category === 'top') return <ClothingCategory title="Haut" slot="top" assets={manifest.clothes.tops} />
@@ -452,7 +468,13 @@ function EditorSurface({ navigationBridge }: { navigationBridge?: WardrobeNaviga
   const lastConfigRef = useRef(currentConfig)
   const suppressCustomTracking = useRef(false)
 
-  const simpleCategories = SIMPLE_CATEGORIES
+  const sex = sexFromGenderMorph(currentConfig.body.gender)
+  const simpleCategories = SIMPLE_CATEGORIES.filter((item) =>
+    (item.id !== 'beard' || sex === 'male') && (item.id !== 'nails' || sex === 'female'))
+
+  useEffect(() => {
+    if ((category === 'beard' && sex !== 'male') || (category === 'nails' && sex !== 'female')) setCategory('general')
+  }, [category, sex])
 
   const customOption = useMemo<CharacterOption | null>(() => customCharacter ? ({
     id: 'custom',

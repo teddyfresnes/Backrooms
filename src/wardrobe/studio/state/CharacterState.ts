@@ -112,6 +112,7 @@ function safeBody(source: Record<string, number> | undefined) {
 
 function normalizeConfig(saved: CharacterConfig): CharacterConfig {
   const defaults = makeDefaultCharacter()
+  const legacyMoustacheId = /moustache/i.test(saved.appearance?.beardId ?? '') ? saved.appearance?.beardId : null
   return {
     ...defaults,
     ...saved,
@@ -129,6 +130,9 @@ function normalizeConfig(saved: CharacterConfig): CharacterConfig {
       skinMaterialId: saved.appearance?.skinMaterialId ?? null,
       eyebrowsId: saved.appearance?.eyebrowsId ?? defaults.appearance.eyebrowsId,
       eyelashesId: saved.appearance?.eyelashesId ?? defaults.appearance.eyelashesId,
+      beardId: legacyMoustacheId ? null : saved.appearance?.beardId ?? defaults.appearance.beardId,
+      moustacheId: saved.appearance?.moustacheId ?? legacyMoustacheId ?? defaults.appearance.moustacheId,
+      nailsId: saved.appearance?.nailsId ?? defaults.appearance.nailsId,
     },
     wardrobe: {
       ...defaults.wardrobe,
@@ -195,7 +199,18 @@ export const useCharacterState = create<EditorState>((set, get) => ({
       feet: footMorphFromShoeSizeEu(oldShoe, gender),
       hands: handMorphFromLengthCm(oldHand, gender),
     })
-    set({ config: updated({ ...current, body }) })
+    set({
+      config: updated({
+        ...current,
+        body,
+        appearance: {
+          ...current.appearance,
+          beardId: sex === 'male' ? current.appearance.beardId : null,
+          moustacheId: sex === 'male' ? current.appearance.moustacheId : null,
+          nailsId: sex === 'female' ? current.appearance.nailsId : null,
+        },
+      }),
+    })
   },
   setAppearance: (key, value) => set((state) => ({
     config: updated({
