@@ -179,8 +179,8 @@ describe('ImportedApartmentDoorInteraction save state', () => {
       expect(physics.chunks.has('entrance-door')).toBe(true);
     }
 
-    expect(furthestAngle).toBeGreaterThan(0.04);
-    expect(furthestAngle).toBeLessThan(Math.PI * 0.04);
+    expect(furthestAngle).toBeGreaterThan(0.16);
+    expect(furthestAngle).toBeLessThan(0.21);
     expect(pivot.rotation.y).toBeCloseTo(0, 5);
     expect(interaction.getState()).toEqual({ progress: 0, targetProgress: 0, locked: true });
     interaction.dispose();
