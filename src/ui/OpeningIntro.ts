@@ -1,3 +1,5 @@
+import { siteAudio } from '../audio/SiteAudio'
+
 const INTRO_MINIMUM_MS = 5900
 const INTRO_REDUCED_MOTION_MS = 900
 const INTRO_EXIT_MS = 900
@@ -35,6 +37,9 @@ function headphoneIcon(): string {
 export class OpeningIntro {
   readonly minimumDuration: Promise<void>
   private readonly root: HTMLElement
+  private readonly timers = new Set<number>()
+  private resolveMinimum = (): void => undefined
+  private minimumResolved = false
   private disposed = false
 
   constructor() {
@@ -77,13 +82,41 @@ export class OpeningIntro {
           <small>Random story</small>
         </div>
       </div>
+
+      <button class="opening-start" type="button">JOUER</button>
     `
     document.documentElement.classList.add('opening-intro-active')
     document.body.append(this.root)
-    requestAnimationFrame(() => this.root.classList.add('is-running'))
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    this.minimumDuration = wait(reducedMotion ? INTRO_REDUCED_MOTION_MS : INTRO_MINIMUM_MS)
+    this.minimumDuration = new Promise((resolve) => {
+      this.resolveMinimum = () => {
+        if (this.minimumResolved) return
+        this.minimumResolved = true
+        resolve()
+      }
+    })
+    const start = (): void => {
+      if (this.disposed || this.root.classList.contains('is-running')) return
+      this.root.classList.add('is-running')
+      void siteAudio.unlock()
+      if (reducedMotion) {
+        void siteAudio.playIntroCue('warning')
+      } else {
+        this.scheduleCue('warning', 80)
+        this.scheduleCue('headphones', 1370)
+        this.scheduleCue('credit', 3260)
+        this.scheduleCue('title', 4780)
+      }
+      const timer = window.setTimeout(
+        this.resolveMinimum,
+        reducedMotion ? INTRO_REDUCED_MOTION_MS : INTRO_MINIMUM_MS,
+      )
+      this.timers.add(timer)
+    }
+    this.root.querySelector<HTMLButtonElement>('.opening-start')?.addEventListener('click', start, {
+      once: true,
+    })
   }
 
   async finish(): Promise<void> {
@@ -105,7 +138,18 @@ export class OpeningIntro {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    this.timers.forEach((timer) => window.clearTimeout(timer))
+    this.timers.clear()
+    this.resolveMinimum()
     this.root.remove()
     document.documentElement.classList.remove('opening-intro-active')
+  }
+
+  private scheduleCue(cue: 'warning' | 'headphones' | 'credit' | 'title', delay: number): void {
+    const timer = window.setTimeout(() => {
+      this.timers.delete(timer)
+      if (!this.disposed) void siteAudio.playIntroCue(cue)
+    }, delay)
+    this.timers.add(timer)
   }
 }

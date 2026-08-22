@@ -169,6 +169,7 @@ export const STAIRWELL_LIGHTING_PROFILES: Record<LightingMode, StairwellLighting
 export class StairwellEnvironment {
   readonly group = new THREE.Group();
   readonly furnitureColliders: StaticCollider[] = [];
+  readonly rainAudioOpenings: THREE.Vector3[] = [];
   hallEntranceDoor?: THREE.Object3D;
   private readonly importedWindowTemplate?: THREE.Object3D;
   private readonly importedEntranceDoorTemplate?: THREE.Object3D;
@@ -910,6 +911,7 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     });
 
     this.group.add(window);
+    this.rainAudioOpenings.push(new THREE.Vector3(centerX, centerY, targetZ));
   }
 
   static async loadImportedWindowTemplate(): Promise<THREE.Object3D | undefined> {
@@ -1088,6 +1090,7 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
 
     this.hallEntranceDoor = hallDoor;
     this.group.add(hallDoor);
+    this.rainAudioOpenings.push(new THREE.Vector3(0, targetCenterY, targetCenterZ));
     this.addEntranceMailbox(wallFaceZ);
   }
 

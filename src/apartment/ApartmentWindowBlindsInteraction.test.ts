@@ -29,12 +29,14 @@ describe('apartment window blinds interaction', () => {
     expect(ui.setInteraction).toHaveBeenLastCalledWith('Fermer les stores');
     expect(interaction.interact(player, towardFirst, true)).toBe(true);
     expect(interaction.getState()).toEqual([false, true]);
+    expect(interaction.getClosureProgress()).toEqual([0, 0]);
 
     for (let frame = 0; frame < 90; frame += 1) {
       interaction.update(1 / 60, player, towardFirst, true);
     }
     expect(blinds[0].pivot.scale.y).toBeCloseTo(8, 5);
     expect(blinds[1].pivot.scale.y).toBeCloseTo(1, 5);
+    expect(interaction.getClosureProgress()).toEqual([1, 0]);
     expect(ui.setInteraction).toHaveBeenLastCalledWith('Ouvrir les stores');
   });
 

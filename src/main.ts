@@ -10,19 +10,30 @@ import {
   type GameSaveEntry,
 } from './core/SaveHistory';
 import type { RussianStairwellLaunch } from './core/RussianStairwellGame';
+import { siteAudio } from './audio/SiteAudio';
 import { OpeningIntro } from './ui/OpeningIntro';
+import { loadGameSettings } from './ui/settings';
 
 const appElement = document.querySelector<HTMLElement>('#app');
 if (!appElement) throw new Error('Application mount point not found.');
 const app = appElement;
+siteAudio.setMasterVolume(loadGameSettings().masterVolume);
+const syncSiteAudioVisibility = (): void => siteAudio.syncVisibility();
+document.addEventListener('visibilitychange', syncSiteAudioVisibility);
 
 interface GameRuntime {
-  initialize(): Promise<void>;
+  initialize(onProgress?: (progress: number) => void): Promise<void>;
   dispose(): void;
+}
+
+interface BootView {
+  readonly element: HTMLElement;
+  setProgress(progress: number): void;
 }
 
 let activeGame: GameRuntime | null = null;
 let transitionId = 0;
+let openingFinished = false;
 
 const readHistory = (): readonly GameSaveEntry[] => {
   try {
@@ -66,7 +77,7 @@ const clearRuntime = (): void => {
   app.replaceChildren();
 };
 
-const createBoot = (detail: string): HTMLElement => {
+const createBoot = (detail: string): BootView => {
   const boot = document.createElement('div');
   boot.className = 'boot-shell';
   boot.setAttribute('role', 'status');
@@ -78,12 +89,96 @@ const createBoot = (detail: string): HTMLElement => {
         <div class="boot-wordmark"><p>Backrooms</p><h1>Random Story</h1></div>
       </header>
       <div class="boot-loading">
-        <div class="boot-track" role="progressbar" aria-label="${detail}"><i></i></div>
+        <div class="boot-track" role="progressbar" aria-label="${detail}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+        <output class="boot-percent" aria-live="off" aria-label="0%">
+          <span class="boot-percent-tape" aria-hidden="true">
+            ${Array.from({ length: 101 }, (_, percent) => `<span>${percent}%</span>`).join('')}
+          </span>
+        </output>
       </div>
     </div>
   `;
   app.append(boot);
-  return boot;
+  const track = boot.querySelector<HTMLElement>('.boot-track')!;
+  const fill = boot.querySelector<HTMLElement>('.boot-track i')!;
+  const output = boot.querySelector<HTMLOutputElement>('.boot-percent')!;
+  const percentTape = boot.querySelector<HTMLElement>('.boot-percent-tape')!;
+  let target = 0;
+  let displayed = 0;
+  let previousTime = performance.now();
+  let counterStart = 0;
+  let counterStartedAt = previousTime;
+  let counterAnimation: Animation | undefined;
+  const counterPercentAt = (time = performance.now()): number => Math.min(
+    99,
+    counterStart + Math.floor(Math.max(0, time - counterStartedAt) / 1000),
+  );
+  const startCounter = (requestedPercent: number, force = false): void => {
+    const now = performance.now();
+    const current = counterPercentAt(now);
+    const percent = Math.min(100, Math.max(0, Math.round(requestedPercent)));
+    if (!force && percent <= current) {
+      output.setAttribute('aria-label', `${current}%`);
+      return;
+    }
+    counterAnimation?.cancel();
+    counterStart = percent;
+    counterStartedAt = now;
+    percentTape.style.transform = `translate3d(0, -${percent}em, 0)`;
+    output.setAttribute('aria-label', `${percent}%`);
+    if (percent >= 99 || typeof percentTape.animate !== 'function') return;
+    const remaining = 99 - percent;
+    counterAnimation = percentTape.animate([
+      { transform: `translate3d(0, -${percent}em, 0)` },
+      { transform: 'translate3d(0, -99em, 0)' },
+    ], {
+      duration: remaining * 1000,
+      easing: `steps(${remaining}, end)`,
+      fill: 'forwards',
+    });
+  };
+  const renderProgress = (): void => {
+    const percent = Math.round(displayed * 100);
+    fill.style.transform = `scaleX(${displayed})`;
+    const visiblePercent = percent >= 100 ? 100 : Math.max(percent, counterPercentAt());
+    track.setAttribute('aria-valuenow', String(visiblePercent));
+    startCounter(percent, percent >= 100);
+  };
+  const tick = (time: number): void => {
+    if (!boot.isConnected) return;
+    // Preserve a few seconds of elapsed wall time after a main-thread-heavy
+    // task so the percentage catches up instead of appearing frozen.
+    const delta = Math.min(5, Math.max(0, (time - previousTime) / 1000));
+    previousTime = time;
+    if (target < 1) {
+      // Some browser/Three/Rapier operations expose no granular progress.
+      // Keep the indicator alive between real milestones. Even near the end it
+      // advances by at least one visible percentage point per second; 100%
+      // remains reserved for actual readiness.
+      const base = Math.max(displayed, target);
+      const idleRate = base < 0.15
+        ? 0.026
+        : base < 0.45 ? 0.018
+          : base < 0.72 ? 0.014 : 0.011;
+      displayed = Math.min(0.985, Math.max(target, displayed + idleRate * delta));
+      renderProgress();
+      requestAnimationFrame(tick);
+    }
+  };
+  startCounter(0, true);
+  requestAnimationFrame(tick);
+  return {
+    element: boot,
+    setProgress(progress: number): void {
+      target = Math.max(target, Math.min(1, Math.max(0, progress)));
+      if (target >= 1) {
+        displayed = 1;
+      } else {
+        displayed = Math.max(displayed, target);
+      }
+      renderProgress();
+    },
+  };
 };
 
 const showBootError = (error: unknown, retryAction: () => void): void => {
@@ -111,14 +206,17 @@ const loadFromHistory = (id: string): void => {
 
 async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
   const id = ++transitionId;
+  siteAudio.setMenuActive(false);
   clearRuntime();
   const boot = createBoot(
     launch.kind === 'load' ? 'Chargement de la sauvegarde' : 'Préparation du niveau',
   );
+  boot.setProgress(0.02);
   let game: GameRuntime | null = null;
   try {
     const { RussianStairwellGame } = await import('./core/RussianStairwellGame');
     if (id !== transitionId) return;
+    boot.setProgress(0.08);
     game = new RussianStairwellGame(app, launch, {
       onRequestNewGame: () => queueMicrotask(() => void startStairwell({ kind: 'new' })),
       onRequestMainMenu: () => queueMicrotask(() => void startInitialExperience()),
@@ -131,17 +229,19 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
       )),
     });
     activeGame = game;
-    await game.initialize();
+    await game.initialize((progress) => boot.setProgress(0.08 + progress * 0.92));
     if (id !== transitionId) {
       game.dispose();
       return;
     }
-    boot.remove();
+    boot.setProgress(1);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    boot.element.remove();
   } catch (error) {
     if (activeGame === game) activeGame = null;
     game?.dispose();
     if (id !== transitionId) return;
-    boot.remove();
+    boot.element.remove();
     showBootError(error, () => void startStairwell(launch));
     console.error(error);
   }
@@ -153,6 +253,7 @@ async function startBackrooms(
   menuBackground = false,
 ): Promise<void> {
   const id = ++transitionId;
+  siteAudio.setMenuActive(false);
   clearRuntime();
   const boot = createBoot(
     launch.kind === 'load'
@@ -161,6 +262,7 @@ async function startBackrooms(
         ? 'Initialisation du menu'
         : 'Génération des Backrooms',
   );
+  boot.setProgress(0.02);
   let game: GameRuntime | null = null;
   try {
     // Give the transition overlay one frame before the synchronous origin
@@ -169,6 +271,7 @@ async function startBackrooms(
     if (id !== transitionId) return;
     const { Game } = await import('./core/Game');
     if (id !== transitionId) return;
+    boot.setProgress(0.08);
     game = new Game(app, {
       launch,
       autosaveOnReady,
@@ -181,17 +284,20 @@ async function startBackrooms(
       onRequestLoadGame: loadFromHistory,
     });
     activeGame = game;
-    await game.initialize();
+    await game.initialize((progress) => boot.setProgress(0.08 + progress * 0.92));
     if (id !== transitionId) {
       game.dispose();
       return;
     }
-    boot.remove();
+    boot.setProgress(1);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    boot.element.remove();
+    if (menuBackground && openingFinished) siteAudio.setMenuActive(true);
   } catch (error) {
     if (activeGame === game) activeGame = null;
     game?.dispose();
     if (id !== transitionId) return;
-    boot.remove();
+    boot.element.remove();
     showBootError(error, () => void startBackrooms(launch, autosaveOnReady, menuBackground));
     console.error(error);
   }
@@ -224,7 +330,11 @@ async function startInitialExperience(): Promise<void> {
 const openingIntro = new OpeningIntro();
 requestAnimationFrame(() => {
   void Promise.all([startInitialExperience(), openingIntro.minimumDuration])
-    .then(() => openingIntro.finish())
+    .then(async () => {
+      await openingIntro.finish();
+      openingFinished = true;
+      siteAudio.setMenuActive(true);
+    })
     .catch((error) => {
       openingIntro.dispose();
       console.error(error);
@@ -234,7 +344,9 @@ requestAnimationFrame(() => {
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     transitionId += 1;
+    document.removeEventListener('visibilitychange', syncSiteAudioVisibility);
     openingIntro.dispose();
     clearRuntime();
+    siteAudio.dispose();
   });
 }

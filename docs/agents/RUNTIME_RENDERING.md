@@ -240,14 +240,44 @@ Les coordonnées de `LightSlot.ceilingY` sont absolues dans le plan local ;
 
 ## Physique et joueur
 
+`AudioSystem` lit huit prises réelles locales par surface pour la marche et les
+réceptions : moquette dans les Backrooms, bois dans l’appartement et béton dans
+la cage d’escalier. Le sprint bascule sur une performance continue dédiée à la
+surface, à cadence humaine native, avec fondu d’entrée/sortie au lieu d’accélérer
+et de tronquer les sons de marche. Son niveau domine nettement la marche ; les
+pas ordinaires sont assombris, légèrement ralentis et renforcés dans le bas du
+spectre pour éviter les transitoires croustillants. Chaque prise courte est
+analysée au premier usage afin de démarrer sur son attaque réelle, notamment à
+l'atterrissage, sans rejouer son silence initial. `PlayerController` transmet la vitesse
+verticale brute à l’impact ; les seuils audio distinguent petite, moyenne, forte
+et très haute chute, cette dernière ajoutant seule le craquement. Le profil intérieur ne crée
+pas le bourdonnement des Backrooms : il joue une pluie discrète dont le niveau
+augmente progressivement près des deux fenêtres de l'appartement, de toutes les
+fenêtres du hall et de sa porte extérieure. Il fournit aussi les sons de porte,
+verrou, stores et interrupteur. La fermeture d'un store atténue progressivement
+puis presque entièrement la contribution de sa propre fenêtre, sans modifier les
+ouvertures du hall. Tant qu'un store reste ouvert, un lit de pluie faible reste
+audible dans tout l'appartement ; la proximité de la fenêtre ajoute son niveau
+direct. La boucle utilise une couture tête/queue fondue. `SiteAudio` reste global entre les runtimes pour les
+quatre ponctuations de l’intro, les retours discrets des boutons et la musique,
+activée uniquement lorsque le menu principal a fini de charger (jamais au
+chargement, en partie ou dans le menu pause).
+Pour une session jouable, `AudioSystem.start(onProgress)` est lancé puis suspendu
+pendant `initialize()` : les fichiers sont téléchargés et décodés derrière la
+barre de chargement, et le second `start()` à l’entrée ne fait que reprendre le
+contexte déjà prêt. Le fond non jouable du menu principal saute ce préchargement.
+
 `RussianStairwellGame` utilise un plan Rapier statique séparé de `WorldStream`.
 La coque de l’appartement entre dans `PhysicsWorld.addTrimeshChunk()` après mise
 à jour de ses matrices monde ; les meubles gardent des AABB économiques. Les
 deux familles sont indexées par clé et suivent le même nettoyage que les chunks
-procéduraux. La porte d’entrée possède son propre collider activé uniquement
-quand elle est complètement fermée. Son verrou intérieur est raycasté sur le
-mur côté appartement. Engagé, il conserve ce collider pendant une ouverture
-limitée à 5,5 % de la course, puis ramène automatiquement le vantail au bâti.
+procéduraux. La porte d’entrée possède son propre collider cinématique,
+synchronisé avec le vantail à chaque tick fixe. Le balayage transmet au joueur
+un déplacement externe consommé par son prochain mouvement physique, afin que
+la porte le pousse sans tick Rapier supplémentaire. Une nouvelle interaction
+pendant l'ouverture ou la fermeture inverse immédiatement la cible. Son verrou
+intérieur est raycasté sur le mur côté appartement. Engagé, il limite
+l'ouverture à 5,5 % de la course, puis ramène automatiquement le vantail au bâti.
 
 La double porte importée du rez-de-chaussée reste statique et collidable, mais
 `HallExitInteraction` la raycast comme un portail. Un appui sur l’action

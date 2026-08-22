@@ -30,7 +30,7 @@ export const defaultGameSettings = (): GameSettings => ({
   renderQuality: 'auto',
   fieldOfView: 72,
   lookSensitivity: 1,
-  masterVolume: 0.42,
+  masterVolume: 0.6,
   menuMotion: typeof window === 'undefined'
     ? true
     : !window.matchMedia('(prefers-reduced-motion: reduce)').matches,

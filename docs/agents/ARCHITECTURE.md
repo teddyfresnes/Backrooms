@@ -51,6 +51,10 @@ ultérieurs au menu principal ne rejouent pas cette introduction.
 Une session jouable masque l’overlay avant de demander le verrouillage de souris :
 le refus asynchrone du navigateur ne doit jamais rouvrir le menu de pause. Le
 canvas permet ensuite de redemander le verrouillage sur un clic utilisateur.
+Le routeur conserve l’écran de chargement jusqu’à la compilation, au warmup et
+au décodage de tous les sons du runtime. `initialize(onProgress)` combine la
+progression visuelle et audio ; l’entrée directe masque le menu sans transition
+avant que cet écran soit retiré, afin qu’aucune frame du menu ne fuite en jeu.
 Le contrat central du labyrinthe reste `WorldPlan` dans `src/world/types.ts` ;
 la génération ne crée que des données et le rendu et la physique les consomment
 séparément.

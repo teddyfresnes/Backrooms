@@ -16,7 +16,7 @@ describe('experience routing', () => {
 
     expect(stairwell).toContain('HallExitInteraction');
     expect(stairwell).toContain('this.callbacks.onEnterBackrooms()');
-    expect(stairwell).toContain("this.renderer.setAnimationLoop(this.frame);\n    this.saveNow('autosave');\n    this.enter();");
+    expect(stairwell).toContain("this.renderer.setAnimationLoop(this.frame);\n    this.saveNow('autosave');\n    this.enter(true);");
     expect(main).toContain("await import('./core/Game')");
     expect(main).toContain("import { OpeningIntro } from './ui/OpeningIntro'");
     expect(main).toContain('onEnterBackrooms: () => queueMicrotask');
@@ -95,6 +95,16 @@ describe('experience routing', () => {
     expect(main).toContain("<div class=\"boot-wordmark\"><p>Backrooms</p><h1>Random Story</h1></div>");
     expect(main).not.toContain('boot-loading-heading');
     expect(main).not.toContain('boot-loading-foot');
+    expect(main).toContain('class="boot-percent"');
+    expect(main).toContain('class="boot-percent-tape"');
+    expect(main).toContain('aria-valuenow="0"');
+    expect(main).toContain('requestAnimationFrame(tick)');
+    expect(main).toContain('Math.min(0.985');
+    expect(main).toContain(': 0.011;');
+    expect(main).toContain('Math.min(5, Math.max(0');
+    expect(main).toContain('duration: remaining * 1000');
+    expect(main).toContain('easing: `steps(${remaining}, end)`');
+    expect(main).toContain('game.initialize((progress) => boot.setProgress');
     expect(main).toContain('showBootError(error, () => void startStairwell(launch))');
     expect(main).toContain('showBootError(error, () => void startBackrooms(launch, autosaveOnReady, menuBackground))');
   });
@@ -145,7 +155,9 @@ describe('experience routing', () => {
 
     expect(main).toContain('autosaveOnReady');
     expect(main).toContain("startBackrooms({ kind: 'load', save }, true)");
-    expect(backrooms).toContain('if (this.options.autoEnterOnReady) this.enter();');
+    expect(backrooms).toContain('if (this.options.autoEnterOnReady) this.enter(true);');
+    expect(backrooms).toContain('await audioReady;');
+    expect(stairwell).toContain('await audioReady;');
     expect(backrooms).toContain("this.saveNow('autosave')");
     expect(backrooms).toContain('nextStory !== this.activeStory');
     expect(backrooms).toContain('await this.worldStream.prepareSavedChunk(chunk)');
@@ -157,8 +169,8 @@ describe('experience routing', () => {
     expect(backrooms).toContain("window.addEventListener('pagehide', this.onPageHide)");
     expect(stairwell).toContain("if (document.hidden) this.saveNow('autosave')");
     expect(backrooms).toContain("if (document.hidden && !this.options.onRequestContinue) this.saveNow('autosave')");
-    expect(stairwell).toContain('this.ui.beginGameplay();');
-    expect(backrooms).toContain('this.ui.beginGameplay();');
+    expect(stairwell).toContain('this.ui.beginGameplay(immediate);');
+    expect(backrooms).toContain('this.ui.beginGameplay(immediate);');
   });
 
   it('uses the Backrooms lighting pipeline and live lighting setting in the stairwell', async () => {

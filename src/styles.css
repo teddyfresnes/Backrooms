@@ -148,6 +148,8 @@ input:focus-visible {
 .boot-loading {
   position: relative;
   width: 100%;
+  display: grid;
+  gap: 12px;
   animation: boot-loading-in .55s .1s cubic-bezier(.2, .8, .2, 1) both;
 }
 
@@ -166,11 +168,41 @@ input:focus-visible {
 
 .boot-track i {
   display: block;
-  width: 38%;
+  width: 100%;
   height: 100%;
   background: linear-gradient(90deg, transparent, #bfae59 18%, #f4e58b 72%, #fff6bd);
   box-shadow: 0 0 20px rgba(229, 211, 108, .5);
-  animation: boot-progress 1.35s cubic-bezier(.52, 0, .32, 1) infinite;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 180ms ease-out;
+}
+
+.boot-percent {
+  display: block;
+  justify-self: center;
+  width: 4.2em;
+  height: 1em;
+  overflow: hidden;
+  color: rgba(251, 247, 229, .68);
+  font: 650 11px/1 'JetBrains Mono Variable', monospace;
+  letter-spacing: .16em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.boot-percent-tape {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+.boot-percent-tape > span {
+  flex: 0 0 1em;
+  width: 100%;
+  height: 1em;
+  line-height: 1;
 }
 
 @keyframes boot-brand-in {
@@ -183,12 +215,6 @@ input:focus-visible {
   to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 
-@keyframes boot-progress {
-  0% { transform: translateX(-110%) scaleX(.65); transform-origin: right; }
-  52% { transform: translateX(105%) scaleX(1); transform-origin: center; }
-  100% { transform: translateX(275%) scaleX(.72); transform-origin: left; }
-}
-
 @media (max-width: 620px) {
   .boot-content { gap: 48px; }
 }
@@ -197,14 +223,8 @@ input:focus-visible {
   .boot-brand,
   .boot-loading { animation: none; }
   .boot-track i {
-    width: 100%;
-    animation: boot-progress-reduced 1.4s ease-in-out infinite alternate;
+    transition: none;
   }
-}
-
-@keyframes boot-progress-reduced {
-  from { opacity: .35; transform: none; }
-  to { opacity: .85; transform: none; }
 }
 
 /* Opening cinematic ------------------------------------------------------- */
@@ -225,6 +245,37 @@ input:focus-visible {
 .opening-scan {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+}
+
+.opening-start {
+  position: relative;
+  z-index: 4;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-width: min(360px, calc(100vw - 48px));
+  padding: 18px 28px;
+  border: 1px solid rgba(229,211,108,.38);
+  color: #f8f4df;
+  background: rgba(12,13,10,.82);
+  box-shadow: 0 18px 60px rgba(0,0,0,.55), inset 0 0 24px rgba(229,211,108,.025);
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, transform .18s ease, opacity .16s ease;
+  font: 720 14px/1.2 'JetBrains Mono Variable', monospace;
+  letter-spacing: .15em;
+}
+
+.opening-start:hover,
+.opening-start:focus-visible {
+  border-color: rgba(229,211,108,.78);
+  background: rgba(26,27,20,.94);
+  transform: translateY(-2px);
+  outline: none;
+}
+
+.opening-intro.is-running .opening-start {
+  opacity: 0;
   pointer-events: none;
 }
 
@@ -1335,6 +1386,13 @@ input[role='switch']:checked::after {
   padding: 4px 9px;
   background: rgba(2, 3, 2, 0.8);
   box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.is-direct-entry .menu-overlay,
+.is-direct-entry .menu-shade {
+  opacity: 0;
+  visibility: hidden;
+  transition: none;
 }
 
 .console-input-row input,

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { AudioSystem } from '../audio/AudioSystem';
+import { siteAudio } from '../audio/SiteAudio';
 import { describeViewDirection, resolveDiagnosticsVisibility } from './Diagnostics';
 import type { DiagnosticsSnapshot, PlayerDiagnostics, SystemDiagnostics } from './Diagnostics';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
@@ -198,13 +199,32 @@ export class Game {
     document.addEventListener('visibilitychange', this.onVisibilityChange);
   }
 
-  async initialize(): Promise<void> {
+  async initialize(onProgress: (progress: number) => void = () => undefined): Promise<void> {
+    let visualProgress = 0;
+    let audioProgress = this.options.onRequestContinue ? 1 : 0;
+    const emitProgress = (): void => onProgress(
+      Math.min(1, visualProgress * 0.8 + audioProgress * 0.2),
+    );
+    const setVisualProgress = (progress: number): void => {
+      visualProgress = Math.max(visualProgress, progress);
+      emitProgress();
+    };
+    const audioReady = this.options.onRequestContinue
+      ? Promise.resolve()
+      : this.audio.start((progress) => {
+        audioProgress = progress;
+        emitProgress();
+      });
+    if (!this.options.onRequestContinue) await this.audio.setSuspended(true);
+    emitProgress();
+
     const materials = await MaterialLibrary.load(this.renderer);
     if (this.disposed) {
       materials.dispose();
       return;
     }
     this.materials = materials;
+    setVisualProgress(0.16);
 
     const physics = await PhysicsWorld.create(this.plan);
     if (this.disposed) {
@@ -212,6 +232,7 @@ export class Game {
       return;
     }
     this.physics = physics;
+    setVisualProgress(0.24);
     this.worldStream = new WorldStream(
       this.seed,
       this.plan,
@@ -222,20 +243,24 @@ export class Game {
     );
     await this.worldStream.initialize();
     if (this.disposed) return;
+    setVisualProgress(0.5);
     await this.worldStream.waitForVisualAssets();
     if (this.disposed) return;
+    setVisualProgress(0.62);
     if (this.worldStream.getLightingMode() !== this.settings.lighting) {
       await this.worldStream.setLightingMode(this.settings.lighting);
       if (this.disposed) return;
     }
+    setVisualProgress(0.68);
     this.camera.rotation.set(0, -Math.PI * 0.22, 0, 'YXZ');
     this.camera.fov = this.settings.fieldOfView;
     this.camera.updateProjectionMatrix();
     this.player = new PlayerController(this.camera, this.renderer.domElement, this.physics, {
       onLockChange: (locked) => this.onPlayerLockChange(locked),
-      onFootstep: (strength) => this.audio.footstep(strength),
+      onFootstep: (strength) => this.audio.footstep('backrooms-carpet', strength),
+      onMovementAudioState: (state) => this.audio.setMovementState('backrooms-carpet', state),
       onInteract: (mode) => this.tryInteract(mode),
-      onLand: () => this.audio.impact(),
+      onLand: (impactSpeed) => this.audio.land('backrooms-carpet', impactSpeed),
       onSafePosition: (position) => {
         this.lastSafePosition.set(position.x, position.y, position.z);
         this.worldStream?.protectRecoveryPosition(position);
@@ -243,7 +268,7 @@ export class Game {
       },
       onFallReset: () => {
         if (this.player) this.worldStream?.ensurePositionMounted(this.player.position);
-        this.audio.impact();
+        this.audio.land('backrooms-carpet', 18);
         this.ui.showFall();
       },
     });
@@ -262,6 +287,7 @@ export class Game {
       this.player.setLookQuaternion(quaternion);
       this.playableSeconds = this.options.launch.save.playTimeSeconds;
     }
+    setVisualProgress(0.76);
     this.lastSafePosition.copy(this.player.position);
 
     // Mount every starting chunk before shader compilation so the first
@@ -272,6 +298,7 @@ export class Game {
       await this.worldStream.waitForVisualAssets();
       if (this.disposed) return;
     }
+    setVisualProgress(0.82);
 
     this.player.setFieldOfView(this.settings.fieldOfView);
     this.player.setLookSensitivity(this.settings.lookSensitivity);
@@ -280,24 +307,30 @@ export class Game {
     this.cinematicPosition.copy(this.camera.position);
     this.cinematicEuler.setFromQuaternion(this.camera.quaternion, 'YXZ');
     this.audio.setMasterVolume(this.settings.masterVolume);
+    siteAudio.setMasterVolume(this.settings.masterVolume);
 
     this.postFX = new PostFX(this.renderer, this.scene, this.camera, this.settings.lighting);
     this.resize();
     await this.renderer.compileAsync(this.scene, this.camera);
     if (this.disposed) return;
+    setVisualProgress(0.92);
     // Warm every composer target behind the opaque loading overlay. The
     // post-processing pipeline has its own shader/target allocation that
     // renderer.compileAsync cannot cover; priming several presented frames
     // prevents black frames when the player first dismisses the overlay.
     await this.warmupPostFX();
     if (this.disposed) return;
+    setVisualProgress(0.98);
+    await audioReady;
+    if (this.disposed) return;
+    setVisualProgress(1);
     this.updateDebugState(true);
     this.syncSaveHistory();
     this.ui.setSessionStarted(true);
     this.ui.setReady();
     this.renderer.setAnimationLoop(this.frame);
     if (this.options.autosaveOnReady) this.saveNow('autosave');
-    if (this.options.autoEnterOnReady) this.enter();
+    if (this.options.autoEnterOnReady) this.enter(true);
   }
 
   private configureScene(): void {
@@ -379,6 +412,7 @@ export class Game {
     this.player?.setCameraMotionEnabled(next.cameraMotion);
     this.player?.setControlBindings(next.controls);
     this.audio.setMasterVolume(next.masterVolume);
+    siteAudio.setMasterVolume(next.masterVolume);
 
     const nextPixelRatio = this.pixelRatioForQuality(next.renderQuality);
     if (nextPixelRatio !== this.pixelRatio) {
@@ -427,12 +461,13 @@ export class Game {
     this.previousTime = performance.now();
   }
 
-  private enter(): void {
+  private enter(immediate = false): void {
     if (this.options.onRequestContinue) {
       this.options.onRequestContinue();
       return;
     }
-    this.ui.beginGameplay();
+    this.ui.beginGameplay(immediate);
+    siteAudio.setMenuActive(false);
     this.player?.lock();
     void this.audio.start();
   }

@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d';
 import * as THREE from 'three';
-import type { StaticCollider, Vec3Data, WorldPlan } from '../world/types';
+import type { QuaternionData, StaticCollider, Vec3Data, WorldPlan } from '../world/types';
 
 const PLAYER_RADIUS = 0.32;
 const STANDING_HALF_HEIGHT = 0.52;
@@ -105,6 +105,51 @@ export class PhysicsWorld {
       this.world.removeRigidBody(body);
       throw error;
     }
+  }
+
+  /** Adds a collider group whose transform can follow an animated prop. */
+  addKinematicChunk(key: string, colliders: readonly StaticCollider[]): void {
+    if (!key) throw new Error('Physics chunk keys cannot be empty.');
+    if (this.chunkBodies.has(key)) throw new Error(`Physics chunk already exists: ${key}`);
+
+    const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased());
+    try {
+      const indexedColliders = new Map<string, RAPIER.Collider>();
+      for (const collider of colliders) {
+        if (indexedColliders.has(collider.id)) {
+          throw new Error(`Duplicate collider id in chunk ${key}: ${collider.id}`);
+        }
+        indexedColliders.set(collider.id, addStaticCollider(this.world, body, collider));
+      }
+      this.chunkBodies.set(key, body);
+      this.chunkColliders.set(key, indexedColliders);
+      this.requestChunkSynchronization();
+    } catch (error) {
+      this.world.removeRigidBody(body);
+      throw error;
+    }
+  }
+
+  setKinematicChunkTransform(
+    key: string,
+    translation: Vec3Data,
+    rotation: QuaternionData,
+  ): boolean {
+    const body = this.chunkBodies.get(key);
+    if (!body || !body.isKinematic()) return false;
+    this.assertFiniteVector(translation, `translation for chunk ${key}`);
+    if (!Number.isFinite(rotation.x)
+      || !Number.isFinite(rotation.y)
+      || !Number.isFinite(rotation.z)
+      || !Number.isFinite(rotation.w)) {
+      throw new Error(`Invalid rotation for chunk ${key}: expected finite coordinates.`);
+    }
+    body.setTranslation(translation, true);
+    body.setRotation(rotation, true);
+    body.setNextKinematicTranslation(translation);
+    body.setNextKinematicRotation(rotation);
+    this.world.propagateModifiedBodyPositionsToColliders();
+    return true;
   }
 
   /**

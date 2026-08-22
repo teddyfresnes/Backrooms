@@ -100,6 +100,159 @@
       "source": "https://freesound.org/people/kentspublicdomain/sounds/328175/",
       "license": "CC0 1.0",
       "file": "audio/ventilation-cc0.mp3"
+    },
+    {
+      "name": "Walking on carpet",
+      "author": "mlsulli",
+      "source": "https://freesound.org/people/mlsulli/sounds/234855/",
+      "license": "CC0 1.0",
+      "files": ["audio/footsteps/backrooms-carpet-*.mp3"],
+      "changes": "Eight distinct footfalls extracted from the recording, loudness-normalized, faded and transcoded to 112 kbps MP3."
+    },
+    {
+      "name": "Low shoes walking on parquet",
+      "author": "Yuval",
+      "source": "https://freesound.org/people/Yuval/sounds/209811/",
+      "license": "CC0 1.0",
+      "files": ["audio/footsteps/apartment-wood-*.mp3"],
+      "changes": "Eight distinct footfalls extracted from the recording, loudness-normalized, faded and transcoded to 112 kbps MP3."
+    },
+    {
+      "name": "Sneakers walking on stone",
+      "author": "xkeril",
+      "source": "https://freesound.org/people/xkeril/sounds/677069/",
+      "license": "CC0 1.0",
+      "files": ["audio/footsteps/stairwell-concrete-*.mp3"],
+      "changes": "Eight distinct footfalls extracted from the recording, loudness-normalized, faded and transcoded to 112 kbps MP3."
+    },
+    {
+      "name": "Running on carpet in sneakers",
+      "author": "taure",
+      "source": "https://freesound.org/people/taure/sounds/575318/",
+      "license": "CC0 1.0",
+      "file": "audio/footsteps/run-backrooms-carpet.mp3",
+      "changes": "The continuous performance keeps its original human cadence; it was high-pass filtered, loudness-normalized and softly faded for runtime crossfades."
+    },
+    {
+      "name": "Running footsteps on wood",
+      "author": "thomasanthony321",
+      "source": "https://freesound.org/people/thomasanthony321/sounds/682772/",
+      "license": "CC0 1.0",
+      "file": "audio/footsteps/run-apartment-wood.mp3",
+      "changes": "The continuous performance keeps its original human cadence; it was high-pass filtered, loudness-normalized and softly faded for runtime crossfades."
+    },
+    {
+      "name": "Running on concrete",
+      "author": "vmgraw",
+      "source": "https://freesound.org/people/vmgraw/sounds/257700/",
+      "license": "CC0 1.0",
+      "file": "audio/footsteps/run-stairwell-concrete.mp3",
+      "changes": "The continuous performance keeps its original human cadence; it was high-pass filtered, loudness-normalized and softly faded for runtime crossfades."
+    },
+    {
+      "name": "Body fall 1",
+      "author": "deleted_user_2104797",
+      "source": "https://freesound.org/people/deleted_user_2104797/sounds/325270/",
+      "license": "CC0 1.0",
+      "file": "audio/impacts/body-fall-normalized.mp3",
+      "changes": "Impact extracted from the Freesound preview, normalized, faded and transcoded to 128 kbps MP3."
+    },
+    {
+      "name": "Bones Crack",
+      "author": "Kane53126",
+      "source": "https://freesound.org/people/Kane53126/sounds/257926/",
+      "license": "CC0 1.0",
+      "file": "audio/impacts/bone-crack-normalized.mp3",
+      "changes": "Crack extracted from the Freesound preview, normalized, faded and transcoded to 128 kbps MP3; reserved for traumatic landings."
+    },
+    {
+      "name": "Cinematic Glitch Transition SFX",
+      "author": "Wakerone",
+      "source": "https://freesound.org/people/Wakerone/sounds/513131/",
+      "license": "CC0 1.0",
+      "file": "audio/ui/intro-glitch.mp3",
+      "changes": "Freesound preview transcoded to 128 kbps MP3; two short regions accompany the warning and headphones cards."
+    },
+    {
+      "name": "Typewriter's Key",
+      "author": "PerMagnusLindborg",
+      "source": "https://freesound.org/people/PerMagnusLindborg/sounds/335898/",
+      "license": "CC0 1.0",
+      "file": "audio/ui/intro-credit.mp3",
+      "changes": "A short mechanical typing phrase was isolated and normalized for the creator credit."
+    },
+    {
+      "name": "Soft Dramatic Impact",
+      "author": "NeoSpica",
+      "source": "https://freesound.org/people/NeoSpica/sounds/504614/",
+      "license": "CC0 1.0",
+      "file": "audio/ui/intro-title.mp3",
+      "changes": "The opening impact and natural decay were trimmed and normalized for the title reveal."
+    },
+    {
+      "name": "Menu music",
+      "author": "User-provided project asset",
+      "source": "temp/menu.MP3",
+      "license": "Not supplied",
+      "file": "audio/music/menu.mp3",
+      "changes": "Project-local source transcoded to 160 kbps MP3 and looped only while the main menu is fully loaded."
+    },
+    {
+      "name": "Rain against a window",
+      "author": "nicoproson",
+      "source": "https://freesound.org/people/nicoproson/sounds/648529/",
+      "license": "CC0 1.0",
+      "file": "audio/apartment/rain-window.mp3",
+      "changes": "A 21.8-second excerpt was loudness-normalized and rebuilt with a two-second head/tail crossfade for a continuous, seam-free loop, then transcoded to 128 kbps MP3."
+    },
+    {
+      "name": "Wooden door open and close",
+      "author": "Breviceps",
+      "source": "https://freesound.org/people/Breviceps/sounds/457042/",
+      "license": "CC0 1.0",
+      "files": ["audio/interactions/door-open.mp3", "audio/interactions/door-close.mp3"],
+      "changes": "The natural opening and closing movements were separated, loudness-normalized and transcoded to MP3."
+    },
+    {
+      "name": "Door lock mechanism",
+      "author": "sgcardinal",
+      "source": "https://freesound.org/people/sgcardinal/sounds/395753/",
+      "license": "CC0 1.0",
+      "files": ["audio/interactions/lock.mp3", "audio/interactions/unlock.mp3"],
+      "changes": "Locking and unlocking movements were extracted separately and loudness-normalized."
+    },
+    {
+      "name": "Roller blinds",
+      "author": "Garuda1982",
+      "source": "https://freesound.org/people/Garuda1982/sounds/553070/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "files": ["audio/interactions/blinds-open.mp3", "audio/interactions/blinds-close.mp3"],
+      "changes": "Opening and closing excerpts were separated, loudness-normalized, stripped of leading silence and time-compressed to 0.73 and 0.70 seconds to match the visual motion."
+    },
+    {
+      "name": "Light Switch (on / off)",
+      "author": "Breviceps",
+      "source": "https://freesound.org/people/Breviceps/sounds/457037/",
+      "license": "CC0 1.0",
+      "files": ["audio/interactions/light-switch-on.mp3", "audio/interactions/light-switch-off.mp3"],
+      "changes": "The two mechanical clicks were separated, high-pass filtered, loudness-normalized, softly faded and transcoded to mono MP3."
+    },
+    {
+      "name": "Soft UI hover",
+      "author": "BaggoNotes",
+      "source": "https://freesound.org/people/BaggoNotes/sounds/720217/",
+      "license": "CC0 1.0",
+      "file": "audio/ui/menu-hover.mp3",
+      "changes": "A short transient was trimmed and normalized for subtle main-menu hover feedback."
+    },
+    {
+      "name": "Soft UI click",
+      "author": "Breviceps",
+      "source": "https://freesound.org/people/Breviceps/sounds/448081/",
+      "license": "CC0 1.0",
+      "file": "audio/ui/menu-click.mp3",
+      "changes": "A short transient was trimmed and normalized for main-menu click feedback."
     }
   ],
   "models": [

@@ -10,8 +10,9 @@ import type { DoorOpenMode, QuaternionData, Vec3Data } from '../world/types';
 export interface PlayerCallbacks {
   onLockChange(locked: boolean): void;
   onFootstep(strength: number): void;
+  onMovementAudioState?(state: 'idle' | 'sprint'): void;
   onInteract(mode: DoorOpenMode): void;
-  onLand(strength: number): void;
+  onLand(impactSpeed: number): void;
   onSafePosition(position: Readonly<Vec3Data>): void;
   onFallReset(): void;
 }
@@ -42,6 +43,7 @@ export class PlayerController {
   private readonly lookCamera = new THREE.PerspectiveCamera();
   private readonly input = new InputManager();
   private readonly desired = new THREE.Vector3();
+  private readonly externalMotion = new THREE.Vector3();
   private readonly forward = new THREE.Vector3();
   private readonly right = new THREE.Vector3();
   private readonly renderForward = new THREE.Vector3();
@@ -149,6 +151,7 @@ export class PlayerController {
       this.velocity.set(0, 0, 0);
       this.moving = false;
       this.sprinting = false;
+      this.callbacks.onMovementAudioState?.('idle');
       this.targetStrafeLean = 0;
     }
   }
@@ -241,12 +244,27 @@ export class PlayerController {
     this.grounded = true;
     this.motionBlend = 0;
     this.landingKick = 0;
+    this.externalMotion.set(0, 0, 0);
     this.physics.teleport(destination);
     this.physics.getPosition(this.position);
     this.previousPosition.copy(this.position);
     this.renderedPosition.copy(this.position);
     this.anchorSafePosition(this.position);
     this.renderUpdate(0, 1);
+  }
+
+  queueExternalMotion(delta: Readonly<Vec3Data>): void {
+    if (this.noclipEnabled || this.traversal) return;
+    if (!Number.isFinite(delta.x) || !Number.isFinite(delta.y) || !Number.isFinite(delta.z)) return;
+    this.externalMotion.x += delta.x;
+    this.externalMotion.y += delta.y;
+    this.externalMotion.z += delta.z;
+    const horizontalLength = Math.hypot(this.externalMotion.x, this.externalMotion.z);
+    if (horizontalLength > 0.55) {
+      const scale = 0.55 / horizontalLength;
+      this.externalMotion.x *= scale;
+      this.externalMotion.z *= scale;
+    }
   }
 
   private anchorSafePosition(position: Readonly<Vec3Data>): void {
@@ -298,6 +316,7 @@ export class PlayerController {
     this.previousTraversalProgress = this.traversalProgress;
 
     if (!this.controls.isLocked) {
+      this.externalMotion.set(0, 0, 0);
       this.input.consumeActionPress('interact');
       this.input.consumeActionRelease('interact');
       this.interactionHoldElapsed = undefined;
@@ -307,11 +326,14 @@ export class PlayerController {
       this.velocity.multiplyScalar(0.82);
       this.moving = false;
       this.sprinting = false;
+      this.callbacks.onMovementAudioState?.('idle');
       this.targetStrafeLean = 0;
       return;
     }
 
     if (this.noclipEnabled) {
+      this.externalMotion.set(0, 0, 0);
+      this.callbacks.onMovementAudioState?.('idle');
       this.input.consumeActionPress('interact');
       this.input.consumeActionRelease('interact');
       this.interactionHoldElapsed = undefined;
@@ -344,6 +366,7 @@ export class PlayerController {
       this.interactionHoldTriggered = false;
     }
     if (this.traversal) {
+      this.externalMotion.set(0, 0, 0);
       const traversal = this.traversal;
       traversal.elapsed = Math.min(traversal.duration, traversal.elapsed + delta);
       this.traversalProgress = traversal.elapsed / traversal.duration;
@@ -363,6 +386,7 @@ export class PlayerController {
       this.physics.getPosition(this.position);
       this.moving = false;
       this.sprinting = false;
+      this.callbacks.onMovementAudioState?.('idle');
       this.crouching = false;
       this.targetStrafeLean = 0;
       if (this.traversalProgress >= 1) {
@@ -410,16 +434,18 @@ export class PlayerController {
     const impactVelocity = this.verticalVelocity;
     const wasGrounded = this.grounded;
     const result = this.physics.move({
-      x: this.velocity.x * delta,
-      y: this.verticalVelocity * delta,
-      z: this.velocity.z * delta,
+      x: this.velocity.x * delta + this.externalMotion.x,
+      y: this.verticalVelocity * delta + this.externalMotion.y,
+      z: this.velocity.z * delta + this.externalMotion.z,
     });
+    this.externalMotion.set(0, 0, 0);
     this.position.copy(result.position);
     this.grounded = result.grounded;
-    if (this.grounded && !wasGrounded && impactVelocity < -5) {
-      const strength = THREE.MathUtils.clamp(Math.abs(impactVelocity) / 14, 0.35, 1);
-      this.landingKick = Math.max(this.landingKick, 0.11 * strength);
-      this.callbacks.onLand(strength);
+    if (this.grounded && !wasGrounded && impactVelocity < -2.4) {
+      const impactSpeed = Math.abs(impactVelocity);
+      const cameraStrength = THREE.MathUtils.clamp(impactSpeed / 14, 0.18, 1);
+      this.landingKick = Math.max(this.landingKick, 0.11 * cameraStrength);
+      this.callbacks.onLand(impactSpeed);
     }
     if (this.grounded && this.verticalVelocity < 0) this.verticalVelocity = -0.9;
     if (this.grounded) {
@@ -429,12 +455,13 @@ export class PlayerController {
     const horizontalDistance = Math.hypot(result.moved.x, result.moved.z);
     this.moving = horizontalDistance > 0.00015 && this.grounded;
     this.sprinting = axes.sprint && !this.crouching && this.moving;
+    this.callbacks.onMovementAudioState?.(this.sprinting ? 'sprint' : 'idle');
     this.targetStrafeLean = this.moving
       ? THREE.MathUtils.clamp(this.velocity.dot(this.right) / Math.max(1, targetSpeed), -1, 1)
       : 0;
 
     if (this.moving) {
-      const stepLength = this.sprinting ? 1.2 : this.crouching ? 0.72 : 0.94;
+      const stepLength = this.sprinting ? 1.85 : this.crouching ? 1.02 : 1.35;
       this.stepDistance += horizontalDistance;
       // PI per footfall: a full 2PI gait cycle contains a left and a right step.
       this.gaitPhase += (horizontalDistance / stepLength) * Math.PI;

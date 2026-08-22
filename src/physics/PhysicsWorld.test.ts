@@ -510,6 +510,31 @@ describe('PhysicsWorld chunk ownership', () => {
     expect(physics.world.colliders.len()).toBe(initialColliderCount);
   });
 
+  it('moves an animated kinematic chunk without rebuilding its collider', async () => {
+    const physics = await createPhysics();
+    const barrier: StaticCollider = {
+      id: 'moving-door',
+      center: { x: 0, y: 1, z: 0 },
+      halfExtents: { x: 0.08, y: 1, z: 0.7 },
+      kind: 'barrier',
+    };
+    physics.addKinematicChunk('moving-door', [barrier]);
+    const colliderCount = physics.world.colliders.len();
+
+    expect(physics.setKinematicChunkTransform(
+      'moving-door',
+      { x: 3, y: 0, z: 0 },
+      { x: 0, y: 0, z: 0, w: 1 },
+    )).toBe(true);
+    expect(physics.setKinematicChunkTransform(
+      'missing-door',
+      { x: 0, y: 0, z: 0 },
+      { x: 0, y: 0, z: 0, w: 1 },
+    )).toBe(false);
+    expect(physics.world.colliders.len()).toBe(colliderCount);
+    expect(physics.hasChunk('moving-door')).toBe(true);
+  });
+
   it('owns and removes indexed and non-indexed imported trimesh colliders', async () => {
     const physics = await createPhysics();
     const initialBodyCount = physics.world.bodies.len();

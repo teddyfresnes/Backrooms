@@ -6,13 +6,27 @@ import { ImportedApartmentDoorInteraction } from './ImportedApartmentDoorInterac
 
 class FakePhysics {
   readonly chunks = new Set<string>();
+  readonly transforms: Array<{ key: string; translation: THREE.Vector3; rotation: THREE.Quaternion }> = [];
 
   hasChunk(key: string): boolean {
     return this.chunks.has(key);
   }
 
-  addChunk(key: string): void {
+  addKinematicChunk(key: string): void {
     this.chunks.add(key);
+  }
+
+  setKinematicChunkTransform(
+    key: string,
+    translation: THREE.Vector3,
+    rotation: THREE.Quaternion,
+  ): boolean {
+    this.transforms.push({
+      key,
+      translation: new THREE.Vector3(translation.x, translation.y, translation.z),
+      rotation: new THREE.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w),
+    });
+    return this.chunks.has(key);
   }
 
   removeChunk(key: string): void {
@@ -20,9 +34,10 @@ class FakePhysics {
   }
 }
 
-const makeInteraction = () => {
+const makeInteraction = (hinged = false) => {
   const pivot = new THREE.Group();
   const leaf = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.1));
+  if (hinged) leaf.position.x = 0.5;
   pivot.add(leaf);
   pivot.updateMatrixWorld(true);
   const physics = new FakePhysics();
@@ -30,9 +45,11 @@ const makeInteraction = () => {
   const lockTarget = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2));
   lockTarget.position.set(-2, 0, 0);
   const onLockChange = vi.fn();
+  const onPush = vi.fn();
+  const centerX = hinged ? 0.5 : 0;
   const collider: StaticCollider = {
     id: 'entrance-leaf',
-    center: { x: 0, y: 0, z: 0 },
+    center: { x: centerX, y: 0, z: 0 },
     halfExtents: { x: 0.5, y: 1, z: 0.05 },
     kind: 'barrier',
   };
@@ -40,8 +57,8 @@ const makeInteraction = () => {
     pivot,
     leaf,
     new THREE.Box3(
-      new THREE.Vector3(-0.5, -1, -0.05),
-      new THREE.Vector3(0.5, 1, 0.05),
+      new THREE.Vector3(centerX - 0.5, -1, -0.05),
+      new THREE.Vector3(centerX + 0.5, 1, 0.05),
     ),
     collider,
     physics as unknown as PhysicsWorld,
@@ -51,9 +68,10 @@ const makeInteraction = () => {
       openAngle: -Math.PI / 2,
       lockTarget,
       onLockChange,
+      onPush,
     },
   );
-  return { interaction, physics, pivot, ui, lockTarget, onLockChange };
+  return { interaction, physics, pivot, ui, leaf, lockTarget, onLockChange, onPush };
 };
 
 describe('ImportedApartmentDoorInteraction save state', () => {
@@ -84,7 +102,7 @@ describe('ImportedApartmentDoorInteraction save state', () => {
     expect(interaction.restoreState({ progress: 0.4, targetProgress: 0 })).toBe(true);
     expect(interaction.getState()).toEqual({ progress: 0.4, targetProgress: 0, locked: false });
     expect(pivot.rotation.y).toBeCloseTo(-Math.PI * 0.2);
-    expect(physics.chunks.has('entrance-door')).toBe(false);
+    expect(physics.chunks.has('entrance-door')).toBe(true);
 
     interaction.update(
       10,
@@ -96,7 +114,40 @@ describe('ImportedApartmentDoorInteraction save state', () => {
     expect(physics.chunks.has('entrance-door')).toBe(true);
 
     expect(interaction.restoreState({ progress: 0, targetProgress: 1 })).toBe(true);
-    expect(physics.chunks.has('entrance-door')).toBe(false);
+    expect(physics.chunks.has('entrance-door')).toBe(true);
+    interaction.dispose();
+  });
+
+  it('can reverse an opening or closing movement immediately while aimed at the leaf', () => {
+    const { interaction } = makeInteraction();
+    const player = new THREE.Vector3(0, -0.73, 2);
+    const direction = new THREE.Vector3(0, 0, -1);
+
+    expect(interaction.interact(player, direction, true)).toBe(true);
+    interaction.update(1 / 60, player, direction, true);
+    expect(interaction.getState().targetProgress).toBe(1);
+    expect(interaction.interact(player, direction, true)).toBe(true);
+    expect(interaction.getState().targetProgress).toBe(0);
+    expect(interaction.interact(player, direction, true)).toBe(true);
+    expect(interaction.getState().targetProgress).toBe(1);
+    interaction.dispose();
+  });
+
+  it('keeps a moving collider and pushes a player caught in the leaf sweep', () => {
+    const { interaction, physics, onPush } = makeInteraction(true);
+    const opener = new THREE.Vector3(0.5, -0.73, 2);
+    expect(interaction.interact(opener, new THREE.Vector3(0, 0, -1), true)).toBe(true);
+
+    interaction.update(
+      1 / 30,
+      new THREE.Vector3(0.5, -0.73, 0.16),
+      new THREE.Vector3(0, 0, -1),
+      true,
+    );
+
+    expect(physics.chunks.has('entrance-door')).toBe(true);
+    expect(physics.transforms.length).toBeGreaterThan(1);
+    expect(onPush).toHaveBeenCalled();
     interaction.dispose();
   });
 

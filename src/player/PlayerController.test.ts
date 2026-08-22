@@ -284,6 +284,19 @@ describe('PlayerController locomotion', () => {
     controller.dispose();
   });
 
+  it('reports the physical impact speed for a small landing', () => {
+    const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });
+    const { callbacks, controller } = createController(physics);
+
+    controller.fixedUpdate(0.1);
+    physics.queueMove({ x: 0, y: 0.6, z: 0 }, true);
+    controller.fixedUpdate(0.02);
+
+    expect(callbacks.onLand).toHaveBeenCalledOnce();
+    expect(callbacks.onLand.mock.calls[0]![0]).toBeCloseTo(2.72, 2);
+    controller.dispose();
+  });
+
   it('does not buffer an airborne jump until the next landing', () => {
     const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });
     const { controller } = createController(physics);

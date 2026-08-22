@@ -30,6 +30,7 @@ export class ApartmentWindowBlindsInteraction {
     private readonly blinds: readonly [ApartmentWindowBlindRuntime, ApartmentWindowBlindRuntime],
     private readonly ui: ApartmentWindowBlindsUI,
     private readonly maxRayDistance = 2.8,
+    private readonly onToggle?: (opening: boolean) => void,
   ) {
     this.applyProgress(0, 0);
     this.applyProgress(1, 0);
@@ -74,6 +75,7 @@ export class ApartmentWindowBlindsInteraction {
     if (targetIndex === null || !this.isSettled(targetIndex)) return false;
     const state = this.states[targetIndex]!;
     state.targetProgress = state.targetProgress === 0 ? 1 : 0;
+    this.onToggle?.(state.targetProgress === 0);
     this.setPrompt(null);
     return true;
   }
@@ -83,6 +85,10 @@ export class ApartmentWindowBlindsInteraction {
       this.states[0].targetProgress === 0,
       this.states[1].targetProgress === 0,
     ];
+  }
+
+  getClosureProgress(): readonly [number, number] {
+    return [this.states[0].progress, this.states[1].progress];
   }
 
   restoreState(state: readonly boolean[]): boolean {

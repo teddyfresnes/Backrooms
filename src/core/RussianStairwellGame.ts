@@ -3,7 +3,15 @@ import { ApartmentLightSwitchInteraction } from '../apartment/ApartmentLightSwit
 import { ApartmentWindowBlindsInteraction } from '../apartment/ApartmentWindowBlindsInteraction';
 import { ImportedApartmentDoorInteraction } from '../apartment/ImportedApartmentDoorInteraction';
 import { ImportedApartmentEnvironment } from '../apartment/ImportedApartmentEnvironment';
-import { AudioSystem } from '../audio/AudioSystem';
+import { APARTMENT_BOUNDS } from '../apartment/layout';
+import {
+  AudioSystem,
+  interiorRainGainForDistance,
+  interiorRainRoomBleedGain,
+  rainExposureForBlindClosure,
+  type AudioSurface,
+} from '../audio/AudioSystem';
+import { siteAudio } from '../audio/SiteAudio';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { PlayerController } from '../player/PlayerController';
 import {
@@ -58,7 +66,7 @@ export class RussianStairwellGame {
   private readonly camera = new THREE.PerspectiveCamera(70, 1, 0.04, 160);
   private readonly renderer: THREE.WebGLRenderer;
   private readonly ui: ExperienceUI;
-  private readonly audio = new AudioSystem();
+  private readonly audio = new AudioSystem('interior');
   private readonly storage: GameSaveStorage | null;
   private readonly viewDirection = new THREE.Vector3();
   private readonly lastSafePosition = new THREE.Vector3();
@@ -67,6 +75,7 @@ export class RussianStairwellGame {
   private readonly hemisphere = new THREE.HemisphereLight();
   private readonly ambientFill = new THREE.AmbientLight();
   private readonly directionalKey = new THREE.DirectionalLight();
+  private readonly windowAudioPosition = new THREE.Vector3();
   private settings: GameSettings;
   private physics?: PhysicsWorld;
   private player?: PlayerController;
@@ -149,10 +158,27 @@ export class RussianStairwellGame {
     document.addEventListener('visibilitychange', this.onVisibilityChange);
   }
 
-  async initialize(): Promise<void> {
+  async initialize(onProgress: (progress: number) => void = () => undefined): Promise<void> {
+    let visualProgress = 0;
+    let audioProgress = 0;
+    const emitProgress = (): void => onProgress(
+      Math.min(1, visualProgress * 0.8 + audioProgress * 0.2),
+    );
+    const setVisualProgress = (progress: number): void => {
+      visualProgress = Math.max(visualProgress, progress);
+      emitProgress();
+    };
+    const audioReady = this.audio.start((progress) => {
+      audioProgress = progress;
+      emitProgress();
+    });
+    await this.audio.setSuspended(true);
+    emitProgress();
+
     const plan = createStairwellPlan();
     const physics = await PhysicsWorld.create(plan);
     this.physics = physics;
+    setVisualProgress(0.12);
     const [materialsResult, apartmentResult] = await Promise.allSettled([
       StairwellMaterials.load(this.renderer),
       ImportedApartmentEnvironment.load(),
@@ -175,6 +201,7 @@ export class RussianStairwellGame {
     }
     this.materials = materials;
     this.apartment = apartment;
+    setVisualProgress(0.38);
     const environment = await StairwellEnvironment.load(materials.materials);
     if (this.disposed) {
       environment.dispose();
@@ -182,6 +209,7 @@ export class RussianStairwellGame {
     }
     environment.setLightingMode(this.settings.lighting);
     this.environment = environment;
+    setVisualProgress(0.52);
     this.scene.add(environment.group, apartment.group);
     if (environment.furnitureColliders.length > 0) {
       physics.addChunk(
@@ -199,17 +227,19 @@ export class RussianStairwellGame {
         { x: 0, y: 0, z: 0 },
       );
     }
+    setVisualProgress(0.64);
 
     this.camera.fov = this.settings.fieldOfView;
     this.camera.updateProjectionMatrix();
     this.player = new PlayerController(this.camera, this.renderer.domElement, physics, {
       onLockChange: (locked) => this.onPlayerLockChange(locked),
-      onFootstep: (strength) => this.audio.footstep(strength),
+      onFootstep: (strength) => this.audio.footstep(this.currentSurface(), strength),
+      onMovementAudioState: (state) => this.audio.setMovementState(this.currentSurface(), state),
       onInteract: () => this.tryInteract(),
-      onLand: () => this.audio.impact(),
+      onLand: (impactSpeed) => this.audio.land(this.currentSurface(), impactSpeed),
       onSafePosition: () => physics.getStandingPosition(this.lastSafePosition),
       onFallReset: () => {
-        this.audio.impact();
+        this.audio.land(this.currentSurface(), 18);
         this.ui.showFall();
       },
     });
@@ -218,6 +248,7 @@ export class RussianStairwellGame {
     this.player.setCameraMotionEnabled(this.settings.cameraMotion);
     this.player.setControlBindings(this.settings.controls);
     this.audio.setMasterVolume(this.settings.masterVolume);
+    siteAudio.setMasterVolume(this.settings.masterVolume);
     this.door = new ImportedApartmentDoorInteraction(
       apartment.entryDoor.pivot,
       apartment.entryDoor.leaf,
@@ -234,6 +265,14 @@ export class RussianStairwellGame {
         openAngle: apartment.entryDoor.openAngle,
         lockTarget: apartment.doorLock,
         onLockChange: (locked) => apartment.setEntryDoorLocked(locked),
+        onSound: (sound) => {
+          if (sound === 'lock' || sound === 'unlock') {
+            this.audio.lock(sound === 'lock');
+          } else {
+            this.audio.door(sound);
+          }
+        },
+        onPush: (delta) => this.player?.queueExternalMotion(delta),
       },
     );
     this.lightSwitch = new ApartmentLightSwitchInteraction(
@@ -241,8 +280,15 @@ export class RussianStairwellGame {
       this.ui,
       () => apartment.areInteriorLightsEnabled,
       (enabled) => apartment.setInteriorLightsEnabled(enabled),
+      2.2,
+      (enabled) => this.audio.lightSwitch(enabled),
     );
-    this.windowBlinds = new ApartmentWindowBlindsInteraction(apartment.windowBlinds, this.ui);
+    this.windowBlinds = new ApartmentWindowBlindsInteraction(
+      apartment.windowBlinds,
+      this.ui,
+      2.8,
+      (opening) => this.audio.blinds(opening),
+    );
     if (!environment.hallEntranceDoor) {
       throw new Error('La porte du hall d’escalier est absente.');
     }
@@ -251,6 +297,7 @@ export class RussianStairwellGame {
       this.ui,
       () => this.callbacks.onEnterBackrooms(),
     );
+    setVisualProgress(0.74);
 
     if (this.launch.kind === 'load') {
       this.door.restoreState(this.launch.save.payload.entranceDoor);
@@ -271,6 +318,7 @@ export class RussianStairwellGame {
       }
     }
     this.lastSafePosition.copy(this.player.position);
+    setVisualProgress(0.8);
 
     this.postFX = new PostFX(
       this.renderer,
@@ -282,8 +330,13 @@ export class RussianStairwellGame {
     this.resize();
     await this.renderer.compileAsync(this.scene, this.camera);
     if (this.disposed) return;
+    setVisualProgress(0.92);
     await this.warmupPostFX();
     if (this.disposed) return;
+    setVisualProgress(0.98);
+    await audioReady;
+    if (this.disposed) return;
+    setVisualProgress(1);
     this.initialized = true;
     this.syncSaveHistory();
     this.ui.setSessionStarted(true);
@@ -291,11 +344,12 @@ export class RussianStairwellGame {
     this.previousTime = performance.now();
     this.renderer.setAnimationLoop(this.frame);
     this.saveNow('autosave');
-    this.enter();
+    this.enter(true);
   }
 
-  private enter(): void {
-    this.ui.beginGameplay();
+  private enter(immediate = false): void {
+    this.ui.beginGameplay(immediate);
+    siteAudio.setMenuActive(false);
     this.player?.lock();
     void this.audio.start().catch(() => {
       this.ui.showConsoleMessage({ kind: 'error', text: 'AUDIO INDISPONIBLE' });
@@ -323,6 +377,46 @@ export class RussianStairwellGame {
     this.door.interact(this.player.position, this.viewDirection, this.player.isLocked);
   }
 
+  private currentSurface(): AudioSurface {
+    const position = this.player?.position;
+    if (
+      position &&
+      position.x >= APARTMENT_BOUNDS.minX &&
+      position.x <= APARTMENT_BOUNDS.maxX &&
+      position.z >= APARTMENT_BOUNDS.minZ &&
+      position.z <= APARTMENT_BOUNDS.maxZ
+    ) return 'apartment-wood';
+    return 'stairwell-concrete';
+  }
+
+  private interiorRainGain(surface: AudioSurface): number {
+    if (!this.apartment || !this.environment || !this.player) {
+      return interiorRainGainForDistance(surface, Number.POSITIVE_INFINITY);
+    }
+    let strongestGain = interiorRainGainForDistance(surface, Number.POSITIVE_INFINITY);
+    if (surface === 'apartment-wood') {
+      const closure = this.windowBlinds?.getClosureProgress() ?? [0, 0];
+      const exposures = closure.map((progress) => rainExposureForBlindClosure(progress));
+      strongestGain = Math.max(strongestGain, interiorRainRoomBleedGain(Math.max(...exposures)));
+      for (let index = 0; index < this.apartment.windowBlinds.length; index += 1) {
+        const blind = this.apartment.windowBlinds[index]!;
+        blind.pivot.getWorldPosition(this.windowAudioPosition);
+        this.windowAudioPosition.y = this.player.position.y;
+        const distance = this.player.position.distanceTo(this.windowAudioPosition);
+        const exposure = exposures[index]!;
+        const gain = interiorRainGainForDistance(surface, distance, exposure);
+        strongestGain = Math.max(strongestGain, gain);
+      }
+      return strongestGain;
+    }
+    for (const opening of this.environment.rainAudioOpenings) {
+      const distance = this.player.position.distanceTo(opening);
+      const gain = interiorRainGainForDistance(surface, distance);
+      strongestGain = Math.max(strongestGain, gain);
+    }
+    return strongestGain;
+  }
+
   private onPlayerLockChange(locked: boolean): void {
     this.ui.setLocked(locked);
     this.player?.setInputEnabled(locked && !this.ui.isConsoleOpen);
@@ -339,6 +433,7 @@ export class RussianStairwellGame {
     this.player?.setCameraMotionEnabled(settings.cameraMotion);
     this.player?.setControlBindings(settings.controls);
     this.audio.setMasterVolume(settings.masterVolume);
+    siteAudio.setMasterVolume(settings.masterVolume);
     const ratio = this.pixelRatioForQuality(settings.renderQuality);
     if (ratio !== this.pixelRatio) {
       this.pixelRatio = ratio;
@@ -476,16 +571,20 @@ export class RussianStairwellGame {
       if (this.autosaveElapsed >= AUTOSAVE_INTERVAL_SECONDS) this.saveNow('autosave');
       this.accumulator = Math.min(this.accumulator + delta, FIXED_STEP * 5);
       while (this.accumulator >= FIXED_STEP) {
+        this.player.getViewDirection(this.viewDirection);
+        this.door.update(FIXED_STEP, this.player.position, this.viewDirection, true);
         this.player.fixedUpdate(FIXED_STEP);
         this.accumulator -= FIXED_STEP;
       }
       this.player.renderUpdate(delta, this.accumulator / FIXED_STEP);
       this.environment.update(this.elapsed);
       this.player.getViewDirection(this.viewDirection);
-      this.door.update(delta, this.player.position, this.viewDirection, true);
+      this.door.update(0, this.player.position, this.viewDirection, true);
       this.hallExit?.update(this.player.position, this.viewDirection, true);
       this.lightSwitch?.update(this.player.position, this.viewDirection, true);
       this.windowBlinds?.update(delta, this.player.position, this.viewDirection, true);
+      const surface = this.currentSurface();
+      this.audio.updateInteriorGain(this.interiorRainGain(surface));
     } else {
       this.accumulator = 0;
       this.ui.setInteraction(null);

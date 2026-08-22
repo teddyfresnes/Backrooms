@@ -1,5 +1,6 @@
 import type { DiagnosticsSnapshot } from '../core/Diagnostics';
 import type { GameSaveExperienceId, GameSaveSummary } from '../core/SaveHistory';
+import { siteAudio } from '../audio/SiteAudio';
 import '../wardrobe/developer.css';
 import {
   controlCodeFromKeyboardEvent,
@@ -191,6 +192,7 @@ export class ExperienceUI {
   private chatFadeTimer?: number;
   private saveStatusTimer?: number;
   private developerCodeErrorTimer?: number;
+  private directEntryFrame?: number;
   private developerExportRunning = false;
   private developerPreviewCompleted = 0;
   private developerPreviewTotal = 0;
@@ -573,6 +575,8 @@ export class ExperienceUI {
     }
     this.consoleInput.addEventListener('keydown', this.onConsoleKeyDown);
     this.consoleInput.addEventListener('input', this.onConsoleInput);
+    this.root.addEventListener('pointerover', this.onMainMenuPointerOver);
+    this.root.addEventListener('click', this.onMainMenuButtonClick, true);
     document.addEventListener('keydown', this.onMenuKeyDown);
     document.addEventListener('fullscreenchange', this.onFullscreenChange);
     this.syncMenuContext();
@@ -608,7 +612,17 @@ export class ExperienceUI {
     this.root.classList.toggle('has-session', started);
   }
 
-  beginGameplay(): void {
+  beginGameplay(immediate = false): void {
+    if (immediate) {
+      this.root.classList.add('is-direct-entry');
+      if (this.directEntryFrame !== undefined) cancelAnimationFrame(this.directEntryFrame);
+      this.directEntryFrame = requestAnimationFrame(() => {
+        this.directEntryFrame = requestAnimationFrame(() => {
+          this.root.classList.remove('is-direct-entry');
+          this.directEntryFrame = undefined;
+        });
+      });
+    }
     this.enteredOnce = true;
     this.mainMenuState = false;
     this.root.classList.add('is-playing');
@@ -966,6 +980,7 @@ export class ExperienceUI {
     this.developerGate.classList.add('error');
     this.developerCodeError.textContent = 'Code refusé — accès bloqué.';
     if (this.developerCodeErrorTimer !== undefined) window.clearTimeout(this.developerCodeErrorTimer);
+    if (this.directEntryFrame !== undefined) cancelAnimationFrame(this.directEntryFrame);
     this.developerCodeErrorTimer = window.setTimeout(() => {
       this.developerCodeErrorTimer = undefined;
       this.developerGate.classList.remove('error');
@@ -1303,6 +1318,8 @@ export class ExperienceUI {
   }
 
   dispose(): void {
+    this.root.removeEventListener('pointerover', this.onMainMenuPointerOver);
+    this.root.removeEventListener('click', this.onMainMenuButtonClick, true);
     document.removeEventListener('keydown', this.onMenuKeyDown);
     document.removeEventListener('fullscreenchange', this.onFullscreenChange);
     if (this.chatFadeTimer !== undefined) window.clearTimeout(this.chatFadeTimer);
@@ -1317,6 +1334,21 @@ export class ExperienceUI {
     if (!result) throw new Error(`Missing UI element: ${selector}`);
     return result;
   }
+
+  private readonly onMainMenuPointerOver = (event: PointerEvent): void => {
+    if (!this.isMainMenuOpen || !(event.target instanceof Element)) return;
+    const button = event.target.closest<HTMLButtonElement>('button:not(:disabled)');
+    if (!button || !this.root.contains(button)) return;
+    if (event.relatedTarget instanceof Node && button.contains(event.relatedTarget)) return;
+    siteAudio.playMenuHover();
+  };
+
+  private readonly onMainMenuButtonClick = (event: MouseEvent): void => {
+    if (!this.isMainMenuOpen || !(event.target instanceof Element)) return;
+    const button = event.target.closest<HTMLButtonElement>('button:not(:disabled)');
+    if (!button || !this.root.contains(button)) return;
+    siteAudio.playMenuClick();
+  };
 
   private readonly resetCompletion = (): void => {
     this.completionSource = '';

@@ -19,6 +19,7 @@ export class ApartmentLightSwitchInteraction {
     private readonly isEnabled: () => boolean,
     private readonly setEnabled: (enabled: boolean) => void,
     private readonly maxRayDistance = 2.2,
+    private readonly onToggle?: (enabled: boolean) => void,
   ) {}
 
   update(
@@ -37,7 +38,9 @@ export class ApartmentLightSwitchInteraction {
     locked: boolean,
   ): boolean {
     if (!locked || !this.rayHitsSwitch(playerPosition, viewDirection)) return false;
-    this.setEnabled(!this.isEnabled());
+    const enabled = !this.isEnabled();
+    this.setEnabled(enabled);
+    this.onToggle?.(enabled);
     this.setPrompt(null);
     return true;
   }

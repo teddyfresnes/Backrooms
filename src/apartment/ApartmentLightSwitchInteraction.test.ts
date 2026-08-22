@@ -7,18 +7,21 @@ const makeInteraction = () => {
   target.position.set(0, 1.5, -1);
   const ui = { setInteraction: vi.fn() };
   let enabled = false;
+  const onToggle = vi.fn();
   const interaction = new ApartmentLightSwitchInteraction(
     target,
     ui,
     () => enabled,
     (value) => { enabled = value; },
+    2.2,
+    onToggle,
   );
-  return { interaction, ui, getEnabled: () => enabled };
+  return { interaction, ui, getEnabled: () => enabled, onToggle };
 };
 
 describe('apartment light switch interaction', () => {
   it('shows the current action and toggles the apartment lights', () => {
-    const { interaction, ui, getEnabled } = makeInteraction();
+    const { interaction, ui, getEnabled, onToggle } = makeInteraction();
     const player = new THREE.Vector3(-0.5, 0.77, 0);
     const towardSwitch = new THREE.Vector3(0.5, 0, -1).normalize();
 
@@ -26,6 +29,7 @@ describe('apartment light switch interaction', () => {
     expect(ui.setInteraction).toHaveBeenLastCalledWith('Allumer la lumière');
     expect(interaction.interact(player, towardSwitch, true)).toBe(true);
     expect(getEnabled()).toBe(true);
+    expect(onToggle).toHaveBeenLastCalledWith(true);
     interaction.update(player, towardSwitch, true);
     expect(ui.setInteraction).toHaveBeenLastCalledWith('Éteindre la lumière');
   });
