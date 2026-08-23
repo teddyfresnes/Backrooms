@@ -15,6 +15,7 @@ Le code local `1234` déverrouille l'export batch des aperçus : les personnages
 sont rendus avec le runtime MakeHuman puis téléchargés dans un ZIP WebP.
 
 Navigation :
+- la catégorie Général conserve une voix dans `CharacterConfig`, filtrée selon le sexe biologique ; sélectionner une voix joue une confirmation aléatoire comme aperçu ;
 - personnage par défaut + six alternatives ;
 - `Modifier` ouvre une seule interface ;
 - catégories simples communes : Général, Peau, Yeux, Coiffure, Sourcils, Cils, Haut, Bas, Chaussures ;
@@ -32,6 +33,10 @@ La configuration courante reste conservée dans `localStorage` sous
 stockés sous les clés `backrooms/wardrobe/custom-character/v1`,
 `backrooms/wardrobe/custom-preview/v1` et
 `backrooms/wardrobe/custom-preview-stamp/v1`.
+
+Les cinq voix et leurs dix catégories sont rangées sous
+`public/assets/audio/voices/super-dialogue`. Seules les confirmations sont
+utilisées actuellement par l'éditeur.
 
 
 Rendu v11 : les hauts/bas/cheveux n’utilisent plus les `delete_verts` communautaires trop larges ; les coiffures sont rendues en alpha cutout double face et aucun accessoire/chapeau caché n’est chargé par les presets.

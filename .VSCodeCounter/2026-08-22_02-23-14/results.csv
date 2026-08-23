@@ -1,0 +1,166 @@
+"filename", "language", "JSON", "TypeScript", "HTML", "Markdown", "JSON with Comments", "XML", "PostCSS", "TypeScript JSX", "comment", "blank", "total"
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\AGENTS.md", "Markdown", 0, 0, 0, 75, 0, 0, 0, 0, 0, 24, 99
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\README.md", "Markdown", 0, 0, 0, 85, 0, 0, 0, 0, 0, 24, 109
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\docs\ADDING_FEATURES.md", "Markdown", 0, 0, 0, 72, 0, 0, 0, 0, 0, 28, 100
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\docs\WARDROBE.md", "Markdown", 0, 0, 0, 29, 0, 0, 0, 0, 0, 9, 38
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\docs\agents\ARCHITECTURE.md", "Markdown", 0, 0, 0, 110, 0, 0, 0, 0, 0, 24, 134
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\docs\agents\RUNTIME_RENDERING.md", "Markdown", 0, 0, 0, 338, 0, 0, 0, 0, 0, 40, 378
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\docs\agents\VERIFICATION.md", "Markdown", 0, 0, 0, 62, 0, 0, 0, 0, 0, 19, 81
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\docs\agents\WORLD_GENERATION.md", "Markdown", 0, 0, 0, 182, 0, 0, 0, 0, 0, 26, 208
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\index.html", "HTML", 0, 0, 15, 0, 0, 0, 0, 0, 0, 1, 16
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\package-lock.json", "JSON", 2102, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2103
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\package.json", "JSON", 34, 0, 0, 0, 0, 0, 0, 0, 0, 1, 35
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\MATERIALS_CREDITS.json", "JSON", 166, 0, 0, 0, 0, 0, 0, 0, 0, 1, 167
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\README.md", "Markdown", 0, 0, 0, 9, 0, 0, 0, 0, 0, 4, 13
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\assets-manifest.json", "JSON", 3445, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3446
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\clothes\makehuman\CLOTHING_CREDITS.json", "JSON", 586, 0, 0, 0, 0, 0, 0, 0, 0, 1, 587
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\clothes\makehuman\CLOTHING_CREDITS.md", "Markdown", 0, 0, 0, 84, 0, 0, 0, 0, 0, 3, 87
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\hair\HAIR_CREDITS.json", "JSON", 710, 0, 0, 0, 0, 0, 0, 0, 0, 1, 711
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\hair\HAIR_CREDITS.md", "Markdown", 0, 0, 0, 43, 0, 0, 0, 0, 0, 6, 49
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\presets\runtime-export-manifest.json", "JSON", 96, 0, 0, 0, 0, 0, 0, 0, 0, 1, 97
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\backpack.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\base.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\beard-short.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\boots.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\cap.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\cargo.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\glasses.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\hoodie.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\jacket.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\jeans.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\mask.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\pants.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\shirt.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\shorts.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\sneakers.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\tshirt.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\watch.svg", "XML", 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\imported-apartment\apartment.json", "JSON", 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\licenses.json", "JSON", 468, 0, 0, 0, 0, 0, 0, 0, 0, 1, 469
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\mpfb\LICENSE.MPFB_ASSETS.md", "Markdown", 0, 0, 0, 21, 0, 0, 0, 0, 0, 21, 42
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\mpfb\README.md", "Markdown", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\mpfb\targets\macrodetails\macro.json", "JSON", 147, 0, 0, 0, 0, 0, 0, 0, 0, 9, 156
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\mpfb\targets\target.json", "JSON", 3666, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3666
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\public\favicon.svg", "XML", 0, 0, 0, 0, 0, 6, 0, 0, 0, 1, 7
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ApartmentLightSwitchInteraction.test.ts", "TypeScript", 0, 52, 0, 0, 0, 0, 0, 0, 0, 5, 57
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ApartmentLightSwitchInteraction.ts", "TypeScript", 0, 64, 0, 0, 0, 0, 0, 0, 4, 10, 78
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ApartmentWindowBlindsInteraction.test.ts", "TypeScript", 0, 54, 0, 0, 0, 0, 0, 0, 0, 8, 62
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ApartmentWindowBlindsInteraction.ts", "TypeScript", 0, 136, 0, 0, 0, 0, 0, 0, 1, 19, 156
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ImportedApartmentDoorInteraction.test.ts", "TypeScript", 0, 209, 0, 0, 0, 0, 0, 0, 0, 31, 240
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ImportedApartmentDoorInteraction.ts", "TypeScript", 0, 361, 0, 0, 0, 0, 0, 0, 7, 34, 402
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ImportedApartmentEnvironment.ts", "TypeScript", 0, 1003, 0, 0, 0, 0, 0, 0, 103, 101, 1207
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ImportedApartmentIntegration.test.ts", "TypeScript", 0, 285, 0, 0, 0, 0, 0, 0, 6, 43, 334
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\layout.ts", "TypeScript", 0, 129, 0, 0, 0, 0, 0, 0, 8, 20, 157
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\audio\AudioSystem.test.ts", "TypeScript", 0, 74, 0, 0, 0, 0, 0, 0, 0, 13, 87
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\audio\AudioSystem.ts", "TypeScript", 0, 549, 0, 0, 0, 0, 0, 0, 8, 44, 601
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\audio\SiteAudio.ts", "TypeScript", 0, 198, 0, 0, 0, 0, 0, 0, 3, 18, 219
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\audio\volume.ts", "TypeScript", 0, 5, 0, 0, 0, 0, 0, 0, 0, 1, 6
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\Diagnostics.test.ts", "TypeScript", 0, 49, 0, 0, 0, 0, 0, 0, 0, 6, 55
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\Diagnostics.ts", "TypeScript", 0, 170, 0, 0, 0, 0, 0, 0, 6, 16, 192
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\ExperienceRouting.test.ts", "TypeScript", 0, 184, 0, 0, 0, 0, 0, 0, 2, 16, 202
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\Game.ts", "TypeScript", 0, 1023, 0, 0, 0, 0, 0, 0, 17, 54, 1094
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\GameSave.test.ts", "TypeScript", 0, 258, 0, 0, 0, 0, 0, 0, 0, 30, 288
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\GameSave.ts", "TypeScript", 0, 240, 0, 0, 0, 0, 0, 0, 3, 32, 275
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\RussianStairwellGame.ts", "TypeScript", 0, 643, 0, 0, 0, 0, 0, 0, 3, 35, 681
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\SaveHistory.test.ts", "TypeScript", 0, 259, 0, 0, 0, 0, 0, 0, 0, 26, 285
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\SaveHistory.ts", "TypeScript", 0, 466, 0, 0, 0, 0, 0, 0, 0, 50, 516
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\SavePreview.ts", "TypeScript", 0, 41, 0, 0, 0, 0, 0, 0, 0, 4, 45
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\WorldStream.test.ts", "TypeScript", 0, 219, 0, 0, 0, 0, 0, 0, 0, 21, 240
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\WorldStream.ts", "TypeScript", 0, 1461, 0, 0, 0, 0, 0, 0, 50, 82, 1593
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\input\ControlBindings.test.ts", "TypeScript", 0, 47, 0, 0, 0, 0, 0, 0, 0, 9, 56
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\input\ControlBindings.ts", "TypeScript", 0, 137, 0, 0, 0, 0, 0, 0, 1, 15, 153
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\input\InputManager.ts", "TypeScript", 0, 117, 0, 0, 0, 0, 0, 0, 0, 18, 135
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\main.ts", "TypeScript", 0, 319, 0, 0, 0, 0, 0, 0, 15, 19, 353
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\physics\PhysicsWorld.test.ts", "TypeScript", 0, 635, 0, 0, 0, 0, 0, 0, 1, 79, 715
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\physics\PhysicsWorld.ts", "TypeScript", 0, 339, 0, 0, 0, 0, 0, 0, 26, 36, 401
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\player\PlayerController.test.ts", "TypeScript", 0, 397, 0, 0, 0, 0, 0, 0, 0, 69, 466
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\player\PlayerController.ts", "TypeScript", 0, 557, 0, 0, 0, 0, 0, 0, 7, 52, 616
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\AdaptiveQuality.test.ts", "TypeScript", 0, 54, 0, 0, 0, 0, 0, 0, 0, 8, 62
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\AdaptiveQuality.ts", "TypeScript", 0, 88, 0, 0, 0, 0, 0, 0, 10, 15, 113
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\BackroomsAtmosphere.ts", "TypeScript", 0, 77, 0, 0, 0, 0, 0, 0, 0, 4, 81
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\BakedLighting.test.ts", "TypeScript", 0, 107, 0, 0, 0, 0, 0, 0, 0, 13, 120
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\BakedLighting.ts", "TypeScript", 0, 557, 0, 0, 0, 0, 0, 0, 31, 29, 617
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\LightingMode.ts", "TypeScript", 0, 2, 0, 0, 0, 0, 0, 0, 1, 3, 6
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\MaterialLibrary.ts", "TypeScript", 0, 320, 0, 0, 0, 0, 0, 0, 10, 20, 350
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\PostFX.ts", "TypeScript", 0, 158, 0, 0, 0, 0, 0, 0, 0, 13, 171
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\WallGraffiti.test.ts", "TypeScript", 0, 246, 0, 0, 0, 0, 0, 0, 0, 14, 260
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\WallGraffiti.ts", "TypeScript", 0, 1335, 0, 0, 0, 0, 0, 0, 4, 36, 1375
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\WorldBuilder.test.ts", "TypeScript", 0, 2796, 0, 0, 0, 0, 0, 0, 2, 100, 2898
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\WorldBuilder.ts", "TypeScript", 0, 4008, 0, 0, 0, 0, 0, 0, 59, 105, 4172
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\WorldDoors.test.ts", "TypeScript", 0, 78, 0, 0, 0, 0, 0, 0, 0, 12, 90
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\WorldDoors.ts", "TypeScript", 0, 283, 0, 0, 0, 0, 0, 0, 0, 21, 304
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\WorldProps.ts", "TypeScript", 0, 154, 0, 0, 0, 0, 0, 0, 1, 10, 165
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\ZonalLighting.test.ts", "TypeScript", 0, 217, 0, 0, 0, 0, 0, 0, 0, 20, 237
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\ZonalLighting.ts", "TypeScript", 0, 661, 0, 0, 0, 0, 0, 0, 21, 22, 704
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\baked-lighting.worker.ts", "TypeScript", 0, 30, 0, 0, 0, 0, 0, 0, 1, 7, 38
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\HallExitInteraction.test.ts", "TypeScript", 0, 37, 0, 0, 0, 0, 0, 0, 0, 6, 43
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\HallExitInteraction.ts", "TypeScript", 0, 64, 0, 0, 0, 0, 0, 0, 1, 10, 75
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\StairwellEnvironment.test.ts", "TypeScript", 0, 101, 0, 0, 0, 0, 0, 0, 2, 17, 120
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\StairwellEnvironment.ts", "TypeScript", 0, 1877, 0, 0, 0, 0, 0, 0, 58, 153, 2088
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\StairwellMaterials.ts", "TypeScript", 0, 240, 0, 0, 0, 0, 0, 0, 2, 18, 260
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\StairwellPhysics.test.ts", "TypeScript", 0, 35, 0, 0, 0, 0, 0, 0, 0, 9, 44
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\createStairwellPlan.test.ts", "TypeScript", 0, 67, 0, 0, 0, 0, 0, 0, 0, 7, 74
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\createStairwellPlan.ts", "TypeScript", 0, 199, 0, 0, 0, 0, 0, 0, 7, 17, 223
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\geometry.ts", "TypeScript", 0, 147, 0, 0, 0, 0, 0, 0, 6, 12, 165
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\layout.ts", "TypeScript", 0, 54, 0, 0, 0, 0, 0, 0, 4, 10, 68
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\styles.css", "PostCSS", 0, 0, 0, 0, 0, 0, 2552, 0, 7, 367, 2926
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\ui\ExperienceUI.test.ts", "TypeScript", 0, 30, 0, 0, 0, 0, 0, 0, 2, 6, 38
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\ui\ExperienceUI.ts", "TypeScript", 0, 1345, 0, 0, 0, 0, 0, 0, 1, 86, 1432
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\ui\ExperienceUI.wardrobe.test.ts", "TypeScript", 0, 39, 0, 0, 0, 0, 0, 0, 1, 6, 46
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\ui\OpeningIntro.ts", "TypeScript", 0, 143, 0, 0, 0, 0, 0, 0, 0, 13, 156
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\ui\settings.ts", "TypeScript", 0, 80, 0, 0, 0, 0, 0, 0, 1, 8, 89
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\BackroomsWardrobeElement.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 58, 0, 17, 75
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\BackroomsWardrobePreviewExporterElement.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 65, 0, 15, 80
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\developer.css", "PostCSS", 0, 0, 0, 0, 0, 0, 157, 0, 1, 5, 163
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\assets\AssetLibrary.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 73, 0, 9, 82
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\assets\assetUtils.ts", "TypeScript", 0, 28, 0, 0, 0, 0, 0, 0, 0, 3, 31
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\assets\extraAppearanceAssets.ts", "TypeScript", 0, 54, 0, 0, 0, 0, 0, 0, 0, 7, 61
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\character\CharacterModel.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 133, 2, 15, 150
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\character\HumanoidRig.ts", "TypeScript", 0, 48, 0, 0, 0, 0, 0, 0, 0, 7, 55
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\character\IdleAnimation.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 276, 36, 47, 359
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\character\WardrobeManager.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 206, 35, 26, 267
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\character\WardrobeRuntimeRegression.test.ts", "TypeScript", 0, 22, 0, 0, 0, 0, 0, 0, 1, 6, 29
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\core\expressions.test.ts", "TypeScript", 0, 41, 0, 0, 0, 0, 0, 0, 0, 7, 48
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\core\expressions.ts", "TypeScript", 0, 67, 0, 0, 0, 0, 0, 0, 0, 12, 79
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\core\humanMeasurements.ts", "TypeScript", 0, 221, 0, 0, 0, 0, 0, 0, 9, 37, 267
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\core\morphs.ts", "TypeScript", 0, 131, 0, 0, 0, 0, 0, 0, 11, 15, 157
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\core\types.ts", "TypeScript", 0, 111, 0, 0, 0, 0, 0, 0, 0, 11, 122
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\editor\CharacterEditor.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 644, 16, 58, 718
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\editor\PresetPreviewExporter.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 265, 3, 33, 301
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\editor\PresetThumbnailGenerator.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 102, 3, 14, 119
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\editor\characterOptions.ts", "TypeScript", 0, 239, 0, 0, 0, 0, 0, 0, 5, 7, 251
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\makehuman\DetailTargets.ts", "TypeScript", 0, 168, 0, 0, 0, 0, 0, 0, 5, 16, 189
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\makehuman\MacroTargets.ts", "TypeScript", 0, 110, 0, 0, 0, 0, 0, 0, 7, 11, 128
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\makehuman\MakeHumanRuntime.ts", "TypeScript", 0, 383, 0, 0, 0, 0, 0, 0, 21, 36, 440
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\makehuman\MhcloRuntime.ts", "TypeScript", 0, 404, 0, 0, 0, 0, 0, 0, 23, 40, 467
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\makehuman\MhmatRuntime.ts", "TypeScript", 0, 153, 0, 0, 0, 0, 0, 0, 6, 15, 174
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\makehuman\TargetLoader.ts", "TypeScript", 0, 69, 0, 0, 0, 0, 0, 0, 2, 9, 80
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\makehuman\types.ts", "TypeScript", 0, 36, 0, 0, 0, 0, 0, 0, 0, 5, 41
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\state\CharacterState.ts", "TypeScript", 0, 222, 0, 0, 0, 0, 0, 0, 17, 13, 252
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\state\defaults.ts", "TypeScript", 0, 61, 0, 0, 0, 0, 0, 0, 0, 2, 63
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\ui\components\ColorSwatches.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 16, 0, 2, 18
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\ui\components\MorphPad.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 51, 0, 5, 56
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\viewport\EditorViewport.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 0, 0, 210, 0, 23, 233
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\wardrobe.css", "PostCSS", 0, 0, 0, 0, 0, 0, 669, 0, 20, 91, 780
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\EpicStructures.ts", "TypeScript", 0, 1837, 0, 0, 0, 0, 0, 0, 43, 72, 1952
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\FeatureRegistry.ts", "TypeScript", 0, 85, 0, 0, 0, 0, 0, 0, 2, 10, 97
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\InfiniteWorld.test.ts", "TypeScript", 0, 1468, 0, 0, 0, 0, 0, 0, 2, 76, 1546
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\InfiniteWorld.ts", "TypeScript", 0, 2138, 0, 0, 0, 0, 0, 0, 76, 115, 2329
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\PassageHoleLayout.ts", "TypeScript", 0, 19, 0, 0, 0, 0, 0, 0, 0, 4, 23
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\PropCatalog.test.ts", "TypeScript", 0, 94, 0, 0, 0, 0, 0, 0, 2, 8, 104
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\PropCatalog.ts", "TypeScript", 0, 156, 0, 0, 0, 0, 0, 0, 9, 20, 185
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\PropPlacement.test.ts", "TypeScript", 0, 274, 0, 0, 0, 0, 0, 0, 0, 17, 291
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\PropPlacement.ts", "TypeScript", 0, 674, 0, 0, 0, 0, 0, 0, 6, 31, 711
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\SeededRandom.ts", "TypeScript", 0, 66, 0, 0, 0, 0, 0, 0, 0, 13, 79
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\StairLayout.ts", "TypeScript", 0, 385, 0, 0, 0, 0, 0, 0, 11, 19, 415
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\generateWorld.test.ts", "TypeScript", 0, 1374, 0, 0, 0, 0, 0, 0, 11, 55, 1440
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\generateWorld.ts", "TypeScript", 0, 5162, 0, 0, 0, 0, 0, 0, 60, 174, 5396
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\infinite.worker.ts", "TypeScript", 0, 44, 0, 0, 0, 0, 0, 0, 1, 7, 52
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\types.ts", "TypeScript", 0, 349, 0, 0, 0, 0, 0, 0, 55, 40, 444
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\temp\Audio Files\voice_phrases.md", "Markdown", 0, 0, 0, 76, 0, 0, 0, 0, 0, 12, 88
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\tsconfig.app.json", "JSON", 22, 0, 0, 0, 0, 0, 0, 0, 0, 1, 23
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\tsconfig.json", "JSON with Comments", 0, 0, 0, 0, 7, 0, 0, 0, 0, 1, 8
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\tsconfig.node.json", "JSON", 16, 0, 0, 0, 0, 0, 0, 0, 0, 1, 17
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\vite.config.ts", "TypeScript", 0, 24, 0, 0, 0, 0, 0, 0, 3, 2, 29
+"c:\Users\Teddy\Dossier original\Développement\Backrooms\vitest.config.ts", "TypeScript", 0, 11, 0, 0, 0, 0, 0, 0, 5, 2, 18
+"Total", "-", 11459, 43037, 15, 1187, 7, 142, 3378, 2099, 1012, 3759, 66095

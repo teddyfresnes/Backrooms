@@ -12,6 +12,7 @@ import { ColorSwatches } from '../ui/components/ColorSwatches'
 import { MorphPad } from '../ui/components/MorphPad'
 import { CHARACTER_OPTIONS, type CharacterOption } from './characterOptions'
 import { PresetThumbnailGenerator } from './PresetThumbnailGenerator'
+import { randomConfirmationUrl, voicesForSex } from '../audio/voices'
 
 const EYES = ['#6c8da8', '#5f7d55', '#7a5a42', '#3c4a57', '#2d2622']
 
@@ -215,9 +216,29 @@ function PadGrid({ children }: { children: ReactNode }) {
 function GeneralEditor() {
   const body = useCharacterState((s) => s.config.body)
   const name = useCharacterState((s) => s.config.name)
+  const voiceId = useCharacterState((s) => s.config.voiceId)
   const setName = useCharacterState((s) => s.setName)
   const setSex = useCharacterState((s) => s.setSex)
+  const setVoice = useCharacterState((s) => s.setVoice)
+  const previewRef = useRef<HTMLAudioElement | null>(null)
   const sex = sexFromGenderMorph(body.gender)
+
+  useEffect(() => () => {
+    previewRef.current?.pause()
+    previewRef.current = null
+  }, [])
+
+  const selectVoice = (nextVoiceId: typeof voiceId) => {
+    setVoice(nextVoiceId)
+    previewRef.current?.pause()
+    const url = randomConfirmationUrl(nextVoiceId)
+    if (!url) return
+    const preview = new Audio(url)
+    preview.volume = 0.82
+    previewRef.current = preview
+    void preview.play().catch(() => {})
+  }
+
   return <div className="simple-content">
     <h3>Général</h3>
     <label className="character-name-field">
@@ -227,6 +248,21 @@ function GeneralEditor() {
     <div className="sex-row">
       <button type="button" className={sex === 'female' ? 'selected' : ''} onClick={() => setSex('female')}>Femme</button>
       <button type="button" className={sex === 'male' ? 'selected' : ''} onClick={() => setSex('male')}>Homme</button>
+    </div>
+    <div className="voice-picker">
+      <span className="voice-picker-label">Voix</span>
+      <div className="voice-grid">
+        {voicesForSex(sex).map((voice) => <button
+          key={voice.id}
+          type="button"
+          className={voice.id === voiceId ? 'selected' : ''}
+          aria-pressed={voice.id === voiceId}
+          onClick={() => selectVoice(voice.id)}
+        >
+          <span>{voice.label}</span>
+          <small>Aperçu aléatoire</small>
+        </button>)}
+      </div>
     </div>
     {['age', 'height', 'weight', 'muscle', 'bodyFat', 'proportions'].map((key) => <CompactSlider key={key} morphKey={key} />)}
   </div>

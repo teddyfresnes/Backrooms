@@ -1,0 +1,243 @@
+Date : 2026-08-22 02:23:14
+Directory : c:\Users\Teddy\Dossier original\Développement\Backrooms
+Total : 164 files,  61324 codes, 1012 comments, 3759 blanks, all 66095 lines
+
+Languages
++--------------------+------------+------------+------------+------------+------------+
+| language           | files      | code       | comment    | blank      | total      |
++--------------------+------------+------------+------------+------------+------------+
+| TypeScript         |        102 |     43,037 |        889 |      2,770 |     46,696 |
+| JSON               |         13 |     11,459 |          0 |         19 |     11,478 |
+| PostCSS            |          3 |      3,378 |         28 |        463 |      3,869 |
+| TypeScript JSX     |         12 |      2,099 |         95 |        264 |      2,458 |
+| Markdown           |         14 |      1,187 |          0 |        240 |      1,427 |
+| XML                |         18 |        142 |          0 |          1 |        143 |
+| HTML               |          1 |         15 |          0 |          1 |         16 |
+| JSON with Comments |          1 |          7 |          0 |          1 |          8 |
++--------------------+------------+------------+------------+------------+------------+
+
+Directories
++--------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                                                     | files      | code       | comment    | blank      | total      |
++--------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                                        |        164 |     61,324 |      1,012 |      3,759 |     66,095 |
+| . (Files)                                                                                                                |         10 |      2,391 |          8 |         58 |      2,457 |
+| docs                                                                                                                     |          6 |        793 |          0 |        146 |        939 |
+| docs (Files)                                                                                                             |          2 |        101 |          0 |         37 |        138 |
+| docs\agents                                                                                                              |          4 |        692 |          0 |        109 |        801 |
+| public                                                                                                                   |         32 |      9,585 |          0 |         50 |      9,635 |
+| public (Files)                                                                                                           |          1 |          6 |          0 |          1 |          7 |
+| public\assets                                                                                                            |         31 |      9,579 |          0 |         49 |      9,628 |
+| public\assets (Files)                                                                                                    |          1 |        468 |          0 |          1 |        469 |
+| public\assets\characters                                                                                                 |         25 |      5,275 |          0 |         18 |      5,293 |
+| public\assets\characters (Files)                                                                                         |          3 |      3,620 |          0 |          6 |      3,626 |
+| public\assets\characters\clothes                                                                                         |          2 |        670 |          0 |          4 |        674 |
+| public\assets\characters\clothes\makehuman                                                                               |          2 |        670 |          0 |          4 |        674 |
+| public\assets\characters\hair                                                                                            |          2 |        753 |          0 |          7 |        760 |
+| public\assets\characters\presets                                                                                         |          1 |         96 |          0 |          1 |         97 |
+| public\assets\characters\thumbnails                                                                                      |         17 |        136 |          0 |          0 |        136 |
+| public\assets\imported-apartment                                                                                         |          1 |          1 |          0 |          0 |          1 |
+| public\assets\mpfb                                                                                                       |          4 |      3,835 |          0 |         30 |      3,865 |
+| public\assets\mpfb (Files)                                                                                               |          2 |         22 |          0 |         21 |         43 |
+| public\assets\mpfb\targets                                                                                               |          2 |      3,813 |          0 |          9 |      3,822 |
+| public\assets\mpfb\targets (Files)                                                                                       |          1 |      3,666 |          0 |          0 |      3,666 |
+| public\assets\mpfb\targets\macrodetails                                                                                  |          1 |        147 |          0 |          9 |        156 |
+| src                                                                                                                      |        115 |     48,479 |      1,004 |      3,493 |     52,976 |
+| src (Files)                                                                                                              |          2 |      2,871 |         22 |        386 |      3,279 |
+| src\apartment                                                                                                            |          9 |      2,293 |        129 |        271 |      2,693 |
+| src\audio                                                                                                                |          4 |        826 |         11 |         76 |        913 |
+| src\core                                                                                                                 |         12 |      5,013 |         81 |        372 |      5,466 |
+| src\input                                                                                                                |          3 |        301 |          1 |         42 |        344 |
+| src\physics                                                                                                              |          2 |        974 |         27 |        115 |      1,116 |
+| src\player                                                                                                               |          2 |        954 |          7 |        121 |      1,082 |
+| src\render                                                                                                               |         18 |     11,171 |        140 |        452 |     11,763 |
+| src\stairwell                                                                                                            |         10 |      2,821 |         80 |        259 |      3,160 |
+| src\ui                                                                                                                   |          5 |      1,637 |          5 |        119 |      1,761 |
+| src\wardrobe                                                                                                             |         33 |      5,493 |        223 |        619 |      6,335 |
+| src\wardrobe (Files)                                                                                                     |          3 |        280 |          1 |         37 |        318 |
+| src\wardrobe\studio                                                                                                      |         30 |      5,213 |        222 |        582 |      6,017 |
+| src\wardrobe\studio (Files)                                                                                              |          1 |        669 |         20 |         91 |        780 |
+| src\wardrobe\studio\assets                                                                                               |          3 |        155 |          0 |         19 |        174 |
+| src\wardrobe\studio\character                                                                                            |          5 |        685 |         74 |        101 |        860 |
+| src\wardrobe\studio\core                                                                                                 |          5 |        571 |         20 |         82 |        673 |
+| src\wardrobe\studio\editor                                                                                               |          4 |      1,250 |         27 |        112 |      1,389 |
+| src\wardrobe\studio\makehuman                                                                                            |          7 |      1,323 |         64 |        132 |      1,519 |
+| src\wardrobe\studio\state                                                                                                |          2 |        283 |         17 |         15 |        315 |
+| src\wardrobe\studio\ui                                                                                                   |          2 |         67 |          0 |          7 |         74 |
+| src\wardrobe\studio\ui\components                                                                                        |          2 |         67 |          0 |          7 |         74 |
+| src\wardrobe\studio\viewport                                                                                             |          1 |        210 |          0 |         23 |        233 |
+| src\world                                                                                                                |         15 |     14,125 |        278 |        661 |     15,064 |
+| temp                                                                                                                     |          1 |         76 |          0 |         12 |         88 |
+| temp\Audio Files                                                                                                         |          1 |         76 |          0 |         12 |         88 |
++--------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++--------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| filename                                                                                                                 | language           | code       | comment    | blank      | total      |
++--------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\AGENTS.md                                                        | Markdown           |         75 |          0 |         24 |         99 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\README.md                                                        | Markdown           |         85 |          0 |         24 |        109 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\docs\ADDING_FEATURES.md                                          | Markdown           |         72 |          0 |         28 |        100 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\docs\WARDROBE.md                                                 | Markdown           |         29 |          0 |          9 |         38 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\docs\agents\ARCHITECTURE.md                                      | Markdown           |        110 |          0 |         24 |        134 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\docs\agents\RUNTIME_RENDERING.md                                 | Markdown           |        338 |          0 |         40 |        378 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\docs\agents\VERIFICATION.md                                      | Markdown           |         62 |          0 |         19 |         81 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\docs\agents\WORLD_GENERATION.md                                  | Markdown           |        182 |          0 |         26 |        208 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\index.html                                                       | HTML               |         15 |          0 |          1 |         16 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\package-lock.json                                                | JSON               |      2,102 |          0 |          1 |      2,103 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\package.json                                                     | JSON               |         34 |          0 |          1 |         35 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\MATERIALS_CREDITS.json                  | JSON               |        166 |          0 |          1 |        167 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\README.md                               | Markdown           |          9 |          0 |          4 |         13 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\assets-manifest.json                    | JSON               |      3,445 |          0 |          1 |      3,446 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\clothes\makehuman\CLOTHING_CREDITS.json | JSON               |        586 |          0 |          1 |        587 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\clothes\makehuman\CLOTHING_CREDITS.md   | Markdown           |         84 |          0 |          3 |         87 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\hair\HAIR_CREDITS.json                  | JSON               |        710 |          0 |          1 |        711 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\hair\HAIR_CREDITS.md                    | Markdown           |         43 |          0 |          6 |         49 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\presets\runtime-export-manifest.json    | JSON               |         96 |          0 |          1 |         97 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\backpack.svg                 | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\base.svg                     | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\beard-short.svg              | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\boots.svg                    | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\cap.svg                      | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\cargo.svg                    | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\glasses.svg                  | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\hoodie.svg                   | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\jacket.svg                   | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\jeans.svg                    | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\mask.svg                     | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\pants.svg                    | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\shirt.svg                    | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\shorts.svg                   | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\sneakers.svg                 | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\tshirt.svg                   | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\characters\thumbnails\watch.svg                    | XML                |          8 |          0 |          0 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\imported-apartment\apartment.json                  | JSON               |          1 |          0 |          0 |          1 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\licenses.json                                      | JSON               |        468 |          0 |          1 |        469 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\mpfb\LICENSE.MPFB_ASSETS.md                        | Markdown           |         21 |          0 |         21 |         42 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\mpfb\README.md                                     | Markdown           |          1 |          0 |          0 |          1 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\mpfb\targets\macrodetails\macro.json               | JSON               |        147 |          0 |          9 |        156 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\assets\mpfb\targets\target.json                           | JSON               |      3,666 |          0 |          0 |      3,666 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\public\favicon.svg                                               | XML                |          6 |          0 |          1 |          7 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ApartmentLightSwitchInteraction.test.ts            | TypeScript         |         52 |          0 |          5 |         57 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ApartmentLightSwitchInteraction.ts                 | TypeScript         |         64 |          4 |         10 |         78 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ApartmentWindowBlindsInteraction.test.ts           | TypeScript         |         54 |          0 |          8 |         62 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ApartmentWindowBlindsInteraction.ts                | TypeScript         |        136 |          1 |         19 |        156 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ImportedApartmentDoorInteraction.test.ts           | TypeScript         |        209 |          0 |         31 |        240 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ImportedApartmentDoorInteraction.ts                | TypeScript         |        361 |          7 |         34 |        402 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ImportedApartmentEnvironment.ts                    | TypeScript         |      1,003 |        103 |        101 |      1,207 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\ImportedApartmentIntegration.test.ts               | TypeScript         |        285 |          6 |         43 |        334 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\apartment\layout.ts                                          | TypeScript         |        129 |          8 |         20 |        157 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\audio\AudioSystem.test.ts                                    | TypeScript         |         74 |          0 |         13 |         87 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\audio\AudioSystem.ts                                         | TypeScript         |        549 |          8 |         44 |        601 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\audio\SiteAudio.ts                                           | TypeScript         |        198 |          3 |         18 |        219 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\audio\volume.ts                                              | TypeScript         |          5 |          0 |          1 |          6 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\Diagnostics.test.ts                                     | TypeScript         |         49 |          0 |          6 |         55 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\Diagnostics.ts                                          | TypeScript         |        170 |          6 |         16 |        192 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\ExperienceRouting.test.ts                               | TypeScript         |        184 |          2 |         16 |        202 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\Game.ts                                                 | TypeScript         |      1,023 |         17 |         54 |      1,094 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\GameSave.test.ts                                        | TypeScript         |        258 |          0 |         30 |        288 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\GameSave.ts                                             | TypeScript         |        240 |          3 |         32 |        275 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\RussianStairwellGame.ts                                 | TypeScript         |        643 |          3 |         35 |        681 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\SaveHistory.test.ts                                     | TypeScript         |        259 |          0 |         26 |        285 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\SaveHistory.ts                                          | TypeScript         |        466 |          0 |         50 |        516 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\SavePreview.ts                                          | TypeScript         |         41 |          0 |          4 |         45 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\WorldStream.test.ts                                     | TypeScript         |        219 |          0 |         21 |        240 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\core\WorldStream.ts                                          | TypeScript         |      1,461 |         50 |         82 |      1,593 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\input\ControlBindings.test.ts                                | TypeScript         |         47 |          0 |          9 |         56 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\input\ControlBindings.ts                                     | TypeScript         |        137 |          1 |         15 |        153 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\input\InputManager.ts                                        | TypeScript         |        117 |          0 |         18 |        135 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\main.ts                                                      | TypeScript         |        319 |         15 |         19 |        353 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\physics\PhysicsWorld.test.ts                                 | TypeScript         |        635 |          1 |         79 |        715 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\physics\PhysicsWorld.ts                                      | TypeScript         |        339 |         26 |         36 |        401 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\player\PlayerController.test.ts                              | TypeScript         |        397 |          0 |         69 |        466 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\player\PlayerController.ts                                   | TypeScript         |        557 |          7 |         52 |        616 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\AdaptiveQuality.test.ts                               | TypeScript         |         54 |          0 |          8 |         62 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\AdaptiveQuality.ts                                    | TypeScript         |         88 |         10 |         15 |        113 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\BackroomsAtmosphere.ts                                | TypeScript         |         77 |          0 |          4 |         81 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\BakedLighting.test.ts                                 | TypeScript         |        107 |          0 |         13 |        120 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\BakedLighting.ts                                      | TypeScript         |        557 |         31 |         29 |        617 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\LightingMode.ts                                       | TypeScript         |          2 |          1 |          3 |          6 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\MaterialLibrary.ts                                    | TypeScript         |        320 |         10 |         20 |        350 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\PostFX.ts                                             | TypeScript         |        158 |          0 |         13 |        171 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\WallGraffiti.test.ts                                  | TypeScript         |        246 |          0 |         14 |        260 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\WallGraffiti.ts                                       | TypeScript         |      1,335 |          4 |         36 |      1,375 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\WorldBuilder.test.ts                                  | TypeScript         |      2,796 |          2 |        100 |      2,898 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\WorldBuilder.ts                                       | TypeScript         |      4,008 |         59 |        105 |      4,172 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\WorldDoors.test.ts                                    | TypeScript         |         78 |          0 |         12 |         90 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\WorldDoors.ts                                         | TypeScript         |        283 |          0 |         21 |        304 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\WorldProps.ts                                         | TypeScript         |        154 |          1 |         10 |        165 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\ZonalLighting.test.ts                                 | TypeScript         |        217 |          0 |         20 |        237 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\ZonalLighting.ts                                      | TypeScript         |        661 |         21 |         22 |        704 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\render\baked-lighting.worker.ts                              | TypeScript         |         30 |          1 |          7 |         38 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\HallExitInteraction.test.ts                        | TypeScript         |         37 |          0 |          6 |         43 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\HallExitInteraction.ts                             | TypeScript         |         64 |          1 |         10 |         75 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\StairwellEnvironment.test.ts                       | TypeScript         |        101 |          2 |         17 |        120 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\StairwellEnvironment.ts                            | TypeScript         |      1,877 |         58 |        153 |      2,088 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\StairwellMaterials.ts                              | TypeScript         |        240 |          2 |         18 |        260 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\StairwellPhysics.test.ts                           | TypeScript         |         35 |          0 |          9 |         44 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\createStairwellPlan.test.ts                        | TypeScript         |         67 |          0 |          7 |         74 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\createStairwellPlan.ts                             | TypeScript         |        199 |          7 |         17 |        223 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\geometry.ts                                        | TypeScript         |        147 |          6 |         12 |        165 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\stairwell\layout.ts                                          | TypeScript         |         54 |          4 |         10 |         68 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\styles.css                                                   | PostCSS            |      2,552 |          7 |        367 |      2,926 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\ui\ExperienceUI.test.ts                                      | TypeScript         |         30 |          2 |          6 |         38 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\ui\ExperienceUI.ts                                           | TypeScript         |      1,345 |          1 |         86 |      1,432 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\ui\ExperienceUI.wardrobe.test.ts                             | TypeScript         |         39 |          1 |          6 |         46 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\ui\OpeningIntro.ts                                           | TypeScript         |        143 |          0 |         13 |        156 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\ui\settings.ts                                               | TypeScript         |         80 |          1 |          8 |         89 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\BackroomsWardrobeElement.tsx                        | TypeScript JSX     |         58 |          0 |         17 |         75 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\BackroomsWardrobePreviewExporterElement.tsx         | TypeScript JSX     |         65 |          0 |         15 |         80 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\developer.css                                       | PostCSS            |        157 |          1 |          5 |        163 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\assets\AssetLibrary.tsx                      | TypeScript JSX     |         73 |          0 |          9 |         82 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\assets\assetUtils.ts                         | TypeScript         |         28 |          0 |          3 |         31 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\assets\extraAppearanceAssets.ts              | TypeScript         |         54 |          0 |          7 |         61 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\character\CharacterModel.tsx                 | TypeScript JSX     |        133 |          2 |         15 |        150 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\character\HumanoidRig.ts                     | TypeScript         |         48 |          0 |          7 |         55 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\character\IdleAnimation.tsx                  | TypeScript JSX     |        276 |         36 |         47 |        359 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\character\WardrobeManager.tsx                | TypeScript JSX     |        206 |         35 |         26 |        267 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\character\WardrobeRuntimeRegression.test.ts  | TypeScript         |         22 |          1 |          6 |         29 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\core\expressions.test.ts                     | TypeScript         |         41 |          0 |          7 |         48 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\core\expressions.ts                          | TypeScript         |         67 |          0 |         12 |         79 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\core\humanMeasurements.ts                    | TypeScript         |        221 |          9 |         37 |        267 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\core\morphs.ts                               | TypeScript         |        131 |         11 |         15 |        157 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\core\types.ts                                | TypeScript         |        111 |          0 |         11 |        122 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\editor\CharacterEditor.tsx                   | TypeScript JSX     |        644 |         16 |         58 |        718 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\editor\PresetPreviewExporter.tsx             | TypeScript JSX     |        265 |          3 |         33 |        301 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\editor\PresetThumbnailGenerator.tsx          | TypeScript JSX     |        102 |          3 |         14 |        119 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\editor\characterOptions.ts                   | TypeScript         |        239 |          5 |          7 |        251 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\makehuman\DetailTargets.ts                   | TypeScript         |        168 |          5 |         16 |        189 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\makehuman\MacroTargets.ts                    | TypeScript         |        110 |          7 |         11 |        128 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\makehuman\MakeHumanRuntime.ts                | TypeScript         |        383 |         21 |         36 |        440 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\makehuman\MhcloRuntime.ts                    | TypeScript         |        404 |         23 |         40 |        467 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\makehuman\MhmatRuntime.ts                    | TypeScript         |        153 |          6 |         15 |        174 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\makehuman\TargetLoader.ts                    | TypeScript         |         69 |          2 |          9 |         80 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\makehuman\types.ts                           | TypeScript         |         36 |          0 |          5 |         41 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\state\CharacterState.ts                      | TypeScript         |        222 |         17 |         13 |        252 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\state\defaults.ts                            | TypeScript         |         61 |          0 |          2 |         63 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\ui\components\ColorSwatches.tsx              | TypeScript JSX     |         16 |          0 |          2 |         18 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\ui\components\MorphPad.tsx                   | TypeScript JSX     |         51 |          0 |          5 |         56 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\viewport\EditorViewport.tsx                  | TypeScript JSX     |        210 |          0 |         23 |        233 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\wardrobe\studio\wardrobe.css                                 | PostCSS            |        669 |         20 |         91 |        780 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\EpicStructures.ts                                      | TypeScript         |      1,837 |         43 |         72 |      1,952 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\FeatureRegistry.ts                                     | TypeScript         |         85 |          2 |         10 |         97 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\InfiniteWorld.test.ts                                  | TypeScript         |      1,468 |          2 |         76 |      1,546 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\InfiniteWorld.ts                                       | TypeScript         |      2,138 |         76 |        115 |      2,329 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\PassageHoleLayout.ts                                   | TypeScript         |         19 |          0 |          4 |         23 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\PropCatalog.test.ts                                    | TypeScript         |         94 |          2 |          8 |        104 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\PropCatalog.ts                                         | TypeScript         |        156 |          9 |         20 |        185 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\PropPlacement.test.ts                                  | TypeScript         |        274 |          0 |         17 |        291 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\PropPlacement.ts                                       | TypeScript         |        674 |          6 |         31 |        711 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\SeededRandom.ts                                        | TypeScript         |         66 |          0 |         13 |         79 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\StairLayout.ts                                         | TypeScript         |        385 |         11 |         19 |        415 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\generateWorld.test.ts                                  | TypeScript         |      1,374 |         11 |         55 |      1,440 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\generateWorld.ts                                       | TypeScript         |      5,162 |         60 |        174 |      5,396 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\infinite.worker.ts                                     | TypeScript         |         44 |          1 |          7 |         52 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\src\world\types.ts                                               | TypeScript         |        349 |         55 |         40 |        444 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\temp\Audio Files\voice_phrases.md                                | Markdown           |         76 |          0 |         12 |         88 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\tsconfig.app.json                                                | JSON               |         22 |          0 |          1 |         23 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\tsconfig.json                                                    | JSON with Comments |          7 |          0 |          1 |          8 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\tsconfig.node.json                                               | JSON               |         16 |          0 |          1 |         17 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\vite.config.ts                                                   | TypeScript         |         24 |          3 |          2 |         29 |
+| c:\Users\Teddy\Dossier original\Développement\Backrooms\vitest.config.ts                                                 | TypeScript         |         11 |          5 |          2 |         18 |
+| Total                                                                                                                    |                    |     61,324 |      1,012 |      3,759 |     66,095 |
++--------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+

@@ -3,6 +3,7 @@ import type { Object3D } from 'three'
 export type ClothingSlot = 'top' | 'bottom' | 'shoes'
 export type AssetSlot = 'base' | 'hair' | 'beard' | 'nails' | 'eyebrows' | 'eyelashes' | ClothingSlot | 'accessory'
 export type MorphSection = 'body' | 'face'
+export type CharacterVoiceId = 'karen-cenon' | 'meghan-christian' | 'alex-brodie' | 'ian-lampert' | 'sean-lenhart'
 
 export interface MorphDefinition {
   key: string
@@ -89,6 +90,7 @@ export interface WardrobeConfig {
 export interface CharacterConfig {
   id: string
   name: string
+  voiceId: CharacterVoiceId
   baseAssetId: string
   body: Record<string, number>
   face: Record<string, number>

@@ -9,6 +9,7 @@ import {
 } from '../core/humanMeasurements'
 import type { CharacterConfig } from '../core/types'
 import { makeDefaultCharacter } from '../state/defaults'
+import { defaultVoiceIdForSex } from '../audio/voices'
 
 export interface CharacterOption {
   id: string
@@ -49,6 +50,7 @@ function variant(label: string, values: Variant): CharacterOption {
   const id = label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-')
   config.name = label
   config.id = `preset-${id}`
+  config.voiceId = defaultVoiceIdForSex(values.sex)
 
   // The runtime ships Asian and African macro corners. Arab and Hispanic
   // presets keep the neutral base geometry and rely on warmer skin plus

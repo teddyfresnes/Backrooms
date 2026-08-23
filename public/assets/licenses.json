@@ -253,6 +253,15 @@
       "license": "CC0 1.0",
       "file": "audio/ui/menu-click.mp3",
       "changes": "A short transient was trimmed and normalized for main-menu click feedback."
+    },
+    {
+      "name": "Super Dialogue Audio Pack v1",
+      "author": "Dillon Becker",
+      "source": "https://dillonbecker.itch.io/sdap",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "files": ["audio/voices/super-dialogue/**"],
+      "changes": "The 545 supplied WAV performances by Karen Cenon, Meghan Christian, Alex Brodie, Ian Lampert and Sean Lenhart were organized by category and transcoded to 96 kbps mono MP3. Only random Confirmation previews are currently used in the Wardrobe."
     }
   ],
   "models": [

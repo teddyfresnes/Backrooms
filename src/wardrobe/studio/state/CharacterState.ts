@@ -18,6 +18,7 @@ import {
   type BiologicalSex,
 } from '../core/humanMeasurements'
 import type { CharacterConfig, ClothingSlot, MorphSection } from '../core/types'
+import { compatibleVoiceId } from '../audio/voices'
 import { makeDefaultCharacter } from './defaults'
 
 const AUTOSAVE_KEY = 'character-studio/current/v4'
@@ -59,6 +60,7 @@ interface EditorState {
   cameraResetToken: number
   setMorph: (section: 'body' | 'face', key: string, value: number) => void
   setSex: (sex: BiologicalSex) => void
+  setVoice: (voiceId: CharacterConfig['voiceId']) => void
   setName: (name: string) => void
   setIdentity: (id: string, name: string, updatedAt?: number) => void
   restoreConfig: (config: CharacterConfig) => void
@@ -112,12 +114,15 @@ function safeBody(source: Record<string, number> | undefined) {
 
 function normalizeConfig(saved: CharacterConfig): CharacterConfig {
   const defaults = makeDefaultCharacter()
+  const body = safeBody(saved.body)
+  const sex = sexFromGenderMorph(body.gender)
   const legacyMoustacheId = /moustache/i.test(saved.appearance?.beardId ?? '') ? saved.appearance?.beardId : null
   return {
     ...defaults,
     ...saved,
     baseAssetId: 'makehuman-hm08',
-    body: safeBody(saved.body),
+    body,
+    voiceId: compatibleVoiceId(saved.voiceId, sex),
     face: safeSection('face', saved.face),
     appearance: {
       ...defaults.appearance,
@@ -165,6 +170,9 @@ export const useCharacterState = create<EditorState>((set, get) => ({
   cameraResetToken: 0,
   commitSnapshot: () => {},
   setName: (name) => set((state) => ({ config: updated({ ...state.config, name: name.slice(0, 32) }) })),
+  setVoice: (voiceId) => set((state) => ({
+    config: updated({ ...state.config, voiceId: compatibleVoiceId(voiceId, sexFromGenderMorph(state.config.body.gender)) }),
+  })),
   // Identity-only updates deliberately preserve the existing body/face/object
   // references. Promoting a preset to Custom must not be mistaken for a body
   // morph, otherwise the rig is recalibrated while a new hair mesh is mounting.
@@ -203,6 +211,7 @@ export const useCharacterState = create<EditorState>((set, get) => ({
       config: updated({
         ...current,
         body,
+        voiceId: compatibleVoiceId(current.voiceId, sex),
         appearance: {
           ...current.appearance,
           beardId: sex === 'male' ? current.appearance.beardId : null,
