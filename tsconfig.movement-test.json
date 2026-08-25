@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "rootDir": "src",
+    "outDir": ".movement-test-dist",
+    "noEmit": false,
+    "declaration": false
+  },
+  "include": [
+    "src/player/MovementConfig.ts",
+    "src/player/MovementKinematics.ts",
+    "src/dev/MovementLabPlan.ts",
+    "src/dev/PitEdgeRagdoll.ts",
+    "src/dev/ThirdPersonLook.ts",
+    "src/dev/FirstPersonLook.ts",
+    "src/physics/ActiveRagdollMotion.ts",
+    "src/physics/RagdollFinalSettling.ts",
+    "src/world/types.ts",
+    "src/dev/DamageSystem.ts",
+    "src/dev/GetUpRecoveryRules.ts",
+    "src/dev/BloodImpactGate.ts",
+    "src/dev/DirectionalLocomotionRules.ts",
+    "src/dev/CombatGuardRules.ts",
+    "src/dev/CombatMeleeRules.ts",
+    "src/dev/GroundKickRules.ts",
+    "src/dev/CombatContact.ts",
+    "src/dev/CombatRig.ts",
+    "src/dev/CombatAnimationLayers.ts"
+  ]
+}
