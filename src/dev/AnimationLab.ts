@@ -1942,7 +1942,7 @@ export class AnimationLab {
       this.playAnimation('idle', true);
       this.updateAvatarTransform(0, true);
       this.setStatus('PRÊT');
-      if (this.hint) this.hint.innerHTML = '<strong>CLIQUER POUR JOUER</strong>';
+      if (this.hint) this.hint.innerHTML = '<strong>CLIQUER POUR JOUER</strong><span>ZQSD : déplacement · clic gauche : coup · sans capture souris : clic droit maintenu pour regarder · Échap : pause</span>';
     } catch (error) {
       this.setStatus('ERREUR ASSET');
       if (this.hint) this.hint.innerHTML = `<strong>ERREUR DE CHARGEMENT</strong><span>${error instanceof Error ? error.message : String(error)}</span>`;
@@ -2093,7 +2093,9 @@ export class AnimationLab {
 
     this.updateHealthUi();
 
-    const hint = document.createElement('div');
+    const hint = document.createElement('button');
+    hint.type = 'button';
+    hint.addEventListener('click', this.onCanvasClick);
     hint.className = 'animation-lab__hint';
     hint.innerHTML = '<strong>CHARGEMENT DU PERSONNAGE…</strong><span>Movement Lab + MakeHuman / Mixamo locomotion</span>';
     this.hint = hint;
@@ -9224,7 +9226,7 @@ export class AnimationLab {
   }
 
   private readonly onCombatMouseDown = (event: MouseEvent): void => {
-    if (!this.ready || !this.player?.isLocked) return;
+    if (!this.ready || !this.player?.isLocked || event.target !== this.renderer.domElement) return;
     if (this.ragdoll || this.recovery || this.player.isIncapacitated || this.combatHitReaction) return;
     if (event.button === 2) {
       event.preventDefault();

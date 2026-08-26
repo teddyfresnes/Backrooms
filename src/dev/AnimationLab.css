@@ -36,11 +36,11 @@ body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .animation-lab__hint {
   position: fixed; left: 50%; bottom: 7vh; z-index: 3; transform: translateX(-50%); display: grid; gap: 4px; min-width: 300px;
   max-width: min(520px, calc(100vw - 30px)); box-sizing: border-box; padding: 10px 14px; border: 1px solid rgba(255,255,255,.14);
-  border-radius: 7px; background: rgba(8,11,14,.82); text-align: center; pointer-events: none; transition: opacity .14s ease;
+  border-radius: 7px; background: rgba(8,11,14,.82); text-align: center; color: #eef1f4; cursor: pointer; pointer-events: auto; transition: opacity .14s ease;
 }
 .animation-lab__hint strong { font-size: 12px; letter-spacing: .09em; }
 .animation-lab__hint span { color: #9ca7b0; font-size: 10px; }
-.animation-lab__hint.is-hidden { opacity: 0; }
+.animation-lab__hint.is-hidden { opacity: 0; pointer-events: none; visibility: hidden; }
 @media (max-width: 700px) {
   .animation-lab__panel { top: 8px; right: 8px; width: min(360px, calc(100vw - 16px)); max-height: 58vh; }
   .animation-lab__clips { grid-template-columns: 1fr; }
