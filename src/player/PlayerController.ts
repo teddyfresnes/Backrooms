@@ -164,7 +164,19 @@ export class PlayerController {
   private landingFovCompression = 0;
   private cameraClock = 0;
   private cameraMotionEnabled = true;
-  private readonly onPointerLock = (): void => this.callbacks.onLockChange(true);
+  private fallbackPlaying = false;
+  private readonly onFallbackPause = (): void => {
+    if (!this.fallbackPlaying) return;
+    this.fallbackPlaying = false;
+    this.callbacks.onLockChange(false);
+  };
+  private readonly onFallbackKey = (event: KeyboardEvent): void => {
+    if (event.code === 'Escape') this.onFallbackPause();
+  };
+  private readonly onPointerLock = (): void => {
+    this.fallbackPlaying = false;
+    this.callbacks.onLockChange(true);
+  };
   private readonly onPointerUnlock = (): void => this.callbacks.onLockChange(false);
 
   constructor(
@@ -189,14 +201,24 @@ export class PlayerController {
     this.controls.addEventListener('lock', this.onPointerLock);
     this.controls.addEventListener('unlock', this.onPointerUnlock);
     this.pointerDocument.addEventListener('mousemove', this.onMouseMove);
+    this.pointerDocument.addEventListener('keydown', this.onFallbackKey);
+    window.addEventListener('blur', this.onFallbackPause);
   }
 
-  get isLocked(): boolean { return this.controls.isLocked; }
+  get isLocked(): boolean { return this.controls.isLocked || this.fallbackPlaying; }
   get isTraversing(): boolean { return this.traversal !== undefined; }
   get isNoclipEnabled(): boolean { return this.noclipEnabled; }
   get isIncapacitated(): boolean { return this.incapacitated; }
   get isLandingRecovering(): boolean { return this.landingRecoveryTimer > 0; }
-  lock(): void { this.controls.lock(); }
+  lock(): void {
+    // Starting gameplay must not depend on optional browser pointer capture.
+    this.fallbackPlaying = true;
+    this.callbacks.onLockChange(true);
+    try {
+      const request = this.pointerElement.requestPointerLock?.();
+      void Promise.resolve(request).catch(() => { /* Keep ordinary mouse controls. */ });
+    } catch { /* Embedded browsers may deny pointer capture synchronously. */ }
+  }
 
   setIncapacitated(enabled: boolean): void {
     this.incapacitated = enabled;
@@ -804,7 +826,7 @@ export class PlayerController {
     this.previousHorizontalVelocity.set(this.velocity.x, 0, this.velocity.z);
     const wasSprinting = this.sprinting;
 
-    if (!this.controls.isLocked) {
+    if (!this.isLocked) {
       this.consumeInactiveActions();
       this.velocity.multiplyScalar(0.82);
       this.moving = false;
@@ -1822,7 +1844,18 @@ export class PlayerController {
   }
 
   private readonly onMouseMove = (event: MouseEvent): void => {
-    if (!this.controls.isLocked || this.traversal) return;
+    if (!this.isLocked || this.traversal) return;
+    if (!this.controls.isLocked) {
+      // Right-drag looks around without locking the cursor; left click attacks.
+      if (event.target !== this.pointerElement || !(event.buttons & 2)) return;
+      this.lookEuler.setFromQuaternion(this.lookCamera.quaternion, 'YXZ');
+      this.lookEuler.y -= event.movementX * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed;
+      this.lookEuler.x = THREE.MathUtils.clamp(
+        this.lookEuler.x - event.movementY * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed,
+        -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01,
+      );
+      this.lookCamera.quaternion.setFromEuler(this.lookEuler);
+    }
     const rawHorizontal = Number.isFinite(event.movementX) ? event.movementX : 0;
     const rawVertical = Number.isFinite(event.movementY) ? event.movementY : 0;
     if (rawHorizontal !== 0 || rawVertical !== 0) this.lookActivitySerial += 1;
@@ -1863,6 +1896,8 @@ export class PlayerController {
 
   dispose(): void {
     this.pointerDocument.removeEventListener('mousemove', this.onMouseMove);
+    this.pointerDocument.removeEventListener('keydown', this.onFallbackKey);
+    window.removeEventListener('blur', this.onFallbackPause);
     this.controls.removeEventListener('lock', this.onPointerLock);
     this.controls.removeEventListener('unlock', this.onPointerUnlock);
     this.controls.disconnect();
