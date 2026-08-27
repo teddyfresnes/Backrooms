@@ -709,7 +709,7 @@ export const createCombatStrikeUpperClip = (
       if (angularDelta > stability.maxRadians) {
         enveloped
           .copy(identity)
-          .slerp(enveloped, stability.maxRadians / Math.max(1e-5, angularDelta))
+          .slerp(delta, Math.min(envelope * stability.gain, 1) * stability.maxRadians / Math.max(1e-5, angularDelta))
           .normalize();
       }
 
