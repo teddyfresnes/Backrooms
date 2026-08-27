@@ -6,6 +6,39 @@ export const easeCombat = (value: number): number => {
   return t * t * t * (t * (t * 6 - 15) + 10);
 };
 
+/** AnimationMixer skips unchanged tracks. Restore the animation pose before
+ * evaluating another frame so IK, look and impact offsets never feed back. */
+export class CombatProceduralPose {
+  private root?: THREE.Object3D;
+  private bones: Array<{ bone: THREE.Bone; rotation: THREE.Quaternion; position: THREE.Vector3 }> = [];
+  private captured = false;
+  restore(enabled = true): void {
+    if (this.captured && enabled) for (const pose of this.bones) {
+      pose.bone.quaternion.copy(pose.rotation);
+      pose.bone.position.copy(pose.position);
+    }
+    this.captured = false;
+  }
+  capture(root: THREE.Object3D | undefined): void {
+    if (!root) return;
+    if (root !== this.root) {
+      this.root = root;
+      this.bones = [];
+      root.traverse(object => {
+        if ((object as THREE.Bone).isBone) this.bones.push({ bone: object as THREE.Bone,
+          rotation: new THREE.Quaternion(), position: new THREE.Vector3() });
+      });
+    }
+    for (const pose of this.bones) {
+      pose.rotation.copy(pose.bone.quaternion);
+      pose.position.copy(pose.bone.position);
+    }
+    this.captured = true;
+  }
+}
+
+const hingeNormals = new WeakMap<THREE.Bone, THREE.Vector3>();
+
 function aimBone(bone: THREE.Bone, direction: THREE.Vector3, wanted: THREE.Vector3): void {
   if (direction.lengthSq() < 1e-10 || wanted.lengthSq() < 1e-10) return;
   const correction = new THREE.Quaternion().setFromUnitVectors(direction.normalize(), wanted.normalize());
@@ -44,7 +77,26 @@ export function solveCombatTwoBone(
   const height = Math.sqrt(Math.max(0, lengthA * lengthA - along * along));
   const elbow = a.clone().addScaledVector(axis, along).addScaledVector(bend, height);
   const tip = a.clone().addScaledVector(axis, reach);
+  // Preserve the anatomical hinge plane, not just the joint positions. A swing
+  // alone can reach the right point while rolling the thigh/elbow by 90 degrees.
+  let localNormal = hingeNormals.get(upper);
+  if (!localNormal) {
+    const normal = b.clone().sub(a).cross(c.clone().sub(b));
+    if (normal.lengthSq() < 1e-8) normal.copy(b).sub(a).cross(bend);
+    localNormal = normal.normalize().applyQuaternion(upper.getWorldQuaternion(new THREE.Quaternion()).invert());
+    hingeNormals.set(upper, localNormal);
+  }
   aimBone(upper, b.clone().sub(a), elbow.clone().sub(a));
+  const upperAxis = elbow.clone().sub(a).normalize();
+  const desiredNormal = elbow.clone().sub(a).cross(tip.clone().sub(elbow)).normalize();
+  const currentNormal = localNormal.clone().applyQuaternion(upper.getWorldQuaternion(new THREE.Quaternion()));
+  currentNormal.addScaledVector(upperAxis, -currentNormal.dot(upperAxis)).normalize();
+  const twist = Math.atan2(upperAxis.dot(currentNormal.clone().cross(desiredNormal)), currentNormal.dot(desiredNormal));
+  const worldRotation = upper.getWorldQuaternion(new THREE.Quaternion())
+    .premultiply(new THREE.Quaternion().setFromAxisAngle(upperAxis, twist));
+  const parentRotation = upper.parent?.getWorldQuaternion(new THREE.Quaternion()).invert() ?? new THREE.Quaternion();
+  upper.quaternion.copy(parentRotation.multiply(worldRotation)).normalize();
+  upper.updateWorldMatrix(false, true);
   lower.getWorldPosition(b);
   end.getWorldPosition(c);
   aimBone(lower, c.sub(b), tip.sub(b));
