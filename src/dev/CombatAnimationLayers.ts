@@ -107,6 +107,7 @@ interface DirectionalBlendClipOptions {
   readonly lowerBodyLateralWeight: number;
   readonly upperBodyLateralWeight: number;
   readonly sampleCount?: number;
+  readonly lateralPhaseOffset?: number;
 }
 
 const sampleNumericTrack = (
@@ -159,6 +160,7 @@ const createBlendedTrack = (
   lateralTrack: THREE.KeyframeTrack | undefined,
   times: Float32Array,
   lateralWeight: number,
+  lateralPhaseOffset = 0,
 ): THREE.KeyframeTrack => {
   const valueSize = forwardTrack.getValueSize();
   const values = new Float32Array(times.length * valueSize);
@@ -170,7 +172,8 @@ const createBlendedTrack = (
     const phase = times.length <= 1 ? 0 : frame / (times.length - 1);
     sampleNumericTrack(forwardTrack, phase, forwardSample);
     if (lateralTrack && lateralTrack.constructor === forwardTrack.constructor && lateralTrack.getValueSize() === valueSize) {
-      sampleNumericTrack(lateralTrack, phase, lateralSample);
+      const lateralPhase = lateralPhaseOffset === 0 ? phase : ((phase + lateralPhaseOffset) % 1 + 1) % 1;
+      sampleNumericTrack(lateralTrack, lateralPhase, lateralSample);
     } else {
       for (let i = 0; i < valueSize; i += 1) lateralSample[i] = forwardSample[i]!;
     }
@@ -230,7 +233,7 @@ export const createDirectionalLocomotionBlendClip = (
       0,
       1,
     );
-    return createBlendedTrack(track, lateralTracks.get(track.name), times, weight);
+    return createBlendedTrack(track, lateralTracks.get(track.name), times, weight, options.lateralPhaseOffset);
   });
   const clip = new THREE.AnimationClip(name, duration, tracks);
   clip.optimize();

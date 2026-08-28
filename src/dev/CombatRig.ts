@@ -52,6 +52,7 @@ function aimBone(bone: THREE.Bone, direction: THREE.Vector3, wanted: THREE.Vecto
 export function solveCombatTwoBone(
   upper: THREE.Bone, lower: THREE.Bone, end: THREE.Bone,
   target: Readonly<THREE.Vector3>, weight: number, pole?: Readonly<THREE.Vector3>,
+  maxReachFraction = 0.975,
 ): void {
   const blend = THREE.MathUtils.clamp(weight, 0, 1);
   if (blend <= 1e-6 || !Number.isFinite(target.x + target.y + target.z)) return;
@@ -64,7 +65,8 @@ export function solveCombatTwoBone(
   const upperBefore = upper.quaternion.clone(), lowerBefore = lower.quaternion.clone();
   const axis = new THREE.Vector3().copy(target).sub(a);
   if (axis.lengthSq() < 1e-9) return;
-  const reach = THREE.MathUtils.clamp(axis.length(), Math.abs(lengthA - lengthB) + 0.035, (lengthA + lengthB) * 0.975);
+  const reach = THREE.MathUtils.clamp(axis.length(), Math.abs(lengthA - lengthB) + 0.035,
+    (lengthA + lengthB) * THREE.MathUtils.clamp(maxReachFraction, 0.90, 0.999));
   axis.normalize();
   const bend = pole ? new THREE.Vector3().copy(pole) : b.clone().sub(a);
   bend.addScaledVector(axis, -bend.dot(axis));

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GaitTransition, sampleGaitPhase, alignGaitPhase } from './LocomotionBlend';
 import { advanceStrikeClock, CombatImpactAudio } from './CombatFeel';
 import { sweepCombatContact, combatChainReady, CombatBalance, stepCombatSpring } from './CombatContact';
 import { solveCombatTwoBone, easeCombat, CombatPoseHandoff, CombatMotionHistory, CombatProceduralPose } from './CombatRig';
@@ -1177,6 +1178,9 @@ const isDiagonalLocomotion = (id: AnimationId): boolean =>
   || id === 'walking-forward-right'
   || id === 'running-forward-left'
   || id === 'running-forward-right';
+// Cadence reference speeds for the in-place gait clips, independent of capsule speed caps.
+const WALK_GAIT_REFERENCE_SPEED = 2.05;
+const RUN_GAIT_REFERENCE_SPEED = 4.8;
 const isCycleLocomotionAnimation = (id: AnimationId): boolean =>
   id === 'walking'
   || id === 'running'
@@ -1250,7 +1254,8 @@ const isIdleSequenceOneShot = (id: AnimationId): boolean =>
   || id === 'idle-wait-2'
   || id === 'idle-action-to-standing-idle';
 const needsHipVerticalMotion = (id: AnimationId): boolean =>
-  id.startsWith('crouch-')
+  isCycleLocomotionAnimation(id)
+  || id.startsWith('crouch-')
   || isPostureTransition(id)
   || id === 'running-slide'
   || id === 'punching-1'
@@ -1383,7 +1388,7 @@ const transitionFadeSeconds = (from: AnimationId, to: AnimationId): number => {
   if (from === 'running-slide' && to === 'crouch-idle') return 0.28;
   if (from === 'running' && (to === 'walking' || to === 'idle-action' || to === 'idle')) return 0.3;
   if (from === 'walking' && (to === 'idle-action' || to === 'idle')) return 0.24;
-  if (isCycleLocomotionAnimation(from) && isCycleLocomotionAnimation(to)) return 0.14;
+  if (isCycleLocomotionAnimation(from) && isCycleLocomotionAnimation(to)) return 0.22;
   if (isDiagonalLocomotion(from) || isDiagonalLocomotion(to)) return 0.22;
   if (to === 'standing-idle-to-fight-idle' || to === 'action-idle-to-fight-idle') return 0.10;
   if (to === 'fight-idle-to-action-idle' || to === 'fight-idle-to-standing-idle') return 0.10;
@@ -1506,6 +1511,16 @@ export class AnimationLab {
   private readonly combatStrikeDesiredDir = new THREE.Vector3();
   private readonly animations = new Map<AnimationId, LoadedAnimation>();
   private readonly firstPersonAnimations = new Map<AnimationId, LoadedAnimation>();
+  private readonly gaitTransition = new GaitTransition();
+  private readonly gaitLandmarks = new Map<AnimationId, number>();
+  private visualRunning = false;
+  private readonly locomotionPreviousVelocity = new THREE.Vector3();
+  private locomotionPitch = 0;
+  private locomotionRoll = 0;
+  private readonly gaitFootPlants = [
+    { point: new THREE.Vector3(), locked: false, weight: 0 },
+    { point: new THREE.Vector3(), locked: false, weight: 0 },
+  ];
   private combatUpperLayer?: CombatLayerPair;
   private readonly combatLowerLayers = new Map<CombatLowerAnimation, CombatLayerPair>();
   private readonly combatAttackLayers = new Map<CombatAttackAnimation, CombatLayerPair>();
@@ -2357,7 +2372,9 @@ export class AnimationLab {
       this.firstPersonAnimations.set(entry.id, { clip, action: firstPersonAction });
     }));
 
+    this.prepareGaitLandmarks();
     this.prepareDirectionalLocomotionAnimations();
+    this.prepareGaitLandmarks();
     this.prepareCombatAnimationLayers();
 
     // The room NPC is now a real melee test opponent: it can enter guard, attack,
@@ -2447,6 +2464,16 @@ export class AnimationLab {
     this.updateNpcUi();
   }
 
+  private prepareGaitLandmarks(): void {
+    if (!this.character) return;
+    const sampleRig = cloneSkeleton(this.character);
+    for (const [id, loaded] of this.animations) {
+      if (isCycleLocomotionAnimation(id) && !this.gaitLandmarks.has(id)) {
+        this.gaitLandmarks.set(id, sampleGaitPhase(sampleRig, loaded.clip));
+      }
+    }
+  }
+
   private prepareDirectionalLocomotionAnimations(): void {
     if (!this.mixer || !this.firstPersonMixer) return;
     const specs: ReadonlyArray<readonly [AnimationId, AnimationId, AnimationId, number, number]> = [
@@ -2463,7 +2490,8 @@ export class AnimationLab {
         forward,
         lateral,
         `AnimationLab_${id}`,
-        { lowerBodyLateralWeight, upperBodyLateralWeight, sampleCount: 49 },
+        { lowerBodyLateralWeight, upperBodyLateralWeight, sampleCount: 49,
+          lateralPhaseOffset: (this.gaitLandmarks.get(lateralId) ?? 0) - (this.gaitLandmarks.get(forwardId) ?? 0) },
       );
       const action = this.mixer.clipAction(clip);
       action.enabled = true;
@@ -3142,6 +3170,15 @@ export class AnimationLab {
       : previousPhase;
     const next = loaded.action;
     const firstPersonNext = firstPersonLoaded.action;
+    const gaitBlend = loop && previous === previousLoaded?.action
+      && (isCycleLocomotionAnimation(previousAnimation) || previousAnimation === 'idle' || previousAnimation === 'idle-action')
+      && (isCycleLocomotionAnimation(id) || id === 'idle' || id === 'idle-action');
+    if (gaitBlend) {
+      const pairs = [...this.animations].map(([key, value]) => ({
+        thirdPerson: value.action, firstPerson: this.firstPersonAnimations.get(key)!.action,
+      }));
+      this.gaitTransition.begin(pairs, next, transitionFadeSeconds(previousAnimation, id));
+    } else this.gaitTransition.release(id.startsWith('hit-') ? 0.035 : 0.12);
     const prepareAction = (action: THREE.AnimationAction, clip: THREE.AnimationClip): void => {
       action.reset();
       action.enabled = true;
@@ -3159,8 +3196,10 @@ export class AnimationLab {
       // Direction changes must continue the current step rather than restarting
       // the next FBX at frame zero. This is what prevents rapid Q/D or A/D
       // changes from visually freezing the knees while the capsule slides.
-      next.time = previousPhase * Math.max(1e-5, loaded.clip.duration);
-      firstPersonNext.time = previousFirstPersonPhase * Math.max(1e-5, firstPersonLoaded.clip.duration);
+      const oldLandmark = this.gaitLandmarks.get(previousAnimation) ?? 0;
+      const newLandmark = this.gaitLandmarks.get(id) ?? 0;
+      next.time = alignGaitPhase(previousPhase, oldLandmark, newLandmark) * loaded.clip.duration;
+      firstPersonNext.time = alignGaitPhase(previousFirstPersonPhase, oldLandmark, newLandmark) * firstPersonLoaded.clip.duration;
     }
 
     // Hit reactions must read on the exact contact frame. A long locomotion-style
@@ -3172,8 +3211,9 @@ export class AnimationLab {
         && (isTurnAnimation(this.currentAnimation) || isTurnAnimation(id))
         ? 0.17
         : transitionFadeSeconds(this.currentAnimation, id);
-    if (previous && previous !== next) next.crossFadeFrom(previous, transitionFade, false);
-    if (firstPersonPrevious && firstPersonPrevious !== firstPersonNext) {
+    if (gaitBlend) this.gaitTransition.update(0);
+    else if (previous && previous !== next) next.crossFadeFrom(previous, transitionFade, false);
+    if (!gaitBlend && firstPersonPrevious && firstPersonPrevious !== firstPersonNext) {
       firstPersonNext.crossFadeFrom(firstPersonPrevious, transitionFade, false);
     }
 
@@ -3203,8 +3243,11 @@ export class AnimationLab {
       this.autoCandidate = id;
       this.autoCandidateElapsed = 0;
       const signedRate = Math.max(0.05, Math.abs(rate)) * (reverse ? -1 : 1);
-      this.currentAction?.setEffectiveTimeScale(signedRate);
-      this.firstPersonCurrentAction?.setEffectiveTimeScale(signedRate);
+      const smoothedRate = isCycleLocomotionAnimation(id) && this.currentAction
+        ? THREE.MathUtils.lerp(this.currentAction.getEffectiveTimeScale(), signedRate, expAlpha(delta, 14))
+        : signedRate;
+      this.currentAction?.setEffectiveTimeScale(smoothedRate);
+      this.firstPersonCurrentAction?.setEffectiveTimeScale(smoothedRate);
       return;
     }
 
@@ -3364,6 +3407,7 @@ export class AnimationLab {
 
   private startCombatLayers(): void {
     if (!this.player || !this.combatUpperLayer) return;
+    this.gaitTransition.release(0.16);
     const state = this.player.getDebugState();
     const intent = this.player.getMovementIntent();
     const moving = state.horizontalSpeed >= 0.20 || Math.abs(intent.forward) > 0.05 || Math.abs(intent.right) > 0.05;
@@ -4538,6 +4582,7 @@ export class AnimationLab {
       return 'get-up-kick';
     }
     if (this.npcRagdoll) {
+      if (this.npcRagdoll.getGroundKickSurface(this.avatarAnchor.position, target)) return 'stomp';
       this.npcRagdoll.getPelvisPose(this.groundKickTargetPelvis, this.tempQuaternionA);
       this.npcRagdoll.getHeadPose(this.groundKickTargetHead, this.tempQuaternionB);
       target.copy(this.groundKickTargetPelvis).lerp(this.groundKickTargetHead, 0.30);
@@ -4601,7 +4646,7 @@ export class AnimationLab {
     const knee = lower.getWorldPosition(new THREE.Vector3());
     const ankle = foot.getWorldPosition(new THREE.Vector3());
     const legReach = (hip.distanceTo(knee) + knee.distanceTo(ankle)) * 0.96;
-    const targetPoint = this.groundKickTargetPoint.clone().add(new THREE.Vector3(0, 0.10, 0));
+    const targetPoint = this.groundKickTargetPoint.clone().add(new THREE.Vector3(0, 0.055, 0));
     const horizontal = Math.hypot(targetPoint.x - hip.x - Math.sin(targetYaw) * 0.14,
       targetPoint.z - hip.z - Math.cos(targetYaw) * 0.14);
     const verticalReach = Math.sqrt(Math.max(0.01, legReach * legReach - horizontal * horizontal));
@@ -4609,7 +4654,7 @@ export class AnimationLab {
       footStart: ankle,
       supportStart: support.getWorldPosition(new THREE.Vector3()),
       supportRotation: support.getWorldQuaternion(new THREE.Quaternion()),
-      pelvisDrop: THREE.MathUtils.clamp(hip.y - targetPoint.y - verticalReach, 0.10, 0.30),
+      pelvisDrop: THREE.MathUtils.clamp(hip.y - targetPoint.y - verticalReach, 0.04, 0.20),
       footRotation: foot.getWorldQuaternion(new THREE.Quaternion()),
       targetPoint,
       previousTarget: this.groundKickTargetPoint.clone(),
@@ -4631,14 +4676,14 @@ export class AnimationLab {
     this.playAutoImmediate('fight-idle', true, 1);
     this.player.setInputEnabled(false, true);
 
-    if (distance > 1.03) {
-      const missing = Math.max(0, distance - 0.90);
-      const speed = THREE.MathUtils.clamp(missing / Math.max(0.16, this.groundKick.impactTime), 0.45, 1.60);
+    if (distance > 0.76) {
+      const missing = Math.max(0, distance - 0.70);
+      const speed = THREE.MathUtils.clamp(missing / 0.20, 0.45, 1.60);
       this.combatStrikeForwardAxis.set(Math.sin(targetYaw), 0, Math.cos(targetYaw)).normalize();
       this.player.applyCombatLunge(
         this.combatStrikeForwardAxis,
         speed,
-        Math.min(0.14, this.groundKick.impactTime),
+        0.20,
         profile.impactFraction,
         'strike',
       );
@@ -4670,7 +4715,7 @@ export class AnimationLab {
     // point during that preparation only; once the leg drives, commit and allow
     // a real miss. Root orientation stays fixed and cannot chase a rolling body.
     if (liveKind && normalizedBeforeStep < 0.30) {
-      const landing = this.groundKickTargetPoint.clone().add(new THREE.Vector3(0, 0.10, 0));
+      const landing = this.groundKickTargetPoint.clone().add(new THREE.Vector3(0, 0.055, 0));
       if (landing.distanceTo(kick.targetPoint) < 0.40) {
         kick.targetPoint.lerp(landing, 1 - Math.exp(-Math.max(0, delta) * 24));
       }
@@ -4683,9 +4728,8 @@ export class AnimationLab {
     this.bodyYaw = kick.startYaw + wrapAngleRadians(kick.targetYaw - kick.startYaw) * turnBlend;
     this.avatarAnchor.rotation.y = this.bodyYaw;
 
-    if (distance > 1.02 && normalizedBeforeStep < 0.18) {
-      const profile = GROUND_KICK_PROFILES[kick.kind];
-      const missing = Math.max(0, distance - 0.90);
+    if (distance > 0.76 && normalizedBeforeStep < 0.22) {
+      const missing = Math.max(0, distance - 0.70);
       const lockedForward = this.combatStrikeForwardAxis.set(
         Math.sin(kick.targetYaw), 0, Math.cos(kick.targetYaw),
       ).normalize();
@@ -4694,7 +4738,7 @@ export class AnimationLab {
         THREE.MathUtils.clamp(missing / Math.max(0.08, kick.impactTime - kick.elapsed), 0.35, 1.60),
       );
     }
-    if (normalizedBeforeStep >= 0.18) this.player.cancelCombatLunge();
+    if (normalizedBeforeStep >= 0.24) this.player.cancelCombatLunge();
     kick.elapsed += Math.max(0, delta);
     if (kick.elapsed < kick.duration) return true;
     this.player.cancelCombatLunge();
@@ -4721,7 +4765,7 @@ export class AnimationLab {
     const forward = new THREE.Vector3(Math.sin(kick.targetYaw), 0, Math.cos(kick.targetYaw));
     const right = new THREE.Vector3(forward.z, 0, -forward.x);
     // One short placement step during load; support is planted before extension.
-    if (t <= 0.18) supportFoot.getWorldPosition(kick.supportStart);
+    if (t <= 0.24) supportFoot.getWorldPosition(kick.supportStart);
     // Load the planted leg and move the pelvis over it before extending. A
     // fixed upright pelvis made the foot stop short at the leg's reach limit.
     // This is a bounded weight transfer, not extra limb length or target reach.
@@ -4736,7 +4780,7 @@ export class AnimationLab {
         const horizontal = Math.hypot(kick.targetPoint.x - hip.x - forward.x * 0.14,
           kick.targetPoint.z - hip.z - forward.z * 0.14);
         const vertical = Math.sqrt(Math.max(0.01, reach * reach - horizontal * horizontal));
-        kick.pelvisDrop = THREE.MathUtils.clamp(hip.y - kick.targetPoint.y - vertical, 0.10, 0.38);
+        kick.pelvisDrop = THREE.MathUtils.clamp(hip.y - kick.targetPoint.y - vertical, 0.04, 0.22);
       }
       const supportOffset = kick.supportStart.clone().sub(pelvis).dot(right);
       pelvis.addScaledVector(forward, 0.14 * pose.supportLoad);
@@ -4745,21 +4789,28 @@ export class AnimationLab {
       this.hipsBone.position.copy(this.hipsBone.parent.worldToLocal(pelvis));
       this.hipsBone.updateWorldMatrix(false, true);
     }
-    const chamber = kick.footStart.clone().lerp(kick.targetPoint, kick.kind === 'stomp' ? 0.70 : 0.52);
-    chamber.y = Math.min(upper.getWorldPosition(new THREE.Vector3()).y - 0.16,
-      Math.max(kick.footStart.y + 0.34, kick.targetPoint.y + 0.22));
+    const downward = kick.kind === 'stomp' || kick.targetPoint.y - this.avatarAnchor.position.y < 0.55;
+    const chamber = kick.footStart.clone().lerp(kick.targetPoint, downward ? 1 : 0.65);
+    chamber.y = Math.min(upper.getWorldPosition(new THREE.Vector3()).y - 0.12,
+      Math.max(kick.footStart.y + 0.38, kick.targetPoint.y + 0.24));
     const target = new THREE.Vector3();
-    if (t < 0.30) target.lerpVectors(kick.footStart, chamber, easeCombat(t / 0.30));
-    else if (t < 0.53) target.lerpVectors(chamber, kick.targetPoint, easeCombat((t - 0.30) / 0.23));
-    else if (t < 0.72) target.lerpVectors(kick.targetPoint, chamber, easeCombat((t - 0.53) / 0.19));
-    else target.lerpVectors(chamber, kick.footStart, easeCombat((t - 0.72) / 0.28));
+    if (t < 0.32) {
+      target.lerpVectors(kick.footStart, chamber, easeCombat(t / 0.32));
+      target.y += Math.sin(Math.PI * t / 0.32) * 0.09;
+    } else if (t < 0.53) target.lerpVectors(chamber, kick.targetPoint, easeCombat((t - 0.32) / 0.21));
+    else if (t < 0.60) target.copy(kick.targetPoint);
+    else {
+      const retract = easeCombat((t - 0.60) / 0.40);
+      target.lerpVectors(kick.targetPoint, kick.footStart, retract);
+      target.y += Math.sin(Math.PI * retract) * 0.13;
+    }
     const weight = easeCombat(t / 0.10) * (1 - easeCombat((t - 0.85) / 0.15));
     solveCombatTwoBone(supportUpper, supportLower, supportFoot, kick.supportStart, weight, forward);
     solveCombatTwoBone(upper, lower, foot, target, weight, forward);
     // Sole orientation is derived from the starting foot frame, never an Euler
     // accumulation. It stays level for a stomp and tilts at most 12 degrees.
     const worldFoot = kick.footRotation.clone().premultiply(new THREE.Quaternion().setFromAxisAngle(right,
-      THREE.MathUtils.degToRad(kick.kind === 'stomp' ? 6 : -12) * pose.drive));
+      THREE.MathUtils.degToRad(downward ? 2 : -10) * pose.drive));
     const parent = foot.parent!.getWorldQuaternion(new THREE.Quaternion()).invert();
     foot.quaternion.slerp(parent.multiply(worldFoot), weight).normalize();
     const supportParent = supportFoot.parent!.getWorldQuaternion(new THREE.Quaternion()).invert();
@@ -6004,6 +6055,21 @@ export class AnimationLab {
       this.idleNpcAnchor?.updateMatrixWorld(true);
     }
     if (!player) return;
+    this.gaitTransition.update(delta);
+    if (this.currentAction && isCycleLocomotionAnimation(this.currentAnimation)
+      && this.currentAction === this.animations.get(this.currentAnimation)?.action) {
+      const current = this.currentAction;
+      const duration = current.getClip().duration;
+      for (const [id, loaded] of this.animations) {
+        if (loaded.action === current || !isCycleLocomotionAnimation(id) || !loaded.action.isRunning()) continue;
+        const phase = alignGaitPhase(current.time / duration,
+          this.gaitLandmarks.get(this.currentAnimation) ?? 0, this.gaitLandmarks.get(id) ?? 0);
+        for (const action of [loaded.action, this.firstPersonAnimations.get(id)!.action]) {
+          action.time = phase * loaded.clip.duration;
+          action.setEffectiveTimeScale(current.getEffectiveTimeScale() * loaded.clip.duration / duration);
+        }
+      }
+    }
     this.mixer?.update(delta);
     this.firstPersonMixer?.update(delta);
     if (this.combatAttack && this.combatAttackAction) {
@@ -6100,7 +6166,7 @@ export class AnimationLab {
     }
     if (this.npcRagdoll) {
       this.npcDownElapsed += dt;
-      if (this.npcRagdoll.isSettled) this.npcRagdoll.setPlayerTraversalEnabled(true);
+      this.npcRagdoll.setPlayerTraversalEnabled(true);
       if (npcGroundRecoveryReady(
         this.npcHealth > 0,
         this.npcRagdoll.isRecoveryReady,
@@ -7064,7 +7130,7 @@ export class AnimationLab {
     }
 
     const standingMoveIntent = Math.abs(intent.forward) > 0.05 || Math.abs(intent.right) > 0.05;
-    if (speed < 0.24 && !standingMoveIntent) {
+    if (speed < 0.08 && !standingMoveIntent) {
       // New Action-Idle turns are AUTO-only for genuine reorientation. Normal
       // and Big variants are selected from the look angle in ThirdPersonLook.
       // Root rotation is stripped: PlayerController/body yaw stays authoritative.
@@ -7087,71 +7153,139 @@ export class AnimationLab {
     let id: AnimationId;
     let rate = 1;
     let reverse = false;
-    // Animation direction follows the keys, not the inertial velocity vector.
-    // With velocity thresholds a diagonal Z+Q/Z+D input could intermittently
-    // fall back to Walking while acceleration/body yaw caught up.
+    // Feet follow the actual travel vector through acceleration, braking and
+    // reversals. Run entry has speed hysteresis, so pressing Shift at rest
+    // cannot instantly play a full sprint over a nearly stationary capsule.
     const bodyViewOffsetDegrees = Math.abs(THREE.MathUtils.radToDeg(
       wrapAngleRadians(this.continuousViewYaw - this.bodyYaw),
     ));
     const bodyCatchupActive = bodyViewOffsetDegrees > 24;
-    const localVelocityIsLateral = Math.abs(rightSpeed) > Math.max(0.24, Math.abs(forwardSpeed) * 0.72);
-    const lateralIntent = bodyCatchupActive
-      ? localVelocityIsLateral
-      : Math.abs(this.visualMovementRightIntent) > 0.15;
+    const travelForward = speed > 0.32 ? forwardSpeed / speed : intent.forward;
+    const travelRight = speed > 0.32 ? rightSpeed / speed : this.visualMovementRightIntent;
+    const lateralIntent = Math.abs(travelRight) > 0.54;
+    this.visualRunning = speed > (this.visualRunning ? 3.10 : 3.75) && forwardSpeed > 0.25;
     const diagonalIntent = forwardDiagonalAnimation(
-      intent.forward,
-      this.visualMovementRightIntent,
-      state.sprinting,
+      travelForward,
+      travelRight,
+      this.visualRunning,
     );
-    const sprintFacingReady = state.sprinting && bodyViewOffsetDegrees <= 62;
+    const sprintFacingReady = this.visualRunning && bodyViewOffsetDegrees <= 62;
 
     if (sprintFacingReady && diagonalIntent?.startsWith('running-forward-')) {
       // Z+Q / Z+D gets its own generated run cycle: forward run cadence remains
       // dominant while the lower body borrows enough strafe motion to read as
       // a real diagonal rather than snapping between "straight" and "sideways".
       id = diagonalIntent;
-      rate = THREE.MathUtils.clamp(speed / MOVEMENT_TUNING.locomotion.sprintSpeed, 0.72, 1.45);
+      rate = THREE.MathUtils.clamp(speed / RUN_GAIT_REFERENCE_SPEED, 0.35, 1.45);
     } else if (sprintFacingReady) {
       // Once the torso is reasonably aligned, sprint uses the authored forward
       // run. Before that point, backward/strafe walk cycles keep the feet honest
       // while the body turns toward the camera-relative travel direction.
       id = 'running';
-      rate = THREE.MathUtils.clamp(speed / MOVEMENT_TUNING.locomotion.sprintSpeed, 0.72, 1.45);
+      rate = THREE.MathUtils.clamp(speed / RUN_GAIT_REFERENCE_SPEED, 0.35, 1.45);
     } else if (!bodyCatchupActive && diagonalIntent?.startsWith('walking-forward-')) {
       id = diagonalIntent;
-      rate = THREE.MathUtils.clamp(Math.max(speed, standingMoveIntent ? 0.46 : 0) / MOVEMENT_TUNING.locomotion.walkSpeed, 0.62, 1.45);
+      rate = THREE.MathUtils.clamp(speed / WALK_GAIT_REFERENCE_SPEED, 0.16, 1.45);
     } else if (lateralIntent) {
-      const strafeRight = bodyCatchupActive ? rightSpeed > 0 : this.visualMovementRightIntent > 0;
+      const strafeRight = travelRight > 0;
       id = strafeRight ? 'right-strafe-walking' : 'left-strafe-walking';
-      rate = THREE.MathUtils.clamp(speed / MOVEMENT_TUNING.locomotion.walkSpeed, 0.62, 1.6);
+      rate = THREE.MathUtils.clamp(speed / WALK_GAIT_REFERENCE_SPEED, 0.16, 1.6);
     } else if (state.sprinting && bodyCatchupActive) {
       id = 'walking';
       reverse = forwardSpeed < -0.12;
-      rate = THREE.MathUtils.clamp(speed / MOVEMENT_TUNING.locomotion.walkSpeed, 0.72, 1.65);
+      rate = THREE.MathUtils.clamp(speed / WALK_GAIT_REFERENCE_SPEED, 0.16, 1.65);
     } else if (speed > MOVEMENT_TUNING.locomotion.walkSpeed * 1.38) {
       id = 'running';
       reverse = forwardSpeed < -0.2;
-      rate = THREE.MathUtils.clamp(speed / MOVEMENT_TUNING.locomotion.sprintSpeed, 0.72, 1.45);
+      rate = THREE.MathUtils.clamp(speed / RUN_GAIT_REFERENCE_SPEED, 0.35, 1.45);
     } else {
       id = 'walking';
       reverse = forwardSpeed < -0.12;
-      rate = THREE.MathUtils.clamp(Math.max(speed, standingMoveIntent ? 0.46 : 0) / MOVEMENT_TUNING.locomotion.walkSpeed, 0.62, 1.45);
+      rate = THREE.MathUtils.clamp(speed / WALK_GAIT_REFERENCE_SPEED, 0.16, 1.45);
     }
 
-    if (standingMoveIntent && speed < 0.24) {
-      // Start locomotion on the input frame instead of waiting for inertial
-      // speed and the generic animation candidate debounce. This is especially
-      // visible when moving with the camera behind the avatar: the feet begin
-      // a backward/strafe cycle immediately while the body turns around.
+    if (standingMoveIntent && speed < 0.24 && !isCycleLocomotionAnimation(this.currentAnimation)) {
+      // Begin a slow placement step immediately; cadence grows with speed.
+      // Repeated input frames must not bypass the rate smoothing below.
       this.playAutoImmediate(id, true, rate, reverse);
     } else {
       this.requestAutoAnimation(id, true, rate, reverse, delta, force);
     }
   }
 
+  private applyLocomotionWeightShift(delta: number): void {
+    if (!this.player) return;
+    const state = this.player.getDebugState();
+    const velocity = new THREE.Vector3(state.velocity.x, 0, state.velocity.z);
+    const acceleration = velocity.clone().sub(this.locomotionPreviousVelocity).divideScalar(Math.max(delta, 1 / 240));
+    this.locomotionPreviousVelocity.copy(velocity);
+    const gait = isCycleLocomotionAnimation(this.currentAnimation) || this.currentAnimation === 'idle-action';
+    const active = gait && state.grounded && this.combatPhase === 'none' && !this.combatHitReaction && !this.groundKick;
+    const forward = new THREE.Vector3(Math.sin(this.bodyYaw), 0, Math.cos(this.bodyYaw));
+    const right = new THREE.Vector3(forward.z, 0, -forward.x);
+    const pitch = active ? THREE.MathUtils.clamp(acceleration.dot(forward) * 0.004, -0.065, 0.075) : 0;
+    const roll = active ? THREE.MathUtils.clamp(-acceleration.dot(right) * 0.0035, -0.055, 0.055) : 0;
+    this.locomotionPitch = THREE.MathUtils.lerp(this.locomotionPitch, pitch, expAlpha(delta, 9));
+    this.locomotionRoll = THREE.MathUtils.lerp(this.locomotionRoll, roll, expAlpha(delta, 9));
+    if (!active) return;
+    for (const [lower, upper] of [[this.combatSpineBone, this.combatSpine1Bone],
+      [this.firstPersonCombatSpineBone, this.firstPersonCombatSpine1Bone]]) {
+      this.applyWorldAxisOffset(lower, right, this.locomotionPitch * 0.45);
+      this.applyWorldAxisOffset(upper, right, this.locomotionPitch * 0.55);
+      this.applyWorldAxisOffset(lower, forward, this.locomotionRoll * 0.45);
+      this.applyWorldAxisOffset(upper, forward, this.locomotionRoll * 0.55);
+    }
+  }
+
+  private applyLocomotionFootPlants(delta: number): void {
+    const state = this.player?.getDebugState();
+    const active = state?.grounded && state.horizontalSpeed > 0.12 && this.combatPhase === 'none'
+      && isCycleLocomotionAnimation(this.currentAnimation) && !this.currentAnimation.startsWith('crouch')
+      && !this.groundKick && !this.combatHitReaction;
+    if (!active) {
+      for (const plant of this.gaitFootPlants) { plant.locked = false; plant.weight = 0; }
+      return;
+    }
+    const legs = [[this.leftUpperLegBone, this.leftLowerLegBone, this.leftFootBone],
+      [this.rightUpperLegBone, this.rightLowerLegBone, this.rightFootBone]];
+    const firstLegs = [[this.firstPersonLeftUpperLegBone, this.firstPersonLeftLowerLegBone, this.firstPersonLeftFootBone],
+      [this.firstPersonRightUpperLegBone, this.firstPersonRightLowerLegBone, this.firstPersonRightFootBone]];
+    const forward = new THREE.Vector3(Math.sin(this.bodyYaw), 0, Math.cos(this.bodyYaw));
+    this.avatarAnchor.updateMatrixWorld(true);
+    for (let i = 0; i < legs.length; i++) {
+      const [upper, lower, foot] = legs[i]!;
+      if (!upper || !lower || !foot) continue;
+      const plant = this.gaitFootPlants[i]!;
+      const ankle = foot.getWorldPosition(new THREE.Vector3());
+      const height = ankle.y - this.avatarAnchor.position.y;
+      const hip = upper.getWorldPosition(new THREE.Vector3());
+      const knee = lower.getWorldPosition(new THREE.Vector3());
+      const reach = hip.distanceTo(knee) + knee.distanceTo(ankle);
+      if (plant.locked && (height > 0.155 || hip.distanceTo(plant.point) > reach * 0.997
+        || Math.abs(plant.point.y - ankle.y) > 0.10)) plant.locked = false;
+      if (!plant.locked && plant.weight < 0.02 && height < 0.105) {
+        plant.point.copy(ankle); plant.locked = true;
+      }
+      plant.weight = THREE.MathUtils.lerp(plant.weight, plant.locked ? 1 : 0, expAlpha(delta, plant.locked ? 40 : 26));
+      if (plant.weight < 0.002) continue;
+      const rotation = foot.getWorldQuaternion(new THREE.Quaternion());
+      // Loaded walking knees approach extension more closely than striking
+      // knees; retain a small bend without shortening the supporting leg.
+      solveCombatTwoBone(upper, lower, foot, plant.point, plant.weight, forward, 0.997);
+      const parent = foot.parent!.getWorldQuaternion(new THREE.Quaternion()).invert();
+      foot.quaternion.copy(parent.multiply(rotation)).normalize();
+      // Both views use the same lower-body solve and preserve the animated sole.
+      for (let joint = 0; joint < 3; joint++) {
+        firstLegs[i]![joint]?.quaternion.copy(legs[i]![joint]!.quaternion);
+      }
+    }
+    this.avatarAnchor.updateMatrixWorld(true);
+  }
+
   private updateAvatarTransform(delta: number, snap = false): void {
     if (!this.physics || !this.player) return;
-    this.physics.getFeetPosition(this.feetPosition);
+    if (snap) this.physics.getFeetPosition(this.feetPosition);
+    else this.player.getRenderedFeetPosition(this.feetPosition);
     const state = this.player.getDebugState();
     // PointerLockControls yaw is the sole aiming authority. Convert its continuous
     // camera-space yaw to the avatar convention (+Z = 0, default -Z = π). Body
@@ -9658,6 +9792,8 @@ export class AnimationLab {
       this.firstPersonCurrentAction?.setEffectiveTimeScale(this.playbackSpeed);
     }
     this.evaluateCombatMixers(rawDelta);
+    this.applyLocomotionWeightShift(rawDelta);
+    this.applyLocomotionFootPlants(rawDelta);
     this.applyFirstPersonCombatRootStabilization();
     this.applyCombatGuardTorsoAlignment();
     this.applyThirdPersonCombatDodgePose();

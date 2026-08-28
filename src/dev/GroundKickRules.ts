@@ -26,11 +26,11 @@ export const GROUND_KICK_PROFILES: Readonly<Record<GroundKickKind, GroundKickPro
   stomp: {
     duration: 0.84,
     impactFraction: 0.54,
-    contactStartFraction: 0.32,
-    contactEndFraction: 0.55,
+    contactStartFraction: 0.36,
+    contactEndFraction: 0.59,
     damage: 14,
-    maxTargetDistance: 1.72,
-    contactRadius: 0.29,
+    maxTargetDistance: 1.12,
+    contactRadius: 0.16,
   },
   'get-up-kick': {
     duration: 0.78,
@@ -38,8 +38,8 @@ export const GROUND_KICK_PROFILES: Readonly<Record<GroundKickKind, GroundKickPro
     contactStartFraction: 0.32,
     contactEndFraction: 0.55,
     damage: 18,
-    maxTargetDistance: 1.82,
-    contactRadius: 0.29,
+    maxTargetDistance: 1.22,
+    contactRadius: 0.18,
   },
 };
 
