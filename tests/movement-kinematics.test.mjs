@@ -63,7 +63,7 @@ test('forward+strafe is biased toward forward while pure strafes and reverse dia
   assert.match(controller, /forwardBiasedDiagonalAxes/);
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
   assert.match(lab, /diagonalStrafeHeadCorrectionDegrees/);
-  assert.match(lab, /Math\.abs\(this\.visualMovementRightIntent\) > 0\.15/);
+  assert.match(lab, /Math\.abs\(travelRight\) > 0\.54/);
 });
 
 test('forward diagonal locomotion has dedicated walk/run animation states', async () => {
@@ -561,7 +561,7 @@ test('continuous yaw survives repeated ±π crossings without reversing turn dir
   assert.ok(unwrapped.at(-1) > Math.PI, 'continuous yaw must be allowed past +π');
 });
 
-test('animation selection uses input intent, direct slide-to-crouch-walk and no sprint-strafe clips', () => {
+test('animation uses travel velocity, direct slide-to-crouch-walk and no sprint-strafe clips', () => {
   const controller = readFileSync(new URL('../src/player/PlayerController.ts', import.meta.url), 'utf8');
   const source = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
   assert.match(controller, /getMovementIntent\(\)/);
@@ -569,11 +569,11 @@ test('animation selection uses input intent, direct slide-to-crouch-walk and no 
   assert.match(controller, /buildInputDirection\(diagonalAxes\.forward, movementRightAxis\)/, 'ZQSD must feed camera-relative movement after the forward-diagonal and sprint lateral shaping');
   assert.match(source, /const intent = this\.player\.getMovementIntent\(\)/);
   assert.match(source, /const crouchMoveIntent = Math\.abs\(intent\.forward\) > 0\.05 \|\| Math\.abs\(intent\.right\) > 0\.05/);
-  assert.match(source, /const sprintFacingReady = state\.sprinting && bodyViewOffsetDegrees <= 62/);
+  assert.match(source, /const sprintFacingReady = this\.visualRunning && bodyViewOffsetDegrees <= 62/);
   assert.match(source, /if \(sprintFacingReady\) \{[\s\S]*id = 'running'/, 'aligned sprint must keep the normal running clip');
   assert.match(source, /state\.sprinting && bodyCatchupActive[\s\S]*id = 'walking'[\s\S]*reverse = forwardSpeed < -0\.12/, 'rear-facing sprint start must keep animated backward footwork while the body catches up');
   assert.doesNotMatch(source, /id: 'left-strafe'.*sprint|id: 'right-strafe'.*sprint/, 'bad sprint-strafe clips must not be exposed');
-  assert.match(source, /const lateralIntent = bodyCatchupActive[\s\S]*localVelocityIsLateral[\s\S]*Math\.abs\(this\.visualMovementRightIntent\) > 0\.15/);
+  assert.match(source, /const lateralIntent = Math\.abs\(travelRight\) > 0\.54/);
   assert.match(source, /airborneAnimationRate/);
   assert.match(source, /expectedAirSeconds/);
 });
@@ -593,8 +593,8 @@ test('Animation Lab reuses PlayerController and PhysicsWorld and ships the locom
   assert.match(source, /'jumping-up'/);
   assert.match(source, /'running-slide'/);
   assert.match(source, /'crouch-idle'/);
-  assert.match(source, /const lateralIntent = bodyCatchupActive[\s\S]*localVelocityIsLateral[\s\S]*Math\.abs\(this\.visualMovementRightIntent\) > 0\.15/);
-  assert.match(source, /const strafeRight = bodyCatchupActive \? rightSpeed > 0 : this\.visualMovementRightIntent > 0/);
+  assert.match(source, /const lateralIntent = Math\.abs\(travelRight\) > 0\.54/);
+  assert.match(source, /const strafeRight = travelRight > 0/);
   assert.match(source, /id = strafeRight \? 'right-strafe-walking' : 'left-strafe-walking'/);
   assert.doesNotMatch(source, /id: 'left-strafe'.*sprint|id: 'right-strafe'.*sprint/);
   assert.match(source, /slideRecoveryTiming/);
@@ -660,9 +660,9 @@ test('locomotion cancels turn-in-place but catches body facing up smoothly', () 
   assert.doesNotMatch(movementBranch, /this\.bodyYaw = aimBodyYaw/, 'movement must not snap the body to a rear-facing camera yaw');
   assert.match(source, /updateTurnGate\(absoluteOffsetDegrees, this\.bodyTurning, moving, sprinting\)/, 'moving body follow must use the normal turn gate');
   assert.match(source, /bodyCatchupActive/);
-  assert.match(source, /localVelocityIsLateral/);
-  assert.match(source, /speed < 0\.24 && !standingMoveIntent/, 'held movement must not fall back to idle during the first acceleration frames');
-  assert.match(source, /if \(standingMoveIntent && speed < 0\.24\) \{[\s\S]*this\.playAutoImmediate\(id, true, rate, reverse\)/, 'locomotion animation must start on the input frame');
+  assert.match(source, /travelRight = speed > 0\.32 \? rightSpeed \/ speed/);
+  assert.match(source, /speed < 0\.08 && !standingMoveIntent/, 'held movement must not fall back to idle during the first acceleration frames');
+  assert.match(source, /if \(standingMoveIntent && speed < 0\.24 && !isCycleLocomotionAnimation[\s\S]*this\.playAutoImmediate\(id, true, rate, reverse\)/, 'locomotion animation must start on the input frame');
   assert.match(source, /this\.autoOneShot && isTurnAnimation\(this\.autoOneShot\)[\s\S]*this\.autoOneShot = null/, 'movement must cancel a stationary turn clip immediately');
 });
 
@@ -842,10 +842,10 @@ test('non-lethal falls damage health, heavily slow landing movement, show a red 
 });
 
 
-test('persistent corpses become shallow dynamic autosteps without affecting active ragdolls', () => {
+test('persistent corpses expose stable support without dynamic limb collision', () => {
   const physics = readFileSync(new URL('../src/physics/PhysicsWorld.ts', import.meta.url), 'utf8');
   assert.match(physics, /PLAYER_COLLISION_GROUP = 0x1000/);
-  assert.match(physics, /enableAutostep\(0\.38, 0\.10, true\)/, 'dynamic corpse bodies should be eligible for a shallow automatic step');
+  assert.match(physics, /enableAutostep\(0\.38, 0\.10, false\)/, 'articulated limbs must never become moving autosteps');
 
   const ragdoll = readFileSync(new URL('../src/physics/RagdollSystem.ts', import.meta.url), 'utf8');
   assert.match(ragdoll, /setPlayerTraversalEnabled\(enabled: boolean\)/);
@@ -2226,7 +2226,7 @@ test('v83 rapid forward Q-D-Q-D animation input falls back to straight walking i
 
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
   assert.match(lab, /forwardLateralAnimationGate\.update\(/);
-  assert.match(lab, /forwardDiagonalAnimation\([\s\S]*this\.visualMovementRightIntent/);
+  assert.match(lab, /forwardDiagonalAnimation\([\s\S]*travelRight/);
   assert.match(lab, /combatLowerSelection\(intent\.forward, this\.visualMovementRightIntent, moving\)/);
 });
 
@@ -2307,7 +2307,7 @@ test('v87 rapid pure strafe reversals keep one walking cycle until the opposite 
 
 test('v87 locomotion switches preserve the current gait phase instead of restarting at frame zero', () => {
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
-  assert.match(lab, /preserveLocomotionPhase[\s\S]*next\.time = previousPhase \* Math\.max\(1e-5, loaded\.clip\.duration\)/);
+  assert.match(lab, /preserveLocomotionPhase[\s\S]*next\.time = alignGaitPhase\(previousPhase, oldLandmark, newLandmark\) \* loaded\.clip\.duration/);
   assert.match(lab, /preserveStepPhase[\s\S]*next\.thirdPerson\.time = thirdPersonPhase \* Math\.max\(1e-5, next\.clip\.duration\)/);
 });
 
@@ -2781,7 +2781,7 @@ test('v120 ground attacks use contextual stomp/get-up kick timings and real foot
   const rules = await import('../.movement-test-dist/dev/GroundKickRules.js');
   assert.equal(rules.GROUND_KICK_PROFILES.stomp.damage, 14);
   assert.equal(rules.GROUND_KICK_PROFILES['get-up-kick'].damage, 18);
-  assert.ok(rules.groundKickContactAccepted(0.54, 'stomp', 0.20, 1.1));
+  assert.ok(rules.groundKickContactAccepted(0.54, 'stomp', 0.12, 1.0));
   assert.ok(!rules.groundKickContactAccepted(0.20, 'stomp', 0.20, 1.1));
   assert.ok(!rules.groundKickContactAccepted(0.54, 'stomp', 0.80, 1.1));
   const chamber = rules.groundKickPose(0.24, 'get-up-kick');
