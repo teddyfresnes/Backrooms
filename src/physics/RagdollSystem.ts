@@ -301,6 +301,10 @@ export class RagdollSystem {
   private animationMotion?: RagdollAnimationMotion;
   private playerNudgeCooldown = 0;
   private playerTraversalEnabled = false;
+  private traversalBody?: RAPIER.RigidBody;
+  private traversalCollider?: RAPIER.Collider;
+  private readonly traversalCorePosition = new THREE.Vector3();
+  private traversalQuietSeconds = 0;
   private finalSettleReleaseStrength = 0;
   private finalSettleReleaseHold = 0;
   private readonly finalNeckAnchorCoreLocal = new THREE.Vector3();
@@ -537,6 +541,14 @@ export class RagdollSystem {
     if (!this.ownedBodies.length) return;
     const safeDelta = Math.max(0, delta);
     this.playerNudgeCooldown = Math.max(0, this.playerNudgeCooldown - safeDelta);
+    const core = this.bodies.get('core')?.body;
+    const linear = core?.linvel(), angular = core?.angvel();
+    // Joint constraint impulses can keep angular velocity noisy even with a
+    // torso resting in place. A slow core translation is the support criterion;
+    // its frozen proxy is discarded if the real core subsequently moves 9 cm.
+    const quietCore = linear && angular && Math.hypot(linear.x, linear.y, linear.z) < 0.12
+      && Math.hypot(angular.x, angular.y, angular.z) < 1.5;
+    this.traversalQuietSeconds = quietCore ? this.traversalQuietSeconds + safeDelta : 0;
     const anyAwake = this.ownedBodies.some((body) => body.isValid() && !body.isSleeping());
     if (anyAwake) {
       this.settled = false;
@@ -549,24 +561,74 @@ export class RagdollSystem {
       this.enforceSafetyLimits(safeDelta);
       this.updateSettling();
     }
+    this.updateTraversalSupport();
     this.syncSkeleton();
   }
 
   /**
-   * Persistent corpses become low dynamic obstacles for the live KCC. Active
-   * ragdolls keep this disabled so a falling body can never catch/launch the
-   * player. Rapier autostep then climbs a settled torso/limb like a shallow step.
+   * A single rounded, stationary support represents the settled torso to the
+   * character controller. Articulated limbs remain physical for the world and
+   * impacts, but cannot push the capsule that is trying to stand on them.
    */
   setPlayerTraversalEnabled(enabled: boolean): void {
-    if (this.playerTraversalEnabled === enabled) return;
     this.playerTraversalEnabled = enabled;
-    for (const ragdollBody of this.bodies.values()) {
-      const filter = desiredCollisionFilter(ragdollBody.membership)
-        | (enabled ? PLAYER_COLLISION_GROUP : 0);
-      for (const collider of ragdollBody.colliders) {
-        collider.setCollisionGroups(makeCollisionGroups(ragdollBody.membership, filter));
-      }
+    if (!enabled) this.traversalBody?.setEnabled(false);
+    else this.updateTraversalSupport();
+  }
+
+  private updateTraversalSupport(): void {
+    const core = this.bodies.get('core');
+    if (!this.playerTraversalEnabled || !core?.body.isValid()) return;
+    const center = core.body.translation();
+    if (this.traversalBody?.isEnabled()) {
+      if (this.traversalCorePosition.distanceTo(center) < 0.09) return;
+      this.traversalBody.setEnabled(false);
     }
+    if (!this.settled && this.traversalQuietSeconds < 0.40) return;
+    const ray = new RAPIER.Ray({ x: center.x, y: center.y + 0.4, z: center.z }, { x: 0, y: -1, z: 0 });
+    const floor = this.physics.world.castRayAndGetNormal(ray, 1.3, true,
+      RAPIER.QueryFilterFlags.ONLY_FIXED, 0x00010001);
+    if (!floor || floor.normal.y < 0.8) return;
+    const groundY = ray.origin.y - floor.timeOfImpact;
+    // Never bridge a pit or turn a hanging body into an invisible platform.
+    if (center.y - groundY > 0.48) return;
+    const height = THREE.MathUtils.clamp(center.y - groundY + 0.04, 0.14, 0.22);
+    // A shallow bevel is walkable from every direction. A small cuboid has
+    // vertical sides and can be too narrow for Rapier's autostep clearance.
+    const vertices = new Float32Array(16 * 2 * 3);
+    for (let ring = 0; ring < 2; ring++) for (let i = 0; i < 16; i++) {
+      const angle = i / 16 * Math.PI * 2, offset = (ring * 16 + i) * 3;
+      vertices[offset] = Math.cos(angle) * (ring ? 0.20 : 0.47);
+      vertices[offset + 1] = (ring ? 0.5 : -0.5) * height;
+      vertices[offset + 2] = Math.sin(angle) * (ring ? 0.34 : 0.62);
+    }
+    const head = this.getHeadPose().position;
+    const yaw = Math.atan2(head.x - center.x, head.z - center.z);
+    const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    for (let i = 0; i < 16; i += 2) {
+      const edge = new THREE.Vector3(vertices[i * 3]!, 0, vertices[i * 3 + 2]!).applyQuaternion(rotation);
+      const support = this.physics.world.castRayAndGetNormal(new RAPIER.Ray(
+        { x: center.x + edge.x, y: center.y + 0.4, z: center.z + edge.z },
+        { x: 0, y: -1, z: 0 }), 1.3, true, RAPIER.QueryFilterFlags.ONLY_FIXED, 0x00010001);
+      if (!support || support.normal.y < 0.8 || Math.abs(support.timeOfImpact - floor.timeOfImpact) > 0.08) return;
+    }
+    const position = { x: center.x, y: groundY + height * 0.5, z: center.z };
+    if (!this.traversalBody) {
+      this.traversalBody = this.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+      this.traversalCollider = this.physics.world.createCollider(
+        RAPIER.ColliderDesc.convexHull(vertices)!
+          .setFriction(0).setRestitution(0)
+          .setCollisionGroups(makeCollisionGroups(0x4000, PLAYER_COLLISION_GROUP)),
+        this.traversalBody,
+      );
+    } else {
+      this.traversalCollider?.setShape(new RAPIER.ConvexPolyhedron(vertices));
+    }
+    this.traversalBody.setTranslation(position, false);
+    this.traversalBody.setRotation(rotation, false);
+    this.traversalBody.setEnabled(true);
+    this.traversalCorePosition.copy(center);
+    this.physics.world.propagateModifiedBodyPositionsToColliders();
   }
 
   /**
@@ -580,7 +642,7 @@ export class RagdollSystem {
     playerPosition: Readonly<THREE.Vector3>,
     playerVelocity: Readonly<THREE.Vector3>,
   ): void {
-    if (!this.ownedBodies.length || this.playerNudgeCooldown > 0) return;
+    if (!this.ownedBodies.length || this.playerNudgeCooldown > 0 || this.traversalBody?.isEnabled()) return;
     const horizontalSpeed = Math.hypot(playerVelocity.x, playerVelocity.z);
     if (horizontalSpeed < 0.22) return;
 
@@ -667,7 +729,34 @@ export class RagdollSystem {
   }
 
   getOwnedBodyHandles(): ReadonlySet<number> {
-    return new Set(this.ownedBodies.filter((body) => body.isValid()).map((body) => body.handle));
+    const handles = new Set(this.ownedBodies.filter((body) => body.isValid()).map((body) => body.handle));
+    if (this.traversalBody?.isValid()) handles.add(this.traversalBody.handle);
+    return handles;
+  }
+
+  /** Closest reachable top surface of the actual torso, for a downward stomp. */
+  getGroundKickSurface(from: Readonly<THREE.Vector3>, target: THREE.Vector3): boolean {
+    const core = this.bodies.get('core');
+    if (!core) return false;
+    let closest = Infinity;
+    for (const collider of core.colliders) {
+      const center = collider.translation();
+      const dx = from.x - center.x, dz = from.z - center.z;
+      const length = Math.hypot(dx, dz);
+      // Aim just inside the near edge, rather than through the center of mass.
+      for (const offset of [0.12, 0]) {
+        const origin = { x: center.x + dx / Math.max(length, 1e-5) * offset,
+          y: center.y + 0.75, z: center.z + dz / Math.max(length, 1e-5) * offset };
+        const toi = collider.castRay(new RAPIER.Ray(origin, { x: 0, y: -1, z: 0 }), 1.5, true);
+        if (toi < 0) continue;
+        const distance = Math.hypot(origin.x - from.x, origin.z - from.z);
+        if (distance < closest) {
+          closest = distance;
+          target.set(origin.x, origin.y - toi, origin.z);
+        }
+      }
+    }
+    return Number.isFinite(closest);
   }
 
   getPelvisPose(
@@ -691,6 +780,8 @@ export class RagdollSystem {
   private applyContactImpulse(id: string, impulse: THREE.Vector3, point?: Readonly<THREE.Vector3>): void {
     const part = this.bodies.get(id);
     if (!part || !part.body.isValid()) return;
+    this.traversalBody?.setEnabled(false);
+    this.traversalQuietSeconds = 0;
     const center = part.body.worldCom();
     const application = point ? new THREE.Vector3().copy(point) : new THREE.Vector3(center.x, center.y, center.z);
     // The torso is one compound rigid body. Bound a stale/off-body contact lever
@@ -725,7 +816,8 @@ export class RagdollSystem {
     contactPoint?: Readonly<THREE.Vector3>,
   ): void {
     if (!Number.isFinite(direction.x + direction.y + direction.z + strength)) return;
-    const vector = new THREE.Vector3(direction.x, recovering ? -0.18 : -1.35, direction.z).normalize();
+    const vector = new THREE.Vector3(direction.x * (recovering ? 1 : 0.22),
+      recovering ? -0.55 : -1, direction.z * (recovering ? 1 : 0.22)).normalize();
     const impulse = vector.multiplyScalar(THREE.MathUtils.clamp(strength, 0.4, 1.5) * (recovering ? 28 : 22));
     let id = 'core';
     if (contactPoint) {
@@ -766,6 +858,7 @@ export class RagdollSystem {
   }
 
   private disableOwnedBodies(): void {
+    this.traversalBody?.setEnabled(false);
     const zero = { x: 0, y: 0, z: 0 };
     for (const body of this.ownedBodies) {
       if (!body.isValid()) continue;
@@ -776,6 +869,8 @@ export class RagdollSystem {
   }
 
   private releaseRuntimeReferences(): void {
+    this.traversalBody = undefined;
+    this.traversalCollider = undefined;
     this.ownedBodies.length = 0;
     this.jointFrameBodies.length = 0;
     this.bodies.clear();
@@ -1425,14 +1520,7 @@ export class RagdollSystem {
     this.selfCollisionsEnabled = true;
     for (const ragdollBody of this.bodies.values()) {
       for (const collider of ragdollBody.colliders) {
-        collider.setCollisionGroups(
-          this.playerTraversalEnabled
-            ? makeCollisionGroups(
-                ragdollBody.membership,
-                desiredCollisionFilter(ragdollBody.membership) | PLAYER_COLLISION_GROUP,
-              )
-            : ragdollBody.desiredCollisionGroups,
-        );
+        collider.setCollisionGroups(ragdollBody.desiredCollisionGroups);
       }
     }
   }

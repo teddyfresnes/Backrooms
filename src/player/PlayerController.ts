@@ -355,6 +355,11 @@ export class PlayerController {
   }
   toggleNoclip(): boolean { return this.setNoclipEnabled(!this.noclipEnabled); }
   getViewDirection(target = new THREE.Vector3()): THREE.Vector3 { return this.controls.getDirection(target); }
+  /** The mesh and camera must consume the same interpolated capsule pose. */
+  getRenderedFeetPosition(target = new THREE.Vector3()): THREE.Vector3 {
+    this.physics.getFeetPosition(target);
+    return target.add(this.renderedPosition).sub(this.position);
+  }
   /** Read-only movement intent for animation selection; PlayerController remains the sole input owner. */
   getMovementIntent(): { forward: number; right: number; sprint: boolean; crouch: boolean } {
     const axes = this.input.axes;
@@ -1560,7 +1565,15 @@ export class PlayerController {
     const frameDelta = THREE.MathUtils.clamp(delta, 0, 0.05);
     const alpha = THREE.MathUtils.clamp(interpolationAlpha, 0, 1);
     this.cameraClock += frameDelta;
+    const previousRenderY = this.renderedPosition.y;
     this.renderedPosition.lerpVectors(this.previousPosition, this.position, alpha);
+    // KCC autostep moves the physical capsule up in one tick. Absorb that small
+    // grounded height change in the shared visual pose; jumps/falls stay direct.
+    if (frameDelta > 0 && this.grounded && !this.crouching && !this.traversal
+      && !this.noclipEnabled && Math.abs(this.renderedPosition.y - previousRenderY) < 0.43) {
+      this.renderedPosition.y = THREE.MathUtils.lerp(previousRenderY,
+        this.renderedPosition.y, 1 - Math.exp(-frameDelta * 22));
+    }
     const gait = THREE.MathUtils.lerp(this.previousGaitPhase, this.gaitPhase, alpha);
     const cameraMotion = this.cameraMotionEnabled ? 1 : 0;
 

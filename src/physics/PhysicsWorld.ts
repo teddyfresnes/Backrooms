@@ -67,15 +67,14 @@ export class PhysicsWorld {
       RAPIER.ColliderDesc.capsule(STANDING_HALF_HEIGHT, PLAYER_RADIUS)
         .setFriction(0)
         .setRestitution(0)
-        // Keep the live character on its own membership bit. Active ragdolls ignore
-        // it; persistent corpses opt into this bit only after respawn so the KCC
-        // can treat a settled body as a small dynamic step instead of a hard wall.
+        // Ragdoll limbs ignore the player. A settled torso exposes one stable,
+        // rounded support surface on a separate collision membership.
         .setCollisionGroups((PLAYER_COLLISION_GROUP << 16) | 0xffff),
       this.playerBody,
     );
     this.controller = this.world.createCharacterController(PLAYER_SKIN_WIDTH);
     this.controller.setSlideEnabled(true);
-    this.controller.enableAutostep(0.38, 0.10, true);
+    this.controller.enableAutostep(0.38, 0.10, false);
     this.controller.enableSnapToGround(0.32);
     this.controller.setMaxSlopeClimbAngle((48 * Math.PI) / 180);
     this.controller.setMinSlopeSlideAngle((54 * Math.PI) / 180);
@@ -230,7 +229,10 @@ export class PhysicsWorld {
   }
 
   move(desiredDelta: Vec3Data): CharacterMotionResult {
-    this.controller.computeColliderMovement(this.playerCollider, desiredDelta);
+    // KCC shape casts do not inherit the capsule's simulation collision groups.
+    // Pass them explicitly or every articulated limb still blocks the player.
+    this.controller.computeColliderMovement(this.playerCollider, desiredDelta,
+      undefined, this.playerCollider.collisionGroups());
     const allowed = this.controller.computedMovement();
     const current = this.playerBody.translation();
     this.playerBody.setNextKinematicTranslation({ x: current.x + allowed.x, y: current.y + allowed.y, z: current.z + allowed.z });
@@ -309,6 +311,7 @@ export class PhysicsWorld {
         rayLength,
         true,
         RAPIER.QueryFilterFlags.ONLY_FIXED,
+        0x00010001,
       );
       if (!hit || hit.normal.y < 0.70) return null;
       const y = rayOriginY - hit.timeOfImpact;
