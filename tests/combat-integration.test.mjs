@@ -12,7 +12,10 @@ for(const view of ['first-person','third-person'])for(const fps of [30,60,120]){
   for(let i=0;i<fps;i++){
    stepLab(lab,1/fps);
    if(lab.npcHealth!==old){changes++;old=lab.npcHealth;assert.ok(attack.impactApplied);assert.ok(lab.npcHitReaction);assert.ok(attack.elapsed/attack.duration<=attack.contactEndFraction+1/fps);}
-   if(lab.combatAttack){assert.ok(lab.leftUpperArmBone.quaternion.angleTo(lab.firstPersonLeftUpperArmBone.quaternion)<1e-6);}
+   if(lab.combatAttack){
+    assert.ok(lab.leftUpperArmBone.quaternion.angleTo(lab.firstPersonLeftUpperArmBone.quaternion)<1e-6);
+    assert.ok(lab.headBone.getWorldPosition(new THREE.Vector3()).sub(lab.hipsBone.getWorldPosition(new THREE.Vector3())).normalize().y>.7,'punch inverted the torso');
+   }
   }
   assert.equal(changes,1);assert.ok(lab.npcHealth<100&&lab.npcHealth>=80);
  });
@@ -93,12 +96,54 @@ for(const kind of ['stomp','get-up-kick'])for(const fps of [30,60,120])for(const
  const target=new THREE.Vector3();lab.resolveGroundKickTarget(target);
  lab.player.teleport({x:target.x,y:.865,z:target.z-.65});lab.player.lookCamera.rotation.set(0,Math.PI,0);lab.player.continuousAimYaw=Math.PI;lab.bodyYaw=0;lab.updateAvatarTransform(0,true);
  assert.equal(lab.tryStartGroundKick(),true);const kick=lab.groundKick,health=lab.npcHealth;assert.equal(kick.kind,kind);
- let damageEvents=0,lastHealth=health,maxYaw=0;
+ let damageEvents=0,lastHealth=health,maxYaw=0,minFoot=99,minData=null;
  for(let i=0;i<fps*1.25;i++){stepLab(lab,1/fps);if(lastHealth!==lab.npcHealth){damageEvents++;lastHealth=lab.npcHealth;}if(lab.groundKick)maxYaw=Math.max(maxYaw,Math.abs(lab.bodyYaw-kick.startYaw));
+  if(lab.groundKick && kick.elapsed/kick.duration>.32 && kick.elapsed/kick.duration<.55){
+   const foot=(side==='left'?lab.leftFootBone:lab.rightFootBone).getWorldPosition(new THREE.Vector3()),point=new THREE.Vector3();lab.resolveGroundKickTarget(point);const d=foot.distanceTo(point);if(d<minFoot){minFoot=d;minData={phase:kick.elapsed/kick.duration,foot:foot.toArray(),point:point.toArray(),aim:kick.targetPoint.toArray()};}
+  }
   for(const bone of [lab.leftUpperLegBone,lab.leftLowerLegBone,lab.rightUpperLegBone,lab.rightLowerLegBone])assert.ok([...bone.quaternion].every(Number.isFinite));
   const pelvis=lab.hipsBone.getWorldPosition(new THREE.Vector3()).sub(lab.avatarAnchor.position);
   assert.ok(Math.hypot(pelvis.x,pelvis.z)<.32,'pelvis offset accumulated between frames');assert.ok(pelvis.y>.4&&pelvis.y<1.4);
  }
- assert.equal(damageEvents,1);assert.ok(kick.impactApplied);assert.equal(lab.groundKick,null);assert.ok(maxYaw<=22*Math.PI/180+.001);assert.ok(lab.player.isLocked);
+ assert.equal(damageEvents,1,JSON.stringify({minFoot,minData}));assert.ok(kick.impactApplied);assert.equal(lab.groundKick,null);assert.ok(maxYaw<=22*Math.PI/180+.001);assert.ok(lab.player.isLocked);
  if(kind==='get-up-kick')assert.ok(lab.npcRagdoll);
+});
+
+for (const fps of [30,60,120]) test(`a complete kick keeps an upright torso and untwisted knees at ${fps} fps`,()=>{
+ setupDuel(lab);lab.startNpcRagdoll('punch',new THREE.Vector3(0,0,1),12,'body');lab.npcGroundKickRecoveryDelay=100;run(2.8);
+ const target=new THREE.Vector3();lab.resolveGroundKickTarget(target);lab.player.teleport({x:target.x,y:.865,z:target.z-.65});lab.bodyYaw=0;lab.updateAvatarTransform(0,true);
+ assert.equal(lab.tryStartGroundKick(),true);const kick=lab.groundKick;
+ const upper=kick.side==='left'?lab.leftUpperLegBone:lab.rightUpperLegBone,lower=kick.side==='left'?lab.leftLowerLegBone:lab.rightLowerLegBone;
+ let previous=upper.quaternion.clone();
+ for(let i=0;i<fps;i++){
+  stepLab(lab,1/fps);
+  const up=lab.headBone.getWorldPosition(new THREE.Vector3()).sub(lab.hipsBone.getWorldPosition(new THREE.Vector3())).normalize();
+  assert.ok(up.y>.85,`torso tipped: ${up.y}`);
+  if(lab.groundKick&&kick.elapsed>.13&&kick.elapsed<kick.duration*.82){
+   const knee=lower.getWorldPosition(new THREE.Vector3()).sub(upper.getWorldPosition(new THREE.Vector3()));
+   const lateral=knee.x*Math.cos(kick.targetYaw)-knee.z*Math.sin(kick.targetYaw);
+   assert.ok(Math.abs(lateral)<.13,`knee twisted sideways: ${lateral}`);
+  }
+  assert.ok(upper.quaternion.angleTo(previous)<1.2,'leg snapped more than 68 degrees in one frame');previous.copy(upper.quaternion);
+ }
+});
+test('held attack starts a combination, release cancels automatic follow-ups, re-press remains responsive',()=>{
+ setupDuel(lab,.9);const canvas=lab.renderer.domElement;
+ lab.onCombatMouseDown({button:0,target:canvas,preventDefault(){}});const first=lab.combatAttack;assert.ok(first);
+ let next;
+ for(let i=0;i<90;i++){stepLab(lab);if(lab.combatAttack&&lab.combatAttack!==first){next=lab.combatAttack;break;}}
+ assert.ok(next,'holding never chained');assert.notEqual(next.strikingSide,first.strikingSide);
+ run(.05);lab.onCombatMouseUp({button:0});run(1.2);assert.equal(lab.combatAttack,null);assert.equal(lab.combatBufferedPunchSeconds,0);
+ setupDuel(lab,.9);lab.onCombatMouseDown({button:0,target:canvas,preventDefault(){}});assert.ok(lab.combatAttack);lab.onCombatMouseUp({button:0});
+});
+test('holding an attack cannot resume automatically after being interrupted',()=>{
+ setupDuel(lab,.9);lab.onCombatMouseDown({button:0,target:lab.renderer.domElement,preventDefault(){}});run(.1);
+ lab.receivePlayerMeleeHit('punch',new THREE.Vector3(0,0,-1),6,'body');run(1.2);
+ assert.equal(lab.combatAttack,null);assert.equal(lab.npcHealth,100);assert.equal(lab.combatBufferedPunchSeconds,0);
+});
+test('confirmed contact compresses the striking arm while misses retain their full motion',()=>{
+ setupDuel(lab,.9);const attack=strike();let compressed=false;
+ for(let i=0;i<70;i++){stepLab(lab);if(attack.impactApplied&&attack.compressionSeconds>0){compressed=true;assert.ok(attack.contactPoint);assert.equal(lab.player.combatDriveTimer,0);}}
+ assert.ok(compressed);
+ setupDuel(lab,3);const miss=strike();run(.8);assert.equal(miss.impactApplied,false);assert.equal(miss.contactPoint,undefined);assert.equal(miss.compressionSeconds,0);
 });

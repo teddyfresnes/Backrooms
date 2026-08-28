@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { sweepCombatContact, combatChainReady, CombatBalance, stepCombatSpring } from '../.movement-test-dist/dev/CombatContact.js';
-import { solveCombatTwoBone, CombatPoseHandoff, CombatMotionHistory } from '../.movement-test-dist/dev/CombatRig.js';
+import { solveCombatTwoBone, CombatPoseHandoff, CombatMotionHistory, CombatProceduralPose } from '../.movement-test-dist/dev/CombatRig.js';
 import { groundKickContactAccepted } from '../.movement-test-dist/dev/GroundKickRules.js';
 const v = (x=0,y=0,z=0)=>({x,y,z});
 const sweep=(a,b,c=v(0.5),d=c,r=.10,dt=1/30,p0=.3,p1=.6)=>sweepCombatContact(a,b,c,d,r,dt,p0,p1,.35,.55);
@@ -101,4 +101,23 @@ test('ground kick validation rejects nonfinite and negative distances',()=>{
  assert.equal(groundKickContactAccepted(.5,'stomp',NaN,.5),false);
  assert.equal(groundKickContactAccepted(.5,'stomp',-.1,.5),false);
  assert.equal(groundKickContactAccepted(.5,'stomp',.1,-1),false);
+});
+
+// This regressed only on constant animation keys: the mixer legitimately skips
+// reapplying them, so a render correction must never become the next base pose.
+test('constant tracks cannot accumulate procedural rotations or translation',()=>{
+ const {root,a}=limb(), layer=new CombatProceduralPose();
+ const mixer=new THREE.AnimationMixer(root);a.name='leg';
+ mixer.clipAction(new THREE.AnimationClip('idle',1,[new THREE.QuaternionKeyframeTrack('leg.quaternion',[0,1],[0,0,0,1,0,0,0,1])])).play();
+ for(let i=0;i<240;i++){
+  layer.restore();mixer.update(1/120);layer.capture(root);
+  a.rotateX(.07);a.position.x+=.02;
+  assert.ok(Math.abs(a.rotation.x-.07)<1e-6);assert.ok(Math.abs(a.position.x-.02)<1e-6);
+ }
+ layer.restore();assert.ok(a.quaternion.angleTo(new THREE.Quaternion())<1e-6);assert.equal(a.position.x,0);
+});
+test('procedural restoration does not retain the interrupted pose during a constant-track handoff',()=>{
+ const {root,a}=limb(),layer=new CombatProceduralPose(),handoff=new CombatPoseHandoff();a.rotation.x=.7;handoff.capture(root,.1);a.quaternion.identity();
+ for(let i=0;i<12;i++){layer.restore();layer.capture(root);handoff.apply(1/60);a.rotateX(.02);}
+ layer.restore();assert.ok(a.quaternion.angleTo(new THREE.Quaternion())<1e-6);
 });

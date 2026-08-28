@@ -856,7 +856,7 @@ test('persistent corpses become shallow dynamic autosteps without affecting acti
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
   assert.match(lab, /this\.ragdoll\.setPlayerTraversalEnabled\(true\)/, 'only the persistent corpse should opt into player traversal');
   assert.match(lab, /corpse\.ragdoll\.nudgeFromPlayer/);
-  assert.match(lab, /<strong>CLIQUER POUR JOUER<\/strong>';/);
+  assert.match(lab, /<strong>CLIQUER POUR JOUER<\/strong>/);
 });
 
 test('first-person body is a dedicated render rig and cannot disturb the third-person avatar', () => {
@@ -1364,8 +1364,8 @@ test('ragdoll impacts feed damage and pooled blood decals without per-frame rayc
 test('CC0 blood sources are still fetched as part of the combined predev/prebuild asset pass', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const fetcher = readFileSync(new URL('../scripts/fetch-blood-assets.mjs', import.meta.url), 'utf8');
-  assert.equal(pkg.scripts.predev, 'npm run assets:all');
-  assert.equal(pkg.scripts.prebuild, 'npm run assets:all');
+  assert.ok(pkg.scripts.predev.split('&&').some(command => command.trim() === 'npm run assets:all'));
+  assert.ok(pkg.scripts.prebuild.split('&&').some(command => command.trim() === 'npm run assets:all'));
   assert.match(pkg.scripts['assets:all'], /assets:blood/);
   assert.match(fetcher, /opengameart\.org/);
   assert.match(fetcher, /blood_0\.png/);
