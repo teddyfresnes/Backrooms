@@ -2019,7 +2019,7 @@ test('v100 every strike is a bounded resampled additive delta with optional anat
 test('first-person combat keeps both fists away from and below the POV without moving the gameplay camera', () => {
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
   assert.match(lab, /FIRST_PERSON_COMBAT_ARM_SCALE = 0\.97/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_BODY_FORWARD_OFFSET = 0\.075/);
+  assert.match(lab, /FIRST_PERSON_COMBAT_BODY_FORWARD_OFFSET = 0\.30/);
   assert.match(lab, /FIRST_PERSON_COMBAT_BODY_UP_OFFSET = -0\.165/);
   assert.match(lab, /FIRST_PERSON_COMBAT_LATERAL_MAX = 0\.32/);
   assert.match(lab, /FIRST_PERSON_COMBAT_NEAR_HAND_DEPTH_TARGET = 0\.53/);
@@ -2104,7 +2104,7 @@ test('v84 first-person framing uses the real pair of hands and smooth solver res
 
 test('v85 first-person combat rig is pulled slightly back while staying lowered', () => {
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
-  assert.match(lab, /FIRST_PERSON_COMBAT_BODY_FORWARD_OFFSET = 0\.075/);
+  assert.match(lab, /FIRST_PERSON_COMBAT_BODY_FORWARD_OFFSET = 0\.30/);
   assert.match(lab, /FIRST_PERSON_COMBAT_BODY_UP_OFFSET = -0\.165/);
   assert.match(lab, /this\.firstPersonHipTarget\.y \+= FIRST_PERSON_COMBAT_BODY_UP_OFFSET/);
   assert.doesNotMatch(lab, /firstPersonCamera\.position[\s\S]{0,120}FIRST_PERSON_COMBAT_BODY_UP_OFFSET/);
@@ -2138,7 +2138,7 @@ test('v85 first-person combat framing protects the nearest fist and locks across
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
   assert.match(lab, /FIRST_PERSON_COMBAT_ARM_SCALE = 0\.97/);
   assert.match(lab, /FIRST_PERSON_COMBAT_HAND_SCALE = 1\.0/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_BODY_FORWARD_OFFSET = 0\.075/);
+  assert.match(lab, /FIRST_PERSON_COMBAT_BODY_FORWARD_OFFSET = 0\.30/);
   assert.match(lab, /FIRST_PERSON_COMBAT_BODY_UP_OFFSET = -0\.165/);
   assert.match(lab, /FIRST_PERSON_COMBAT_NEAR_HAND_DEPTH_TARGET = 0\.53/);
   assert.match(lab, /FIRST_PERSON_COMBAT_HAND_Y_TARGET = -0\.18/);
@@ -2542,16 +2542,13 @@ test('v98 dodge counter visibly lowers the pelvis before the retaliatory hook', 
   assert.match(layers, /degToRad\(46\)/);
 });
 
-test('v107 combat drive preserves entry momentum then curves/loads into impact instead of rail-snapping', () => {
+test('v126 combat footwork adds a loading step to live locomotion instead of replacing its momentum', () => {
   const controller = readFileSync(new URL('../src/player/PlayerController.ts', import.meta.url), 'utf8');
-  assert.match(controller, /private readonly combatDriveEntryDirection/);
-  assert.match(controller, /private combatDriveEntryAlignment = 1/);
-  assert.match(controller, /const currentSpeed = Math\.hypot\(this\.velocity\.x, this\.velocity\.z\)/);
-  assert.match(controller, /this\.combatDriveEntryAlignment = THREE\.MathUtils\.clamp/);
-  assert.match(controller, /private combatDriveTurnBlend\(phase: number\)/);
-  assert.match(controller, /const yawDelta = Math\.atan2\(Math\.sin\(targetYaw - entryYaw\), Math\.cos\(targetYaw - entryYaw\)\)/);
-  assert.match(controller, /const backwardPlant = THREE\.MathUtils\.clamp/);
-  assert.match(controller, /const retainedEntrySpeed = this\.combatDriveEntrySpeed/);
+  assert.match(controller, /private readonly combatDriveVelocity/);
+  assert.match(controller, /this\.velocity\.sub\(this\.combatDriveVelocity\)/);
+  assert.match(controller, /this\.velocity\.add\(this\.combatDriveVelocity\)/);
+  assert.match(controller, /const retreating = this\.inputDirection\.dot/);
+  assert.doesNotMatch(controller, /combatDriveTurnBlend|retainedEntrySpeed|pathYaw/);
   assert.match(controller, /const driveSpeed = this\.combatDriveSpeed \* this\.combatDriveEnvelope\(phase\)/);
   assert.match(controller, /mode: 'strike' \| 'impulse' = 'strike'/);
 });
@@ -2602,8 +2599,8 @@ test('v99 real fist volume and wider safety reach prevent visible close contacts
 test('v101 NPC and player keep their head on the opponent while shoulders/arms carry strike variation', () => {
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
   assert.match(lab, /headSlipDegrees/);
-  assert.match(lab, /Keep the head on the opponent/);
-  assert.match(lab, /const slip = THREE\.MathUtils\.degToRad\(visual\.headSlipDegrees\) \* reach \* 0\.22/);
+  assert.match(lab, /combatHeadLocalForward/);
+  assert.match(lab, /this\.applyWorldYawOffset\(this\.neckBone, counterYaw \* 0\.45\)/);
   assert.match(lab, /old per-strike downward head dip/);
   assert.doesNotMatch(lab, /const dipDegrees = visual\.character/);
   assert.match(lab, /this\.idleNpcHeadBone[\s\S]*headSlipDegrees[\s\S]*0\.18/);
@@ -2713,10 +2710,10 @@ test('v107 committed strike footwork follows the curved physical trajectory inst
   assert.match(lab, /const motionRoll = THREE\.MathUtils\.degToRad/);
 
   const controller = readFileSync(new URL('../src/player/PlayerController.ts', import.meta.url), 'utf8');
-  assert.match(controller, /this\.combatDriveEntryDirection\.set\(this\.velocity\.x \/ currentSpeed/);
-  assert.match(controller, /const turnEnd = THREE\.MathUtils\.lerp\(0\.54, 0\.22, alignment01\)/);
-  assert.match(controller, /const backwardPlant = THREE\.MathUtils\.clamp/);
-  assert.match(controller, /const pathYaw = entryYaw \+ yawDelta \* turnBlend/);
+  assert.match(controller, /this\.removeCombatDriveVelocity\(\)/);
+  assert.match(controller, /const addedSpeed = retreating \? 0 : Math\.max/);
+  assert.match(controller, /this\.velocity\.add\(this\.combatDriveVelocity\)/);
+  assert.doesNotMatch(controller, /pathYaw|combatDriveEntryDirection/);
   assert.doesNotMatch(controller, /const lateralRetention = along < 0 \? 0\.08 : 0\.18/);
 });
 

@@ -13,7 +13,12 @@ for(const view of ['first-person','third-person'])for(const fps of [30,60,120]){
    stepLab(lab,1/fps);
    if(lab.npcHealth!==old){changes++;old=lab.npcHealth;assert.ok(attack.impactApplied);assert.ok(lab.npcHitReaction);assert.ok(attack.elapsed/attack.duration<=attack.contactEndFraction+1/fps);}
    if(lab.combatAttack){
-    assert.ok(lab.leftUpperArmBone.quaternion.angleTo(lab.firstPersonLeftUpperArmBone.quaternion)<1e-6);
+    const phase=attack.elapsed/attack.duration;
+    if(phase>=attack.contactStartFraction&&phase<=attack.contactEndFraction){
+     const world=attack.strikingSide==='left'?lab.leftUpperArmBone:lab.rightUpperArmBone;
+     const pov=attack.strikingSide==='left'?lab.firstPersonLeftUpperArmBone:lab.firstPersonRightUpperArmBone;
+     assert.ok(world.quaternion.angleTo(pov.quaternion)<1e-6,'the striking arm must share its physical contact pose in both views');
+    }
     assert.ok(lab.headBone.getWorldPosition(new THREE.Vector3()).sub(lab.hipsBone.getWorldPosition(new THREE.Vector3())).normalize().y>.7,'punch inverted the torso');
    }
   }
