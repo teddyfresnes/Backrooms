@@ -145,13 +145,11 @@ export class PlayerController {
   private combatGuardLookConstraint = false;
   private readonly combatDriveDirection = new THREE.Vector3();
   private readonly combatDriveTargetDirection = new THREE.Vector3();
-  private readonly combatDriveEntryDirection = new THREE.Vector3();
+  private readonly combatDriveVelocity = new THREE.Vector3();
   private combatDriveTimer = 0;
   private combatDriveDuration = 0;
   private combatDriveElapsed = 0;
   private combatDriveSpeed = 0;
-  private combatDriveEntrySpeed = 0;
-  private combatDriveEntryAlignment = 1;
   private combatDriveImpactFraction = 0.48;
   private combatDriveMode: 'strike' | 'impulse' = 'strike';
   private baseFov: number;
@@ -246,12 +244,10 @@ export class PlayerController {
     this.combatDriveDuration = 0;
     this.combatDriveElapsed = 0;
     this.combatDriveSpeed = 0;
-    this.combatDriveEntrySpeed = 0;
-    this.combatDriveEntryAlignment = 1;
     this.combatDriveMode = 'strike';
     this.combatDriveDirection.set(0, 0, 0);
     this.combatDriveTargetDirection.set(0, 0, 0);
-    this.combatDriveEntryDirection.set(0, 0, 0);
+    this.combatDriveVelocity.set(0, 0, 0);
   }
 
   beginLandingRecovery(duration: number, strength: number): void {
@@ -314,7 +310,10 @@ export class PlayerController {
   setInputEnabled(enabled: boolean, preserveMomentum = false): void {
     this.input.setEnabled(enabled);
     if (!enabled) {
-      if (!preserveMomentum) this.velocity.set(0, 0, 0);
+      if (!preserveMomentum) {
+        this.velocity.set(0, 0, 0);
+        this.cancelCombatLunge();
+      }
       this.moving = false;
       this.sprinting = false;
       this.targetStrafeLean = 0;
@@ -415,16 +414,9 @@ export class PlayerController {
   }
 
   /**
-   * Collision-safe combat footwork. A strike no longer replaces the current
-   * horizontal velocity with a straight rail on frame one. Instead the drive
-   * snapshots the movement that existed when the attack began and bends that
-   * momentum into the requested strike direction over the anticipation/contact
-   * phase. Sideways entries therefore arc into the punch, backward entries
-   * visibly brake/plant before driving forward, and forward entries preserve
-   * their existing momentum.
-   *
-   * `impulse` is reserved for evasions/spacing pushes that must react instantly;
-   * ordinary punches use the humanized `strike` trajectory.
+   * A small collision-safe step adds to live locomotion. It never rotates or
+   * replaces the player's existing momentum. Evasions alone use an immediate
+   * impulse; strikes begin at zero drive and load before their forward step.
    */
   applyCombatLunge(
     direction: Readonly<Vec3Data>,
@@ -447,26 +439,10 @@ export class PlayerController {
 
     this.combatDriveTargetDirection.set(x, 0, z);
     if (freshDrive) {
-      const currentSpeed = Math.hypot(this.velocity.x, this.velocity.z);
-      this.combatDriveEntrySpeed = currentSpeed;
-      if (currentSpeed > 0.12) {
-        this.combatDriveEntryDirection.set(this.velocity.x / currentSpeed, 0, this.velocity.z / currentSpeed);
-      } else if (this.inputDirection.lengthSq() > 1e-5) {
-        // Input matters even when the character has only just begun to move and
-        // velocity has not caught up yet. This prevents a fresh strafe+attack
-        // from looking identical to a stationary punch.
-        this.combatDriveEntryDirection.copy(this.inputDirection).normalize();
-        this.combatDriveEntrySpeed = Math.max(currentSpeed, MOVEMENT_TUNING.locomotion.walkSpeed * 0.18);
-      } else {
-        this.combatDriveEntryDirection.copy(this.combatDriveTargetDirection);
-        this.combatDriveEntrySpeed = 0;
-      }
-      this.combatDriveEntryAlignment = THREE.MathUtils.clamp(
-        this.combatDriveEntryDirection.dot(this.combatDriveTargetDirection),
-        -1,
-        1,
-      );
-      this.combatDriveDirection.copy(this.combatDriveEntryDirection);
+      // End any old additive step without subtracting its momentum. A fresh
+      // action must not resurrect a cached entry vector or reset a live strafe.
+      this.combatDriveVelocity.set(0, 0, 0);
+      this.combatDriveDirection.copy(this.combatDriveTargetDirection);
       this.combatDriveDuration = safeDuration;
       this.combatDriveElapsed = 0;
       this.combatDriveImpactFraction = THREE.MathUtils.clamp(impactFraction, 0.30, 0.68);
@@ -489,12 +465,12 @@ export class PlayerController {
     this.combatDriveDuration = 0;
     this.combatDriveElapsed = 0;
     this.combatDriveSpeed = 0;
+    this.combatDriveVelocity.set(0, 0, 0);
   }
 
   /**
-   * Retarget the destination of an already-active strike without resetting its
-   * footwork history. Target tracking may move the end of the arc, but it never
-   * erases the direction the player was travelling when the punch began.
+   * Retarget only the small additive step. Live input and existing locomotion
+   * retain their own direction throughout the attack.
    */
   retargetCombatLunge(direction: Readonly<Vec3Data>, targetSpeed: number): void {
     if (
@@ -518,21 +494,6 @@ export class PlayerController {
     return THREE.MathUtils.clamp(this.combatDriveElapsed / this.combatDriveDuration, 0, 1);
   }
 
-  private combatDriveTurnBlend(phase: number): number {
-    if (this.combatDriveMode === 'impulse') return 1;
-    const speed01 = THREE.MathUtils.clamp(
-      this.combatDriveEntrySpeed / Math.max(0.1, MOVEMENT_TUNING.locomotion.walkSpeed),
-      0,
-      1,
-    );
-    const alignment01 = (this.combatDriveEntryAlignment + 1) * 0.5;
-    // Forward travel can merge almost immediately. Lateral motion needs a clear
-    // crossover step, and backward motion needs the longest plant/reversal.
-    const turnEnd = THREE.MathUtils.lerp(0.54, 0.22, alignment01)
-      * THREE.MathUtils.lerp(0.72, 1, speed01);
-    return THREE.MathUtils.smoothstep(phase, 0.015, Math.max(0.12, turnEnd));
-  }
-
   private combatDriveEnvelope(phase = this.combatDrivePhase()): number {
     if (this.combatDriveMode === 'impulse') return 1;
     const impact = THREE.MathUtils.clamp(this.combatDriveImpactFraction, 0.30, 0.68);
@@ -541,20 +502,26 @@ export class PlayerController {
     const peakEnd = Math.min(0.84, impact + 0.075);
     const brakeEnd = Math.min(1, impact + 0.30);
     if (phase <= loadEnd) {
-      return THREE.MathUtils.lerp(0.16, 0.62, THREE.MathUtils.smoothstep(phase, 0, loadEnd));
+      return THREE.MathUtils.lerp(0, 0.35, THREE.MathUtils.smoothstep(phase, 0, loadEnd));
     }
     if (phase < peakStart) {
-      return THREE.MathUtils.lerp(0.62, 1, THREE.MathUtils.smoothstep(phase, loadEnd, peakStart));
+      return THREE.MathUtils.lerp(0.35, 1, THREE.MathUtils.smoothstep(phase, loadEnd, peakStart));
     }
     if (phase <= peakEnd) return 1;
     if (phase < brakeEnd) {
-      return THREE.MathUtils.lerp(1, 0.32, THREE.MathUtils.smoothstep(phase, peakEnd, brakeEnd));
+      return THREE.MathUtils.lerp(1, 0.18, THREE.MathUtils.smoothstep(phase, peakEnd, brakeEnd));
     }
-    return 0.20;
+    return THREE.MathUtils.lerp(0.18, 0, THREE.MathUtils.smoothstep(phase, brakeEnd, 1));
+  }
+
+  private removeCombatDriveVelocity(): void {
+    this.velocity.sub(this.combatDriveVelocity);
+    this.combatDriveVelocity.set(0, 0, 0);
   }
 
   private applyCombatDriveVelocity(): void {
     if (this.combatDriveTimer <= 0) return;
+    this.removeCombatDriveVelocity();
     if (this.combatDriveMode === 'impulse') {
       this.combatDriveDirection.copy(this.combatDriveTargetDirection);
       this.velocity.x = this.combatDriveDirection.x * this.combatDriveSpeed;
@@ -563,49 +530,15 @@ export class PlayerController {
     }
 
     const phase = this.combatDrivePhase();
-    const turnBlend = this.combatDriveTurnBlend(phase);
-    const entryYaw = Math.atan2(this.combatDriveEntryDirection.x, this.combatDriveEntryDirection.z);
-    const targetYaw = Math.atan2(this.combatDriveTargetDirection.x, this.combatDriveTargetDirection.z);
-    const yawDelta = Math.atan2(Math.sin(targetYaw - entryYaw), Math.cos(targetYaw - entryYaw));
-    const pathYaw = entryYaw + yawDelta * turnBlend;
-    this.combatDriveDirection.set(Math.sin(pathYaw), 0, Math.cos(pathYaw));
-
+    this.combatDriveDirection.copy(this.combatDriveTargetDirection);
     const driveSpeed = this.combatDriveSpeed * this.combatDriveEnvelope(phase);
-    const alignment = this.combatDriveEntryAlignment;
-    const backwardPlant = THREE.MathUtils.clamp((-alignment - 0.10) / 0.90, 0, 1);
-    const plantEnd = THREE.MathUtils.lerp(0.05, 0.19, backwardPlant);
-    const entryFadeEnd = THREE.MathUtils.lerp(0.24, 0.50, backwardPlant);
-    const retainedEntrySpeed = this.combatDriveEntrySpeed
-      * (1 - THREE.MathUtils.smoothstep(phase, 0, entryFadeEnd));
-
-    // Reversing direction has a readable plant: old backward speed disappears
-    // before the forward launch grows. Sideways/forward entries remain continuous.
-    const launchStart = plantEnd * backwardPlant * 0.72;
-    const launchBlend = THREE.MathUtils.smoothstep(
-      phase,
-      launchStart,
-      Math.max(launchStart + 0.08, THREE.MathUtils.lerp(0.25, 0.48, backwardPlant)),
-    );
-    let speed = THREE.MathUtils.lerp(retainedEntrySpeed, driveSpeed, launchBlend);
-    if (backwardPlant > 0.01 && phase < plantEnd) {
-      const brake = 1 - THREE.MathUtils.smoothstep(phase, 0, plantEnd);
-      speed *= THREE.MathUtils.lerp(0.24, 1, brake);
-    }
-
-    // Small live-input influence survives late in the step so the player never
-    // feels welded to a rail, but the attack trajectory remains the dominant cue.
-    const inputInfluence = this.inputDirection.lengthSq() > 1e-5
-      ? (1 - turnBlend) * 0.12
-      : 0;
-    if (inputInfluence > 1e-4) {
-      const blendedX = this.combatDriveDirection.x * (1 - inputInfluence) + this.inputDirection.x * inputInfluence;
-      const blendedZ = this.combatDriveDirection.z * (1 - inputInfluence) + this.inputDirection.z * inputInfluence;
-      const blendedLength = Math.hypot(blendedX, blendedZ);
-      if (blendedLength > 1e-5) this.combatDriveDirection.set(blendedX / blendedLength, 0, blendedZ / blendedLength);
-    }
-
-    this.velocity.x = this.combatDriveDirection.x * Math.max(0, speed);
-    this.velocity.z = this.combatDriveDirection.z * Math.max(0, speed);
+    const forwardSpeed = this.velocity.dot(this.combatDriveDirection);
+    // Never pull a deliberately retreating player toward their opponent. A
+    // forward approach already supplies the step; adding it again causes skating.
+    const retreating = this.inputDirection.dot(this.combatDriveDirection) < -0.15 || forwardSpeed < -0.30;
+    const addedSpeed = retreating ? 0 : Math.max(0, driveSpeed - Math.max(0, forwardSpeed));
+    this.combatDriveVelocity.copy(this.combatDriveDirection).multiplyScalar(addedSpeed);
+    this.velocity.add(this.combatDriveVelocity);
   }
 
   private updateCombatDrive(delta: number): void {
@@ -615,22 +548,20 @@ export class PlayerController {
       this.combatDriveDuration = 0;
       this.combatDriveElapsed = 0;
       this.combatDriveSpeed = 0;
-      this.combatDriveEntrySpeed = 0;
-      this.combatDriveEntryAlignment = 1;
+      this.combatDriveVelocity.set(0, 0, 0);
       this.combatDriveImpactFraction = 0.48;
       this.combatDriveMode = 'strike';
       return;
     }
-    this.applyCombatDriveVelocity();
     const safeDelta = Math.max(0, delta);
     this.combatDriveElapsed += safeDelta;
+    this.applyCombatDriveVelocity();
     this.combatDriveTimer = Math.max(0, this.combatDriveTimer - safeDelta);
     if (this.combatDriveTimer <= 0) {
       this.combatDriveDuration = 0;
       this.combatDriveElapsed = 0;
       this.combatDriveSpeed = 0;
-      this.combatDriveEntrySpeed = 0;
-      this.combatDriveEntryAlignment = 1;
+      this.combatDriveVelocity.set(0, 0, 0);
       this.combatDriveImpactFraction = 0.48;
       this.combatDriveMode = 'strike';
     }
@@ -785,6 +716,7 @@ export class PlayerController {
     this.combatDriveDuration = 0;
     this.combatDriveElapsed = 0;
     this.combatDriveSpeed = 0;
+    this.combatDriveVelocity.set(0, 0, 0);
   }
 
   private anchorSafePosition(position: Readonly<Vec3Data>): void {
@@ -1003,6 +935,9 @@ export class PlayerController {
     if (this.slideTimer <= 0) {
       this.crouching = this.physics.setCrouched(this.lowPosture || this.crouchRequested);
       if (this.grounded && jumpRequested && !this.lowPosture && this.jumpGroundRearmTimer <= 0) this.startJump();
+      // Remove only last tick's authored step before normal locomotion runs.
+      // Otherwise the small addition would accumulate on every physics tick.
+      this.removeCombatDriveVelocity();
       this.updateHorizontalVelocity(
         delta,
         sprintRequested && this.postSpecialRiseLockTimer <= 0,
@@ -1030,6 +965,15 @@ export class PlayerController {
     const horizontalDistance = Math.hypot(result.moved.x, result.moved.z);
     this.blockedMotionFraction = 0;
     this.handleBlockedMotion(delta, intendedX, intendedZ, result.moved.x, result.moved.z);
+    // A collision may brake the combined velocity. Retain only the authored
+    // portion that survived, or removing last tick's step could pull the player
+    // backward off a wall/opponent on the following tick.
+    for (const axis of ['x', 'z'] as const) {
+      const drive = this.combatDriveVelocity[axis];
+      this.combatDriveVelocity[axis] = drive * this.velocity[axis] > 0
+        ? Math.sign(drive) * Math.min(Math.abs(drive), Math.abs(this.velocity[axis]))
+        : 0;
+    }
 
     const wasTrackingAirborne = this.airborneTime > 0;
     if (!this.grounded) {

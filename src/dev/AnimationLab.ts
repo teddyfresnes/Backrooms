@@ -131,7 +131,7 @@ const FIRST_PERSON_ARM_SAFETY_MAX_FORWARD = 0.24;
 const FIRST_PERSON_ARM_SAFETY_RELEASE_RESPONSE = 15.0;
 // Move the render-only combat body farther *in front* of the eye. The previous
 // negative offset left one leading fist almost inside the near camera plane.
-const FIRST_PERSON_COMBAT_BODY_FORWARD_OFFSET = 0.075;
+const FIRST_PERSON_COMBAT_BODY_FORWARD_OFFSET = 0.30;
 const FIRST_PERSON_COMBAT_BODY_UP_OFFSET = -0.165;
 const FIRST_PERSON_COMBAT_BODY_OFFSET_RESPONSE = 12.0;
 const FIRST_PERSON_COMBAT_LATERAL_MAX = 0.32;
@@ -157,6 +157,9 @@ const FIRST_PERSON_COMBAT_VISUAL_HAND_Y_EXTRA = 0.06;
 const FIRST_PERSON_COMBAT_VERTICAL_MAX_CORRECTION = 0.20;
 const FIRST_PERSON_COMBAT_VERTICAL_RESPONSE = 10.0;
 const FIRST_PERSON_COMBAT_FRAMING_SETTLE_SECONDS = 0.26;
+const FIRST_PERSON_GUARD_WRIST_DEPTH = 0.36;
+const FIRST_PERSON_GUARD_WRIST_LATERAL = 0.24;
+const FIRST_PERSON_GUARD_WRIST_DROP = 0.22;
 const FIRST_PERSON_COMBAT_PUNCH_FORWARD_PRESENTATION_SCALE = 0.22;
 const COMBAT_STRIKE_AIM_CORRECTION_MAX = THREE.MathUtils.degToRad(38);
 const COMBAT_STRIKE_AIM_CORRECTION_RESPONSE = 1.0;
@@ -1652,6 +1655,7 @@ export class AnimationLab {
   private firstPersonCombatReleaseSeconds = 0;
   private neckBone?: THREE.Bone;
   private headBone?: THREE.Bone;
+  private readonly combatHeadLocalForward = new THREE.Vector3(0, 0, 1);
   private hipsBone?: THREE.Bone;
   private firstPersonHipsBone?: THREE.Bone;
   private firstPersonLeftUpperLegBone?: THREE.Bone;
@@ -2310,6 +2314,13 @@ export class AnimationLab {
     this.avatarAnchor.add(character);
     this.firstPersonAvatarAnchor.add(firstPersonCharacter);
     character.updateMatrixWorld(true);
+    if (this.headBone) {
+      // Derive the face axis from the neutral rig, not from assumed FBX bone
+      // axes. Shoulder twists may then be countered without flattening head tilt.
+      this.combatHeadLocalForward.set(0, 0, 1)
+        .applyQuaternion(this.avatarAnchor.getWorldQuaternion(new THREE.Quaternion()))
+        .applyQuaternion(this.headBone.getWorldQuaternion(new THREE.Quaternion()).invert());
+    }
     if (this.hipsBone) {
       this.recoveryRestHipsRotation.copy(this.hipsBone.getWorldQuaternion(new THREE.Quaternion()));
     }
@@ -4048,8 +4059,8 @@ export class AnimationLab {
 
     // Capture how the body was actually travelling when the punch began. Root
     // yaw no longer snaps to the reticle on mouse-down: the hips turn into the
-    // strike during anticipation while the combat drive curves the old momentum
-    // into the new line. This gives strafe/reverse/turn attacks distinct entries.
+    // strike during anticipation while locomotion retains its own momentum.
+    // This gives strafe/reverse/turn attacks distinct entries.
     this.combatAttackStartBodyYaw = this.bodyYaw;
     const entryState = this.player?.getDebugState();
     this.combatStrikeForwardAxis.set(
@@ -4201,19 +4212,21 @@ export class AnimationLab {
     if (!this.player) return;
     const timing = combatAttackTimingProfile(animation);
     const target = this.combatTargetDirection(this.tempDirection, false, true);
-    const missing = target ? Math.max(0, target.distance - 0.78) : 0.12;
-    const step = Math.min(missing, spacing === 'far' ? 0.48 : spacing === 'close' ? 0 : 0.32) * Math.min(1, scale);
+    // Normal boxing distance is reached through the hips/shoulder and arm. A
+    // click in range (or an air punch) must never move the capsule automatically.
+    const missing = target && target.distance <= 1.50 ? Math.max(0, target.distance - 1.08) : 0;
+    const step = Math.min(missing, spacing === 'far' ? 0.28 : spacing === 'close' ? 0 : 0.16) * Math.min(1, scale);
     if (step < 0.025) { this.player.cancelCombatLunge(); return; }
     this.setCombatAttackForward(this.meleeForward);
     const duration = Math.max(0.16, attackDuration * timing.contactStartFraction);
-    this.player.applyCombatLunge(this.meleeForward, Math.min(1.85, step / (duration * 0.72)), duration, timing.impactFraction);
+    this.player.applyCombatLunge(this.meleeForward, Math.min(1.25, step / (duration * 0.52)), duration, timing.impactFraction);
   }
 
   private updateCombatAttackEngagement(): void {
     const attack = this.combatAttack;
     if (!attack || !this.player) return;
     const target = this.combatTargetDirection(this.tempDirection, false, true);
-    if (attack.elapsed / attack.duration >= attack.contactStartFraction || (target && target.distance < 0.79)) {
+    if (attack.elapsed / attack.duration >= attack.contactStartFraction || (target && target.distance < 1.04)) {
       this.player.cancelCombatLunge();
     }
   }
@@ -6125,8 +6138,9 @@ export class AnimationLab {
 
   private copyCombatPoseToFirstPerson(): void {
     if (!this.combatAttack && !this.groundKick && !this.combatHitReaction) return;
-    // One set of joint rotations is authoritative for both views. Presentation
-    // offsets only frame the body; they never independently re-aim the fist.
+    // The world strike owns the contact pose in both views. First-person guard
+    // presentation is applied afterward, fading away before the striking hand
+    // enters its contact window, then returning smoothly during recoil.
     if ((this.groundKick || this.combatAttack) && this.hipsBone && this.firstPersonHipsBone) {
       this.firstPersonHipsBone.position.copy(this.hipsBone.position);
       this.firstPersonHipsBone.quaternion.copy(this.hipsBone.quaternion);
@@ -7658,9 +7672,16 @@ export class AnimationLab {
         rotation: chain[2]!.getWorldQuaternion(new THREE.Quaternion()),
       }));
       const pelvis = this.hipsBone.getWorldPosition(new THREE.Vector3());
-      const commitment = (character === 'jab' ? 0.045 : heavy ? 0.085 : 0.07) * reachEnvelope - 0.016 * load;
+      // Fight Idle begins with the pelvis behind the feet/shoulders. Transfer
+      // weight onto the front support instead of sliding the entire capsule.
+      // Crowded punches stay compact; full range uses the available stance.
+      const stanceReach = Number.isFinite(targetDistance)
+        ? THREE.MathUtils.lerp(0.45, 1, THREE.MathUtils.smoothstep(targetDistance, 0.65, 1.05))
+        : 0.75;
+      const commitment = (character === 'jab' ? 0.19 : heavy ? 0.25 : 0.22)
+        * stanceReach * reachEnvelope - 0.024 * load;
       pelvis.addScaledVector(this.combatStrikeForwardAxis, commitment);
-      pelvis.y -= 0.022 * load;
+      pelvis.y -= 0.028 * load;
       this.hipsBone.position.copy(this.hipsBone.parent.worldToLocal(pelvis));
       this.hipsBone.updateWorldMatrix(false, true);
       for (const { chain, point, rotation } of feet) {
@@ -8212,6 +8233,46 @@ export class AnimationLab {
     }
   }
 
+  private applyFirstPersonGuardPose(): void {
+    if (this.viewMode !== 'first-person' || this.combatPhase !== 'guard'
+      || this.combatHitReaction || this.groundKick
+      || this.combatDodge || this.player?.isIncapacitated) return;
+    // First-person guard is a presentation pose: each wrist sits below/to the
+    // side of the sight line. Centering the pair left the rear fist at the eye.
+    // Keep actual limb lengths and authored wrist/finger rotations; contact
+    // poses still come from the authoritative world rig during a strike.
+    const cameraRotation = this.firstPersonCamera.getWorldQuaternion(new THREE.Quaternion());
+    const chains = [
+      [this.firstPersonLeftUpperArmBone, this.firstPersonLeftForearmBone, this.firstPersonLeftHandBone],
+      [this.firstPersonRightUpperArmBone, this.firstPersonRightForearmBone, this.firstPersonRightHandBone],
+    ];
+    for (let side = 0; side < chains.length; side++) {
+      const [upper, forearm, hand] = chains[side]!;
+      if (!upper || !forearm || !hand) continue;
+      const attack = this.combatAttack;
+      let guardWeight = this.firstPersonCombatPoseBlend;
+      if (attack && attack.strikingSide === (side === 0 ? 'left' : 'right')) {
+        const phase = attack.elapsed / Math.max(1e-5, attack.duration);
+        const release = easeCombat(THREE.MathUtils.smoothstep(phase, 0.015, attack.contactStartFraction - 0.045));
+        const returnToGuard = easeCombat(THREE.MathUtils.smoothstep(
+          phase, attack.contactEndFraction + 0.06,
+          Math.min(attack.endTime / attack.duration - 0.02, attack.contactEndFraction + 0.24),
+        ));
+        guardWeight *= 1 - release * (1 - returnToGuard);
+      }
+      if (guardWeight < 1e-6) continue;
+      const target = new THREE.Vector3(
+        (side === 0 ? -1 : 1) * FIRST_PERSON_GUARD_WRIST_LATERAL,
+        -FIRST_PERSON_GUARD_WRIST_DROP - (side === 0 ? 0 : 0.035),
+        -FIRST_PERSON_GUARD_WRIST_DEPTH - (side === 0 ? 0.045 : 0),
+      ).applyQuaternion(cameraRotation).add(this.firstPersonCamera.position);
+      const handRotation = hand.getWorldQuaternion(new THREE.Quaternion());
+      solveCombatTwoBone(upper, forearm, hand, target, guardWeight, undefined, 0.94);
+      hand.quaternion.copy(hand.parent!.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(handRotation)).normalize();
+      hand.updateWorldMatrix(false, true);
+    }
+  }
+
   private applyFallMotion(delta: number): void {
     if (!this.player) return;
     const state = this.player.getDebugState();
@@ -8272,26 +8333,25 @@ export class AnimationLab {
     this.applyWorldYawOffset(this.neckBone, this.headLookYaw * 0.34);
     this.applyWorldYawOffset(this.headBone, this.headLookYaw * 0.5);
 
-    // Give each strike a different defensive head rhythm while eyes remain on
-    // the opponent. This is intentionally small compared with torso rotation: a
-    // cross slips the head off-line, a jab stays almost centered, and hooks carry
-    // a little more head/shoulder commitment. The mixer rewrites the base pose
-    // next frame, so this never accumulates into a neck twist.
-    if (this.combatAttack) {
-      const visual = combatAttackVisualProfile(this.combatAttack.animation);
-      if (visual) {
-        const normalized = this.combatAttack.duration > 1e-5
-          ? this.combatAttack.elapsed / this.combatAttack.duration
-          : 1;
-        const reach = combatStrikeReachEnvelope(normalized, this.combatAttack.kind === 'big-punch', this.combatAttack.impactFraction);
-        // Keep the head on the opponent. Variation comes from shoulders/torso
-        // and striking side, not from pitching the face into the floor. A tiny
-        // lateral slip remains so the silhouette is alive without breaking eye
-        // contact with the target.
-        const slip = THREE.MathUtils.degToRad(visual.headSlipDegrees) * reach * 0.22;
-        this.applyWorldYawOffset(this.neckBone, slip * 0.42);
-        this.applyWorldYawOffset(this.headBone, slip * 0.58);
-      }
+    if (this.headBone && (this.combatAttack || this.combatPhase === 'guard')
+      && !this.combatHitReaction && !this.groundKick && !this.combatDodge) {
+      // The chest must rotate into a punch; the face must keep watching the
+      // opponent. Apply a world-space counter-yaw through neck/head, leaving the
+      // authored chin tuck, pitch, roll and positional weight shift intact.
+      const facing = this.combatAttack ? this.combatAttackAimYaw : this.continuousViewYaw;
+      const target = this.combatTargetDirection(new THREE.Vector3(), false, true);
+      const targetYaw = target ? Math.atan2(target.direction.x, target.direction.z) : facing;
+      const gazeOffset = Math.atan2(Math.sin(targetYaw - facing), Math.cos(targetYaw - facing));
+      const gazeYaw = facing + THREE.MathUtils.clamp(gazeOffset, -0.55, 0.55);
+      const face = this.combatHeadLocalForward.clone()
+        .applyQuaternion(this.headBone.getWorldQuaternion(new THREE.Quaternion()));
+      const faceYaw = Math.atan2(face.x, face.z);
+      const counterYaw = THREE.MathUtils.clamp(
+        Math.atan2(Math.sin(gazeYaw - faceYaw), Math.cos(gazeYaw - faceYaw)),
+        -THREE.MathUtils.degToRad(75), THREE.MathUtils.degToRad(75),
+      );
+      this.applyWorldYawOffset(this.neckBone, counterYaw * 0.45);
+      this.applyWorldYawOffset(this.headBone, counterYaw * 0.55);
     }
 
     // Forward+strafe uses the authored strafe feet, but its head pose should
@@ -9835,6 +9895,7 @@ export class AnimationLab {
       this.updateFirstPersonBodyTransform(rawDelta);
       this.applyFirstPersonCombatFraming(rawDelta);
       this.applyFirstPersonArmCameraSafety(rawDelta);
+      this.applyFirstPersonGuardPose();
     }
     this.updateRecoveryCameraBlend(rawDelta);
     this.applyFirstPersonMeleeHitCameraFeedback(rawDelta);
