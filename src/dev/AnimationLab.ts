@@ -4667,7 +4667,7 @@ export class AnimationLab {
       footStart: ankle,
       supportStart: support.getWorldPosition(new THREE.Vector3()),
       supportRotation: support.getWorldQuaternion(new THREE.Quaternion()),
-      pelvisDrop: THREE.MathUtils.clamp(hip.y - targetPoint.y - verticalReach, 0.04, 0.20),
+      pelvisDrop: THREE.MathUtils.clamp(hip.y - targetPoint.y - verticalReach, 0, 0.20),
       footRotation: foot.getWorldQuaternion(new THREE.Quaternion()),
       targetPoint,
       previousTarget: this.groundKickTargetPoint.clone(),
@@ -4793,7 +4793,7 @@ export class AnimationLab {
         const horizontal = Math.hypot(kick.targetPoint.x - hip.x - forward.x * 0.14,
           kick.targetPoint.z - hip.z - forward.z * 0.14);
         const vertical = Math.sqrt(Math.max(0.01, reach * reach - horizontal * horizontal));
-        kick.pelvisDrop = THREE.MathUtils.clamp(hip.y - kick.targetPoint.y - vertical, 0.04, 0.22);
+        kick.pelvisDrop = THREE.MathUtils.clamp(hip.y - kick.targetPoint.y - vertical, 0, 0.22);
       }
       const supportOffset = kick.supportStart.clone().sub(pelvis).dot(right);
       pelvis.addScaledVector(forward, 0.14 * pose.supportLoad);
@@ -4818,8 +4818,12 @@ export class AnimationLab {
       target.y += Math.sin(Math.PI * retract) * 0.13;
     }
     const weight = easeCombat(t / 0.10) * (1 - easeCombat((t - 0.85) / 0.15));
-    solveCombatTwoBone(supportUpper, supportLower, supportFoot, kick.supportStart, weight, forward);
-    solveCombatTwoBone(upper, lower, foot, target, weight, forward);
+    // Preserve the support knee's authored bend plane rather than turning both
+    // thighs toward the kick. Only the lifted leg follows the forward pole.
+    solveCombatTwoBone(supportUpper, supportLower, supportFoot, kick.supportStart,
+      weight, undefined, 0.997, THREE.MathUtils.degToRad(12));
+    solveCombatTwoBone(upper, lower, foot, target, weight, forward,
+      0.975, THREE.MathUtils.degToRad(18));
     // Sole orientation is derived from the starting foot frame, never an Euler
     // accumulation. It stays level for a stomp and tilts at most 12 degrees.
     const worldFoot = kick.footRotation.clone().premultiply(new THREE.Quaternion().setFromAxisAngle(right,
@@ -7684,8 +7688,12 @@ export class AnimationLab {
       pelvis.y -= 0.028 * load;
       this.hipsBone.position.copy(this.hipsBone.parent.worldToLocal(pelvis));
       this.hipsBone.updateWorldMatrix(false, true);
+      const stanceWeight = easeCombat(THREE.MathUtils.clamp((Math.abs(commitment) + 0.028 * load) / 0.025, 0, 1));
       for (const { chain, point, rotation } of feet) {
-        solveCombatTwoBone(chain[0]!, chain[1]!, chain[2]!, point, 1, this.combatStrikeForwardAxis);
+        // Keep strafe/guard knee direction and thigh rotation. The small IK
+        // correction carries the weight shift without forcing a pinched stance.
+        solveCombatTwoBone(chain[0]!, chain[1]!, chain[2]!, point, stanceWeight,
+          undefined, 0.997, THREE.MathUtils.degToRad(12));
         const parent = chain[2]!.parent!.getWorldQuaternion(new THREE.Quaternion()).invert();
         chain[2]!.quaternion.copy(parent.multiply(rotation)).normalize();
       }
