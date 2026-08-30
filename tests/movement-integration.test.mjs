@@ -8,6 +8,14 @@ after(() => lab?.dispose());
 const run = (seconds, dt = 1 / 60) => { for (let t = 0; t < seconds; t += dt) stepLab(lab, dt); };
 const makeBody = () => {
   setupDuel(lab);
+  // These cases measure a resting body on flat ground. Keep the impact away
+  // from pits/ramps so a still-rolling corpse cannot invalidate that fixture.
+  lab.player.input.clear();
+  lab.idleNpcAnchor.position.set(-14, 0, -12);
+  lab.idleNpcAnchor.updateMatrixWorld(true);
+  lab.syncNpcPlayerBlocker(true);
+  lab.player.teleport({ x: -14, y: .865, z: -13.05 });
+  run(.3);
   lab.startNpcRagdoll('punch', new THREE.Vector3(0, 0, 1), 12, 'body');
   lab.npcGroundKickRecoveryDelay = 100;
   run(4);
