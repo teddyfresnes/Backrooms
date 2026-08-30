@@ -53,6 +53,7 @@ export function solveCombatTwoBone(
   upper: THREE.Bone, lower: THREE.Bone, end: THREE.Bone,
   target: Readonly<THREE.Vector3>, weight: number, pole?: Readonly<THREE.Vector3>,
   maxReachFraction = 0.975,
+  maxTwistRadians = Math.PI,
 ): void {
   const blend = THREE.MathUtils.clamp(weight, 0, 1);
   if (blend <= 1e-6 || !Number.isFinite(target.x + target.y + target.z)) return;
@@ -93,7 +94,12 @@ export function solveCombatTwoBone(
   const desiredNormal = elbow.clone().sub(a).cross(tip.clone().sub(elbow)).normalize();
   const currentNormal = localNormal.clone().applyQuaternion(upper.getWorldQuaternion(new THREE.Quaternion()));
   currentNormal.addScaledVector(upperAxis, -currentNormal.dot(upperAxis)).normalize();
-  const twist = Math.atan2(upperAxis.dot(currentNormal.clone().cross(desiredNormal)), currentNormal.dot(desiredNormal));
+  const wantedTwist = Math.atan2(upperAxis.dot(currentNormal.clone().cross(desiredNormal)), currentNormal.dot(desiredNormal));
+  // A support leg must retain the authored hip rotation, especially while
+  // strafing. Forcing its entire hinge plane toward a new pole can twist the
+  // thigh by 80 degrees and collapse the pelvis skin even with correct feet.
+  // Arm/contact solves retain the full anatomical correction by default.
+  const twist = THREE.MathUtils.clamp(wantedTwist, -Math.abs(maxTwistRadians), Math.abs(maxTwistRadians));
   const worldRotation = upper.getWorldQuaternion(new THREE.Quaternion())
     .premultiply(new THREE.Quaternion().setFromAxisAngle(upperAxis, twist));
   const parentRotation = upper.parent?.getWorldQuaternion(new THREE.Quaternion()).invert() ?? new THREE.Quaternion();
