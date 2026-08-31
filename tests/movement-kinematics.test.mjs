@@ -2082,10 +2082,11 @@ test('v117 NPC keeps Fight Idle upper-body guard layered over locomotion and add
   assert.match(lab, /combatAttackPlaybackRate\(kind, pair\.clip\.duration, visual\?\.tempoMultiplier \?\? 1\)/);
 });
 
-test('v74 guard and strikes share the same look-facing root so attack start cannot teleport left or right', () => {
+test('guard and strikes keep shared root axes without per-move yaw offsets', () => {
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
   assert.match(lab, /const combatFacingActive = this\.combatAttack !== null[\s\S]*this\.combatPhase === 'guard'/);
-  assert.match(lab, /if \(combatFacingActive\) \{[\s\S]*this\.bodyYaw = this\.continuousViewYaw;[\s\S]*this\.avatarAnchor\.rotation\.y = this\.bodyYaw/);
+  // The former direct yaw assignment is intentionally gone. Actual turn-rate
+  // and handoff continuity are covered by action-transitions-integration.
   assert.doesNotMatch(lab, /firstPersonCombatStanceYawCorrection/);
   assert.doesNotMatch(lab, /combatAttackForwardYawCorrection/);
 });
