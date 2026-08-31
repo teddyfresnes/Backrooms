@@ -158,7 +158,7 @@ export class MovementLab {
         ${formatKeyLabel(controls.forward)}${formatKeyLabel(controls.left)}${formatKeyLabel(controls.backward)}${formatKeyLabel(controls.right)} ·
         ${formatKeyLabel(controls.sprint)} sprint · ${formatKeyLabel(controls.jump)} saut ·
         ${formatKeyLabel(controls.crouch)} crouch / glissade · slide+${formatKeyLabel(controls.jump)} sortie ·
-        A/E lean gauche/droite · après slide : court verrou 0,22 s, puis avancer+${formatKeyLabel(controls.sprint)} pour se relever / repartir · Échap souris
+        A/E lean gauche/droite · slide : maintenir avancer+${formatKeyLabel(controls.sprint)} pour se relever et repartir · Échap souris
       </p>
     `;
     for (const element of panel.querySelectorAll<HTMLElement>('[data-stat]')) {

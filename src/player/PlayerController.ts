@@ -1189,6 +1189,18 @@ export class PlayerController {
       MOVEMENT_TUNING.posture.postSpecialRiseLockDuration,
     );
     if (stayLow) {
+      // Held forward+sprint is a continuous launch, not a request to crouch-walk
+      // for a few ticks first. Expand only through the usual clearance check;
+      // a low ceiling still keeps the ordinary crouched exit and its lock.
+      const axes = this.input.axes;
+      if (this.grounded && !this.sprintSuppressed && axes.sprint
+        && axes.forward >= MOVEMENT_TUNING.posture.sprintRiseForwardThreshold
+        && this.tryStandFromCrouch(true)) {
+        this.lowPosture = false;
+        this.lowPostureElapsed = 0;
+        this.postSpecialRiseLockTimer = 0;
+        return;
+      }
       // A completed slide becomes an ordinary crouch immediately. Movement input
       // can therefore go straight into Crouch Walk; only automatic sprint/stand
       // is held back for the short post-slide lock.
