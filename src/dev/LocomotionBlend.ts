@@ -74,3 +74,65 @@ export function sampleGaitPhase(rig: THREE.Object3D, clip: THREE.AnimationClip):
 
 export const alignGaitPhase = (phase: number, oldLandmark: number, newLandmark: number): number =>
   ((phase - oldLandmark + newLandmark) % 1 + 1) % 1;
+
+/** Keep the slide's authored push off the floor, then enter the nearest running
+ * foot phase. Mixing a crouch walk with a run loses this actual recovery motion. */
+export function createSlideSprintRecoveryClip(
+  slide: THREE.AnimationClip,
+  run: THREE.AnimationClip,
+  sourceStart: number,
+): { clip: THREE.AnimationClip; runPhase: number } {
+  const duration = 0.58;
+  const start = Math.min(slide.duration - 0.1, Math.max(0, sourceStart));
+  const end = slide.duration * 0.94;
+  const sampleTrack = (track: THREE.KeyframeTrack): THREE.Interpolant => track.name.endsWith('.quaternion')
+    ? new THREE.QuaternionLinearInterpolant(track.times, track.values, 4)
+    : new THREE.LinearInterpolant(track.times, track.values, track.getValueSize());
+  const runSamples = new Map(run.tracks.map(track => [track.name, sampleTrack(track)]));
+  const slideSamples = new Map(slide.tracks.map(track => [track.name, sampleTrack(track)]));
+  let runPhase = 0, bestCost = Infinity;
+  const a = new THREE.Quaternion(), b = new THREE.Quaternion();
+  for (let i = 0; i < 96; i++) {
+    const phase = i / 96;
+    let cost = 0;
+    for (const track of slide.tracks) {
+      if (!/hips|upleg|leg|foot/i.test(track.name) || !track.name.endsWith('.quaternion')) continue;
+      const sample = runSamples.get(track.name);
+      if (!sample) continue;
+      a.fromArray(slideSamples.get(track.name)!.evaluate(end)).normalize();
+      b.fromArray(sample.evaluate(phase * run.duration)).normalize();
+      cost += a.angleTo(b) ** 2 * (/hips|foot/i.test(track.name) ? 2 : 1);
+    }
+    if (cost < bestCost) { bestCost = cost; runPhase = phase; }
+  }
+  const frames = 35;
+  const times = Array.from({ length: frames + 1 }, (_, i) => duration * i / frames);
+  const tracks = slide.tracks.map(track => {
+    const values: number[] = [];
+    const source = slideSamples.get(track.name)!;
+    const target = runSamples.get(track.name);
+    const quaternion = track.name.endsWith('.quaternion');
+    const size = track.getValueSize();
+    let previous: THREE.Quaternion | undefined;
+    for (const time of times) {
+      const progress = time / duration;
+      const blend = THREE.MathUtils.smoothstep(progress, 0.72, 1);
+      const pose = source.evaluate(start + (end - start) * progress);
+      // The next loop starts at this exact phase, including the moving tail.
+      const runTime = ((runPhase * run.duration + time - duration) % run.duration + run.duration) % run.duration;
+      const running = target?.evaluate(runTime);
+      if (quaternion) {
+        a.fromArray(pose).normalize();
+        if (running) a.slerp(b.fromArray(running).normalize(), blend);
+        if (previous && previous.dot(a) < 0) a.set(-a.x, -a.y, -a.z, -a.w);
+        values.push(a.x, a.y, a.z, a.w); previous = a.clone();
+      } else {
+        for (let i = 0; i < size; i++) values.push(THREE.MathUtils.lerp(pose[i]!, running?.[i] ?? pose[i]!, blend));
+      }
+    }
+    return quaternion
+      ? new THREE.QuaternionKeyframeTrack(track.name, times, values)
+      : new THREE.VectorKeyframeTrack(track.name, times, values);
+  });
+  return { clip: new THREE.AnimationClip('AnimationLab_slide-to-running', duration, tracks), runPhase };
+}

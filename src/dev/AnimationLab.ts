@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GaitTransition, sampleGaitPhase, alignGaitPhase } from './LocomotionBlend';
+import { GaitTransition, sampleGaitPhase, alignGaitPhase, createSlideSprintRecoveryClip } from './LocomotionBlend';
 import { advanceStrikeClock, CombatImpactAudio } from './CombatFeel';
 import { sweepCombatContact, combatChainReady, CombatBalance, stepCombatSpring } from './CombatContact';
 import { solveCombatTwoBone, easeCombat, CombatPoseHandoff, CombatMotionHistory, CombatProceduralPose } from './CombatRig';
@@ -297,6 +297,7 @@ const ANIMATIONS = [
   { id: 'running-jump', label: 'Jump · sprint', file: 'running-jump.fbx' },
   { id: 'jump-backward', label: 'Jump · arrière', file: 'jump-backward.fbx' },
   { id: 'running-slide', label: 'Running slide', file: 'running-slide.fbx' },
+  { id: 'slide-to-running', label: 'Slide → sprint', generated: true },
 
   { id: 'fight-idle', label: 'Fight · bouncing idle', file: 'fight-idle.fbx' },
   { id: 'standing-idle-to-fight-idle', label: 'Standing idle → fight idle', file: 'standing-idle-to-fight-idle.fbx' },
@@ -1174,6 +1175,10 @@ const addBackroomsLabDecor = (scene: THREE.Scene, materials: LabMaterials): void
 };
 
 const expAlpha = (delta: number, response: number): number => 1 - Math.exp(-Math.max(0, delta) * response);
+const followActionYaw = (current: number, target: number, delta: number, response: number, maxDegrees: number): number => {
+  const limit = THREE.MathUtils.degToRad(maxDegrees) * Math.max(0, delta);
+  return current + THREE.MathUtils.clamp(wrapAngleRadians(target - current) * expAlpha(delta, response), -limit, limit);
+};
 
 const isTurnAnimation = (id: AnimationId): boolean => id.includes('turn');
 const isDiagonalLocomotion = (id: AnimationId): boolean =>
@@ -1234,7 +1239,7 @@ const ONE_SHOT_ANIMATIONS = new Set<AnimationId>([
   'idle-wait-1', 'idle-wait-2', 'idle-action-to-standing-idle',
   'standing-to-crouched', 'crouched-to-standing',
   'jumping-up', 'jump', 'running-jump', 'jump-backward',
-  'running-slide',
+  'running-slide', 'slide-to-running',
   'standing-idle-to-fight-idle', 'action-idle-to-fight-idle',
   'fight-idle-to-action-idle', 'fight-idle-to-standing-idle',
   'punching-1', 'punching-2', 'punching-3-clean', 'punching-4-alt',
@@ -1388,6 +1393,8 @@ const slideRecoveryTiming = (source: THREE.AnimationClip): SlideRecoveryTiming =
 };
 
 const transitionFadeSeconds = (from: AnimationId, to: AnimationId): number => {
+  if (from === 'running-slide' && to === 'slide-to-running') return 0.07;
+  if (from === 'slide-to-running') return to === 'running' ? 0.10 : 0.22;
   if (from === 'running-slide' && to === 'crouch-idle') return 0.28;
   if (from === 'running' && (to === 'walking' || to === 'idle-action' || to === 'idle')) return 0.3;
   if (from === 'walking' && (to === 'idle-action' || to === 'idle')) return 0.24;
@@ -1542,6 +1549,7 @@ export class AnimationLab {
   private combatAttackAction?: CombatLayerPair;
   private combatAttackAimYaw = 0;
   private combatAttackStartBodyYaw = 0;
+  private combatGazeYaw: number | null = null;
   private combatAttackEntryForwardSpeed = 0;
   private combatAttackEntryRightSpeed = 0;
   private combatAttackRecoverySeconds = 0;
@@ -1853,6 +1861,8 @@ export class AnimationLab {
   private wasSliding = false;
   private slideVisualSettled = false;
   private slideRecoveryBlendStart = 0;
+  private slideRecoverySource?: THREE.AnimationClip;
+  private slideSprintExitPhase = 0;
   private idleResumeMode: IdleResumeMode = 'sleeping';
   private idleNeedsEntry = false;
   private idleSequencePhase: IdleSequencePhase = 'sleeping';
@@ -2357,6 +2367,7 @@ export class AnimationLab {
         : undefined;
       const slideTiming = entry.id === 'running-slide' ? slideRecoveryTiming(sourceClip) : undefined;
       if (slideTiming) this.slideRecoveryBlendStart = slideTiming.blendStart;
+      if (slideTiming) this.slideRecoverySource = inPlaceClip(sourceClip, 'Slide_FullRecovery', false, hipVertical);
       const trimEnd = slideTiming?.trimEnd;
       // This specific source FBX is authored 180° around its Hips compared with
       // the rest of the pack. Correct only its root orientation, not its motion.
@@ -2383,6 +2394,14 @@ export class AnimationLab {
       this.firstPersonAnimations.set(entry.id, { clip, action: firstPersonAction });
     }));
 
+    if (this.slideRecoverySource) {
+      const recovery = createSlideSprintRecoveryClip(
+        this.slideRecoverySource, this.animations.get('running')!.clip, this.slideRecoveryBlendStart,
+      );
+      this.slideSprintExitPhase = recovery.runPhase;
+      this.animations.set('slide-to-running', { clip: recovery.clip, action: this.mixer.clipAction(recovery.clip) });
+      this.firstPersonAnimations.set('slide-to-running', { clip: recovery.clip, action: this.firstPersonMixer.clipAction(recovery.clip) });
+    }
     this.prepareGaitLandmarks();
     this.prepareDirectionalLocomotionAnimations();
     this.prepareGaitLandmarks();
@@ -3212,6 +3231,10 @@ export class AnimationLab {
       next.time = alignGaitPhase(previousPhase, oldLandmark, newLandmark) * loaded.clip.duration;
       firstPersonNext.time = alignGaitPhase(previousFirstPersonPhase, oldLandmark, newLandmark) * firstPersonLoaded.clip.duration;
     }
+    if (previousAnimation === 'slide-to-running' && id === 'running') {
+      next.time = this.slideSprintExitPhase * loaded.clip.duration;
+      firstPersonNext.time = this.slideSprintExitPhase * firstPersonLoaded.clip.duration;
+    }
 
     // Hit reactions must read on the exact contact frame. A long locomotion-style
     // crossfade makes HP change first and the body react later, which feels like
@@ -3720,6 +3743,7 @@ export class AnimationLab {
   }
 
   private resetCombatState(clearPointer = false): void {
+    this.combatGazeYaw = null;
     if (this.groundKick && !this.ragdoll && !this.recovery && !this.combatHitReaction) this.player?.setInputEnabled(this.player.isLocked);
     this.player?.cancelCombatLunge();
     this.stopCombatLayers(0);
@@ -6975,14 +6999,16 @@ export class AnimationLab {
         this.slideVisualSettled = false;
       }
       const slideClip = this.animations.get('running-slide')?.clip;
+      const continueSprint = this.player.isSprintRequested()
+        && intent.forward >= MOVEMENT_TUNING.posture.sprintRiseForwardThreshold;
       const rate = slideClip
-        ? THREE.MathUtils.clamp(slideClip.duration / MOVEMENT_TUNING.slide.duration, 0.78, 1.55)
+        ? THREE.MathUtils.clamp((continueSprint ? this.slideRecoveryBlendStart : slideClip.duration) / MOVEMENT_TUNING.slide.duration, 0.78, 1.55)
         : 1;
       if (!this.slideVisualSettled && this.currentAnimation === 'running-slide' && this.currentAction) {
         const blendStart = this.slideRecoveryBlendStart > 0
           ? this.slideRecoveryBlendStart
           : (slideClip?.duration ?? 1) * 0.73;
-        if (this.currentAction.time >= blendStart) this.slideVisualSettled = true;
+        if (!continueSprint && this.currentAction.time >= blendStart) this.slideVisualSettled = true;
       }
       if (this.slideVisualSettled) this.playAutoImmediate('crouch-idle', true, 1);
       else this.playAutoImmediate('running-slide', false, rate);
@@ -6991,6 +7017,13 @@ export class AnimationLab {
     if (this.wasSliding) {
       this.wasSliding = false;
       this.slideVisualSettled = false;
+      if (state.grounded && this.player.isSprintRequested()
+        && intent.forward >= MOVEMENT_TUNING.posture.sprintRiseForwardThreshold
+        && !state.crouching && this.slideRecoverySource) {
+        this.autoOneShot = 'slide-to-running';
+        this.playAutoImmediate('slide-to-running', false, 1);
+        return;
+      }
     }
 
     if (state.airborne) {
@@ -7090,7 +7123,11 @@ export class AnimationLab {
       this.clearAuthoredTurn();
     }
     if (this.autoOneShot) {
-      if (isTurnAnimation(this.autoOneShot)) {
+      if (this.autoOneShot === 'slide-to-running') {
+        if (!state.crouching && !state.lowPosture && this.animationStillPlaying('slide-to-running', 0)) return;
+        this.autoOneShot = null;
+      }
+      if (this.autoOneShot && isTurnAnimation(this.autoOneShot)) {
         // A turn may not be cut immediately by new movement input. First let
         // the clip reach its readable turning phase and let the physical body
         // yaw cover a minimum angle; after that locomotion may take over.
@@ -7121,7 +7158,7 @@ export class AnimationLab {
           this.holdSettledActionTurnPose(finishedTurn);
         }
         if (resumeMode === 'sleeping') this.idleLookMovedThisFrame = false;
-      } else {
+      } else if (this.autoOneShot) {
         const mayHold = speed < 1.45;
         if (mayHold && this.currentAutoOneShotStillPlaying()) return;
         this.autoOneShot = null;
@@ -7222,7 +7259,11 @@ export class AnimationLab {
       rate = THREE.MathUtils.clamp(speed / WALK_GAIT_REFERENCE_SPEED, 0.16, 1.45);
     }
 
-    if (standingMoveIntent && speed < 0.24 && !isCycleLocomotionAnimation(this.currentAnimation)) {
+    if (this.currentAnimation === 'slide-to-running') {
+      // The recovery ends on the next foot phase; do not hold its final frame
+      // through the ordinary locomotion candidate debounce.
+      this.playAutoImmediate(id, true, rate, reverse);
+    } else if (standingMoveIntent && speed < 0.24 && !isCycleLocomotionAnimation(this.currentAnimation)) {
       // Begin a slow placement step immediately; cadence grows with speed.
       // Repeated input frames must not bypass the rate smoothing below.
       this.playAutoImmediate(id, true, rate, reverse);
@@ -7375,15 +7416,33 @@ export class AnimationLab {
     const moving = movementIntentActive || state.horizontalSpeed > 0.28;
     const sprinting = state.sprinting;
 
+    if (this.autoOneShot === 'slide-to-running' && !state.crouching && !state.airborne) {
+      // Lift in the direction of the slide first. Once the hips are upright,
+      // smoothly recover the camera direction instead of pivoting on the floor.
+      const progress = (this.currentAction?.time ?? 0) / Math.max(0.001, this.currentAction?.getClip().duration ?? 1);
+      if (progress > 0.66) this.bodyYaw = followActionYaw(this.bodyYaw, this.continuousViewYaw, delta, 8, 210);
+      this.avatarAnchor.rotation.y = this.bodyYaw;
+      this.bodyTurning = false;
+      this.bodyTurnRate = 0;
+      this.lookOffsetDegrees = THREE.MathUtils.radToDeg(wrapAngleRadians(this.continuousViewYaw - this.bodyYaw));
+      this.headLookYaw = dampAngleRadians(this.headLookYaw,
+        THREE.MathUtils.clamp(wrapAngleRadians(this.continuousViewYaw - this.bodyYaw), -0.7, 0.7), expAlpha(delta, 8));
+      this.pendingStrongTurn = null;
+      this.clearAuthoredTurn();
+      return;
+    }
+
     const combatFacingActive = this.combatAttack !== null
       || this.groundKick !== null
       || this.combatPhase === 'enter'
       || this.combatPhase === 'guard';
     if (combatFacingActive) {
-      // Guard tracks the look axis directly. Strikes and ground kicks own their
+      // Guard catches up at a bounded rate. Strikes and ground kicks own their
       // root yaw for the duration of the move; camera/body follow must not fight
       // that yaw every frame or a moving/downed target can create violent spins.
-      if (!this.combatAttack && !this.groundKick) this.bodyYaw = this.continuousViewYaw;
+      if (!this.combatAttack && !this.groundKick) {
+        this.bodyYaw = followActionYaw(this.bodyYaw, this.continuousViewYaw, delta, 10, 240);
+      }
       this.avatarAnchor.rotation.y = this.bodyYaw;
       this.bodyTurning = false;
       this.bodyTurnRate = 0;
@@ -8325,7 +8384,7 @@ export class AnimationLab {
     }
   }
 
-  private applyHeadLook(): void {
+  private applyHeadLook(delta: number): void {
     // Mixer animation is evaluated first each frame, then the look is layered.
     // A downed player is different: the impact pose must stay frozen, so only
     // neck/head receive the small remaining look cone (no spine/body twist).
@@ -8350,17 +8409,20 @@ export class AnimationLab {
       const target = this.combatTargetDirection(new THREE.Vector3(), false, true);
       const targetYaw = target ? Math.atan2(target.direction.x, target.direction.z) : facing;
       const gazeOffset = Math.atan2(Math.sin(targetYaw - facing), Math.cos(targetYaw - facing));
-      const gazeYaw = facing + THREE.MathUtils.clamp(gazeOffset, -0.55, 0.55);
+      const desiredGazeYaw = facing + THREE.MathUtils.clamp(gazeOffset, -0.55, 0.55);
       const face = this.combatHeadLocalForward.clone()
         .applyQuaternion(this.headBone.getWorldQuaternion(new THREE.Quaternion()));
       const faceYaw = Math.atan2(face.x, face.z);
+      // Keep the final strike gaze when returning to guard, then let the eyes
+      // and head catch the new view. A newly sampled camera yaw is not a pose.
+      this.combatGazeYaw = followActionYaw(this.combatGazeYaw ?? faceYaw, desiredGazeYaw, delta, 14, 300);
       const counterYaw = THREE.MathUtils.clamp(
-        Math.atan2(Math.sin(gazeYaw - faceYaw), Math.cos(gazeYaw - faceYaw)),
+        wrapAngleRadians(this.combatGazeYaw - faceYaw),
         -THREE.MathUtils.degToRad(75), THREE.MathUtils.degToRad(75),
       );
       this.applyWorldYawOffset(this.neckBone, counterYaw * 0.45);
       this.applyWorldYawOffset(this.headBone, counterYaw * 0.55);
-    }
+    } else this.combatGazeYaw = null;
 
     // Forward+strafe uses the authored strafe feet, but its head pose should
     // read as a diagonal advance rather than a full sideways crab-walk. Counter
@@ -9133,7 +9195,11 @@ export class AnimationLab {
     this.playAnimation('idle', true, 1, false, true);
     this.resetRagdollMotionHistory();
     this.player.setInputEnabled(false);
-    this.updateAvatarTransform(0, true);
+    // Keep the actual recovery orientation. Snapping the transform here used
+    // to erase it and instantly face the player's saved mouse direction.
+    this.continuousViewYaw = Math.PI + this.player.getContinuousAimYawRadians();
+    this.headLookYaw = 0;
+    this.updateAvatarTransform(0);
     this.applyViewMode(true);
     if (this.viewMode === 'first-person') {
       this.recoveryCameraBlend = 0;
@@ -9886,7 +9952,7 @@ export class AnimationLab {
     }
     this.applyFirstPersonArmTuning(rawDelta);
     this.applyFallMotion(rawDelta);
-    this.applyHeadLook();
+    this.applyHeadLook(rawDelta);
     this.updatePitEdgeRisk(rawDelta);
     if (this.ragdoll) {
       // The ragdoll cloned the fully evaluated animation pose above. Render the
