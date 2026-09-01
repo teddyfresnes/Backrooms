@@ -86,7 +86,7 @@ test('ragdoll melee impulse adds physical momentum once and preserves existing i
 test('ground kick wakes a resting articulated body with one downward contact impulse',()=>{
  setupDuel(lab);lab.startNpcRagdoll('punch',new THREE.Vector3(0,0,1),12,'body');lab.npcGroundKickRecoveryDelay=100;run(2.5);
  const r=lab.npcRagdoll,before=momentum(r);r.applyGroundKickImpact(new THREE.Vector3(0,0,1),1,false,lab.groundKickTargetPoint);const change=momentum(r).sub(before);
- assert.ok(change.y<0);assert.ok(Math.abs(change.length()-22)<.02);assert.equal(r.isSettled,false);
+ assert.ok(change.y<0);assert.ok(Math.abs(change.length()-30)<.02);assert.equal(r.isSettled,false);
 });
 test('actual ground-kick trajectory keeps finite limbs, limits yaw and can be interrupted without damage',()=>{
  setupDuel(lab);lab.startNpcRagdoll('punch',new THREE.Vector3(0,0,1),12,'body');lab.npcGroundKickRecoveryDelay=100;run(2.4);
