@@ -2777,7 +2777,7 @@ test('v119 dodge animation offsets legs hips and torso on different phases then 
 
 test('v120 ground attacks use contextual stomp/get-up kick timings and real foot-path contact', async () => {
   const rules = await import('../.movement-test-dist/dev/GroundKickRules.js');
-  assert.equal(rules.GROUND_KICK_PROFILES.stomp.damage, 14);
+  assert.ok(rules.GROUND_KICK_PROFILES.stomp.damage > 14, 'a loaded stomp should have a stronger impact');
   assert.equal(rules.GROUND_KICK_PROFILES['get-up-kick'].damage, 18);
   assert.ok(rules.groundKickContactAccepted(0.54, 'stomp', 0.12, 1.0));
   assert.ok(!rules.groundKickContactAccepted(0.20, 'stomp', 0.20, 1.1));

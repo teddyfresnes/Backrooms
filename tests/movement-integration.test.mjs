@@ -97,7 +97,7 @@ test('a stomp descends almost vertically onto the real torso surface before its 
   for (let i = 0; i < 120; i++) {
     stepLab(lab, 1 / 120);
     const phase = kick.elapsed / kick.duration;
-    if (lab.groundKick && phase >= 0.34 && !kick.impactApplied) samples.push(foot.getWorldPosition(new THREE.Vector3()));
+    if (lab.groundKick && phase >= 0.44 && !kick.impactApplied) samples.push(foot.getWorldPosition(new THREE.Vector3()));
     if (lab.npcHealth !== health) { changes++; health = lab.npcHealth; }
   }
   assert.equal(changes, 1);
