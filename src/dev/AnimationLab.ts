@@ -788,6 +788,9 @@ interface ActiveGroundKick {
   sampledElapsed: number;
   elapsed: number;
   impactApplied: boolean;
+  compressionSeconds: number;
+  contactFoot?: THREE.Vector3;
+  contactAge: number;
 }
 
 interface CombatSweepContact {
@@ -4328,7 +4331,7 @@ export class AnimationLab {
     const damage = combatPhysicalContactDamage(attack.kind, attack.spacing, contact.distance, contact.fistSpeed, contact.zone);
     if (damage <= 0) return;
     attack.impactApplied = true;
-    attack.compressionSeconds = attack.kind === 'big-punch' ? 0.055 : 0.038;
+    attack.compressionSeconds = attack.kind === 'big-punch' ? 0.065 : 0.048;
     const contactHand = attack.strikingSide === 'left' ? this.leftHandBone : this.rightHandBone;
     attack.contactPoint = contactHand?.getWorldPosition(new THREE.Vector3());
     this.player?.cancelCombatLunge();
@@ -4714,6 +4717,8 @@ export class AnimationLab {
       targetYaw,
       elapsed: 0,
       impactApplied: false,
+      compressionSeconds: 0,
+      contactAge: 0,
     };
     this.groundKickFootReady = false;
     this.combatLeftPressConsumed = true;
@@ -4787,7 +4792,10 @@ export class AnimationLab {
       );
     }
     if (normalizedBeforeStep >= 0.24) this.player.cancelCombatLunge();
-    kick.elapsed += Math.max(0, delta);
+    const strikeClock = advanceStrikeClock(delta, kick.compressionSeconds);
+    kick.compressionSeconds = strikeClock.remaining;
+    kick.elapsed += strikeClock.step;
+    if (kick.contactFoot) kick.contactAge += Math.max(0, delta);
     if (kick.elapsed < kick.duration) return true;
     this.player.cancelCombatLunge();
     this.groundKick = null;
@@ -4841,7 +4849,9 @@ export class AnimationLab {
       const supportOffset = kick.supportStart.clone().sub(pelvis).dot(right);
       // Ease the weight transfer out of the captured resting stance.
       const load = pose.supportLoad * entryWeight;
-      pelvis.addScaledVector(forward, 0.14 * load);
+      const transfer = kick.kind === 'get-up-kick' ? 0.14 * load
+        : 0.12 * load + 0.05 * pose.drive * entryWeight;
+      pelvis.addScaledVector(forward, transfer);
       pelvis.addScaledVector(right, THREE.MathUtils.clamp(supportOffset, -0.07, 0.07) * load);
       // Keep both soles on the floor during the quiet preparation. Lower the
       // pelvis as the lifted leg takes over, when its IK has reached full weight.
@@ -4866,16 +4876,16 @@ export class AnimationLab {
         target.y += Math.sin(Math.PI * pose.recover) * 0.12;
       }
     } else if (kick.kind === 'soccer-kick') {
-      // Heel draws back low, then the instep sweeps through the side of the body.
-      // The knee never performs the high forward chamber of a push kick.
-      chamber.copy(kick.footStart).addScaledVector(forward, -0.24)
+      // A compact low strike driven from the hip, rather than a long football
+      // backswing. The boot meets the flank and stops against its resistance.
+      chamber.copy(kick.footStart).addScaledVector(forward, -0.10)
         .addScaledVector(right, kick.side === 'left' ? -0.035 : 0.035);
-      chamber.y = Math.max(kick.footStart.y + 0.18, kick.targetPoint.y + 0.05);
-      const through = kick.targetPoint.clone().addScaledVector(forward, 0.16);
+      chamber.y = Math.max(kick.footStart.y + 0.11, kick.targetPoint.y + 0.035);
+      const through = kick.targetPoint.clone().addScaledVector(forward, 0.10);
       if (t < 0.38) target.lerpVectors(kick.footStart, chamber, pose.lift);
       else if (t < 0.66) {
         target.lerpVectors(chamber, through, pose.strike);
-        target.y += Math.sin(Math.PI * pose.strike) * 0.055;
+        target.y += Math.sin(Math.PI * pose.strike) * 0.035;
       } else {
         target.lerpVectors(through, kick.footStart, pose.recover);
         target.y += Math.sin(Math.PI * pose.recover) * 0.10;
@@ -4890,6 +4900,11 @@ export class AnimationLab {
       target.lerpVectors(kick.targetPoint, kick.footStart, retract);
       target.y += Math.sin(Math.PI * retract) * 0.13;
     }
+    if (kick.contactFoot) {
+      // Resistance begins only after the visible boot actually touches. Keep
+      // the world running while the attacking leg absorbs the collision.
+      target.lerp(kick.contactFoot, 1 - easeCombat(kick.contactAge / 0.11));
+    }
     const weight = entryWeight * (1 - easeCombat((t - 0.85) / 0.15));
     // Preserve the support knee's authored bend plane rather than turning both
     // thighs toward the kick. Only the lifted leg follows the forward pole.
@@ -4900,19 +4915,22 @@ export class AnimationLab {
     // Sole orientation is derived from the starting foot frame, never an Euler
     // accumulation. It stays level for a stomp and tilts at most 12 degrees.
     const worldFoot = kick.footRotation.clone().premultiply(new THREE.Quaternion().setFromAxisAngle(right,
-      THREE.MathUtils.degToRad(downward ? 2 : -10) * pose.drive));
+      THREE.MathUtils.degToRad(downward ? 2 : kick.kind === 'soccer-kick' ? 6 : -10) * pose.drive));
     const parent = foot.parent!.getWorldQuaternion(new THREE.Quaternion()).invert();
     foot.quaternion.slerp(parent.multiply(worldFoot), weight).normalize();
     const supportParent = supportFoot.parent!.getWorldQuaternion(new THREE.Quaternion()).invert();
     supportFoot.quaternion.slerp(supportParent.multiply(kick.supportRotation), weight).normalize();
-    this.applyWorldAxisOffset(this.combatSpine1Bone, right,
-      THREE.MathUtils.degToRad(kick.kind === 'soccer-kick' ? -7 : -5) * pose.supportLoad);
+    const lean = kick.kind === 'get-up-kick' ? -5 * pose.supportLoad
+      : (kick.kind === 'soccer-kick' ? 8 : 5) * pose.supportLoad + 8 * pose.drive;
+    this.applyWorldAxisOffset(this.combatSpine1Bone, right, THREE.MathUtils.degToRad(lean));
     this.applyWorldAxisOffset(this.combatSpine2Bone, forward, THREE.MathUtils.degToRad(kick.side === 'left' ? -3 : 3) * pose.supportLoad);
     const side = kick.side === 'left' ? -1 : 1;
-    this.applyWorldYawOffset(this.combatSpine2Bone,
-      side * THREE.MathUtils.degToRad(9) * pose.chamber - side * THREE.MathUtils.degToRad(11) * pose.drive);
-    this.applyWorldAxisOffset(this.leftUpperArmBone, forward, -0.16 * pose.supportLoad);
-    this.applyWorldAxisOffset(this.rightUpperArmBone, forward, 0.16 * pose.supportLoad);
+    const shoulderYaw = side * THREE.MathUtils.degToRad(9) * pose.chamber
+      - side * THREE.MathUtils.degToRad(14) * pose.drive;
+    this.applyWorldYawOffset(this.combatSpine2Bone, shoulderYaw);
+    this.applyWorldYawOffset(this.headBone, -shoulderYaw * 0.85);
+    this.applyWorldAxisOffset(this.leftUpperArmBone, forward, -0.08 * pose.supportLoad);
+    this.applyWorldAxisOffset(this.rightUpperArmBone, forward, 0.08 * pose.supportLoad);
     this.avatarAnchor.updateMatrixWorld(true);
   }
 
@@ -4937,6 +4955,11 @@ export class AnimationLab {
       if (contact && this.groundKickHasLineOfSight(this.groundKickTargetPoint)
         && this.combatSweepLineOfSight(this.groundKickFootPrevious, new THREE.Vector3(contact.point.x, contact.point.y, contact.point.z))) {
         kick.impactApplied = true;
+        if (kick.kind !== 'get-up-kick') {
+          kick.contactFoot = foot.getWorldPosition(new THREE.Vector3());
+          kick.contactAge = 0;
+          kick.compressionSeconds = kick.kind === 'stomp' ? 0.055 : 0.045;
+        }
         this.combatImpactAudio.contact(true, true);
         this.applyGroundKickDamage(kick.kind, new THREE.Vector3(contact.point.x, contact.point.y, contact.point.z));
       }
@@ -5802,7 +5825,7 @@ export class AnimationLab {
     const damage = combatPhysicalContactDamage(attack.kind, attack.spacing, contact.distance, contact.fistSpeed, contact.zone);
     if (damage <= 0) return;
     attack.impactApplied = true;
-    attack.compressionSeconds = attack.kind === 'big-punch' ? 0.055 : 0.038;
+    attack.compressionSeconds = attack.kind === 'big-punch' ? 0.065 : 0.048;
     const hand = attack.strikingSide === 'left' ? this.idleNpcLeftHandBone : this.idleNpcRightHandBone;
     attack.contactPoint = hand?.getWorldPosition(new THREE.Vector3());
     this.combatImpactAudio.contact(attack.kind === 'big-punch', contact.zone === 'body');
