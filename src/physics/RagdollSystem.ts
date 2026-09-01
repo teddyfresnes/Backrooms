@@ -748,13 +748,34 @@ export class RagdollSystem {
         const origin = { x: center.x + dx / Math.max(length, 1e-5) * offset,
           y: center.y + 0.75, z: center.z + dz / Math.max(length, 1e-5) * offset };
         const toi = collider.castRay(new RAPIER.Ray(origin, { x: 0, y: -1, z: 0 }), 1.5, true);
-        if (toi < 0) continue;
+        if (toi === null || !Number.isFinite(toi) || toi < 0) continue;
         const distance = Math.hypot(origin.x - from.x, origin.z - from.z);
         if (distance < closest) {
           closest = distance;
           target.set(origin.x, origin.y - toi, origin.z);
         }
       }
+    }
+    return Number.isFinite(closest);
+  }
+
+  /** Near side of the actual torso, so a low swing contacts its flank rather
+   * than aiming at the top like a stomp. Each ray crosses the collider's center height. */
+  getGroundKickSideSurface(from: Readonly<THREE.Vector3>, target: THREE.Vector3): boolean {
+    const core = this.bodies.get('core');
+    if (!core) return false;
+    let closest = Infinity;
+    for (const collider of core.colliders) {
+      const center = collider.translation();
+      const dx = center.x - from.x, dz = center.z - from.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance < 1e-5) continue;
+      const origin = { x: from.x, y: center.y, z: from.z };
+      const direction = { x: dx / distance, y: 0, z: dz / distance };
+      const toi = collider.castRay(new RAPIER.Ray(origin, direction), distance + 0.65, true);
+      if (toi === null || !Number.isFinite(toi) || toi < 0 || toi >= closest) continue;
+      closest = toi;
+      target.set(origin.x + direction.x * toi, origin.y, origin.z + direction.z * toi);
     }
     return Number.isFinite(closest);
   }
@@ -814,11 +835,14 @@ export class RagdollSystem {
   applyGroundKickImpact(
     direction: Readonly<THREE.Vector3>, strength = 1, recovering = false,
     contactPoint?: Readonly<THREE.Vector3>,
+    style: 'stomp' | 'soccer-kick' = 'stomp',
   ): void {
     if (!Number.isFinite(direction.x + direction.y + direction.z + strength)) return;
-    const vector = new THREE.Vector3(direction.x * (recovering ? 1 : 0.22),
-      recovering ? -0.55 : -1, direction.z * (recovering ? 1 : 0.22)).normalize();
-    const impulse = vector.multiplyScalar(THREE.MathUtils.clamp(strength, 0.4, 1.5) * (recovering ? 28 : 22));
+    const horizontal = recovering || style === 'soccer-kick' ? 1 : 0.16;
+    const vector = new THREE.Vector3(direction.x * horizontal,
+      recovering ? -0.55 : style === 'soccer-kick' ? 0.08 : -1, direction.z * horizontal).normalize();
+    const impulse = vector.multiplyScalar(THREE.MathUtils.clamp(strength, 0.4, 1.5)
+      * (recovering ? 28 : style === 'soccer-kick' ? 32 : 30));
     let id = 'core';
     if (contactPoint) {
       let closest = Infinity;

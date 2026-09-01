@@ -57,6 +57,7 @@ import { ForwardLateralAnimationGate, forwardDiagonalAnimation } from './Directi
 import {
   GROUND_KICK_PROFILES,
   groundKickPose,
+  groundKickKindForTarget,
   npcGroundRecoveryReady,
   type GroundKickKind,
 } from './GroundKickRules';
@@ -781,6 +782,7 @@ interface ActiveGroundKick {
   readonly supportRotation: THREE.Quaternion;
   pelvisDrop: number;
   readonly footRotation: THREE.Quaternion;
+  readonly pelvisStart: THREE.Vector3;
   readonly targetPoint: THREE.Vector3;
   previousTarget: THREE.Vector3;
   sampledElapsed: number;
@@ -4619,7 +4621,14 @@ export class AnimationLab {
       return 'get-up-kick';
     }
     if (this.npcRagdoll) {
-      if (this.npcRagdoll.getGroundKickSurface(this.avatarAnchor.position, target)) return 'stomp';
+      if (this.npcRagdoll.getGroundKickSurface(this.avatarAnchor.position, target)) {
+        const kind = this.groundKick?.kind ?? groundKickKindForTarget(
+          Math.hypot(target.x - this.avatarAnchor.position.x, target.z - this.avatarAnchor.position.z),
+          target.y - this.avatarAnchor.position.y,
+        );
+        if (kind === 'soccer-kick') this.npcRagdoll.getGroundKickSideSurface(this.avatarAnchor.position, target);
+        return kind;
+      }
       this.npcRagdoll.getPelvisPose(this.groundKickTargetPelvis, this.tempQuaternionA);
       this.npcRagdoll.getHeadPose(this.groundKickTargetHead, this.tempQuaternionB);
       target.copy(this.groundKickTargetPelvis).lerp(this.groundKickTargetHead, 0.30);
@@ -4666,8 +4675,8 @@ export class AnimationLab {
       GROUND_KICK_MAX_ROOT_TURN,
     );
 
-    if (this.character) this.playerHitHandoff.capture(this.character, 0.12);
-    if (this.firstPersonCharacter) this.firstPersonHitHandoff.capture(this.firstPersonCharacter, 0.12);
+    if (this.character) this.playerHitHandoff.capture(this.character, 0.18);
+    if (this.firstPersonCharacter) this.firstPersonHitHandoff.capture(this.firstPersonCharacter, 0.18);
     this.resetCombatState(false);
     this.combatBufferedPunchSeconds = 0;
     this.combatHeavyTapDetector.cancel();
@@ -4693,6 +4702,7 @@ export class AnimationLab {
       supportRotation: support.getWorldQuaternion(new THREE.Quaternion()),
       pelvisDrop: THREE.MathUtils.clamp(hip.y - targetPoint.y - verticalReach, 0, 0.20),
       footRotation: foot.getWorldQuaternion(new THREE.Quaternion()),
+      pelvisStart: this.hipsBone?.position.clone() ?? new THREE.Vector3(),
       targetPoint,
       previousTarget: this.groundKickTargetPoint.clone(),
       sampledElapsed: 0,
@@ -4725,7 +4735,8 @@ export class AnimationLab {
         'strike',
       );
     }
-    this.setStatus(kind === 'get-up-kick' ? 'COMBAT · KICK D’INTERRUPTION' : 'COMBAT · COUP DE PIED AU SOL');
+    this.setStatus(kind === 'get-up-kick' ? 'COMBAT · KICK D’INTERRUPTION'
+      : kind === 'soccer-kick' ? 'COMBAT · FRAPPE AU SOL' : 'COMBAT · ÉCRASEMENT');
     return true;
   }
 
@@ -4792,6 +4803,7 @@ export class AnimationLab {
     if (!kick) return;
     const t = THREE.MathUtils.clamp(kick.elapsed / kick.duration, 0, 1);
     const pose = groundKickPose(t, kick.kind);
+    const entryWeight = easeCombat(t / (kick.kind === 'get-up-kick' ? 0.10 : 0.20));
     const upper = kick.side === 'left' ? this.leftUpperLegBone : this.rightUpperLegBone;
     const lower = kick.side === 'left' ? this.leftLowerLegBone : this.rightLowerLegBone;
     const foot = kick.side === 'left' ? this.leftFootBone : this.rightFootBone;
@@ -4799,6 +4811,13 @@ export class AnimationLab {
     const supportLower = kick.side === 'left' ? this.rightLowerLegBone : this.leftLowerLegBone;
     const supportFoot = kick.side === 'left' ? this.rightFootBone : this.leftFootBone;
     if (!upper || !lower || !foot || !supportUpper || !supportLower || !supportFoot) return;
+    if (kick.kind !== 'get-up-kick' && this.hipsBone) {
+      // Keep the captured pelvis height while preparing the strike. Retain the
+      // clip's hip/thigh rotations so the planted leg keeps its relaxed stance.
+      const release = easeCombat((t - 0.80) / 0.20);
+      this.hipsBone.position.lerpVectors(kick.pelvisStart, this.hipsBone.position.clone(), release);
+      this.hipsBone.updateWorldMatrix(true, true);
+    }
     const forward = new THREE.Vector3(Math.sin(kick.targetYaw), 0, Math.cos(kick.targetYaw));
     const right = new THREE.Vector3(forward.z, 0, -forward.x);
     // One short placement step during load; support is planted before extension.
@@ -4820,18 +4839,48 @@ export class AnimationLab {
         kick.pelvisDrop = THREE.MathUtils.clamp(hip.y - kick.targetPoint.y - vertical, 0, 0.22);
       }
       const supportOffset = kick.supportStart.clone().sub(pelvis).dot(right);
-      pelvis.addScaledVector(forward, 0.14 * pose.supportLoad);
-      pelvis.addScaledVector(right, THREE.MathUtils.clamp(supportOffset, -0.07, 0.07) * pose.supportLoad);
-      pelvis.y -= kick.pelvisDrop * pose.supportLoad;
+      // Ease the weight transfer out of the captured resting stance.
+      const load = pose.supportLoad * entryWeight;
+      pelvis.addScaledVector(forward, 0.14 * load);
+      pelvis.addScaledVector(right, THREE.MathUtils.clamp(supportOffset, -0.07, 0.07) * load);
+      // Keep both soles on the floor during the quiet preparation. Lower the
+      // pelvis as the lifted leg takes over, when its IK has reached full weight.
+      pelvis.y -= kick.pelvisDrop * pose.supportLoad
+        * (kick.kind === 'get-up-kick' ? entryWeight : pose.lift);
       this.hipsBone.position.copy(this.hipsBone.parent.worldToLocal(pelvis));
       this.hipsBone.updateWorldMatrix(false, true);
     }
-    const downward = kick.kind === 'stomp' || kick.targetPoint.y - this.avatarAnchor.position.y < 0.55;
+    const downward = kick.kind !== 'soccer-kick' && (kick.kind === 'stomp' || kick.targetPoint.y - this.avatarAnchor.position.y < 0.55);
     const chamber = kick.footStart.clone().lerp(kick.targetPoint, downward ? 1 : 0.65);
     chamber.y = Math.min(upper.getWorldPosition(new THREE.Vector3()).y - 0.12,
       Math.max(kick.footStart.y + 0.38, kick.targetPoint.y + 0.24));
     const target = new THREE.Vector3();
-    if (t < 0.32) {
+    if (kick.kind === 'stomp') {
+      // Load first, lift without a pop, then accelerate the sole downwards.
+      chamber.y = Math.min(upper.getWorldPosition(new THREE.Vector3()).y - 0.10,
+        Math.max(kick.footStart.y + 0.54, kick.targetPoint.y + 0.40));
+      if (t < 0.43) target.lerpVectors(kick.footStart, chamber, pose.lift);
+      else if (t < 0.66) target.lerpVectors(chamber, kick.targetPoint, pose.strike);
+      else {
+        target.lerpVectors(kick.targetPoint, kick.footStart, pose.recover);
+        target.y += Math.sin(Math.PI * pose.recover) * 0.12;
+      }
+    } else if (kick.kind === 'soccer-kick') {
+      // Heel draws back low, then the instep sweeps through the side of the body.
+      // The knee never performs the high forward chamber of a push kick.
+      chamber.copy(kick.footStart).addScaledVector(forward, -0.24)
+        .addScaledVector(right, kick.side === 'left' ? -0.035 : 0.035);
+      chamber.y = Math.max(kick.footStart.y + 0.18, kick.targetPoint.y + 0.05);
+      const through = kick.targetPoint.clone().addScaledVector(forward, 0.16);
+      if (t < 0.38) target.lerpVectors(kick.footStart, chamber, pose.lift);
+      else if (t < 0.66) {
+        target.lerpVectors(chamber, through, pose.strike);
+        target.y += Math.sin(Math.PI * pose.strike) * 0.055;
+      } else {
+        target.lerpVectors(through, kick.footStart, pose.recover);
+        target.y += Math.sin(Math.PI * pose.recover) * 0.10;
+      }
+    } else if (t < 0.32) {
       target.lerpVectors(kick.footStart, chamber, easeCombat(t / 0.32));
       target.y += Math.sin(Math.PI * t / 0.32) * 0.09;
     } else if (t < 0.53) target.lerpVectors(chamber, kick.targetPoint, easeCombat((t - 0.32) / 0.21));
@@ -4841,13 +4890,13 @@ export class AnimationLab {
       target.lerpVectors(kick.targetPoint, kick.footStart, retract);
       target.y += Math.sin(Math.PI * retract) * 0.13;
     }
-    const weight = easeCombat(t / 0.10) * (1 - easeCombat((t - 0.85) / 0.15));
+    const weight = entryWeight * (1 - easeCombat((t - 0.85) / 0.15));
     // Preserve the support knee's authored bend plane rather than turning both
     // thighs toward the kick. Only the lifted leg follows the forward pole.
     solveCombatTwoBone(supportUpper, supportLower, supportFoot, kick.supportStart,
       weight, undefined, 0.997, THREE.MathUtils.degToRad(12));
     solveCombatTwoBone(upper, lower, foot, target, weight, forward,
-      0.975, THREE.MathUtils.degToRad(18));
+      kick.kind === 'get-up-kick' ? 0.975 : 0.997, THREE.MathUtils.degToRad(18));
     // Sole orientation is derived from the starting foot frame, never an Euler
     // accumulation. It stays level for a stomp and tilts at most 12 degrees.
     const worldFoot = kick.footRotation.clone().premultiply(new THREE.Quaternion().setFromAxisAngle(right,
@@ -4856,8 +4905,14 @@ export class AnimationLab {
     foot.quaternion.slerp(parent.multiply(worldFoot), weight).normalize();
     const supportParent = supportFoot.parent!.getWorldQuaternion(new THREE.Quaternion()).invert();
     supportFoot.quaternion.slerp(supportParent.multiply(kick.supportRotation), weight).normalize();
-    this.applyWorldAxisOffset(this.combatSpine1Bone, right, THREE.MathUtils.degToRad(-3) * pose.supportLoad);
+    this.applyWorldAxisOffset(this.combatSpine1Bone, right,
+      THREE.MathUtils.degToRad(kick.kind === 'soccer-kick' ? -7 : -5) * pose.supportLoad);
     this.applyWorldAxisOffset(this.combatSpine2Bone, forward, THREE.MathUtils.degToRad(kick.side === 'left' ? -3 : 3) * pose.supportLoad);
+    const side = kick.side === 'left' ? -1 : 1;
+    this.applyWorldYawOffset(this.combatSpine2Bone,
+      side * THREE.MathUtils.degToRad(9) * pose.chamber - side * THREE.MathUtils.degToRad(11) * pose.drive);
+    this.applyWorldAxisOffset(this.leftUpperArmBone, forward, -0.16 * pose.supportLoad);
+    this.applyWorldAxisOffset(this.rightUpperArmBone, forward, 0.16 * pose.supportLoad);
     this.avatarAnchor.updateMatrixWorld(true);
   }
 
@@ -4867,6 +4922,12 @@ export class AnimationLab {
     const foot = kick.side === 'left' ? this.leftFootBone : this.rightFootBone;
     if (!foot) return;
     foot.getWorldPosition(this.groundKickFootCurrent);
+    if (kick.kind === 'soccer-kick') {
+      // Sweep the instep, not the ankle: the front half of the visible boot
+      // reaches a low body before the ankle does, especially at full extension.
+      const toe = foot.children.find(child => child.name.toLowerCase().includes('toe'));
+      if (toe) this.groundKickFootCurrent.lerp(toe.getWorldPosition(new THREE.Vector3()), 0.55);
+    }
     const targetKind = this.resolveGroundKickTarget(this.groundKickTargetPoint);
     if (this.groundKickFootReady && !kick.impactApplied && targetKind) {
       const profile = GROUND_KICK_PROFILES[kick.kind];
@@ -4900,13 +4961,14 @@ export class AnimationLab {
     if (recovering) {
       this.interruptNpcRecoveryWithGroundKick(this.tempDirection, 1.16, point);
     } else if (this.npcRagdoll) {
-      this.npcRagdoll.applyGroundKickImpact(this.tempDirection, 1, false, point);
+      this.npcRagdoll.applyGroundKickImpact(this.tempDirection, profile.impulseStrength, false, point,
+        kind === 'soccer-kick' ? 'soccer-kick' : 'stomp');
       this.npcDownElapsed = 0;
       this.npcGroundKickRecoveryDelay = 1.35;
       if (this.npcHealth <= 0) this.npcResumeCombatAfterRecovery = false;
     }
     this.updateNpcUi();
-    this.setStatus(`${kind === 'get-up-kick' ? 'KICK DE RELEVÉ' : 'COUP DE PIED AU SOL'} · -${profile.damage} HP`);
+    this.setStatus(`${kind === 'get-up-kick' ? 'KICK DE RELEVÉ' : kind === 'soccer-kick' ? 'FRAPPE AU SOL' : 'ÉCRASEMENT'} · -${profile.damage} HP`);
   }
 
   private requestNormalCombatPunch(): void {
