@@ -60,6 +60,7 @@ for (const kind of ['stomp', 'soccer-kick']) for (const side of ['left', 'right'
     let previous = start.clone(), firstFrameStep = 0, earlyLift = 0, maxDownSpeed = 0;
     let damageEvents = 0, previousHealth = health, contacts = 0, impulse, contactPhase, maxBootStep = 0, maxBootPhase;
     let previousBoot = foot.getWorldQuaternion(new THREE.Quaternion());
+    let resistanceFrames = 0, resistanceError = 0, compressionLag = 0;
     const drive = []; let closest = Infinity, closestPose;
     const physicalImpact = lab.npcRagdoll.applyGroundKickImpact;
     lab.npcRagdoll.applyGroundKickImpact = function (...args) {
@@ -68,9 +69,15 @@ for (const kind of ['stomp', 'soccer-kick']) for (const side of ['left', 'right'
     };
     try {
       for (let i = 0; i < Math.ceil(fps * 1.22); i++) {
+        const elapsedBefore = kick.elapsed, resisted = kick.compressionSeconds > 0;
         stepLab(lab, 1 / fps);
         if (i === 0) firstFrameStep = beforeKnee.angleTo(lower.quaternion.clone().normalize());
         const point = foot.getWorldPosition(new THREE.Vector3());
+        if (resisted) compressionLag += 1 / fps - (kick.elapsed - elapsedBefore);
+        if (kick.contactFoot && kick.contactAge > 0 && kick.contactAge <= .045) {
+          resistanceFrames++;
+          resistanceError = Math.max(resistanceError, point.distanceTo(kick.contactFoot));
+        }
         const phase = kick.elapsed / kick.duration;
         if (kick.elapsed <= .11) earlyLift = Math.max(earlyLift, point.y - start.y);
         if (lab.groundKick && phase > (kind === 'stomp' ? .43 : .38) && !kick.impactApplied) {
@@ -99,14 +106,16 @@ for (const kind of ['stomp', 'soccer-kick']) for (const side of ['left', 'right'
       assert.ok(earlyLift < .04, `foot popped up ${earlyLift}m before loading`);
       assert.ok(maxBootStep < 25 / fps, `boot rotated ${maxBootStep}rad at ${maxBootPhase}`);
       assert.ok(contactPhase > .44 && contactPhase < .65, `contact at ${contactPhase}`);
+      assert.ok(resistanceFrames > 0 && resistanceError < .09, `boot passed through contact: ${resistanceError}m`);
+      assert.ok(compressionLag > .02 && compressionLag < .05, `contact resistance lasted ${compressionLag}s`);
       if (kind === 'stomp') {
         assert.ok(maxDownSpeed > 2.3, `slow stomp: ${maxDownSpeed}m/s`);
-        assert.ok(impulse.y < -28, `weak vertical impulse ${impulse.toArray()}`);
+        assert.ok(impulse.y < -40, `weak vertical impulse ${impulse.toArray()}`);
       } else {
         assert.ok(drive.length >= 2);
         const swing = drive.at(-1).clone().sub(drive[0]);
         assert.ok(Math.hypot(swing.x, swing.z) > .17, `no forward swing: ${swing.toArray()}`);
-        assert.ok(Math.hypot(impulse.x, impulse.z) > 30, `weak horizontal impulse ${impulse.toArray()}`);
+        assert.ok(Math.hypot(impulse.x, impulse.z) > 40, `weak horizontal impulse ${impulse.toArray()}`);
         assert.ok(Math.abs(impulse.y) < Math.hypot(impulse.x, impulse.z) * .2, 'football strike became a downward stomp');
       }
       assert.equal(lab.groundKick, null); assert.ok(lab.player.isLocked);
@@ -124,6 +133,8 @@ for (const kind of ['stomp', 'soccer-kick']) test(`${kind} misses a body that mo
   run(1.05);
   assert.equal(lab.npcHealth, health, 'a committed miss dealt phantom damage');
   assert.equal(kick.impactApplied, false);
+  assert.equal(kick.contactFoot, undefined, 'a miss was artificially stopped against empty space');
+  assert.equal(kick.compressionSeconds, 0);
 });
 
 test('a missing collider ray hit cannot create a ground-kick surface in empty space', () => {
