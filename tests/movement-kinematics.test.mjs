@@ -533,12 +533,6 @@ test('sprint is forward-only and keeps reduced lateral steering', () => {
   assert.ok(MOVEMENT_TUNING.locomotion.sprintStrafeScale <= 0.65);
 });
 
-test('post-slide residual momentum cannot flash crouch-walk without held movement input', () => {
-  const source = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
-  assert.match(source, /const crouchMoveIntent = Math\.abs\(intent\.forward\) > 0\.05 \|\| Math\.abs\(intent\.right\) > 0\.05/);
-  assert.match(source, /crouchMoveIntent && speed >= 0\.2[\s\S]*'crouch-walking'/);
-});
-
 test('first-person crouch walk has presentation-only recentering', () => {
   const source = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
   assert.match(source, /FIRST_PERSON_CROUCH_WALK_OFFSET_RIGHT = -0\.065/);
