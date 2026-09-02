@@ -349,6 +349,9 @@ export class PhysicsWorld {
   }
 
   get isCrouched(): boolean { return this.crouched; }
+  /** Shape changes move the capsule center, never its supporting feet. */
+  get crouchCenterOffset(): number { return this.crouched ? CROUCH_CENTER_DROP : 0; }
+  get crouchedCenterDrop(): number { return CROUCH_CENTER_DROP; }
   setPlayerColliderEnabled(enabled: boolean): void { this.playerCollider.setEnabled(enabled); }
   getStandingPosition(target = new THREE.Vector3()): THREE.Vector3 {
     target.copy(this.position);

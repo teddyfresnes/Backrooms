@@ -75,6 +75,71 @@ export function sampleGaitPhase(rig: THREE.Object3D, clip: THREE.AnimationClip):
 export const alignGaitPhase = (phase: number, oldLandmark: number, newLandmark: number): number =>
   ((phase - oldLandmark + newLandmark) % 1 + 1) % 1;
 
+/** Reverse the forward placement while a backward diagonal's lateral cycle
+ * still travels in its requested direction. Reversing the finished diagonal
+ * would reverse its sidestep as well. */
+export function reverseLocomotionClip(source: THREE.AnimationClip): THREE.AnimationClip {
+  const tracks = source.tracks.map(track => {
+    const next = track.clone(), size = track.getValueSize();
+    for (let i = 0; i < track.times.length; i++) {
+      const j = track.times.length - 1 - i;
+      next.times[i] = source.duration - track.times[j]!;
+      for (let k = 0; k < size; k++) next.values[i * size + k] = track.values[j * size + k]!;
+    }
+    return next;
+  });
+  return new THREE.AnimationClip(`${source.name}_reverse`, source.duration, tracks);
+}
+
+/** Match posture endpoints to the same crouch stance used by the gait cycles.
+ * Retain the authored descent/rise, without its incompatible deep-squat tail. */
+export function matchCrouchPostureClip(
+  source: THREE.AnimationClip, idle: THREE.AnimationClip, entering: boolean,
+): THREE.AnimationClip {
+  const idleTracks = new Map(idle.tracks.map(track => [track.name, track]));
+  const hipTrack = source.tracks.find(track => /hips\.position$/i.test(track.name));
+  const targetHip = hipTrack && idleTracks.get(hipTrack.name);
+  const duration = Math.min(source.duration, 0.62);
+  const times = Array.from({ length: 65 }, (_, i) => duration * i / 64);
+  const tracks = source.tracks.map(track => {
+    const quaternion = track.name.endsWith('.quaternion'), size = track.getValueSize();
+    const sample = quaternion ? new THREE.QuaternionLinearInterpolant(track.times, track.values, 4)
+      : new THREE.LinearInterpolant(track.times, track.values, size);
+    const target = idleTracks.get(track.name);
+    const values: number[] = [];
+    const q = new THREE.Quaternion(), b = new THREE.Quaternion();
+    let previous: THREE.Quaternion | undefined;
+    let lastHeight = entering ? Infinity : -Infinity;
+    for (const time of times) {
+      const progress = time / duration;
+      const blend = entering ? THREE.MathUtils.smoothstep(progress, 0.28, 1)
+        : 1 - THREE.MathUtils.smoothstep(progress, 0, 0.72);
+      const value = sample.evaluate(progress * source.duration);
+      if (quaternion) {
+        q.fromArray(value).normalize();
+        if (target) q.slerp(b.fromArray(target.values).normalize(), blend);
+        if (previous && previous.dot(q) < 0) q.set(-q.x, -q.y, -q.z, -q.w);
+        values.push(q.x, q.y, q.z, q.w); previous = q.clone();
+      } else {
+        for (let i = 0; i < size; i++) {
+          let next = THREE.MathUtils.lerp(value[i]!, target?.values[i] ?? value[i]!, blend);
+          if (track === hipTrack && i === 1 && targetHip) {
+            const standing = entering ? hipTrack.values[1]! : hipTrack.values[hipTrack.values.length - 2]!;
+            const crouched = targetHip.values[1]!;
+            next = THREE.MathUtils.clamp(next, Math.min(standing, crouched), Math.max(standing, crouched));
+            next = entering ? Math.min(lastHeight, next) : Math.max(lastHeight, next);
+            lastHeight = next;
+          }
+          values.push(next);
+        }
+      }
+    }
+    return quaternion ? new THREE.QuaternionKeyframeTrack(track.name, times, values)
+      : new THREE.VectorKeyframeTrack(track.name, times, values);
+  });
+  return new THREE.AnimationClip(source.name, duration, tracks);
+}
+
 /** Keep the slide's authored push off the floor, then enter the nearest running
  * foot phase. Mixing a crouch walk with a run loses this actual recovery motion. */
 export function createSlideSprintRecoveryClip(

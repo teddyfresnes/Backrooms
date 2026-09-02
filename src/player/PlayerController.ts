@@ -93,7 +93,10 @@ export class PlayerController {
   private targetAccelerationPitch = 0;
   private targetLateralAccelerationLean = 0;
   private motionBlend = 0;
+  private cameraBobAmplitude = 0;
   private crouchBlend = 0;
+  private previousCapsuleCenterOffset = 0;
+  private renderedCapsuleCenterOffset = 0;
   private lowBlend = 0;
   private slideBlend = 0;
   private strafeLean = 0;
@@ -194,6 +197,7 @@ export class PlayerController {
     this.physics.getPosition(this.position);
     this.previousPosition.copy(this.position);
     this.renderedPosition.copy(this.position);
+    this.previousCapsuleCenterOffset = this.renderedCapsuleCenterOffset = this.physics.crouchCenterOffset;
     this.anchorSafePosition(this.position);
     this.renderUpdate(0, 1);
     this.controls.addEventListener('lock', this.onPointerLock);
@@ -758,6 +762,7 @@ export class PlayerController {
 
   fixedUpdate(delta: number): void {
     this.previousPosition.copy(this.position);
+    this.previousCapsuleCenterOffset = this.physics.crouchCenterOffset;
     this.previousGaitPhase = this.gaitPhase;
     this.previousTraversalProgress = this.traversalProgress;
     this.previousHorizontalVelocity.set(this.velocity.x, 0, this.velocity.z);
@@ -1521,15 +1526,22 @@ export class PlayerController {
     const frameDelta = THREE.MathUtils.clamp(delta, 0, 0.05);
     const alpha = THREE.MathUtils.clamp(interpolationAlpha, 0, 1);
     this.cameraClock += frameDelta;
-    const previousRenderY = this.renderedPosition.y;
+    const centerOffset = this.physics.crouchCenterOffset;
+    const previousRenderY = this.renderedPosition.y + this.renderedCapsuleCenterOffset;
     this.renderedPosition.lerpVectors(this.previousPosition, this.position, alpha);
+    // Interpolate the supporting plane. A slide changes center height by 30 cm
+    // in one physics tick; interpolating those unlike centers launched/sank the
+    // avatar for a frame even though its physical feet never left the floor.
+    this.renderedPosition.y += this.previousCapsuleCenterOffset * (1 - alpha) + centerOffset * alpha;
     // KCC autostep moves the physical capsule up in one tick. Absorb that small
     // grounded height change in the shared visual pose; jumps/falls stay direct.
-    if (frameDelta > 0 && this.grounded && !this.crouching && !this.traversal
+    if (frameDelta > 0 && this.grounded && !this.traversal
       && !this.noclipEnabled && Math.abs(this.renderedPosition.y - previousRenderY) < 0.43) {
       this.renderedPosition.y = THREE.MathUtils.lerp(previousRenderY,
         this.renderedPosition.y, 1 - Math.exp(-frameDelta * 22));
     }
+    this.renderedPosition.y -= centerOffset;
+    this.renderedCapsuleCenterOffset = centerOffset;
     const gait = THREE.MathUtils.lerp(this.previousGaitPhase, this.gaitPhase, alpha);
     const cameraMotion = this.cameraMotionEnabled ? 1 : 0;
 
@@ -1619,7 +1631,9 @@ export class PlayerController {
     this.landingKick = THREE.MathUtils.lerp(this.landingKick, 0, expSmoothing(frameDelta, 12));
 
     const mode = this.getMovementMode();
-    const bobAmplitude = this.getBobAmplitude(mode) * this.motionBlend * cameraMotion;
+    this.cameraBobAmplitude = THREE.MathUtils.lerp(this.cameraBobAmplitude,
+      this.getBobAmplitude(mode), expSmoothing(frameDelta, 10));
+    const bobAmplitude = this.cameraBobAmplitude * this.motionBlend * cameraMotion;
     const verticalBob = (0.48 - Math.abs(Math.cos(gait))) * bobAmplitude;
     const lateralBob = Math.sin(gait) * bobAmplitude * MOVEMENT_TUNING.camera.bobLateralScale;
     const forwardBob = Math.cos(gait * 2) * bobAmplitude * MOVEMENT_TUNING.camera.bobForwardScale;
@@ -1673,7 +1687,7 @@ export class PlayerController {
       expSmoothing(frameDelta, highFallTarget > this.highFallCameraBlend ? 5.2 : 11.5),
     );
     const eyeOffset = MOVEMENT_TUNING.camera.eyeHeight
-      - this.crouchBlend * MOVEMENT_TUNING.camera.crouchDrop
+      - this.crouchBlend * (MOVEMENT_TUNING.camera.crouchDrop + this.physics.crouchedCenterDrop)
       - this.lowBlend * MOVEMENT_TUNING.camera.lowExtraDrop
       + traversalDuck
       - this.landingKick * cameraMotion
@@ -1701,7 +1715,7 @@ export class PlayerController {
           + this.highFallCameraBlend * MOVEMENT_TUNING.camera.fallHighForwardMeters * cameraMotion
           + this.incapacitatedBlend * MOVEMENT_TUNING.camera.incapacitatedCameraForwardMeters * cameraMotion,
       );
-    this.camera.position.y += eyeOffset
+    this.camera.position.y += centerOffset + eyeOffset
       + verticalBob
       + this.lookLift * cameraMotion
       + idleSwayY
