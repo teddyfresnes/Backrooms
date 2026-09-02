@@ -27,24 +27,24 @@ const smooth01 = (value: number): number => {
 
 export const GROUND_KICK_PROFILES: Readonly<Record<GroundKickKind, GroundKickProfile>> = {
   stomp: {
-    duration: 1.02,
+    duration: 0.94,
     impactFraction: 0.58,
     contactStartFraction: 0.49,
     contactEndFraction: 0.63,
     damage: 22,
     maxTargetDistance: 1.12,
     contactRadius: 0.16,
-    impulseStrength: 1.20,
+    impulseStrength: 1.40,
   },
   'soccer-kick': {
-    duration: 0.96,
+    duration: 0.88,
     impactFraction: 0.57,
     contactStartFraction: 0.44,
     contactEndFraction: 0.65,
     damage: 20,
     maxTargetDistance: 1.24,
     contactRadius: 0.16,
-    impulseStrength: 1.12,
+    impulseStrength: 1.38,
   },
   'get-up-kick': {
     duration: 0.78,
