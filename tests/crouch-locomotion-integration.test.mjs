@@ -30,14 +30,68 @@ function weightsAndViews() {
   assert.ok(Math.abs(sum - 1) < 1e-5, `pose weight sum ${sum}`);
   assert.ok(Math.abs(lab.currentAction.time - lab.firstPersonCurrentAction.time) < 1e-7);
   for (const [a, b] of [[lab.leftUpperLegBone, lab.firstPersonLeftUpperLegBone], [lab.rightUpperLegBone, lab.firstPersonRightUpperLegBone],
-    [lab.leftLowerLegBone, lab.firstPersonLeftLowerLegBone], [lab.rightLowerLegBone, lab.firstPersonRightLowerLegBone]]) {
+    [lab.leftLowerLegBone, lab.firstPersonLeftLowerLegBone], [lab.rightLowerLegBone, lab.firstPersonRightLowerLegBone],
+    [lab.leftFootBone, lab.firstPersonLeftFootBone], [lab.rightFootBone, lab.firstPersonRightFootBone]]) {
     assert.ok(a.quaternion.clone().normalize().angleTo(b.quaternion.clone().normalize()) < 1e-6, 'views use different steps');
   }
 }
 
+const directions = [['forward'], ['backward'], ['left'], ['right'], ['forward', 'left'],
+  ['forward', 'right'], ['backward', 'left'], ['backward', 'right']];
+const toeOf = foot => {
+  let toe; foot.traverse(bone => { if (/toe_?end$/i.test(bone.name)) toe = bone; });
+  assert.ok(toe, 'avatar has no toe endpoint'); return toe;
+};
+const toeHeading = (foot, anchor) => {
+  const forward = toeOf(foot).getWorldPosition(new THREE.Vector3()).sub(foot.getWorldPosition(new THREE.Vector3()));
+  forward.applyQuaternion(anchor.getWorldQuaternion(new THREE.Quaternion()).invert());
+  return Math.atan2(forward.x, forward.z);
+};
+
+for (const view of ['first-person', 'third-person']) {
+  test(`rebuilt crouch feet face ahead with forward knee bends in all eight directions in ${view}`, () => {
+    for (const direction of directions) {
+      crouch(view); keys(direction);
+      for (let frame = 0; frame < 240; frame++) {
+        stepLab(lab, 1 / 120);
+        for (const [feet, anchor] of [
+          [[lab.leftFootBone, lab.rightFootBone], lab.avatarAnchor],
+          [[lab.firstPersonLeftFootBone, lab.firstPersonRightFootBone], lab.firstPersonAvatarAnchor],
+        ]) {
+          const headings = feet.map(foot => toeHeading(foot, anchor));
+          assert.ok(headings.every(yaw => Math.abs(yaw) < .20), `${direction}: toes turn sideways ${headings}`);
+          assert.ok(Math.abs(headings[0] + headings[1]) / 2 < .065,
+            `${direction}: both feet lean to one side ${headings}`);
+        }
+        const legs = [[lab.leftUpperLegBone, lab.leftLowerLegBone, lab.leftFootBone],
+          [lab.rightUpperLegBone, lab.rightLowerLegBone, lab.rightFootBone]];
+        for (const [upper, lower, foot] of legs) {
+          const hip = upper.getWorldPosition(new THREE.Vector3());
+          const axis = foot.getWorldPosition(new THREE.Vector3()).sub(hip).normalize();
+          const bend = lower.getWorldPosition(new THREE.Vector3()).sub(hip);
+          bend.addScaledVector(axis, -bend.dot(axis));
+          bend.applyQuaternion(lab.avatarAnchor.getWorldQuaternion(new THREE.Quaternion()).invert());
+          assert.ok(bend.z > .12, `${direction}: knee hinge twists sideways ${bend.toArray()}`);
+          assert.ok(toeOf(foot).getWorldPosition(new THREE.Vector3()).y >= lab.avatarAnchor.position.y - .002,
+            `${direction}: toe penetrates the floor`);
+        }
+        const gap = lab.leftFootBone.getWorldPosition(new THREE.Vector3()).x - lab.rightFootBone.getWorldPosition(new THREE.Vector3()).x;
+        assert.ok(gap > .095, `${direction}: lateral feet cross or overlap ${gap}`);
+        if (view === 'first-person') assert.ok(Math.abs(lab.firstPersonAvatarAnchor.rotation.y - lab.bodyYaw) < 1e-6,
+          'legacy first-person crouch compensation still turns the whole rig');
+      }
+      if (direction.length === 1 && direction[0] === 'backward') {
+        assert.equal(lab.currentAnimation, 'crouch-backward', 'backwards motion reverses a forwards toe-off');
+        assert.ok(lab.currentAction.getEffectiveTimeScale() > 0);
+      }
+      lab.player.input.clear(); run(.65);
+    }
+  });
+}
+
 for (const view of ['first-person', 'third-person']) for (const fps of [30, 60, 120]) {
   test(`crouch start, direction changes and braking retain continuous appuis in ${view} at ${fps} fps`, () => {
-    for (const direction of [['forward'], ['backward'], ['left'], ['right'], ['forward', 'left'], ['forward', 'right'], ['backward', 'left'], ['backward', 'right']]) {
+    for (const direction of directions) {
       crouch(view); const dt = 1 / fps;
       let previous = pose(), previousHip = lab.hipsBone.getWorldPosition(new THREE.Vector3()).y;
       let maxJointStep = 0, maxHipStep = 0, moving = false;

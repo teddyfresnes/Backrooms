@@ -127,7 +127,7 @@ for (const fps of [30,60,120]) test(`a complete kick keeps an upright torso and 
   if(lab.groundKick&&kick.elapsed>.13&&kick.elapsed<kick.duration*.82){
    const knee=lower.getWorldPosition(new THREE.Vector3()).sub(upper.getWorldPosition(new THREE.Vector3()));
    const lateral=knee.x*Math.cos(kick.targetYaw)-knee.z*Math.sin(kick.targetYaw);
-   assert.ok(Math.abs(lateral)<.13,`knee twisted sideways: ${lateral}`);
+   assert.ok(Math.abs(lateral)<.13,`knee twisted sideways: ${JSON.stringify({lateral,phase:kick.elapsed/kick.duration,side:kick.side,kind:kick.kind,knee:knee.toArray(),target:kick.targetPoint.toArray(),footStart:kick.footStart.toArray(),yaw:kick.targetYaw})}`);
   }
   assert.ok(upper.quaternion.angleTo(previous)<1.2,'leg snapped more than 68 degrees in one frame');previous.copy(upper.quaternion);
  }

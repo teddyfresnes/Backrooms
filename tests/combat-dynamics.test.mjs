@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { sweepCombatContact, combatChainReady, CombatBalance, stepCombatSpring } from '../.movement-test-dist/dev/CombatContact.js';
-import { solveCombatTwoBone, CombatPoseHandoff, CombatMotionHistory, CombatProceduralPose } from '../.movement-test-dist/dev/CombatRig.js';
+import { solveCombatTwoBone, limitKneeLateralBend, CombatPoseHandoff, CombatMotionHistory, CombatProceduralPose } from '../.movement-test-dist/dev/CombatRig.js';
 import { groundKickContactAccepted } from '../.movement-test-dist/dev/GroundKickRules.js';
 const v = (x=0,y=0,z=0)=>({x,y,z});
 const sweep=(a,b,c=v(0.5),d=c,r=.10,dt=1/30,p0=.3,p1=.6)=>sweepCombatContact(a,b,c,d,r,dt,p0,p1,.35,.55);
@@ -72,6 +72,21 @@ test('two-bone solve reaches a target while preserving both anatomical segment l
  solveCombatTwoBone(a,b,c,target,1,new THREE.Vector3(0,0,1));root.updateMatrixWorld(true);
  const p=a.getWorldPosition(new THREE.Vector3()),q=b.getWorldPosition(new THREE.Vector3()),r=c.getWorldPosition(new THREE.Vector3());
  assert.ok(r.distanceTo(target)<1e-6);assert.ok(Math.abs(p.distanceTo(q)-.42)<1e-6);assert.ok(Math.abs(q.distanceTo(r)-.43)<1e-6);
+});
+test('high close contacts keep the lifted knee in front without moving the foot target or stretching the leg',()=>{
+ for(const side of [-1,1])for(const yaw of [-Math.PI+.01,0,Math.PI-.01]) {
+  const {root,a,b,c}=limb();root.rotation.y=yaw;root.updateMatrixWorld(true);
+  const target=new THREE.Vector3(side*.14,.10,.26).applyQuaternion(root.quaternion);
+  const forward=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
+  const pole=limitKneeLateralBend(a,b,c,target,forward,.997);
+  solveCombatTwoBone(a,b,c,target,1,pole,.997);root.updateMatrixWorld(true);
+  const hip=a.getWorldPosition(new THREE.Vector3()),knee=b.getWorldPosition(new THREE.Vector3()),foot=c.getWorldPosition(new THREE.Vector3());
+  const relative=knee.clone().sub(hip).applyQuaternion(root.quaternion.clone().invert());
+  assert.ok(Math.abs(relative.x)<=.085001,`high contact splays the knee ${relative.x}m`);
+  assert.ok(relative.z>0,'high contact folds the knee backwards');
+  assert.ok(foot.distanceTo(target)<1e-6,'knee correction fabricates foot reach');
+  assert.ok(Math.abs(hip.distanceTo(knee)-.42)<1e-6&&Math.abs(knee.distanceTo(foot)-.43)<1e-6);
+ }
 });
 test('unreachable, near-singular and turned kick targets keep a bent finite knee without stretching',()=>{
  for(const target of [new THREE.Vector3(0,-5,.1),new THREE.Vector3(.001,0,0),new THREE.Vector3(-.5,-.1,.5)]) {

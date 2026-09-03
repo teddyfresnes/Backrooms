@@ -533,14 +533,6 @@ test('sprint is forward-only and keeps reduced lateral steering', () => {
   assert.ok(MOVEMENT_TUNING.locomotion.sprintStrafeScale <= 0.65);
 });
 
-test('first-person crouch walk has presentation-only recentering', () => {
-  const source = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
-  assert.match(source, /FIRST_PERSON_CROUCH_WALK_OFFSET_RIGHT = -0\.065/);
-  assert.match(source, /FIRST_PERSON_CROUCH_WALK_YAW_CORRECTION/);
-  assert.match(source, /this\.currentAnimation === 'crouch-walking'/);
-  assert.match(source, /this\.firstPersonCrouchWalkBlend/);
-});
-
 test('continuous yaw survives repeated ±π crossings without reversing turn direction', () => {
   let yaw = Math.PI - 0.08;
   const samples = [-Math.PI + 0.02, -Math.PI + 0.12, -Math.PI + 0.22, -Math.PI + 0.32];
