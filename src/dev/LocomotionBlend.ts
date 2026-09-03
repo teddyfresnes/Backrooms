@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { solveCombatTwoBone } from './CombatRig';
 
 export interface GaitActionPair {
   thirdPerson: THREE.AnimationAction;
@@ -95,6 +97,7 @@ export function reverseLocomotionClip(source: THREE.AnimationClip): THREE.Animat
  * Retain the authored descent/rise, without its incompatible deep-squat tail. */
 export function matchCrouchPostureClip(
   source: THREE.AnimationClip, idle: THREE.AnimationClip, entering: boolean,
+  character?: THREE.Object3D, ankleHeight = 0.09,
 ): THREE.AnimationClip {
   const idleTracks = new Map(idle.tracks.map(track => [track.name, track]));
   const hipTrack = source.tracks.find(track => /hips\.position$/i.test(track.name));
@@ -126,7 +129,13 @@ export function matchCrouchPostureClip(
           if (track === hipTrack && i === 1 && targetHip) {
             const standing = entering ? hipTrack.values[1]! : hipTrack.values[hipTrack.values.length - 2]!;
             const crouched = targetHip.values[1]!;
-            next = THREE.MathUtils.clamp(next, Math.min(standing, crouched), Math.max(standing, crouched));
+            const sourceCrouch = entering ? hipTrack.values[hipTrack.values.length - 2]! : hipTrack.values[1]!;
+            const range = sourceCrouch - standing;
+            const authored = Math.abs(range) > 1e-5 ? THREE.MathUtils.clamp((value[i]! - standing) / range, 0, 1)
+              : entering ? progress : 1 - progress;
+            const descent = THREE.MathUtils.lerp(authored,
+              THREE.MathUtils.smoothstep(entering ? progress : 1 - progress, 0, 1), 0.25);
+            next = THREE.MathUtils.lerp(standing, crouched, descent);
             next = entering ? Math.min(lastHeight, next) : Math.max(lastHeight, next);
             lastHeight = next;
           }
@@ -137,7 +146,56 @@ export function matchCrouchPostureClip(
     return quaternion ? new THREE.QuaternionKeyframeTrack(track.name, times, values)
       : new THREE.VectorKeyframeTrack(track.name, times, values);
   });
-  return new THREE.AnimationClip(source.name, duration, tracks);
+  const matched = new THREE.AnimationClip(source.name, duration, tracks);
+  if (!character) return matched;
+  // Changing the crouch height while retaining deep-squat leg rotations lifts
+  // both shoes off the floor. Retarget each authored posture frame onto its
+  // actual sole contact, retaining foot roll and the original knee hinge.
+  const rig = clone(character), bones: THREE.Bone[] = [];
+  rig.traverse(object => { if ((object as THREE.Bone).isBone) bones.push(object as THREE.Bone); });
+  rig.updateMatrixWorld(true);
+  const joint = (name: string): THREE.Bone => bones.find(bone =>
+    bone.name.toLowerCase().replace(/[^a-z0-9]/g, '').endsWith(name))!;
+  const legs = ['left', 'right'].map(side =>
+    [joint(`${side}upleg`), joint(`${side}leg`), joint(`${side}foot`), joint(`${side}toeend`)]);
+  const rest = bones.map(bone => ({ p: bone.position.clone(), q: bone.quaternion.clone() }));
+  const heels = legs.map(leg => new THREE.Vector3(0, -ankleHeight, -0.055)
+    .applyQuaternion(leg[2]!.getWorldQuaternion(new THREE.Quaternion()).invert()));
+  const channels = tracks.map(track => ({ track,
+    bone: bones.find(bone => track.name === `${bone.name}.${track.name.endsWith('.quaternion') ? 'quaternion' : 'position'}`),
+    sample: track.name.endsWith('.quaternion') ? new THREE.QuaternionLinearInterpolant(track.times, track.values, 4)
+      : new THREE.LinearInterpolant(track.times, track.values, track.getValueSize()),
+  }));
+  const values = bones.map(() => [] as number[]), previous = bones.map(() => undefined as THREE.Quaternion | undefined);
+  for (const time of times) {
+    bones.forEach((bone, i) => { bone.position.copy(rest[i]!.p); bone.quaternion.copy(rest[i]!.q); });
+    for (const { track, bone, sample } of channels) {
+      if (!bone) continue;
+      const value = sample.evaluate(time);
+      if (track.name.endsWith('.quaternion')) bone.quaternion.fromArray(value).normalize();
+      else bone.position.fromArray(value);
+    }
+    rig.updateMatrixWorld(true);
+    for (const [side, leg] of legs.entries()) {
+      const [upper, lower, foot, toe] = leg as [THREE.Bone, THREE.Bone, THREE.Bone, THREE.Bone];
+      const point = foot.getWorldPosition(new THREE.Vector3()), q = foot.getWorldQuaternion(new THREE.Quaternion());
+      const heelY = point.y + heels[side]!.clone().applyQuaternion(q).y;
+      const toeY = toe.getWorldPosition(new THREE.Vector3()).y;
+      point.y -= Math.min(heelY, toeY);
+      solveCombatTwoBone(upper, lower, foot, point, 1, undefined, 0.997, 0);
+      foot.quaternion.copy(foot.parent!.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(q)).normalize();
+      foot.updateWorldMatrix(false, true);
+    }
+    bones.forEach((bone, i) => {
+      const q = bone.quaternion.clone().normalize();
+      if (previous[i] && previous[i]!.dot(q) < 0) q.set(-q.x, -q.y, -q.z, -q.w);
+      values[i]!.push(q.x, q.y, q.z, q.w); previous[i] = q;
+    });
+  }
+  return new THREE.AnimationClip(source.name, duration, [
+    ...bones.map((bone, i) => new THREE.QuaternionKeyframeTrack(`${bone.name}.quaternion`, times, values[i]!)),
+    ...tracks.filter(track => !track.name.endsWith('.quaternion')),
+  ]);
 }
 
 /** Keep the slide's authored push off the floor, then enter the nearest running

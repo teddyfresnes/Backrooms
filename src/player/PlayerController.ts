@@ -1268,9 +1268,15 @@ export class PlayerController {
         : sprintHeld
           ? MOVEMENT_TUNING.locomotion.sprintSpeed
           : MOVEMENT_TUNING.locomotion.walkSpeed;
-    const targetSpeed = sprintHeld
+    const crouchLateral = this.crouching && !this.lowPosture
+      ? Math.abs(this.inputDirection.dot(this.right)) : 0;
+    // A low cross-step is shorter than a forwards stride. Keep acceleration
+    // and directional inertia, with a speed that the authored feet can cover.
+    const crouchPace = THREE.MathUtils.lerp(1, MOVEMENT_TUNING.locomotion.crouchStrafeSpeedScale,
+      crouchLateral * crouchLateral);
+    const targetSpeed = (sprintHeld
       ? baseTargetSpeed
-      : baseTargetSpeed * this.movementSpeedScale;
+      : baseTargetSpeed * this.movementSpeedScale) * crouchPace;
 
     if (movingInput) {
       this.desired.copy(this.inputDirection).multiplyScalar(targetSpeed);

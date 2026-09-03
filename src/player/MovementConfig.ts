@@ -12,6 +12,7 @@ export const MOVEMENT_TUNING = {
     // equal 45° sidestep. Pure Q/D strafing remains full-strength.
     forwardDiagonalStrafeScale: 0.64,
     crouchSpeed: 1.62,
+    crouchStrafeSpeedScale: 0.70,
     lowSpeed: 1.18,
     groundAcceleration: 20.5,
     sprintAcceleration: 15.2,
