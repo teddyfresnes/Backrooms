@@ -48,6 +48,45 @@ function aimBone(bone: THREE.Bone, direction: THREE.Vector3, wanted: THREE.Vecto
   bone.updateWorldMatrix(false, true);
 }
 
+/** Keep a lifted knee within its forwards bend corridor when a high contact
+ * lies across the hip. A fixed forwards pole can still splay the knee sideways:
+ * the target axis contributes lateral displacement to the analytic solution.
+ * Choose the nearest feasible bend on that same circle; never move the target,
+ * stretch the leg or force the support thigh into the striking leg's plane. */
+export function limitKneeLateralBend(
+  upper: THREE.Bone, lower: THREE.Bone, foot: THREE.Bone,
+  target: Readonly<THREE.Vector3>, forward: Readonly<THREE.Vector3>,
+  maxReachFraction: number, lateralLimit = 0.085,
+): THREE.Vector3 {
+  upper.updateWorldMatrix(true, true);
+  const a = upper.getWorldPosition(new THREE.Vector3());
+  const b = lower.getWorldPosition(new THREE.Vector3());
+  const c = foot.getWorldPosition(new THREE.Vector3());
+  const lengthA = a.distanceTo(b), lengthB = b.distanceTo(c);
+  const axis = new THREE.Vector3().copy(target).sub(a);
+  const pole = new THREE.Vector3().copy(forward);
+  if (axis.lengthSq() < 1e-9 || Math.min(lengthA, lengthB) < 1e-5) return pole;
+  const reach = THREE.MathUtils.clamp(axis.length(), Math.abs(lengthA - lengthB) + 0.035,
+    (lengthA + lengthB) * THREE.MathUtils.clamp(maxReachFraction, 0.90, 0.999));
+  axis.normalize();
+  const along = (lengthA * lengthA + reach * reach - lengthB * lengthB) / (2 * reach);
+  const height = Math.sqrt(Math.max(0, lengthA * lengthA - along * along));
+  const right = new THREE.Vector3(forward.z, 0, -forward.x).normalize();
+  const rightInPlane = right.clone().addScaledVector(axis, -right.dot(axis));
+  const span = rightInPlane.length();
+  pole.addScaledVector(axis, -pole.dot(axis));
+  if (height < 1e-5 || span < 1e-5 || pole.lengthSq() < 1e-9) return new THREE.Vector3().copy(forward);
+  pole.normalize();
+  const lateral = along * axis.dot(right) + height * pole.dot(right);
+  if (Math.abs(lateral) <= lateralLimit) return pole;
+  rightInPlane.divideScalar(span);
+  const other = axis.clone().cross(rightInPlane).normalize();
+  if (other.dot(pole) < 0) other.negate();
+  const wanted = THREE.MathUtils.clamp(lateral, -lateralLimit, lateralLimit);
+  const component = THREE.MathUtils.clamp((wanted - along * axis.dot(right)) / (height * span), -1, 1);
+  return rightInPlane.multiplyScalar(component).addScaledVector(other, Math.sqrt(Math.max(0, 1 - component * component)));
+}
+
 /** Analytic two-link solve. Keeps the authored bend plane and never stretches a limb. */
 export function solveCombatTwoBone(
   upper: THREE.Bone, lower: THREE.Bone, end: THREE.Bone,
