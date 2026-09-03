@@ -1,14 +1,14 @@
 {
   "name": "backrooms-movement-lab",
   "private": true,
-  "version": "0.3.85",
+  "version": "0.3.86",
   "type": "module",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
     "dev": "vite --open \"/\"",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/write-delivery-manifest.mjs",
     "preview": "vite preview",
     "check": "tsc -b",
     "test": "node -e \"require('fs').rmSync('.movement-test-dist',{recursive:true,force:true})\" && tsc -p tsconfig.movement-test.json && node --test tests/*.test.mjs",
