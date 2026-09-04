@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GaitTransition, sampleGaitPhase, alignGaitPhase, createSlideSprintRecoveryClip, matchCrouchPostureClip } from './LocomotionBlend';
+import { GaitTransition, sampleGaitPhase, alignGaitPhase, createSlideSprintRecoveryClip } from './LocomotionBlend';
 import { createCrouchLocomotionClips, CROUCH_LOCOMOTION_IDS, CROUCH_GAIT_REFERENCE_SPEED } from './CrouchLocomotion';
 import { advanceStrikeClock, CombatImpactAudio } from './CombatFeel';
 import { sweepCombatContact, combatChainReady, CombatBalance, stepCombatSpring } from './CombatContact';
@@ -1406,8 +1406,8 @@ const slideRecoveryTiming = (source: THREE.AnimationClip): SlideRecoveryTiming =
 };
 
 const transitionFadeSeconds = (from: AnimationId, to: AnimationId): number => {
-  if (from === 'crouch-idle' && isCycleLocomotionAnimation(to) && to.startsWith('crouch-')) return 0.30;
-  if (to === 'crouch-idle' && isCycleLocomotionAnimation(from) && from.startsWith('crouch-')) return 0.25;
+  if (from === 'crouch-idle' && isCycleLocomotionAnimation(to) && to.startsWith('crouch-')) return 0.50;
+  if (to === 'crouch-idle' && isCycleLocomotionAnimation(from) && from.startsWith('crouch-')) return 0.50;
   if (from.startsWith('crouch-') && to.startsWith('crouch-')) return 0.26;
   if (from === 'running-slide' && to === 'slide-to-running') return 0.07;
   if (from === 'slide-to-running') return to === 'running' ? 0.10 : 0.22;
@@ -2519,24 +2519,17 @@ export class AnimationLab {
   private prepareCrouchLocomotion(): void {
     if (!this.character || !this.mixer || !this.firstPersonMixer) return;
     const motion = createCrouchLocomotionClips(this.character, this.firstPersonFootToSole,
-      { forward: this.animations.get('crouch-walking')!.clip,
+      { idle: this.animations.get('crouch-idle')!.clip,
+        forward: this.animations.get('crouch-walking')!.clip,
         left: this.animations.get('crouch-strafe-left')!.clip,
-        right: this.animations.get('crouch-strafe-right')!.clip,
-        walking: this.animations.get('walking')!.clip }, this.combatHeadLocalForward);
+        right: this.animations.get('crouch-strafe-right')!.clip }, this.combatHeadLocalForward);
     const clips = motion.clips;
     for (const [id, speed] of motion.referenceSpeeds) this.crouchGaitReferenceSpeeds.set(id, speed);
     for (const id of CROUCH_LOCOMOTION_IDS) {
       const previous = this.animations.get(id)?.clip;
-      if (previous) { this.mixer.uncacheClip(previous); this.firstPersonMixer.uncacheClip(previous); }
       const clip = clips.get(id)!;
-      this.animations.set(id, { clip, action: this.mixer.clipAction(clip) });
-      this.firstPersonAnimations.set(id, { clip, action: this.firstPersonMixer.clipAction(clip) });
-    }
-    for (const id of ['standing-to-crouched', 'crouched-to-standing'] as const) {
-      const previous = this.animations.get(id)!.clip;
-      const clip = matchCrouchPostureClip(previous, clips.get('crouch-idle')!, id === 'standing-to-crouched',
-        this.character, this.firstPersonFootToSole);
-      this.mixer.uncacheClip(previous); this.firstPersonMixer.uncacheClip(previous);
+      if (previous === clip) continue;
+      if (previous) { this.mixer.uncacheClip(previous); this.firstPersonMixer.uncacheClip(previous); }
       this.animations.set(id, { clip, action: this.mixer.clipAction(clip) });
       this.firstPersonAnimations.set(id, { clip, action: this.firstPersonMixer.clipAction(clip) });
     }
@@ -3246,7 +3239,15 @@ export class AnimationLab {
       const pairs = [...this.animations].map(([key, value]) => ({
         thirdPerson: value.action, firstPerson: this.firstPersonAnimations.get(key)!.action,
       }));
-      this.gaitTransition.begin(pairs, next, transitionFadeSeconds(previousAnimation, id));
+      let fade = transitionFadeSeconds(previousAnimation, id);
+      if (previousAnimation.startsWith('crouch-') && id.startsWith('crouch-')) {
+        const rest = this.animations.get('crouch-idle')!.action;
+        const restWeight = rest.isScheduled() ? rest.getEffectiveWeight() : 0;
+        // Reversing a sidestep during the initial rise must retain the longer
+        // deep-rest handoff, rather than accelerate it into a direction fade.
+        fade = Math.max(fade, 0.50 * Math.sqrt(Math.max(0, restWeight)));
+      }
+      this.gaitTransition.begin(pairs, next, fade);
     } else this.gaitTransition.release(id.startsWith('hit-') ? 0.035 : 0.12);
     const prepareAction = (action: THREE.AnimationAction, clip: THREE.AnimationClip): void => {
       action.reset();
@@ -7440,10 +7441,12 @@ export class AnimationLab {
   private applyLocomotionFootPlants(delta: number): void {
     const state = this.player?.getDebugState();
     const postureGait = this.currentAnimation === 'standing-to-crouched' || this.currentAnimation === 'crouched-to-standing';
-    const crouchGait = this.currentAnimation.startsWith('crouch-') || postureGait;
+    const authoredCrouch = this.currentAnimation === 'crouch-idle' || this.currentAnimation === 'crouch-walking'
+      || this.currentAnimation === 'crouch-backward';
+    const crouchGait = (this.currentAnimation.startsWith('crouch-') && !authoredCrouch) || postureGait;
     const active = state?.grounded && (state.horizontalSpeed > 0.12 || crouchGait) && this.combatPhase === 'none'
       && (isCycleLocomotionAnimation(this.currentAnimation) || this.currentAnimation === 'crouch-idle' || postureGait)
-      && !this.groundKick && !this.combatHitReaction;
+      && !authoredCrouch && !this.groundKick && !this.combatHitReaction;
     if (!active) {
       for (const plant of this.gaitFootPlants) { plant.locked = false; plant.weight = 0; }
       return;
