@@ -49,6 +49,29 @@ const toeHeading = (foot, anchor) => {
 };
 
 for (const view of ['first-person', 'third-person']) {
+  test(`standing/crouched posture keeps both soles supported in ${view}`, () => {
+    explore(view);
+    for (const entering of [true, false]) {
+      lab.player.input.justPressed.add(lab.player.input.bindings.crouch);
+      let transitioned = false;
+      for (let frame = 0; frame < 150; frame++) {
+        stepLab(lab, 1 / 120);
+        if (lab.currentAnimation !== (entering ? 'standing-to-crouched' : 'crouched-to-standing')) continue;
+        transitioned = true;
+        for (const foot of [lab.leftFootBone, lab.rightFootBone]) {
+          const toeY = toeOf(foot).getWorldPosition(new THREE.Vector3()).y - lab.avatarAnchor.position.y;
+          const ankleY = foot.getWorldPosition(new THREE.Vector3()).y - lab.avatarAnchor.position.y;
+          assert.ok(toeY > -.008, `posture buries the toes ${toeY}`);
+          assert.ok(Math.min(toeY, ankleY - lab.firstPersonFootToSole) < .025,
+            `posture floats above its sole contact: ankle ${ankleY}, toe ${toeY}`);
+        }
+      }
+      assert.ok(transitioned, 'posture transition was not exercised');
+    }
+  });
+}
+
+for (const view of ['first-person', 'third-person']) {
   test(`rebuilt crouch feet face ahead with forward knee bends in all eight directions in ${view}`, () => {
     for (const direction of directions) {
       crouch(view); keys(direction);
@@ -71,12 +94,19 @@ for (const view of ['first-person', 'third-person']) {
           const bend = lower.getWorldPosition(new THREE.Vector3()).sub(hip);
           bend.addScaledVector(axis, -bend.dot(axis));
           bend.applyQuaternion(lab.avatarAnchor.getWorldQuaternion(new THREE.Quaternion()).invert());
-          assert.ok(bend.z > .12, `${direction}: knee hinge twists sideways ${bend.toArray()}`);
+          // The support knee extends through a walking step; requiring a deep
+          // bend throughout the cycle would encode the rejected squat gait.
+          assert.ok(bend.z > .035 && Math.abs(bend.x) < bend.z * .85,
+            `${direction}: knee hinge twists sideways ${bend.toArray()}`);
           assert.ok(toeOf(foot).getWorldPosition(new THREE.Vector3()).y >= lab.avatarAnchor.position.y - .002,
             `${direction}: toe penetrates the floor`);
         }
-        const gap = lab.leftFootBone.getWorldPosition(new THREE.Vector3()).x - lab.rightFootBone.getWorldPosition(new THREE.Vector3()).x;
-        assert.ok(gap > .095, `${direction}: lateral feet cross or overlap ${gap}`);
+        const a = lab.leftFootBone.getWorldPosition(new THREE.Vector3());
+        const b = lab.rightFootBone.getWorldPosition(new THREE.Vector3());
+        // A lateral recovery can pass behind the loaded foot. Check actual
+        // clearance, not just X ordering, which prohibits a human cross-step.
+        assert.ok(Math.hypot(a.x - b.x, a.z - b.z) > .12,
+          `${direction}: feet overlap on their supporting plane ${a.distanceTo(b)}`);
         if (view === 'first-person') assert.ok(Math.abs(lab.firstPersonAvatarAnchor.rotation.y - lab.bodyYaw) < 1e-6,
           'legacy first-person crouch compensation still turns the whole rig');
       }
@@ -148,6 +178,45 @@ test('a loaded crouched foot remains near its world contact, including lateral s
     }
     assert.ok(contacts > 15, `${direction} has no supporting foot`);
     assert.ok(speed / contacts < .75, `${direction} supporting foot slides at ${speed / contacts}m/s`);
+    lab.player.input.clear();
+  }
+});
+
+test('crouched walking transfers weight through extending legs instead of moving a wide fixed squat', () => {
+  const flexion = ([upper, lower, foot]) => {
+    const knee = lower.getWorldPosition(new THREE.Vector3());
+    const thigh = upper.getWorldPosition(new THREE.Vector3()).sub(knee).normalize();
+    const shin = foot.getWorldPosition(new THREE.Vector3()).sub(knee).normalize();
+    return Math.PI - Math.acos(THREE.MathUtils.clamp(thigh.dot(shin), -1, 1));
+  };
+  for (const direction of ['forward', 'backward', 'left', 'right']) {
+    crouch(); keys([direction]); run(.6);
+    const heights = [], angles = [[], []];
+    const legs = [[lab.leftUpperLegBone, lab.leftLowerLegBone, lab.leftFootBone],
+      [lab.rightUpperLegBone, lab.rightLowerLegBone, lab.rightFootBone]];
+    for (let frame = 0; frame < 180; frame++) {
+      stepLab(lab, 1 / 120);
+      const hip = lab.hipsBone.getWorldPosition(new THREE.Vector3()).sub(lab.avatarAnchor.position);
+      heights.push(hip.y);
+      legs.forEach((leg, side) => angles[side].push(flexion(leg)));
+      const left = lab.avatarAnchor.worldToLocal(lab.leftFootBone.getWorldPosition(new THREE.Vector3()));
+      const right = lab.avatarAnchor.worldToLocal(lab.rightFootBone.getWorldPosition(new THREE.Vector3()));
+      assert.ok(Math.abs(left.x - right.x) < .64, `${direction}: over-wide duck steps ${left.x - right.x}`);
+      const kneeLeft = lab.avatarAnchor.worldToLocal(lab.leftLowerLegBone.getWorldPosition(new THREE.Vector3()));
+      const kneeRight = lab.avatarAnchor.worldToLocal(lab.rightLowerLegBone.getWorldPosition(new THREE.Vector3()));
+      assert.ok(Math.abs(kneeLeft.x - kneeRight.x) < .40, `${direction}: splayed knees ${kneeLeft.x - kneeRight.x}`);
+    }
+    const mean = heights.reduce((sum, y) => sum + y, 0) / heights.length;
+    assert.ok(mean > .83 && mean < .94, `${direction}: pelvis held in a deep squat ${mean}`);
+    const rise = Math.max(...heights) - Math.min(...heights);
+    assert.ok(rise > .025 && rise < .08, `${direction}: no walking weight transfer or excessive bounce ${rise}`);
+    // A cross-step recovers around the loaded foot with less change of knee
+    // flexion than a forward stride. Do not force a high-knee marching motion.
+    const minimumFlexionChange = direction === 'left' || direction === 'right' ? .15 : .30;
+    for (const values of angles) {
+      const change = Math.max(...values) - Math.min(...values);
+      assert.ok(change > minimumFlexionChange, `${direction}: knee stays fixed through recovery (${change}rad)`);
+    }
     lab.player.input.clear();
   }
 });
