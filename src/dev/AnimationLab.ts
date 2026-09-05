@@ -25,6 +25,7 @@ import {
 import { BloodDecalSystem } from './BloodDecalSystem';
 import { BloodImpactGate } from './BloodImpactGate';
 import { GetUpRecovery, captureGetUpPoseClip, copyGetUpPose } from './GetUpRecovery';
+import { createGetUpMotionClip } from './GetUpMotion';
 import { canGetUp, chooseGetUpSide, recoveryReadyForInput, shouldShowGetUpPrompt } from './GetUpRecoveryRules';
 import { analyzeCombatStrikeSource, combatStrikeEnvelope, combatStrikeReachEnvelope, createCombatDodgeClip, createCombatLowerClip, createCombatStrikeUpperClip, createCombatUpperClip, createDirectionalLocomotionBlendClip, firstQuaternionForBone, type CombatStrikeSide } from './CombatAnimationLayers';
 import {
@@ -1406,6 +1407,7 @@ const slideRecoveryTiming = (source: THREE.AnimationClip): SlideRecoveryTiming =
 };
 
 const transitionFadeSeconds = (from: AnimationId, to: AnimationId): number => {
+  if (from === 'stand-up-back' || from === 'stand-up-belly') return 0.36;
   if (from === 'crouch-idle' && isCycleLocomotionAnimation(to) && to.startsWith('crouch-')) return 0.50;
   if (to === 'crouch-idle' && isCycleLocomotionAnimation(from) && from.startsWith('crouch-')) return 0.50;
   if (from.startsWith('crouch-') && to.startsWith('crouch-')) return 0.26;
@@ -1568,6 +1570,8 @@ export class AnimationLab {
   private combatAttackAimYaw = 0;
   private combatAttackStartBodyYaw = 0;
   private combatGazeYaw: number | null = null;
+  private actionFacingReturnActive = false;
+  private actionFacingReturnSeconds = 0;
   private combatAttackEntryForwardSpeed = 0;
   private combatAttackEntryRightSpeed = 0;
   private combatAttackRecoverySeconds = 0;
@@ -1998,7 +2002,7 @@ export class AnimationLab {
       this.playAnimation('idle', true);
       this.updateAvatarTransform(0, true);
       this.setStatus('PRÊT');
-      if (this.hint) this.hint.innerHTML = '<strong>CLIQUER POUR JOUER</strong><span>ZQSD : déplacement · clic gauche : frappe / maintenir : enchaîner · sans capture souris : clic droit maintenu pour regarder · Échap : pause</span>';
+      if (this.hint) this.hint.innerHTML = '<strong>CLIQUER POUR JOUER</strong><span>ZQSD : déplacement · clic droit : garde · clic gauche en garde : frappe / maintenir : enchaîner · sans capture souris : clic droit maintenu pour regarder · Échap : pause</span>';
     } catch (error) {
       this.setStatus('ERREUR ASSET');
       if (this.hint) this.hint.innerHTML = `<strong>ERREUR DE CHARGEMENT</strong><span>${error instanceof Error ? error.message : String(error)}</span>`;
@@ -2082,7 +2086,7 @@ export class AnimationLab {
       <div class="animation-lab__clips" data-clips></div>
       <p class="animation-lab__controls">
         ${formatKeyLabel(controls.forward)}${formatKeyLabel(controls.left)}${formatKeyLabel(controls.backward)}${formatKeyLabel(controls.right)} déplacement ·
-        ${formatKeyLabel(controls.sprint)} sprint avant · diagonales Z+Q/Z+D · Q/D limités · ${formatKeyLabel(controls.jump)} saut · ${formatKeyLabel(controls.crouch)} crouch/slide · souris regard · A/E lean bodycam · clic droit garde + focus cible · clic gauche frappe / maintenir pour enchaîner · double clic coup appuyé · maintenir F + clic gauche face à une attaque = esquive/contre hook · E se relever au sol · P KILL · Échap panneau
+        ${formatKeyLabel(controls.sprint)} sprint avant · diagonales Z+Q/Z+D · Q/D limités · ${formatKeyLabel(controls.jump)} saut · ${formatKeyLabel(controls.crouch)} crouch/slide · souris regard · A/E lean bodycam · clic droit garde + focus cible · clic gauche en garde frappe / maintenir pour enchaîner · double clic en garde coup appuyé · maintenir F + clic gauche face à une attaque = esquive/contre hook · E se relever au sol · P KILL · Échap panneau
       </p>
       <p class="animation-lab__note">AUTO : en 1ST, Action Idle garde beaucoup plus de marge à gauche qu’à droite avant le turn. Les turns Action et Sleeping utilisent chacun leurs propres appuis et suivent la rotation réelle de la POV. Le mouvement de tête remet le timer AFK à zéro tant qu’on est en Action Idle ; une fois en Sleeping Idle, on peut regarder et tourner sur place sans en sortir. Après 2,5 s totalement immobile → Wait aléatoire → transition ralentie → Sleeping Idle ; les Looking se jouent ensuite toutes les 5 s d’inactivité.</p>
     `;
@@ -2424,6 +2428,7 @@ export class AnimationLab {
       this.firstPersonAnimations.set('slide-to-running', { clip: recovery.clip, action: this.firstPersonMixer.clipAction(recovery.clip) });
     }
     this.prepareCrouchLocomotion();
+    this.prepareGetUpAnimations();
     this.prepareGaitLandmarks();
     this.prepareDirectionalLocomotionAnimations();
     this.prepareGaitLandmarks();
@@ -2514,6 +2519,20 @@ export class AnimationLab {
     }
     this.playNpcAnimation('idle', true, 1, true);
     this.updateNpcUi();
+  }
+
+  private prepareGetUpAnimations(): void {
+    if (!this.character || !this.mixer || !this.firstPersonMixer) return;
+    const standing = this.animations.get('idle')!.clip;
+    for (const side of ['back', 'belly'] as const) {
+      const id = side === 'back' ? 'stand-up-back' : 'stand-up-belly';
+      const previous = this.animations.get(id)!;
+      const clip = createGetUpMotionClip(this.character, previous.clip, standing, side);
+      this.mixer.uncacheClip(previous.clip);
+      this.firstPersonMixer.uncacheClip(previous.clip);
+      this.animations.set(id, { clip, action: this.mixer.clipAction(clip) });
+      this.firstPersonAnimations.set(id, { clip, action: this.firstPersonMixer.clipAction(clip) });
+    }
   }
 
   private prepareCrouchLocomotion(): void {
@@ -2976,11 +2995,9 @@ export class AnimationLab {
     // current direction; once the glance exceeds the allowed arc, bodyYaw is
     // advanced by updateAvatarTransform and this render rig follows it.
     // Downed/dead poses already keep bodyYaw locked for the same reason.
-    const rigBodyYaw = this.groundKick
-      ? this.bodyYaw
-      : combatPoseTarget > 0.001
-        ? this.continuousViewYaw
-        : this.bodyYaw;
+    // Both render rigs share the committed physical facing, including guard
+    // and recoil. The gameplay camera remains free to look elsewhere.
+    const rigBodyYaw = this.bodyYaw;
     this.firstPersonAvatarAnchor.rotation.set(
       FIRST_PERSON_HIGH_FALL_FORWARD_PITCH * this.firstPersonHighFallBlend,
       rigBodyYaw,
@@ -3605,6 +3622,7 @@ export class AnimationLab {
     fadeSeconds = 0.22,
     preserveGuardMoveSpeed = false,
   ): void {
+    this.beginActionFacingReturn();
     const intent = this.player?.getMovementIntent() ?? { forward: 0, right: 0, sprint: false, crouch: false };
     const moving = state.horizontalSpeed >= 0.20 || Math.abs(intent.forward) > 0.05 || Math.abs(intent.right) > 0.05;
     const movingManualRelease = preserveGuardMoveSpeed && moving && state.grounded && !state.crouching && !state.lowPosture && !state.sliding;
@@ -3681,6 +3699,7 @@ export class AnimationLab {
 
   private beginCombatExit(immediate: boolean): void {
     if (!this.player || this.combatPhase === 'none') return;
+    this.beginActionFacingReturn();
     const state = this.player.getDebugState();
     if (immediate) {
       this.finishCombatImmediately(state, COMBAT_GUARD_SPRINT_EXIT_BLEND_SECONDS);
@@ -3788,6 +3807,8 @@ export class AnimationLab {
 
   private resetCombatState(clearPointer = false): void {
     this.combatGazeYaw = null;
+    this.actionFacingReturnActive = false;
+    this.actionFacingReturnSeconds = 0;
     if (this.groundKick && !this.ragdoll && !this.recovery && !this.combatHitReaction) this.player?.setInputEnabled(this.player.isLocked);
     this.player?.cancelCombatLunge();
     this.stopCombatLayers(0);
@@ -4044,6 +4065,8 @@ export class AnimationLab {
     if (!this.combatIsEligible() || this.combatHitReaction) return;
     if (kind !== 'hook-counter' && !replaceCurrent && this.combatAttackRecoverySeconds > 0) return;
     if (this.combatAttack && !replaceCurrent) return;
+    this.actionFacingReturnActive = false;
+    this.actionFacingReturnSeconds = 0;
     const previousAttackPair = replaceCurrent ? this.combatAttackAction : undefined;
     if (replaceCurrent) {
       previousAttackPair?.thirdPerson.fadeOut(COMBAT_ATTACK_CHAIN_BLEND_SECONDS);
@@ -4172,6 +4195,7 @@ export class AnimationLab {
     this.combatHandSweepReady = false;
     this.combatCounterGuaranteedTarget = false;
     if (finished) {
+      this.beginActionFacingReturn();
       this.combatAttackRecoverySeconds = Math.max(
         this.combatAttackRecoverySeconds,
         combatAttackRecoverySeconds(finished.kind),
@@ -4839,6 +4863,7 @@ export class AnimationLab {
     this.player.cancelCombatLunge();
     this.groundKick = null;
     this.groundKickFootReady = false;
+    this.beginActionFacingReturn();
     this.player.setInputEnabled(this.player.isLocked);
     if (this.combatPointerHeld) this.requestCombatGuard('manual');
     else this.setStatus('PRÊT');
@@ -5166,6 +5191,7 @@ export class AnimationLab {
     if (
       this.combatBufferedPunchSeconds > 0
       && activeStrike.kind !== 'hook-counter'
+      && this.combatAttackGuardActive()
       && combatChainReady(activeStrike.elapsed, activeStrike.duration, activeStrike.contactEndFraction, activeStrike.impactFraction)
     ) {
       const target = this.combatTargetDirection(this.tempDirection, false, true);
@@ -5465,6 +5491,7 @@ export class AnimationLab {
     reverse: boolean,
     rate: number,
     committedStrikeStep = false,
+    entryFadeSeconds?: number,
   ): void {
     const next = this.idleNpcCombatLowerActions.get(id);
     const pair = this.combatLowerLayers.get(id);
@@ -5483,9 +5510,9 @@ export class AnimationLab {
         % previousPair!.clip.duration / Math.max(1e-5, previousPair!.clip.duration)
       : 0;
     const touchesIdle = previousId === 'fight-idle' || id === 'fight-idle';
-    const fadeSeconds = committedStrikeStep
+    const fadeSeconds = entryFadeSeconds ?? (committedStrikeStep
       ? COMBAT_LOWER_STRIKE_CROSSFADE_SECONDS
-      : touchesIdle ? COMBAT_LOWER_IDLE_CROSSFADE_SECONDS : COMBAT_LOWER_DIRECTION_CROSSFADE_SECONDS;
+      : touchesIdle ? COMBAT_LOWER_IDLE_CROSSFADE_SECONDS : COMBAT_LOWER_DIRECTION_CROSSFADE_SECONDS);
     previous?.fadeOut(fadeSeconds);
     this.prepareNpcCombatLoopAction(next, pair.clip, rate, reverse, fadeSeconds);
     if (preserveStepPhase) next.time = phase * Math.max(1e-5, pair.clip.duration);
@@ -5502,12 +5529,14 @@ export class AnimationLab {
     committedStrikeStep = false,
   ): void {
     const upper = this.idleNpcCombatUpperAction;
+    const getUpHandoff = this.npcCurrentAnimation === 'stand-up-back' || this.npcCurrentAnimation === 'stand-up-belly';
+    const entryFade = getUpHandoff ? 0.36 : 0.18;
     if (!upper || !this.combatUpperLayer) {
       this.playNpcAnimation(lower === 'fight-idle' ? 'fight-idle' : 'walking', true, rate);
       return;
     }
     if (this.npcCombatLowerActive === null) {
-      this.npcCurrentAction?.fadeOut(0.18);
+      this.npcCurrentAction?.fadeOut(entryFade);
       this.npcCurrentAction = undefined;
       upper.reset();
       upper.enabled = true;
@@ -5517,9 +5546,9 @@ export class AnimationLab {
       upper.setEffectiveWeight(1);
       upper.setEffectiveTimeScale(1);
       upper.play();
-      upper.fadeIn(0.18);
+      upper.fadeIn(entryFade);
     }
-    this.setNpcCombatLowerLayer(lower, false, rate, committedStrikeStep);
+    this.setNpcCombatLowerLayer(lower, false, rate, committedStrikeStep, getUpHandoff ? entryFade : undefined);
     this.npcCurrentAnimation = 'fight-idle';
     if (this.npcCombatPhase !== 'attack') this.npcCombatPhase = 'guard';
   }
@@ -5542,6 +5571,8 @@ export class AnimationLab {
       return;
     }
     const previousAction = this.npcCurrentAction;
+    const fadeSeconds = this.npcCurrentAnimation === 'stand-up-back' || this.npcCurrentAnimation === 'stand-up-belly'
+      ? 0.36 : id.startsWith('hit-') ? 0.035 : 0.10;
     action.reset();
     action.enabled = true;
     action.paused = false;
@@ -5552,7 +5583,7 @@ export class AnimationLab {
     action.play();
     if (hadLayeredGuard && !previousAction) action.fadeIn(id.startsWith('hit-') ? 0.035 : 0.10);
     if (previousAction && previousAction !== action) {
-      action.crossFadeFrom(previousAction, id.startsWith('hit-') ? 0.035 : 0.10, false);
+      action.crossFadeFrom(previousAction, fadeSeconds, false);
     }
     this.npcCurrentAction = action;
     this.npcCurrentAnimation = id;
@@ -6382,11 +6413,7 @@ export class AnimationLab {
       && (!this.npcAttack || this.npcAttack.elapsed / this.npcAttack.duration < this.npcAttack.contactStartFraction)) {
       this.npcToPlayer.multiplyScalar(1 / distance);
       const targetYaw = Math.atan2(this.npcToPlayer.x, this.npcToPlayer.z);
-      this.idleNpcAnchor.rotation.y = dampAngleRadians(
-        this.idleNpcAnchor.rotation.y,
-        targetYaw,
-        1 - Math.exp(-dt * 12),
-      );
+      this.idleNpcAnchor.rotation.y = followActionYaw(this.idleNpcAnchor.rotation.y, targetYaw, dt, 12, 240);
     }
 
     if (this.npcAttack) {
@@ -7530,6 +7557,19 @@ export class AnimationLab {
     this.avatarAnchor.updateMatrixWorld(true);
   }
 
+  private beginActionFacingReturn(): void {
+    this.actionFacingReturnActive = true;
+    this.actionFacingReturnSeconds = 0;
+    this.pendingStrongTurn = null;
+    this.strongTurnLatched = false;
+    this.clearAuthoredTurn();
+    if (this.headBone) {
+      const face = this.combatHeadLocalForward.clone()
+        .applyQuaternion(this.headBone.getWorldQuaternion(new THREE.Quaternion()));
+      this.combatGazeYaw = Math.atan2(face.x, face.z);
+    }
+  }
+
   private updateAvatarTransform(delta: number, snap = false): void {
     if (!this.physics || !this.player) return;
     if (snap) this.physics.getFeetPosition(this.feetPosition);
@@ -7561,6 +7601,8 @@ export class AnimationLab {
       return;
     }
     if (snap) {
+      this.actionFacingReturnActive = false;
+      this.actionFacingReturnSeconds = 0;
       this.continuousViewYaw = aimBodyYaw;
       this.bodyYaw = aimBodyYaw;
       this.avatarAnchor.rotation.y = this.bodyYaw;
@@ -7604,6 +7646,32 @@ export class AnimationLab {
     const movementIntentActive = Math.abs(intent.forward) > 0.05 || Math.abs(intent.right) > 0.05;
     const moving = movementIntentActive || state.horizontalSpeed > 0.28;
     const sprinting = state.sprinting;
+
+    if (this.actionFacingReturnActive && !this.combatAttack && !this.groundKick) {
+      // A completed action hands back its last facing, not the accumulated
+      // mouse delta. Follow the shortest arc in both views while the player can
+      // keep looking and moving; ordinary free-look resumes after convergence.
+      this.actionFacingReturnSeconds += Math.max(0, delta);
+      const previousYaw = this.bodyYaw;
+      this.bodyYaw = followActionYaw(this.bodyYaw, this.continuousViewYaw, delta, 10, 240);
+      // A shortest-arc turn may finish at an equivalent angle one revolution
+      // away from the continuous input. Rebase before normal 1P free-look takes
+      // over so that it never interprets that equivalent pose as a 360° debt.
+      this.bodyYaw = rebaseAngleNear(this.continuousViewYaw, this.bodyYaw);
+      const offset = wrapAngleRadians(this.continuousViewYaw - this.bodyYaw);
+      this.avatarAnchor.rotation.y = this.bodyYaw;
+      this.bodyTurning = Math.abs(offset) > 0.025;
+      this.bodyTurnRate = delta > 0 ? THREE.MathUtils.radToDeg(wrapAngleRadians(this.bodyYaw - previousYaw)) / delta : 0;
+      this.lookOffsetDegrees = THREE.MathUtils.radToDeg(offset);
+      this.headLookYaw = dampAngleRadians(this.headLookYaw,
+        this.combatPhase === 'guard' || this.combatPhase === 'enter' ? 0 : THREE.MathUtils.clamp(offset, -0.65, 0.65),
+        expAlpha(delta, 8));
+      if (this.actionFacingReturnSeconds >= 0.5 && Math.abs(offset) < 0.025
+        && Math.abs(firstPersonViewYawDelta) < 0.035 && Math.abs(this.headLookYaw) < 0.035) {
+        this.actionFacingReturnActive = false;
+      }
+      return;
+    }
 
     if (this.autoOneShot === 'slide-to-running' && !state.crouching && !state.airborne) {
       // Lift in the direction of the slide first. Once the hips are upright,
@@ -8589,7 +8657,7 @@ export class AnimationLab {
     this.applyWorldYawOffset(this.neckBone, this.headLookYaw * 0.34);
     this.applyWorldYawOffset(this.headBone, this.headLookYaw * 0.5);
 
-    if (this.headBone && (this.combatAttack || this.combatPhase === 'guard')
+    if (this.headBone && (this.combatAttack || this.combatPhase === 'guard' || this.actionFacingReturnActive || this.combatGazeYaw !== null)
       && !this.combatHitReaction && !this.groundKick && !this.combatDodge) {
       // The chest must rotate into a punch; the face must keep watching the
       // opponent. Apply a world-space counter-yaw through neck/head, leaving the
@@ -8598,10 +8666,11 @@ export class AnimationLab {
       const target = this.combatTargetDirection(new THREE.Vector3(), false, true);
       const targetYaw = target ? Math.atan2(target.direction.x, target.direction.z) : facing;
       const gazeOffset = Math.atan2(Math.sin(targetYaw - facing), Math.cos(targetYaw - facing));
-      const desiredGazeYaw = facing + THREE.MathUtils.clamp(gazeOffset, -0.55, 0.55);
       const face = this.combatHeadLocalForward.clone()
         .applyQuaternion(this.headBone.getWorldQuaternion(new THREE.Quaternion()));
       const faceYaw = Math.atan2(face.x, face.z);
+      const combatGazeActive = this.combatAttack || this.combatPhase === 'guard';
+      const desiredGazeYaw = combatGazeActive ? facing + THREE.MathUtils.clamp(gazeOffset, -0.55, 0.55) : faceYaw;
       // Keep the final strike gaze when returning to guard, then let the eyes
       // and head catch the new view. A newly sampled camera yaw is not a pose.
       this.combatGazeYaw = followActionYaw(this.combatGazeYaw ?? faceYaw, desiredGazeYaw, delta, 14, 300);
@@ -8611,6 +8680,7 @@ export class AnimationLab {
       );
       this.applyWorldYawOffset(this.neckBone, counterYaw * 0.45);
       this.applyWorldYawOffset(this.headBone, counterYaw * 0.55);
+      if (!combatGazeActive && !this.actionFacingReturnActive && Math.abs(counterYaw) < 0.012) this.combatGazeYaw = null;
     } else this.combatGazeYaw = null;
 
     // Forward+strafe uses the authored strafe feet, but its head pose should
@@ -9336,6 +9406,7 @@ export class AnimationLab {
     this.firstPersonCamera.near = 0.01;
     this.firstPersonCamera.updateProjectionMatrix();
     this.bodyYaw = recovery.root.rotation.y;
+    this.avatarAnchor.rotation.y = this.bodyYaw;
     this.mixer.timeScale = 1;
     this.firstPersonMixer.timeScale = 1;
 
@@ -9386,6 +9457,7 @@ export class AnimationLab {
     // to erase it and instantly face the player's saved mouse direction.
     this.continuousViewYaw = Math.PI + this.player.getContinuousAimYawRadians();
     this.headLookYaw = 0;
+    this.beginActionFacingReturn();
     this.updateAvatarTransform(0);
     this.applyViewMode(true);
     if (this.viewMode === 'first-person') {
@@ -9790,6 +9862,17 @@ export class AnimationLab {
       return;
     }
     if (event.button !== 0) return;
+    if (!this.combatAttackGuardActive()) {
+      // Reject the whole press before ground kicks, counters or tap buffering.
+      // Raising guard later must never resurrect an unguarded click.
+      this.combatLeftPointerHeld = false;
+      this.combatLeftPressConsumed = true;
+      this.combatBufferedPunchSeconds = 0;
+      this.combatBufferedFromHold = false;
+      this.combatHeavyTapDetector.cancel();
+      this.combatHeavyUpgradePending = false;
+      return;
+    }
     this.combatImpactAudio.unlock();
 
     // A downed/recovering opponent turns LMB into a contextual kick before the
@@ -9815,12 +9898,6 @@ export class AnimationLab {
       this.combatHeavyUpgradePending = false;
       if (combatHookCounterAllowed(true, this.npcCounterWindowIsOpen())) this.executeHookCounter();
       return;
-    }
-
-    if (!this.combatAttackGuardActive()) {
-      this.combatLatchReason = 'manual';
-      this.combatLatchSeconds = MANUAL_GUARD_RELEASE_SECONDS;
-      this.startCombatLayers();
     }
 
     if (this.combatLatchReason === 'manual' && this.combatPhase !== 'none') {

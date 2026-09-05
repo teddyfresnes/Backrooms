@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GET_UP_BLEND_SECONDS, getUpProgress, getUpYawFromDirection, type GetUpSide } from './GetUpRecoveryRules';
+import { GET_UP_SETTLE_SECONDS } from './GetUpMotion';
 
 interface BonePose {
   bone: THREE.Bone;
@@ -29,7 +30,6 @@ export class GetUpRecovery {
   private readonly targetPosition: THREE.Vector3;
   private readonly targetRotation: THREE.Quaternion;
   private readonly holdClip: THREE.AnimationClip;
-  private readonly playbackRate: number;
   private elapsed = 0;
   private started = false;
 
@@ -71,9 +71,9 @@ export class GetUpRecovery {
         rotation.x, rotation.y, rotation.z, rotation.w,
         rotation.x, rotation.y, rotation.z, rotation.w,
       ]),
-      ...(bone === this.hips ? [new THREE.VectorKeyframeTrack(`${bone.name}.position`, [0, 1], [
+      new THREE.VectorKeyframeTrack(`${bone.name}.position`, [0, 1], [
         position.x, position.y, position.z, position.x, position.y, position.z,
-      ])] : []),
+      ]),
     ]));
 
     this.mixer = new THREE.AnimationMixer(character);
@@ -102,13 +102,9 @@ export class GetUpRecovery {
     const bounds = new THREE.Box3().setFromObject(character, true);
     this.targetPosition.y = groundY + this.startPosition.y - bounds.min.y;
     this.standingPosition = new THREE.Vector3(this.targetPosition.x, groundY + 0.865, this.targetPosition.z);
-    // The supplied Mixamo takes are intentionally long (roughly 8–11 s).
-    // Playing them near source speed feels like the game froze after pressing E.
-    // Normalize the authored motion to a compact, readable recovery while still
-    // preserving every source keyframe and the back/belly distinction.
-    const targetDuration = side === 'back' ? 2.15 : 2.45;
-    this.playbackRate = THREE.MathUtils.clamp(clip.duration / targetDuration, 1, 6);
-    this.duration = Math.max(0.5, clip.duration / this.playbackRate);
+    // GetUpMotion already trims waiting and settles into the standing pose.
+    // Never accelerate the full source take or rush the last upright frames.
+    this.duration = Math.max(0.5, clip.duration);
 
     this.mixer.stopAllAction();
     this.restorePose();
@@ -140,7 +136,7 @@ export class GetUpRecovery {
     hold.play();
     this.action.reset().setLoop(THREE.LoopOnce, 1);
     this.action.clampWhenFinished = true;
-    this.action.setEffectiveTimeScale(this.playbackRate);
+    this.action.setEffectiveTimeScale(1);
     this.action.play();
     this.action.crossFadeFrom(hold, GET_UP_BLEND_SECONDS, false);
     this.mixer.update(0);
@@ -155,6 +151,12 @@ export class GetUpRecovery {
       this.elapsed, 0, GET_UP_BLEND_SECONDS,
     );
     this.root.position.copy(this.startPosition).lerp(this.targetPosition, t);
+    // Grounding a prone mesh adds a small root offset. Release that offset
+    // while settling upright so the standing capsule handoff cannot drop the
+    // whole character abruptly on the last frame.
+    const standBlend = THREE.MathUtils.smoothstep(this.elapsed,
+      Math.max(GET_UP_BLEND_SECONDS, this.duration - GET_UP_SETTLE_SECONDS), this.duration);
+    this.root.position.y = THREE.MathUtils.lerp(this.root.position.y, this.standingPosition.y - 0.865, standBlend);
     this.root.quaternion.copy(this.startRotation).slerp(this.targetRotation, t);
     this.character.updateMatrixWorld(true);
   }
@@ -195,12 +197,10 @@ export const captureGetUpPoseClip = (character: THREE.Group, name: string): THRE
     tracks.push(new THREE.QuaternionKeyframeTrack(`${bone.name}.quaternion`, [0, 1], [
       q.x, q.y, q.z, q.w, q.x, q.y, q.z, q.w,
     ]));
-    if (bone.name.toLowerCase().replace(/[^a-z0-9]/g, '').endsWith('hips')) {
-      const p = bone.position;
-      tracks.push(new THREE.VectorKeyframeTrack(`${bone.name}.position`, [0, 1], [
-        p.x, p.y, p.z, p.x, p.y, p.z,
-      ]));
-    }
+    const p = bone.position;
+    tracks.push(new THREE.VectorKeyframeTrack(`${bone.name}.position`, [0, 1], [
+      p.x, p.y, p.z, p.x, p.y, p.z,
+    ]));
   });
   return new THREE.AnimationClip(name, 1, tracks);
 };
