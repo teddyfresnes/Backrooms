@@ -4841,7 +4841,9 @@ export class AnimationLab {
       0.01,
       GROUND_KICK_ROOT_TURN_END_FRACTION,
     );
-    this.bodyYaw = kick.startYaw + wrapAngleRadians(kick.targetYaw - kick.startYaw) * turnBlend;
+    const authoredYaw = kick.startYaw + wrapAngleRadians(kick.targetYaw - kick.startYaw) * turnBlend;
+    const turnLimit = THREE.MathUtils.degToRad(240) * Math.max(0, delta);
+    this.bodyYaw += THREE.MathUtils.clamp(wrapAngleRadians(authoredYaw - this.bodyYaw), -turnLimit, turnLimit);
     this.avatarAnchor.rotation.y = this.bodyYaw;
 
     if (distance > 0.76 && normalizedBeforeStep < 0.22) {
@@ -5224,7 +5226,12 @@ export class AnimationLab {
         0.46,
       );
       const turnBlend = THREE.MathUtils.smoothstep(normalizedStrike, 0.015, turnEnd);
-      this.bodyYaw = this.combatAttackStartBodyYaw + yawDelta * turnBlend;
+      // A new combo entry can aim behind the current stance. Keep the authored
+      // turn curve for ordinary corrections, but never rotate the whole body
+      // faster just to catch its impact deadline. A misaligned strike may miss.
+      const authoredYaw = this.combatAttackStartBodyYaw + yawDelta * turnBlend;
+      const turnLimit = THREE.MathUtils.degToRad(240) * Math.max(0, delta);
+      this.bodyYaw += THREE.MathUtils.clamp(wrapAngleRadians(authoredYaw - this.bodyYaw), -turnLimit, turnLimit);
       this.avatarAnchor.rotation.y = this.bodyYaw;
       this.bodyTurning = false;
       this.lookOffsetDegrees = 0;
