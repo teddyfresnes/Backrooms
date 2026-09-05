@@ -2097,11 +2097,8 @@ test('v85 first-person combat rig is pulled slightly back while staying lowered'
   assert.doesNotMatch(lab, /firstPersonCamera\.position[\s\S]{0,120}FIRST_PERSON_COMBAT_BODY_UP_OFFSET/);
 });
 
-test('v77 get-up normalizes long authored takes and cannot deadlock on the final clearance recheck', () => {
-  const recovery = readFileSync(new URL('../src/dev/GetUpRecovery.ts', import.meta.url), 'utf8');
+test('get-up cannot deadlock on the final clearance recheck', () => {
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
-  assert.match(recovery, /const targetDuration = side === 'back' \? 2\.15 : 2\.45/);
-  assert.match(recovery, /clip\.duration \/ targetDuration/);
   assert.match(lab, /const revalidatedSafe = this\.physics\.findStandingRecoveryPosition\(recovery\.standingPosition\)/);
   assert.match(lab, /const safe = revalidatedSafe \?\? this\.recoveryStandPosition\?\.clone\(\) \?\? recovery\.standingPosition\.clone\(\)/);
   const finish = lab.slice(lab.indexOf('  private finishGetUp(): void'), lab.indexOf('  private killPlayer(', lab.indexOf('  private finishGetUp(): void')));

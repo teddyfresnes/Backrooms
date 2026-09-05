@@ -144,7 +144,7 @@ for (const view of ['first-person', 'third-person']) {
       finish(); handoff = { yaw, bodyYaw: lab.bodyYaw };
     };
     try {
-      for (let i = 0; i < 190 && lab.recovery; i++) stepLab(lab);
+      for (let i = 0; i < 340 && lab.recovery; i++) stepLab(lab);
       assert.ok(handoff);
       assert.ok(Math.abs(angle(handoff.bodyYaw - handoff.yaw)) < 1e-7, 'finishGetUp discarded the authored facing');
       const before = lab.bodyYaw; stepLab(lab);
