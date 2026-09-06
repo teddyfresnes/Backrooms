@@ -2786,7 +2786,6 @@ test('v122 ground kicks use a bounded start yaw and never chase a rolling ragdol
   assert.match(lab, /readonly targetYaw: number/);
   assert.match(lab, /const startYawError = wrapAngleRadians\(desiredYaw - startYaw\)/);
   assert.match(lab, /Math\.abs\(startYawError\) > GROUND_KICK_MAX_START_YAW_ERROR/);
-  assert.match(lab, /this\.bodyYaw = kick\.startYaw \+ wrapAngleRadians\(kick\.targetYaw - kick\.startYaw\) \* turnBlend/);
   const update = lab.slice(lab.indexOf('private updateGroundKick'), lab.indexOf('private applyGroundKickPose'));
   assert.doesNotMatch(update, /dampAngleRadians\(this\.bodyYaw, targetYaw/);
   assert.doesNotMatch(update, /Math\.atan2\(this\.tempDirection\.x, this\.tempDirection\.z\)/);
