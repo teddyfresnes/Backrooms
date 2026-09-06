@@ -51,6 +51,26 @@ test('a ground target cannot bypass the LMB guard requirement', () => {
   mouse(0, false); run(1.3);
 });
 
+for (const view of ['first-person', 'third-person']) {
+  test(`a guarded ground kick catches a diagonal target without a root snap in ${view}`, () => {
+    setupDuel(lab, 1.05, view);
+    lab.startNpcRagdoll('punch', new THREE.Vector3(0, 0, 1), 12, 'body');
+    lab.npcGroundKickRecoveryDelay = 100; run(2.6);
+    const target = new THREE.Vector3(); assert.ok(lab.resolveGroundKickTarget(target));
+    lab.player.teleport({ x: target.x + .62, y: .865, z: target.z });
+    aim(-Math.PI / 2); lab.bodyYaw = -Math.PI / 2 + .55;
+    lab.avatarAnchor.rotation.y = lab.bodyYaw; lab.updateAvatarTransform(0);
+    mouse(0); assert.ok(lab.groundKick, 'contextual kick did not start'); mouse(0, false);
+    let previous = lab.bodyYaw, maxStep = 0;
+    for (let i = 0; i < 85; i++) {
+      stepLab(lab); maxStep = Math.max(maxStep, Math.abs(angle(lab.bodyYaw - previous))); previous = lab.bodyYaw;
+      if (view === 'first-person') assert.ok(Math.abs(angle(lab.firstPersonAvatarAnchor.rotation.y - lab.bodyYaw)) < 1e-7);
+    }
+    assert.equal(lab.groundKick, null);
+    assert.ok(maxStep <= 241 / 60 * Math.PI / 180, `ground kick turned ${maxStep * 180 / Math.PI}° in one frame`);
+  });
+}
+
 test('F without an active guard cannot bypass the left-click gate', () => {
   setupDuel(lab); unguard(); lab.combatCounterModifierHeld = true;
   const check = lab.npcCounterWindowIsOpen;
@@ -110,6 +130,27 @@ for (const view of ['first-person', 'third-person']) for (const fps of [30, 60, 
     assert.ok(maxHead <= 420 / fps * Math.PI / 180, `head jump: ${maxHead * 180 / Math.PI}°`);
     assert.ok(Math.abs(angle(lab.bodyYaw + 2.35)) < .06, 'body did not finish following the look');
     assert.ok(Math.abs(angle(Math.PI + lab.player.getContinuousAimYawRadians() + 2.35)) < 1e-7, 'body follow changed the aim');
+  });
+}
+
+for (const view of ['first-person', 'third-person']) for (const fps of [30, 60, 120]) {
+  test(`a newly aimed combo strike cannot spin the body toward a rear view in ${view} at ${fps} fps`, () => {
+    setupDuel(lab, 4.0, view); lab.combatLockOnActive = false;
+    lab.startCombatAttackLayer('punch', 'cross-b'); const first = lab.combatAttack;
+    while (first.elapsed / first.duration < .76) stepLab(lab, 1 / fps);
+    aim(2.7); mouse(0); mouse(0, false);
+    for (let i = 0; i < 8 && lab.combatAttack === first; i++) stepLab(lab, 1 / fps);
+    assert.ok(lab.combatAttack && lab.combatAttack !== first, 'the guarded combo was not queued');
+    let previousBody = lab.bodyYaw, previousHead = headYaw(), maxBody = 0, maxHead = 0;
+    for (let i = 0; i < Math.ceil(fps * 1.15); i++) {
+      stepLab(lab, 1 / fps);
+      maxBody = Math.max(maxBody, Math.abs(angle(lab.bodyYaw - previousBody))); previousBody = lab.bodyYaw;
+      const head = headYaw(); maxHead = Math.max(maxHead, Math.abs(angle(head - previousHead))); previousHead = head;
+      if (view === 'first-person') assert.ok(Math.abs(angle(lab.firstPersonAvatarAnchor.rotation.y - lab.bodyYaw)) < 1e-7);
+    }
+    assert.ok(maxBody <= 241 / fps * Math.PI / 180, `combo body snapped ${maxBody * 180 / Math.PI}°`);
+    assert.ok(maxHead <= 420 / fps * Math.PI / 180, `combo head snapped ${maxHead * 180 / Math.PI}°`);
+    assert.ok(Math.abs(angle(lab.bodyYaw - 2.7)) < .06);
   });
 }
 
