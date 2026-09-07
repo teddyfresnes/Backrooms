@@ -205,6 +205,21 @@ export const captureGetUpPoseClip = (character: THREE.Group, name: string): THRE
   return new THREE.AnimationClip(name, 1, tracks);
 };
 
+/** Reapply a captured single pose after disposing a mixer. New position
+ * bindings must save the standing pose as their original state, otherwise a
+ * fading hold with a rotation-only idle blends back toward the ragdoll. */
+export const applyCapturedGetUpPose = (character: THREE.Group, pose: THREE.AnimationClip): void => {
+  const tracks = new Map(pose.tracks.map(track => [track.name, track]));
+  character.traverse(object => {
+    const bone = object as THREE.Bone;
+    if (!bone.isBone) return;
+    const q = tracks.get(`${bone.name}.quaternion`), p = tracks.get(`${bone.name}.position`);
+    if (q) bone.quaternion.fromArray(q.values).normalize();
+    if (p) bone.position.fromArray(p.values);
+  });
+  character.updateMatrixWorld(true);
+};
+
 export const copyGetUpPose = (source: THREE.Group, target: THREE.Group): void => {
   const bones = new Map<string, THREE.Bone>();
   source.traverse((object) => {

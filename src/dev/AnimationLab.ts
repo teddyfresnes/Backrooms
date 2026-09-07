@@ -24,8 +24,9 @@ import {
 } from './PitEdgeRagdoll';
 import { BloodDecalSystem } from './BloodDecalSystem';
 import { BloodImpactGate } from './BloodImpactGate';
-import { GetUpRecovery, captureGetUpPoseClip, copyGetUpPose } from './GetUpRecovery';
-import { createGetUpMotionClip } from './GetUpMotion';
+import { GetUpRecovery, captureGetUpPoseClip, applyCapturedGetUpPose, copyGetUpPose } from './GetUpRecovery';
+import { createGetUpMotionVariants, type GetUpMotionVariant } from './GetUpMotionVariants';
+import { GetUpVariationSelector } from './GetUpVariationRules';
 import { canGetUp, chooseGetUpSide, recoveryReadyForInput, shouldShowGetUpPrompt } from './GetUpRecoveryRules';
 import { analyzeCombatStrikeSource, combatStrikeEnvelope, combatStrikeReachEnvelope, createCombatDodgeClip, createCombatLowerClip, createCombatStrikeUpperClip, createCombatUpperClip, createDirectionalLocomotionBlendClip, firstQuaternionForBone, type CombatStrikeSide } from './CombatAnimationLayers';
 import {
@@ -1734,6 +1735,10 @@ export class AnimationLab {
   private ragdoll?: RagdollSystem;
   private ragdollMode: RagdollMode | null = null;
   private recovery: GetUpRecovery | null = null;
+  private readonly getUpVariants = new Map<'back' | 'belly', GetUpMotionVariant[]>();
+  private readonly playerGetUpVariation = new GetUpVariationSelector();
+  private readonly npcGetUpVariation = new GetUpVariationSelector();
+  private npcRecoveryHandoffSeconds = 0;
   private recoveryStandPosition: THREE.Vector3 | null = null;
   private recoveryGroundAvailable = false;
   private recoveryRequested = false;
@@ -2357,7 +2362,8 @@ export class AnimationLab {
         .applyQuaternion(this.headBone.getWorldQuaternion(new THREE.Quaternion()).invert());
     }
     if (this.hipsBone) {
-      this.recoveryRestHipsRotation.copy(this.hipsBone.getWorldQuaternion(new THREE.Quaternion()));
+      this.recoveryRestHipsRotation.copy(this.hipsBone.getWorldQuaternion(new THREE.Quaternion()))
+        .premultiply(this.avatarAnchor.getWorldQuaternion(new THREE.Quaternion()).invert());
     }
     this.mixer = new THREE.AnimationMixer(character);
     this.firstPersonMixer = new THREE.AnimationMixer(firstPersonCharacter);
@@ -2479,7 +2485,7 @@ export class AnimationLab {
     if (this.idleNpcHipsBone) {
       this.npcRecoveryRestHipsRotation.copy(
         this.idleNpcHipsBone.getWorldQuaternion(new THREE.Quaternion()),
-      );
+      ).premultiply(idleNpcAnchor.quaternion.clone().invert());
     }
     this.idleNpcAnchor = idleNpcAnchor;
     this.idleNpcCharacter = idleNpcCharacter;
@@ -2527,7 +2533,9 @@ export class AnimationLab {
     for (const side of ['back', 'belly'] as const) {
       const id = side === 'back' ? 'stand-up-back' : 'stand-up-belly';
       const previous = this.animations.get(id)!;
-      const clip = createGetUpMotionClip(this.character, previous.clip, standing, side);
+      const variants = createGetUpMotionVariants(this.character, previous.clip, standing, side);
+      this.getUpVariants.set(side, variants);
+      const clip = variants[0]!.clip;
       this.mixer.uncacheClip(previous.clip);
       this.firstPersonMixer.uncacheClip(previous.clip);
       this.animations.set(id, { clip, action: this.mixer.clipAction(clip) });
@@ -5625,6 +5633,7 @@ export class AnimationLab {
   }
 
   private resetNpcOpponent(enableCombat: boolean): void {
+    this.npcRecoveryHandoffSeconds = 0;
     this.npcBalance.reset(); this.playerBalance.reset();
     this.npcMotionHistory.reset(); this.npcHitHandoff.reset();
     this.combatPreviousTargets = { player: null, npc: null };
@@ -6036,6 +6045,7 @@ export class AnimationLab {
     contactPoint?: Readonly<THREE.Vector3>,
   ): void {
     if (!this.physics || !this.idleNpcCharacter || this.npcRagdoll || this.npcRecovery) return;
+    this.npcRecoveryHandoffSeconds = 0;
     this.npcResumeCombatAfterRecovery = this.npcCombatEnabled && this.npcHealth > 0;
     this.npcDownElapsed = 0;
     this.npcGroundKickRecoveryDelay = 0;
@@ -6086,9 +6096,12 @@ export class AnimationLab {
       .multiply(this.npcRecoveryRestHipsRotation.clone().invert());
     this.npcRecoveryFront.set(0, 0, 1).applyQuaternion(anatomicalRotation);
     const side = chooseGetUpSide(this.npcRecoveryFront.dot(this.recoveryWorldUp));
-    const clipId: AnimationId = side === 'back' ? 'stand-up-back' : 'stand-up-belly';
-    const clip = this.animations.get(clipId)?.clip;
-    if (!clip) return;
+    const variants = this.getUpVariants.get(side);
+    if (!variants?.length) return;
+    const rightUp = new THREE.Vector3(-1, 0, 0).applyQuaternion(anatomicalRotation).dot(this.recoveryWorldUp);
+    const choice = this.npcGetUpVariation.choose(side, rightUp, variants);
+    const variant = variants.find(candidate => candidate.id === choice.id)!;
+    const clip = variant.clip;
     let recovery: GetUpRecovery;
     try {
       recovery = new GetUpRecovery(this.idleNpcAnchor, this.idleNpcCharacter, clip, side, stand.y - 0.865);
@@ -6098,6 +6111,7 @@ export class AnimationLab {
       console.error('[npc-get-up] Unable to start recovery', error);
       return;
     }
+    this.npcGetUpVariation.commit(side, choice);
     ragdoll.suspendForRecovery();
     this.npcRagdoll = undefined;
     this.npcRecovery = recovery;
@@ -6118,6 +6132,7 @@ export class AnimationLab {
     this.npcRecovery = null;
     this.idleNpcMixer.stopAllAction();
     this.idleNpcMixer.timeScale = 1;
+    applyCapturedGetUpPose(this.idleNpcCharacter, handoff);
     const hold = this.idleNpcMixer.clipAction(handoff);
     hold.reset().setLoop(THREE.LoopOnce, 1);
     hold.clampWhenFinished = true;
@@ -6131,6 +6146,7 @@ export class AnimationLab {
     this.npcCombatPhase = this.npcCombatEnabled ? 'guard' : 'idle';
     if (this.npcCombatEnabled) this.startNpcCombatGuardLayers('fight-idle', 1);
     else this.playNpcAnimation('idle', true, 1, true);
+    this.npcRecoveryHandoffSeconds = 0.36;
     this.syncNpcPlayerBlocker(true);
     this.updateNpcUi();
   }
@@ -6380,6 +6396,14 @@ export class AnimationLab {
         this.groundKick !== null,
       )) this.startNpcGroundRecovery();
       this.updateNpcUi();
+      return;
+    }
+    this.npcRecoveryHandoffSeconds = Math.max(0, this.npcRecoveryHandoffSeconds - dt);
+    if (this.npcRecoveryHandoffSeconds > 0 && !this.npcHitReaction) {
+      // Let the standing/guard crossfade finish before replacing its lower
+      // layer with a step. Starting fadeOut midway through fadeIn restarts its
+      // weight at one and can abruptly pull the pelvis down into the guard.
+      this.idleNpcAnchor.updateMatrixWorld(true);
       return;
     }
     this.updateNpcSpacingPush(delta);
@@ -9304,9 +9328,8 @@ export class AnimationLab {
       .multiply(this.recoveryRestHipsRotation.clone().invert());
     this.recoveryFront.set(0, 0, 1).applyQuaternion(anatomicalRotation);
     const side = chooseGetUpSide(this.recoveryFront.dot(this.recoveryWorldUp));
-    const clipId: AnimationId = side === 'back' ? 'stand-up-back' : 'stand-up-belly';
-    const clip = this.animations.get(clipId)?.clip;
-    if (!clip) {
+    const variants = this.getUpVariants.get(side);
+    if (!variants?.length) {
       this.setStatus('ANIMATION DE RELEVÉ INDISPONIBLE');
       return;
     }
@@ -9316,6 +9339,9 @@ export class AnimationLab {
       this.setStatus('AU SOL · AUCUNE POSITION DE RELEVÉ');
       return;
     }
+    const rightUp = new THREE.Vector3(-1, 0, 0).applyQuaternion(anatomicalRotation).dot(this.recoveryWorldUp);
+    const choice = this.playerGetUpVariation.choose(side, rightUp, variants);
+    const clip = variants.find(candidate => candidate.id === choice.id)!.clip;
     let recovery: GetUpRecovery;
     try {
       recovery = new GetUpRecovery(root, character, clip, side, initialStand.y - 0.865);
@@ -9350,6 +9376,7 @@ export class AnimationLab {
     // freeze every subsequent physics access. Disable the complete articulated
     // rig instead, then let World.free() reclaim it with the rest of the world.
     // The get-up animation owns the visual skeleton from this point onward.
+    this.playerGetUpVariation.commit(side, choice);
     ragdoll.suspendForRecovery();
     this.recoveryRequested = false;
     this.ragdoll = undefined;
