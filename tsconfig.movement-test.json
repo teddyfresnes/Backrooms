@@ -22,6 +22,7 @@
     "src/world/types.ts",
     "src/dev/DamageSystem.ts",
     "src/dev/GetUpRecoveryRules.ts",
+    "src/dev/GetUpVariationRules.ts",
     "src/dev/BloodImpactGate.ts",
     "src/dev/DirectionalLocomotionRules.ts",
     "src/dev/CombatGuardRules.ts",
