@@ -1,7 +1,7 @@
 {
   "name": "backrooms-movement-lab",
   "private": true,
-  "version": "0.3.92",
+  "version": "0.3.93",
   "type": "module",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
@@ -11,7 +11,7 @@
     "build": "tsc -b && vite build && node scripts/write-delivery-manifest.mjs",
     "preview": "vite preview",
     "check": "tsc -b",
-    "test": "node -e \"require('fs').rmSync('.movement-test-dist',{recursive:true,force:true})\" && tsc -p tsconfig.movement-test.json && node --test tests/*.test.mjs",
+    "test": "node -e \"require('fs').rmSync('.movement-test-dist',{recursive:true,force:true})\" && tsc -p tsconfig.movement-test.json && node --test --test-concurrency=1 tests/*.test.mjs",
     "assets:blood": "node scripts/fetch-blood-assets.mjs",
     "predev": "node scripts/unpack-assets.mjs && npm run assets:all",
     "prebuild": "node scripts/unpack-assets.mjs && npm run assets:all",
