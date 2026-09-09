@@ -51,7 +51,7 @@ const POINTER_LOCK_RADIANS_PER_PIXEL = 0.002;
 const DOWNED_LOOK_YAW_LIMIT = THREE.MathUtils.degToRad(24);
 const DOWNED_LOOK_PITCH_UP_LIMIT = THREE.MathUtils.degToRad(18);
 const DOWNED_LOOK_PITCH_DOWN_LIMIT = THREE.MathUtils.degToRad(24);
-const COMBAT_GUARD_LOOK_DOWN_LIMIT = THREE.MathUtils.degToRad(58);
+const COMBAT_GUARD_LOOK_DOWN_LIMIT = THREE.MathUtils.degToRad(82);
 
 export class PlayerController {
   readonly controls: PointerLockControls;

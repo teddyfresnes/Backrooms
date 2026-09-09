@@ -3,6 +3,8 @@ import { GaitTransition, sampleGaitPhase, alignGaitPhase, createSlideSprintRecov
 import { createCrouchLocomotionClips, CROUCH_LOCOMOTION_IDS, CROUCH_GAIT_REFERENCE_SPEED } from './CrouchLocomotion';
 import { advanceStrikeClock, CombatImpactAudio } from './CombatFeel';
 import { createCombatPushClip, applyCombatPushPose, transferCombatStance } from './CombatPushMotion';
+import { FirstPersonCombatPose, offsetFirstPersonUpperBody } from './FirstPersonCombatPose';
+import { capFirstPersonMask } from './FirstPersonMeshCaps';
 import { sweepCombatContact, combatChainReady, CombatBalance, stepCombatSpring } from './CombatContact';
 import { solveCombatTwoBone, limitKneeLateralBend, easeCombat, CombatPoseHandoff, CombatMotionHistory, CombatProceduralPose } from './CombatRig';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
@@ -125,49 +127,23 @@ const FIRST_PERSON_COMBAT_ARM_MASK_THRESHOLD = 0.19;
 const FIRST_PERSON_SOLE_CLEARANCE = 0.018;
 const FIRST_PERSON_ARM_SCALE = 0.84;
 const FIRST_PERSON_HAND_SCALE = 0.90;
-const FIRST_PERSON_COMBAT_ARM_SCALE = 0.97;
+const FIRST_PERSON_COMBAT_ARM_SCALE = 1.0;
 const FIRST_PERSON_COMBAT_HAND_SCALE = 1.0;
 const FIRST_PERSON_COMBAT_STRIKE_REACH_SCALE = 0.78;
 const FIRST_PERSON_COMBAT_COUNTER_REACH_SCALE = 0.74;
 // Never solve first-person camera penetration by discarding arm fragments: that
 // creates visible holes/"transparent" limbs. Instead the render-only skeleton is
 // kept physically in front of the eye with a small dynamic forward safety offset.
-const FIRST_PERSON_HAND_SAFE_DEPTH = 0.28;
-const FIRST_PERSON_FOREARM_SAFE_DEPTH = 0.29;
-const FIRST_PERSON_ARM_SAFETY_MAX_FORWARD = 0.24;
-const FIRST_PERSON_ARM_SAFETY_RELEASE_RESPONSE = 15.0;
-// Move the render-only combat body farther *in front* of the eye. The previous
-// negative offset left one leading fist almost inside the near camera plane.
+// Legacy exploration placement fades smoothly into the physical body at guard entry.
 const FIRST_PERSON_COMBAT_BODY_FORWARD_OFFSET = 0.30;
 const FIRST_PERSON_COMBAT_BODY_UP_OFFSET = -0.165;
 const FIRST_PERSON_COMBAT_BODY_OFFSET_RESPONSE = 12.0;
-const FIRST_PERSON_COMBAT_LATERAL_MAX = 0.32;
-const FIRST_PERSON_COMBAT_LATERAL_RESPONSE = 11.0;
-// First-person combat is its own presentation layer. While the guard is active,
-// sample the Fight Idle pelvis at the upper-body phase instead of inheriting the
-// locomotion pelvis. This makes walking/strafe/reverse use the exact same guard
-// pose as standing still, with no lateral hand drift and no stop/start snap.
+// Guard release uses the same short, gradual handoff in both views.
 const FIRST_PERSON_COMBAT_ROOT_RELEASE_SECONDS = 0.46;
-// Keep the closest fist, not just the midpoint, safely away from the gameplay eye.
-const FIRST_PERSON_COMBAT_NEAR_HAND_DEPTH_TARGET = 0.53;
-const FIRST_PERSON_COMBAT_DEPTH_MAX_CORRECTION = 0.34;
-const FIRST_PERSON_COMBAT_DEPTH_EFFECTIVE_MAX_FORWARD = 0.16;
-const FIRST_PERSON_COMBAT_ATTACK_SAFETY_MAX_FORWARD = 0.075;
-const FIRST_PERSON_COMBAT_DEPTH_RESPONSE = 9.5;
-const FIRST_PERSON_COMBAT_HAND_Y_TARGET = -0.18;
 const FIRST_PERSON_COMBAT_VISUAL_ARM_SCALE_BONUS = 0.0;
 const FIRST_PERSON_COMBAT_VISUAL_HAND_SCALE_BONUS = 0.0;
 const FIRST_PERSON_COMBAT_VISUAL_BODY_FORWARD_EXTRA = 0.0;
 const FIRST_PERSON_COMBAT_VISUAL_BODY_UP_EXTRA = -0.055;
-const FIRST_PERSON_COMBAT_VISUAL_NEAR_HAND_DEPTH_EXTRA = 0.0;
-const FIRST_PERSON_COMBAT_VISUAL_HAND_Y_EXTRA = 0.06;
-const FIRST_PERSON_COMBAT_VERTICAL_MAX_CORRECTION = 0.20;
-const FIRST_PERSON_COMBAT_VERTICAL_RESPONSE = 10.0;
-const FIRST_PERSON_COMBAT_FRAMING_SETTLE_SECONDS = 0.26;
-const FIRST_PERSON_GUARD_WRIST_DEPTH = 0.36;
-const FIRST_PERSON_GUARD_WRIST_LATERAL = 0.24;
-const FIRST_PERSON_GUARD_WRIST_DROP = 0.22;
-const FIRST_PERSON_COMBAT_PUNCH_FORWARD_PRESENTATION_SCALE = 0.22;
 const COMBAT_STRIKE_AIM_CORRECTION_MAX = THREE.MathUtils.degToRad(38);
 const COMBAT_STRIKE_AIM_CORRECTION_RESPONSE = 1.0;
 const COMBAT_STRIKE_TORSO_AIM_SHARE = 0.34;
@@ -1641,24 +1617,12 @@ export class AnimationLab {
   private combatResumeMode: CombatIdleResumeMode = 'sleeping';
   private combatTransition: AnimationId | null = null;
   private readonly firstPersonClipUniforms: Array<{ clipY: { value: number }; combatIsolation: { value: number }; groundKick: { value: number } }> = [];
+  private readonly firstPersonCombatPresentation = new FirstPersonCombatPose();
   private readonly firstPersonHipWorld = new THREE.Vector3();
   private readonly firstPersonHipTarget = new THREE.Vector3();
   private readonly firstPersonForward = new THREE.Vector3();
   private readonly firstPersonRight = new THREE.Vector3();
   private readonly firstPersonViewRight = new THREE.Vector3();
-  private readonly firstPersonCombatHandCenter = new THREE.Vector3();
-  private readonly firstPersonCombatHandA = new THREE.Vector3();
-  private readonly firstPersonCombatHandB = new THREE.Vector3();
-  private readonly firstPersonCombatDepthVectorA = new THREE.Vector3();
-  private readonly firstPersonCombatDepthVectorB = new THREE.Vector3();
-  private readonly firstPersonArmSafetyBonePosition = new THREE.Vector3();
-  private readonly firstPersonArmSafetyViewForward = new THREE.Vector3();
-  private firstPersonCombatFramingSettleSeconds = 0;
-  private firstPersonCombatFramingLocked = false;
-  private firstPersonCombatFramingWasVisible = false;
-  private firstPersonCombatLateralOffset = 0;
-  private firstPersonCombatDepthOffset = 0;
-  private firstPersonCombatVerticalOffset = 0;
   private readonly firstPersonFootWorldA = new THREE.Vector3();
   private readonly firstPersonFootWorldB = new THREE.Vector3();
   private readonly firstPersonFootLockTarget = new THREE.Vector3();
@@ -1686,7 +1650,6 @@ export class AnimationLab {
   private combatFightHipsReferenceReady = false;
   private combatFightHipsInterpolant?: THREE.Interpolant;
   private combatFightHipsDuration = 1;
-  private readonly firstPersonCombatHipsSample = new THREE.Quaternion();
   private firstPersonCombatReleaseSeconds = 0;
   private neckBone?: THREE.Bone;
   private headBone?: THREE.Bone;
@@ -2786,6 +2749,7 @@ export class AnimationLab {
     const armBoneIndices = new Set<number>();
     const combatDistalArmBoneIndices = new Set<number>();
     const combatUpperArmBoneIndices = new Set<number>();
+    const combatTorsoBoneIndices = new Set<number>();
     mesh.skeleton.bones.forEach((bone, index) => {
       const name = bone.name.toLowerCase().replace(/[^a-z0-9]/g, '');
       if (
@@ -2819,17 +2783,21 @@ export class AnimationLab {
         name.includes('pinky')
       ) combatDistalArmBoneIndices.add(index);
       if (name.endsWith('leftarm') || name.endsWith('rightarm')) combatUpperArmBoneIndices.add(index);
+      if (name.endsWith('spine') || name.endsWith('spine1') || name.endsWith('spine2')
+        || name.endsWith('leftshoulder') || name.endsWith('rightshoulder')) combatTorsoBoneIndices.add(index);
     });
     if (!lowerBoneIndices.size) return false;
 
     const lowerMask = new Float32Array(position.count);
     const armMask = new Float32Array(position.count);
     const combatArmMask = new Float32Array(position.count);
+    const combatBodyMask = new Float32Array(position.count);
     for (let vertex = 0; vertex < position.count; vertex += 1) {
       let lowerWeight = 0;
       let armWeight = 0;
       let combatDistalWeight = 0;
       let combatUpperWeight = 0;
+      let combatTorsoWeight = 0;
       const indices = [
         skinIndex.getX(vertex), skinIndex.getY(vertex), skinIndex.getZ(vertex), skinIndex.getW(vertex),
       ];
@@ -2843,6 +2811,7 @@ export class AnimationLab {
         if (armBoneIndices.has(boneIndex)) armWeight += weight;
         if (combatDistalArmBoneIndices.has(boneIndex)) combatDistalWeight += weight;
         if (combatUpperArmBoneIndices.has(boneIndex)) combatUpperWeight += weight;
+        if (combatTorsoBoneIndices.has(boneIndex)) combatTorsoWeight += weight;
       }
       lowerMask[vertex] = THREE.MathUtils.smoothstep(lowerWeight, 0.10, 0.62);
       armMask[vertex] = THREE.MathUtils.smoothstep(armWeight, 0.08, 0.58);
@@ -2860,27 +2829,20 @@ export class AnimationLab {
         Math.max(combatUpperWeight * 0.72, shoulderBridge * 0.94),
       );
       combatArmMask[vertex] = THREE.MathUtils.smoothstep(combatArmWeight, 0.10, 0.42);
+      combatBodyMask[vertex] = THREE.MathUtils.smoothstep(lowerWeight + combatTorsoWeight, 0.10, 0.62);
     }
     geometry.setAttribute('fpLowerBodyMask', new THREE.Float32BufferAttribute(lowerMask, 1));
     geometry.setAttribute('fpArmMask', new THREE.Float32BufferAttribute(armMask, 1));
     geometry.setAttribute('fpCombatArmMask', new THREE.Float32BufferAttribute(combatArmMask, 1));
+    geometry.setAttribute('fpCombatBodyMask', new THREE.Float32BufferAttribute(combatBodyMask, 1));
 
-    // Keep whole triangles that belong clearly to either the lower body or an
-    // arm/hand chain. This avoids interpolation spikes while allowing hands to
-    // travel forward during authored jumps/falls/slides.
-    const index = geometry.getIndex();
-    if (index) {
-      const kept: number[] = [];
-      for (let i = 0; i + 2 < index.count; i += 3) {
-        const a = index.getX(i);
-        const b = index.getX(i + 1);
-        const c = index.getX(i + 2);
-        const visible = (v: number) => Math.max(lowerMask[v]!, armMask[v]!) >= FIRST_PERSON_LOWER_BODY_MASK_THRESHOLD;
-        if (visible(a) && visible(b) && visible(c)) kept.push(a, b, c);
-      }
-      geometry.setIndex(kept);
-    }
-
+    // Close only the boundary of the complete visible body. Closing the arm
+    // and torso separately would draw artificial discs across the shoulders.
+    const solidMask = new Float32Array(geometry.getAttribute('position').count);
+    for (let i = 0; i < solidMask.length; i++) solidMask[i] = Math.max(combatArmMask[i]!, combatBodyMask[i]!);
+    geometry.setAttribute('fpCombatSolidMask', new THREE.Float32BufferAttribute(solidMask, 1));
+    capFirstPersonMask(geometry, 'fpCombatSolidMask', FIRST_PERSON_COMBAT_ARM_MASK_THRESHOLD);
+    geometry.deleteAttribute('fpCombatSolidMask');
     mesh.geometry = geometry;
     return true;
   }
@@ -2896,22 +2858,22 @@ export class AnimationLab {
       shader.uniforms.fpGroundKick = groundKick;
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
-        '#include <common>\nattribute float fpLowerBodyMask;\nattribute float fpArmMask;\nattribute float fpCombatArmMask;\nvarying float vFpWorldY;\nvarying float vFpLowerBodyMask;\nvarying float vFpArmMask;\nvarying float vFpCombatArmMask;',
+        '#include <common>\nattribute float fpLowerBodyMask;\nattribute float fpArmMask;\nattribute float fpCombatArmMask;\nattribute float fpCombatBodyMask;\nvarying float vFpWorldY;\nvarying float vFpLowerBodyMask;\nvarying float vFpArmMask;\nvarying float vFpCombatArmMask;\nvarying float vFpCombatBodyMask;',
       );
       shader.vertexShader = shader.vertexShader.replace(
         '#include <project_vertex>',
-        '#include <project_vertex>\nvec4 fpWorldPosition = modelMatrix * vec4(transformed, 1.0);\nvFpWorldY = fpWorldPosition.y;\nvFpLowerBodyMask = fpLowerBodyMask;\nvFpArmMask = fpArmMask;\nvFpCombatArmMask = fpCombatArmMask;',
+        '#include <project_vertex>\nvec4 fpWorldPosition = modelMatrix * vec4(transformed, 1.0);\nvFpWorldY = fpWorldPosition.y;\nvFpLowerBodyMask = fpLowerBodyMask;\nvFpArmMask = fpArmMask;\nvFpCombatArmMask = fpCombatArmMask;\nvFpCombatBodyMask = fpCombatBodyMask;',
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <common>',
-        '#include <common>\nuniform float fpUpperClipY;\nuniform float fpCombatIsolation;\nuniform float fpGroundKick;\nvarying float vFpWorldY;\nvarying float vFpLowerBodyMask;\nvarying float vFpArmMask;\nvarying float vFpCombatArmMask;',
+        '#include <common>\nuniform float fpUpperClipY;\nuniform float fpCombatIsolation;\nuniform float fpGroundKick;\nvarying float vFpWorldY;\nvarying float vFpLowerBodyMask;\nvarying float vFpArmMask;\nvarying float vFpCombatArmMask;\nvarying float vFpCombatBodyMask;',
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <clipping_planes_fragment>',
-        `#include <clipping_planes_fragment>\nfloat fpExplorationMask = max(vFpLowerBodyMask, vFpArmMask);\nfloat fpCombatKickMask = max(vFpCombatArmMask, vFpLowerBodyMask);\nfloat fpCombatMask = mix(vFpCombatArmMask, fpCombatKickMask, fpGroundKick);\nfloat fpVisibleMask = mix(fpExplorationMask, fpCombatMask, fpCombatIsolation);\nfloat fpMaskThreshold = mix(${FIRST_PERSON_LOWER_BODY_MASK_THRESHOLD.toFixed(2)}, ${FIRST_PERSON_COMBAT_ARM_MASK_THRESHOLD.toFixed(2)}, fpCombatIsolation);\nif (fpVisibleMask < fpMaskThreshold) discard;\nif (fpCombatIsolation < 0.5 && vFpWorldY > fpUpperClipY && vFpArmMask < ${FIRST_PERSON_LOWER_BODY_MASK_THRESHOLD.toFixed(2)}) discard;`,
+        `#include <clipping_planes_fragment>\nfloat fpExplorationMask = max(vFpLowerBodyMask, vFpArmMask);\nfloat fpCombatKickMask = max(vFpCombatArmMask, vFpCombatBodyMask);\nfloat fpCombatMask = fpCombatKickMask;\nfloat fpVisibleMask = mix(fpExplorationMask, fpCombatMask, fpCombatIsolation);\nfloat fpMaskThreshold = mix(${FIRST_PERSON_LOWER_BODY_MASK_THRESHOLD.toFixed(2)}, ${FIRST_PERSON_COMBAT_ARM_MASK_THRESHOLD.toFixed(2)}, fpCombatIsolation);\nif (fpVisibleMask < fpMaskThreshold) discard;\nif (fpCombatIsolation < 0.5 && vFpWorldY > fpUpperClipY && vFpArmMask < ${FIRST_PERSON_LOWER_BODY_MASK_THRESHOLD.toFixed(2)}) discard;`,
       );
     };
-    material.customProgramCacheKey = () => 'animation-lab-first-person-viewmodel-v13-ground-kick';
+    material.customProgramCacheKey = () => 'animation-lab-first-person-viewmodel-v14-full-body';
     material.needsUpdate = true;
   }
 
@@ -2957,9 +2919,10 @@ export class AnimationLab {
     // are untouched; only this second render rig is framed around the camera.
     const state = this.player.getDebugState();
     const lowView = state.crouching || state.lowPosture || state.sliding;
-    const targetScale = lowView
-      ? FIRST_PERSON_VIEWMODEL_CROUCH_SCALE
-      : FIRST_PERSON_VIEWMODEL_STAND_SCALE;
+    const targetScale = THREE.MathUtils.lerp(
+      lowView ? FIRST_PERSON_VIEWMODEL_CROUCH_SCALE : FIRST_PERSON_VIEWMODEL_STAND_SCALE,
+      1, this.firstPersonCombatPoseBlend,
+    );
     this.firstPersonViewmodelScale = snapScale
       ? targetScale
       : THREE.MathUtils.lerp(
@@ -2988,10 +2951,8 @@ export class AnimationLab {
           expAlpha(delta, FIRST_PERSON_ACTION_IDLE_BODY_OFFSET_RESPONSE),
         );
 
-    // Combat presentation only: keep the real gameplay camera fixed. The
-    // render-only body uses a conservative base offset, then a hand-midpoint
-    // solver below keeps both fists visibly in front of and slightly below the
-    // eye without letting guard/punch animation translate the gameplay camera.
+    // The combat body converges to the physical avatar. Only the arms receive
+    // a camera-aware presentation pose; the gameplay eye never follows a fist.
     const combatPoseTarget = !state.incapacitated && (
       this.combatAttack !== null
       || this.combatPhase === 'enter'
@@ -3000,9 +2961,8 @@ export class AnimationLab {
       || this.firstPersonCombatReleaseSeconds > 0
       || this.groundKick !== null
     ) ? 1 : 0;
-    // While the fists are up, keep enough downward look for stairs/feet awareness but
-    // prevent the camera from pitching all the way into the forearms/body. The limiter
-    // modifies the input look range only; animation still never moves the gameplay camera.
+    // Allow a near-vertical look at the legs. Arm clearance is resolved on the
+    // presentation skeleton, without forcing the eyes away from the floor.
     this.player.setCombatGuardLookConstraint(combatPoseTarget > 0.001 && this.groundKick === null);
     this.firstPersonCombatPoseBlend = snapScale
       ? combatPoseTarget
@@ -3124,14 +3084,17 @@ export class AnimationLab {
 
     // Do not let the oversized view-model sink below the physical body. Only
     // lift when the lower shoe/foot estimate crosses the real feet plane.
-    if (!state.incapacitated && combatPoseTarget <= 0.001 && this.firstPersonLeftFootBone && this.firstPersonRightFootBone) {
+    if (!state.incapacitated && this.firstPersonLeftFootBone && this.firstPersonRightFootBone) {
       this.firstPersonLeftFootBone.getWorldPosition(this.firstPersonFootWorldA);
       this.firstPersonRightFootBone.getWorldPosition(this.firstPersonFootWorldB);
       const estimatedSoleY = Math.min(this.firstPersonFootWorldA.y, this.firstPersonFootWorldB.y)
         - this.firstPersonFootToSole * this.firstPersonViewmodelScale;
       const minimumSoleY = this.feetPosition.y + FIRST_PERSON_SOLE_CLEARANCE;
       if (estimatedSoleY < minimumSoleY) {
-        this.firstPersonAvatarAnchor.position.y += minimumSoleY - estimatedSoleY;
+        // Release exploration's extra lift with the body blend. Dropping it
+        // immediately on RMB teleported the whole visible body downward.
+        this.firstPersonAvatarAnchor.position.y += (minimumSoleY - estimatedSoleY)
+          * (1 - this.firstPersonCombatPoseBlend);
         this.firstPersonAvatarAnchor.updateMatrixWorld(true);
       }
     }
@@ -3178,11 +3141,14 @@ export class AnimationLab {
 
     this.firstPersonHipsBone.getWorldPosition(this.firstPersonHipWorld);
     const clipY = this.firstPersonHipWorld.y + FIRST_PERSON_BODY_CLIP_ABOVE_HIPS;
-    // Enter combat isolation immediately: the guard should never spend even a
-    // transition frame showing the torso/back while the presentation rig moves
-    // toward the fists. On release, keep the arms-only mask until the combat
-    // framing has substantially settled, then hand control back to the normal
-    // legs+arms exploration view-model.
+    // Combat legs share the physical avatar's placement and size. Guard framing
+    // and camera safety operate on the upper spine, never on this world anchor.
+    if (!state.incapacitated) {
+      this.firstPersonAvatarAnchor.position.lerp(this.avatarAnchor.position, this.firstPersonCombatPoseBlend);
+      this.firstPersonAvatarAnchor.updateMatrixWorld(true);
+    }
+    // The connected combat body is visible throughout guard entry. Release
+    // blends back to exploration after its body placement has settled.
     const combatIsolation = combatPoseTarget > 0.001
       ? 1
       : THREE.MathUtils.smoothstep(this.firstPersonCombatPoseBlend, 0.08, 0.72);
@@ -3557,11 +3523,8 @@ export class AnimationLab {
     this.combatPhase = 'guard';
     this.combatTransition = null;
     this.firstPersonCombatReleaseSeconds = 0;
-    // Solve the first-person guard frame once, then keep that exact framing
-    // through walk/strafe/stop changes. Locomotion must never drag the fists
-    // toward/away from the gameplay eye.
-    this.firstPersonCombatFramingLocked = false;
-    this.firstPersonCombatFramingSettleSeconds = FIRST_PERSON_COMBAT_FRAMING_SETTLE_SECONDS;
+    // The camera-relative guard is applied after locomotion each frame; pelvis
+    // and feet remain owned by the physical gait.
     this.autoOneShot = null;
     this.pendingStrongTurn = null;
     this.clearAuthoredTurn();
@@ -6422,11 +6385,11 @@ export class AnimationLab {
   }
 
   private copyCombatPoseToFirstPerson(): void {
-    if (!this.combatAttack && !this.groundKick && !this.combatHitReaction) return;
+    if (!this.combatAttack && !this.groundKick && !this.combatHitReaction && this.combatPhase === 'none' && this.firstPersonCombatPoseBlend < 0.001) return;
     // The world strike owns the contact pose in both views. First-person guard
     // presentation is applied afterward, fading away before the striking hand
     // enters its contact window, then returning smoothly during recoil.
-    if ((this.groundKick || this.combatAttack) && this.hipsBone && this.firstPersonHipsBone) {
+    if (this.hipsBone && this.firstPersonHipsBone) {
       this.firstPersonHipsBone.position.copy(this.hipsBone.position);
       this.firstPersonHipsBone.quaternion.copy(this.hipsBone.quaternion);
     }
@@ -8314,41 +8277,6 @@ export class AnimationLab {
   }
 
 
-  private applyFirstPersonCombatRootStabilization(): void {
-    if (!this.firstPersonHipsBone || !this.combatUpperLayer) return;
-    const hardGuard = this.combatAttack !== null || this.combatPhase === 'guard';
-    const releaseBlend = THREE.MathUtils.clamp(
-      this.firstPersonCombatReleaseSeconds / FIRST_PERSON_COMBAT_ROOT_RELEASE_SECONDS,
-      0,
-      1,
-    );
-    const strength = hardGuard ? 1 : releaseBlend;
-    if (strength <= 1e-4) return;
-
-    if (this.combatFightHipsInterpolant) {
-      const duration = Math.max(1e-5, this.combatFightHipsDuration);
-      const time = ((this.combatUpperLayer.firstPerson.time % duration) + duration) % duration;
-      const sample = this.combatFightHipsInterpolant.evaluate(time);
-      this.firstPersonCombatHipsSample.set(
-        Number(sample[0] ?? 0),
-        Number(sample[1] ?? 0),
-        Number(sample[2] ?? 0),
-        Number(sample[3] ?? 1),
-      ).normalize();
-    } else if (this.combatFightHipsReferenceReady) {
-      this.firstPersonCombatHipsSample.copy(this.combatFightHipsReference);
-    } else {
-      return;
-    }
-
-    // Crucial 1P rule: locomotion may animate the world/3P pelvis, but it must
-    // never drag the first-person guard left/right. The upper guard is evaluated
-    // against the Fight Idle pelvis at the same phase it has while standing still.
-    this.firstPersonHipsBone.quaternion.slerp(this.firstPersonCombatHipsSample, strength).normalize();
-    this.firstPersonHipsBone.updateMatrix();
-    this.firstPersonHipsBone.updateWorldMatrix(false, true);
-  }
-
   private applyCombatGuardTorsoAlignment(): void {
     if (
       this.combatPhase !== 'guard'
@@ -8438,256 +8366,60 @@ export class AnimationLab {
     bone.updateWorldMatrix(false, true);
   }
 
-  private applyFirstPersonCombatFraming(delta: number): void {
-    if (!this.firstPersonCharacter || !this.player) return;
-    const combatVisible = this.viewMode === 'first-person' && !this.player.isIncapacitated && (
-      this.combatAttack !== null
-      || this.combatPhase === 'enter'
-      || this.combatPhase === 'guard'
-      || this.combatPhase === 'exit'
-      || this.firstPersonCombatReleaseSeconds > 0
-      || this.groundKick !== null
-    );
-
-    // The fight-idle guard gets ONE framing solve when it becomes active. After
-    // that, the exact same lateral/depth/height correction is held through
-    // walking, strafing and the return to idle. The old continuously-running
-    // solver chased the animated hands during locomotion, which made the fists
-    // drift forward while walking and then snap back toward the eye on stop.
-    if (combatVisible && !this.firstPersonCombatFramingWasVisible) {
-      this.firstPersonCombatFramingLocked = false;
-      this.firstPersonCombatFramingSettleSeconds = FIRST_PERSON_COMBAT_FRAMING_SETTLE_SECONDS;
-    } else if (!combatVisible) {
-      this.firstPersonCombatFramingLocked = false;
-      this.firstPersonCombatFramingSettleSeconds = 0;
-    }
-    this.firstPersonCombatFramingWasVisible = combatVisible;
-
-    let lateralTarget = combatVisible ? this.firstPersonCombatLateralOffset : 0;
-    let depthTarget = combatVisible ? this.firstPersonCombatDepthOffset : 0;
-    let verticalTarget = combatVisible ? this.firstPersonCombatVerticalOffset : 0;
-
-    const guardHandsAvailable = combatVisible
-      && this.combatPhase === 'guard'
-      && !this.combatAttack
-      && this.firstPersonHandBones.length >= 2;
-    const canSolveGuardFrame = combatVisible
-      && this.combatPhase === 'guard'
-      && !this.combatAttack
-      && !this.firstPersonCombatFramingLocked
-      && this.firstPersonHandBones.length >= 2;
-    let guardRawLateral: number | null = null;
-
-    if (guardHandsAvailable) {
-      this.firstPersonHandBones[0]!.getWorldPosition(this.firstPersonCombatHandA);
-      this.firstPersonHandBones[1]!.getWorldPosition(this.firstPersonCombatHandB);
-      this.firstPersonCombatHandCenter
-        .copy(this.firstPersonCombatHandA)
-        .add(this.firstPersonCombatHandB)
-        .multiplyScalar(0.5);
-      this.firstPersonViewRight.set(
-        Math.cos(this.continuousViewYaw),
-        0,
-        -Math.sin(this.continuousViewYaw),
-      );
-      guardRawLateral = this.tempDirection
-        .copy(this.firstPersonCombatHandCenter)
-        .sub(this.firstPersonCamera.position)
-        .dot(this.firstPersonViewRight);
-    }
-
-    if (canSolveGuardFrame) {
-      this.firstPersonForward.set(
-        Math.sin(this.continuousViewYaw),
-        0,
-        Math.cos(this.continuousViewYaw),
-      );
-
-      const fromCamera = this.tempDirection
-        .copy(this.firstPersonCombatHandCenter)
-        .sub(this.firstPersonCamera.position);
-      const lateral = guardRawLateral ?? fromCamera.dot(this.firstPersonViewRight);
-      const vertical = fromCamera.y;
-      // Do not mutate the cached hand positions while measuring depth; they are
-      // reused by diagnostics and the second subtraction used to make one hand
-      // appear to jump when the solver resumed after locomotion.
-      const nearDepth = Math.min(
-        this.firstPersonCombatDepthVectorA.copy(this.firstPersonCombatHandA).sub(this.firstPersonCamera.position).dot(this.firstPersonForward),
-        this.firstPersonCombatDepthVectorB.copy(this.firstPersonCombatHandB).sub(this.firstPersonCamera.position).dot(this.firstPersonForward),
-      );
-
-      lateralTarget = THREE.MathUtils.clamp(
-        -lateral,
-        -FIRST_PERSON_COMBAT_LATERAL_MAX,
-        FIRST_PERSON_COMBAT_LATERAL_MAX,
-      ) * this.firstPersonCombatPoseBlend;
-      depthTarget = THREE.MathUtils.clamp(
-        FIRST_PERSON_COMBAT_NEAR_HAND_DEPTH_TARGET - nearDepth,
-        -FIRST_PERSON_COMBAT_DEPTH_MAX_CORRECTION,
-        FIRST_PERSON_COMBAT_DEPTH_MAX_CORRECTION,
-      ) * this.firstPersonCombatPoseBlend;
-      depthTarget += FIRST_PERSON_COMBAT_VISUAL_NEAR_HAND_DEPTH_EXTRA * this.firstPersonCombatPoseBlend;
-      // Guard framing may correct the fists, but it must never drag the whole
-      // render body far out in front of the eye. Keep a hard presentation budget.
-      depthTarget = Math.min(depthTarget, FIRST_PERSON_COMBAT_DEPTH_EFFECTIVE_MAX_FORWARD);
-      verticalTarget = THREE.MathUtils.clamp(
-        FIRST_PERSON_COMBAT_HAND_Y_TARGET - vertical,
-        -FIRST_PERSON_COMBAT_VERTICAL_MAX_CORRECTION,
-        FIRST_PERSON_COMBAT_VERTICAL_MAX_CORRECTION,
-      ) * this.firstPersonCombatPoseBlend;
-      verticalTarget += FIRST_PERSON_COMBAT_VISUAL_HAND_Y_EXTRA * this.firstPersonCombatPoseBlend;
-
-      this.firstPersonCombatFramingSettleSeconds = Math.max(
-        0,
-        this.firstPersonCombatFramingSettleSeconds - Math.max(0, delta),
-      );
-      if (
-        this.firstPersonCombatFramingSettleSeconds <= 0
-        && this.firstPersonCombatPoseBlend >= 0.92
-      ) {
-        this.firstPersonCombatFramingLocked = true;
-      }
-    }
-
-    // The 1P pelvis is stabilized separately against the Fight Idle phase, so
-    // no extra screen-space strafe compensation is needed here. Holding this
-    // framing offset untouched avoids the old stop/start hand teleport.
-
-    this.firstPersonCombatLateralOffset = THREE.MathUtils.lerp(
-      this.firstPersonCombatLateralOffset,
-      lateralTarget,
-      expAlpha(delta, FIRST_PERSON_COMBAT_LATERAL_RESPONSE),
-    );
-    this.firstPersonCombatDepthOffset = THREE.MathUtils.lerp(
-      this.firstPersonCombatDepthOffset,
-      depthTarget,
-      expAlpha(delta, FIRST_PERSON_COMBAT_DEPTH_RESPONSE),
-    );
-    this.firstPersonCombatVerticalOffset = THREE.MathUtils.lerp(
-      this.firstPersonCombatVerticalOffset,
-      verticalTarget,
-      expAlpha(delta, FIRST_PERSON_COMBAT_VERTICAL_RESPONSE),
-    );
-
-    if (Math.abs(this.firstPersonCombatLateralOffset) > 0.0001) {
-      this.firstPersonAvatarAnchor.position.addScaledVector(
-        this.firstPersonViewRight,
-        this.firstPersonCombatLateralOffset,
-      );
-    }
-    if (Math.abs(this.firstPersonCombatDepthOffset) > 0.0001) {
-      this.firstPersonAvatarAnchor.position.addScaledVector(
-        this.firstPersonForward,
-        this.firstPersonCombatDepthOffset,
-      );
-    }
-    if (Math.abs(this.firstPersonCombatVerticalOffset) > 0.0001) {
-      this.firstPersonAvatarAnchor.position.y += this.firstPersonCombatVerticalOffset;
-    }
-
-    // First-person punch readability: move the render-only upper body a few
-    // centimeters farther along view-forward around impact. This is presentation
-    // only (the gameplay camera/collider never moves), and because the offset uses
-    // the same bell envelope as torso drive it returns to the exact guard frame.
-    if (this.combatAttack) {
-      const strikeNormalized = this.combatAttack.duration > 1e-5
-        ? this.combatAttack.elapsed / this.combatAttack.duration
-        : 1;
-      const strikeVisual = combatAttackVisualProfile(this.combatAttack.animation);
-      const strikeForward = strikeVisual?.firstPersonForwardMeters ?? 0;
-      const strikeReach = combatStrikeReachEnvelope(
-        strikeNormalized,
-        this.combatAttack.kind === 'big-punch',
-        this.combatAttack.impactFraction,
-      );
-      if (strikeForward > 0 && strikeReach > 1e-4) {
-        const startDistance = this.combatAttack.targetDistanceAtStart;
-        const contactReachBoost = Number.isFinite(startDistance)
-          ? THREE.MathUtils.lerp(0.98, 1.22, THREE.MathUtils.smoothstep(startDistance, 0.82, 1.82))
-          : 1.08;
-        this.firstPersonAvatarAnchor.position.addScaledVector(
-          this.firstPersonForward,
-          strikeForward * strikeReach * contactReachBoost * FIRST_PERSON_COMBAT_PUNCH_FORWARD_PRESENTATION_SCALE,
-        );
-      }
-    }
-    this.firstPersonAvatarAnchor.updateMatrixWorld(true);
-  }
-
   private applyFirstPersonArmCameraSafety(delta: number): void {
     if (!this.firstPersonCharacter || !this.player || this.viewMode !== 'first-person') return;
-    this.firstPersonCamera.getWorldDirection(this.firstPersonArmSafetyViewForward).normalize();
-    const combatVisible = !this.player.isIncapacitated && (
-      this.combatAttack !== null
-      || this.combatPhase === 'enter'
-      || this.combatPhase === 'guard'
-      || this.firstPersonCombatPoseBlend > 0.01
-    );
-
-    let targetForwardOffset = 0;
-    if (combatVisible && this.combatAttack !== null) {
-      const requireDepth = (bones: readonly THREE.Bone[], safeDepth: number): void => {
-        for (const bone of bones) {
-          bone.getWorldPosition(this.firstPersonArmSafetyBonePosition);
-          const depth = this.firstPersonArmSafetyBonePosition
-            .sub(this.firstPersonCamera.position)
-            .dot(this.firstPersonArmSafetyViewForward);
-          targetForwardOffset = Math.max(targetForwardOffset, safeDepth - depth);
+    const visible = !this.player.isIncapacitated && this.firstPersonCombatPoseBlend > 0.001;
+    const eye = this.firstPersonCamera.getWorldPosition(new THREE.Vector3());
+    const forward = new THREE.Vector3(Math.sin(this.bodyYaw), 0, Math.cos(this.bodyYaw));
+    let required = 0;
+    if (visible) {
+      const arms = [
+        [this.firstPersonLeftUpperArmBone, this.firstPersonLeftForearmBone, this.firstPersonLeftHandBone],
+        [this.firstPersonRightUpperArmBone, this.firstPersonRightForearmBone, this.firstPersonRightHandBone],
+      ];
+      // Check the actual arm segments after guard IK. Camera pitch cannot change
+      // the eye's physical clearance, and cannot push the legs toward the sky.
+      for (const chain of arms) for (let i = 0; i < 2; i++) {
+        const a = chain[i]?.getWorldPosition(new THREE.Vector3());
+        const b = chain[i + 1]?.getWorldPosition(new THREE.Vector3());
+        if (!a || !b) continue;
+        const nearest = new THREE.Line3(a, b).closestPointToPoint(eye, true, new THREE.Vector3());
+        const rel = nearest.sub(eye);
+        const lateralSq = Math.max(0, rel.lengthSq() - rel.dot(forward) ** 2);
+        const clearance = i === 0 ? 0.13 : 0.115;
+        if (lateralSq < clearance ** 2 && rel.lengthSq() < clearance ** 2) {
+          required = Math.max(required, Math.sqrt(clearance ** 2 - lateralSq) - rel.dot(forward));
         }
-      };
-
-      requireDepth(this.firstPersonHandBones, FIRST_PERSON_HAND_SAFE_DEPTH);
-      requireDepth(this.firstPersonForearmBones, FIRST_PERSON_FOREARM_SAFE_DEPTH);
-      // Shoulders/clavicles and most proximal upper-arm geometry are hidden by
-      // the combat-only view mask. Do not let invisible bones push the entire
-      // guard rig forward, which was the source of the huge back/torso in POV.
-      targetForwardOffset = THREE.MathUtils.clamp(
-        targetForwardOffset,
-        0,
-        Math.min(FIRST_PERSON_ARM_SAFETY_MAX_FORWARD, FIRST_PERSON_COMBAT_ATTACK_SAFETY_MAX_FORWARD),
-      );
+      }
     }
-
-    // Penetration correction is immediate so the camera never spends a frame
-    // inside the arm. Releasing the offset is smoothed so guard/punch recovery
-    // cannot make the whole view-model pop backward.
-    if (targetForwardOffset > this.firstPersonArmSafetyForwardOffset) {
-      this.firstPersonArmSafetyForwardOffset = targetForwardOffset;
-    } else {
-      this.firstPersonArmSafetyForwardOffset = THREE.MathUtils.lerp(
-        this.firstPersonArmSafetyForwardOffset,
-        targetForwardOffset,
-        expAlpha(delta, FIRST_PERSON_ARM_SAFETY_RELEASE_RESPONSE),
-      );
-    }
-
-    if (this.firstPersonArmSafetyForwardOffset > 0.0001) {
-      this.firstPersonAvatarAnchor.position.addScaledVector(
-        this.firstPersonArmSafetyViewForward,
-        this.firstPersonArmSafetyForwardOffset,
-      );
-      this.firstPersonAvatarAnchor.updateMatrixWorld(true);
-    }
+    required = THREE.MathUtils.clamp(required, 0, 0.24);
+    this.firstPersonArmSafetyForwardOffset = required > this.firstPersonArmSafetyForwardOffset
+      ? required
+      : THREE.MathUtils.lerp(this.firstPersonArmSafetyForwardOffset, required, expAlpha(delta, 15));
+    offsetFirstPersonUpperBody(this.firstPersonCombatSpineBone,
+      forward.multiplyScalar(this.firstPersonArmSafetyForwardOffset));
   }
 
-  private applyFirstPersonGuardPose(): void {
-    if (this.viewMode !== 'first-person' || this.combatPhase !== 'guard'
+  private applyFirstPersonGuardPose(delta: number): void {
+    if (this.viewMode !== 'first-person' || (this.combatPhase === 'none' && this.firstPersonCombatReleaseSeconds <= 0)
       || this.combatHitReaction || this.groundKick
       || this.combatDodge || this.player?.isIncapacitated) return;
     // First-person guard is a presentation pose: each wrist sits below/to the
     // side of the sight line. Centering the pair left the rear fist at the eye.
     // Keep actual limb lengths and authored wrist/finger rotations; contact
     // poses still come from the authoritative world rig during a strike.
-    const cameraRotation = this.firstPersonCamera.getWorldQuaternion(new THREE.Quaternion());
     const chains = [
       [this.firstPersonLeftUpperArmBone, this.firstPersonLeftForearmBone, this.firstPersonLeftHandBone],
       [this.firstPersonRightUpperArmBone, this.firstPersonRightForearmBone, this.firstPersonRightHandBone],
-    ];
+    ] as const;
+    const weights: number[] = [];
     for (let side = 0; side < chains.length; side++) {
-      const [upper, forearm, hand] = chains[side]!;
-      if (!upper || !forearm || !hand) continue;
       const attack = this.combatAttack;
-      let guardWeight = this.firstPersonCombatPoseBlend;
+      const guardAction = this.combatUpperLayer?.firstPerson;
+      // A stopped action can report its default weight of one. The authored
+      // entry clip must raise the hands before the running guard layer takes over.
+      let guardWeight = this.firstPersonCombatPoseBlend
+        * (guardAction?.isRunning() ? THREE.MathUtils.clamp(guardAction.getEffectiveWeight(), 0, 1) : 0);
       if (attack && (attack.strikingSide === (side === 0 ? 'left' : 'right')
         || combatAttackVisualProfile(attack.animation)?.character === 'shove')) {
         const phase = attack.elapsed / Math.max(1e-5, attack.duration);
@@ -8698,17 +8430,9 @@ export class AnimationLab {
         ));
         guardWeight *= 1 - release * (1 - returnToGuard);
       }
-      if (guardWeight < 1e-6) continue;
-      const target = new THREE.Vector3(
-        (side === 0 ? -1 : 1) * FIRST_PERSON_GUARD_WRIST_LATERAL,
-        -FIRST_PERSON_GUARD_WRIST_DROP - (side === 0 ? 0 : 0.035),
-        -FIRST_PERSON_GUARD_WRIST_DEPTH - (side === 0 ? 0.045 : 0),
-      ).applyQuaternion(cameraRotation).add(this.firstPersonCamera.position);
-      const handRotation = hand.getWorldQuaternion(new THREE.Quaternion());
-      solveCombatTwoBone(upper, forearm, hand, target, guardWeight, undefined, 0.94);
-      hand.quaternion.copy(hand.parent!.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(handRotation)).normalize();
-      hand.updateWorldMatrix(false, true);
+      weights.push(guardWeight);
     }
+    this.firstPersonCombatPresentation.applyGuard(this.firstPersonCamera, chains, weights, delta);
   }
 
   private applyFallMotion(delta: number): void {
@@ -10312,7 +10036,6 @@ export class AnimationLab {
     this.evaluateCombatMixers(rawDelta);
     this.applyLocomotionWeightShift(rawDelta);
     this.applyLocomotionFootPlants(rawDelta);
-    this.applyFirstPersonCombatRootStabilization();
     this.applyCombatGuardTorsoAlignment();
     this.applyThirdPersonCombatDodgePose();
     this.applyNpcCombatStrikeAimCorrection();
@@ -10351,9 +10074,13 @@ export class AnimationLab {
     }
     if (this.viewMode === 'first-person') {
       this.updateFirstPersonBodyTransform(rawDelta);
-      this.applyFirstPersonCombatFraming(rawDelta);
+      // Eyes sit in front of the neck. Recess only the presentation chest a
+      // little; visible feet keep the physical gait and guard wrists use IK.
+      offsetFirstPersonUpperBody(this.firstPersonCombatSpineBone,
+        new THREE.Vector3(Math.sin(this.bodyYaw), 0, Math.cos(this.bodyYaw))
+          .multiplyScalar(-0.075 * this.firstPersonCombatPoseBlend));
+      this.applyFirstPersonGuardPose(rawDelta);
       this.applyFirstPersonArmCameraSafety(rawDelta);
-      this.applyFirstPersonGuardPose();
     }
     this.updateRecoveryCameraBlend(rawDelta);
     this.applyFirstPersonMeleeHitCameraFeedback(rawDelta);
