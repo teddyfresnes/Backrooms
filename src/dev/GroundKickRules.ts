@@ -84,9 +84,11 @@ export const groundKickPose = (normalized: number, kind: GroundKickKind): Ground
     lift: smooth01(t / 0.32), strike: smooth01((t - 0.32) / 0.21) };
 };
 
-/** Close overhead contact uses the sole; a low body ahead gets an instep swing. */
+/** Close overhead contact uses the sole; a low body ahead gets an instep swing.
+ * A torso still propped up needs a compact forward kick, not a raised stomp. */
 export const groundKickKindForTarget = (distance: number, height: number): GroundKickKind =>
-  distance >= 0.78 && height < 0.68 ? 'soccer-kick' : 'stomp';
+  height >= 0.68 && distance > 0.40 ? 'get-up-kick'
+    : distance >= 0.78 && height < 0.68 ? 'soccer-kick' : 'stomp';
 
 export const groundKickContactWindowOpen = (normalized: number, kind: GroundKickKind): boolean => {
   const profile = GROUND_KICK_PROFILES[kind];

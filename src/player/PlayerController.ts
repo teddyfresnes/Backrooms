@@ -154,7 +154,7 @@ export class PlayerController {
   private combatDriveElapsed = 0;
   private combatDriveSpeed = 0;
   private combatDriveImpactFraction = 0.48;
-  private combatDriveMode: 'strike' | 'impulse' = 'strike';
+  private combatDriveMode: 'strike' | 'impulse' | 'shove' = 'strike';
   private baseFov: number;
   private horizontalAcceleration = 0;
   private targetBodyLagForward = 0;
@@ -427,7 +427,7 @@ export class PlayerController {
     targetSpeed: number,
     durationSeconds = 0.12,
     impactFraction = 0.48,
-    mode: 'strike' | 'impulse' = 'strike',
+    mode: 'strike' | 'impulse' | 'shove' = 'strike',
   ): void {
     if (
       this.incapacitated || this.traversal || !this.grounded || this.crouching
@@ -535,6 +535,14 @@ export class PlayerController {
 
     const phase = this.combatDrivePhase();
     this.combatDriveDirection.copy(this.combatDriveTargetDirection);
+    if (this.combatDriveMode === 'shove') {
+      // External contact adds recoil to live lateral momentum. KCC resolves the
+      // displacement against walls and the other capsule on every frame.
+      this.combatDriveVelocity.copy(this.combatDriveDirection)
+        .multiplyScalar(this.combatDriveSpeed * Math.sin(Math.PI * Math.min(1, phase)));
+      this.velocity.add(this.combatDriveVelocity);
+      return;
+    }
     const driveSpeed = this.combatDriveSpeed * this.combatDriveEnvelope(phase);
     const forwardSpeed = this.velocity.dot(this.combatDriveDirection);
     // Never pull a deliberately retreating player toward their opponent. A
@@ -970,14 +978,16 @@ export class PlayerController {
     const horizontalDistance = Math.hypot(result.moved.x, result.moved.z);
     this.blockedMotionFraction = 0;
     this.handleBlockedMotion(delta, intendedX, intendedZ, result.moved.x, result.moved.z);
-    // A collision may brake the combined velocity. Retain only the authored
-    // portion that survived, or removing last tick's step could pull the player
-    // backward off a wall/opponent on the following tick.
-    for (const axis of ['x', 'z'] as const) {
-      const drive = this.combatDriveVelocity[axis];
-      this.combatDriveVelocity[axis] = drive * this.velocity[axis] > 0
-        ? Math.sign(drive) * Math.min(Math.abs(drive), Math.abs(this.velocity[axis]))
-        : 0;
+    // Only a collision may trim the recorded additive step. A free strafe can
+    // oppose one component of that step; it still has to be removed next tick,
+    // otherwise that component accumulates and silently brakes the orbit.
+    if (this.blockedMotionFraction >= MOVEMENT_TUNING.collision.hardBlockFraction) {
+      for (const axis of ['x', 'z'] as const) {
+        const drive = this.combatDriveVelocity[axis];
+        this.combatDriveVelocity[axis] = drive * this.velocity[axis] > 0
+          ? Math.sign(drive) * Math.min(Math.abs(drive), Math.abs(this.velocity[axis]))
+          : 0;
+      }
     }
 
     const wasTrackingAirborne = this.airborneTime > 0;

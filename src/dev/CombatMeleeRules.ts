@@ -4,13 +4,15 @@ export type CombatHitZone = 'head' | 'upper-body' | 'body';
 
 export type CombatMeleeSpacing = 'close' | 'medium' | 'far' | 'out';
 
-// Contextual melee spacing. Distances are horizontal chest-to-target distances,
+// Contextual melee spacing. Distances are horizontal root-to-root distances,
 // not camera distances. Close creates space, medium uses ordinary boxing range,
 // far commits with a collision-safe step-in, and out never magnetizes the player.
 // "close" is now true clinch distance only. Anything beyond this should
 // remain a real punch and may use collision-safe footwork to make the knuckles
 // meet the opponent instead of turning every short-range click into a shove.
 export const COMBAT_MELEE_CLOSE_MAX_DISTANCE = 0.78;
+// Capsule radii plus skin leave about 0.685 m between touching roots.
+export const COMBAT_MELEE_CLINCH_DISTANCE = 0.76;
 export const COMBAT_MELEE_MEDIUM_MAX_DISTANCE = 1.58;
 export const COMBAT_MELEE_FAR_MAX_DISTANCE = 2.62;
 

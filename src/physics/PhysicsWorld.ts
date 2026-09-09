@@ -233,13 +233,34 @@ export class PhysicsWorld {
     // Pass them explicitly or every articulated limb still blocks the player.
     this.controller.computeColliderMovement(this.playerCollider, desiredDelta,
       undefined, this.playerCollider.collisionGroups());
-    const allowed = this.controller.computedMovement();
+    let allowed = this.controller.computedMovement();
+    let grounded = this.controller.computedGrounded();
+    const requestedHorizontal = Math.hypot(desiredDelta.x, desiredDelta.z);
+    // A capsule already resting within the floor skin can get a zero-time
+    // downward hit and lose all tangential recoil. Retry that horizontal sweep
+    // separately, through the same KCC and collision groups, never by teleport.
+    if (grounded && desiredDelta.y <= 0 && requestedHorizontal > 0.005
+      && Math.hypot(allowed.x, allowed.z) < requestedHorizontal * 0.25
+      && this.controller.numComputedCollisions() > 0) {
+      let floorOnly = true;
+      for (let i = 0; i < this.controller.numComputedCollisions(); i++) {
+        if ((this.controller.computedCollision(i)?.normal1.y ?? 0) < 0.99) { floorOnly = false; break; }
+      }
+      if (floorOnly) {
+        const floorY = allowed.y;
+        this.controller.computeColliderMovement(this.playerCollider,
+          { x: desiredDelta.x, y: 0, z: desiredDelta.z }, undefined, this.playerCollider.collisionGroups());
+        const horizontal = this.controller.computedMovement();
+        allowed = { x: horizontal.x, y: floorY + horizontal.y, z: horizontal.z };
+        grounded ||= this.controller.computedGrounded();
+      }
+    }
     const current = this.playerBody.translation();
     this.playerBody.setNextKinematicTranslation({ x: current.x + allowed.x, y: current.y + allowed.y, z: current.z + allowed.z });
     this.world.step();
     this.syncPosition();
     this.movement.set(allowed.x, allowed.y, allowed.z);
-    return { position: this.position, grounded: this.controller.computedGrounded(), moved: this.movement };
+    return { position: this.position, grounded, moved: this.movement };
   }
 
   stepDynamics(delta: number): void {

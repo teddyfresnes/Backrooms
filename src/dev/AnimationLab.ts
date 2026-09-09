@@ -2,12 +2,14 @@ import * as THREE from 'three';
 import { GaitTransition, sampleGaitPhase, alignGaitPhase, createSlideSprintRecoveryClip } from './LocomotionBlend';
 import { createCrouchLocomotionClips, CROUCH_LOCOMOTION_IDS, CROUCH_GAIT_REFERENCE_SPEED } from './CrouchLocomotion';
 import { advanceStrikeClock, CombatImpactAudio } from './CombatFeel';
+import { createCombatPushClip, applyCombatPushPose, transferCombatStance } from './CombatPushMotion';
 import { sweepCombatContact, combatChainReady, CombatBalance, stepCombatSpring } from './CombatContact';
 import { solveCombatTwoBone, limitKneeLateralBend, easeCombat, CombatPoseHandoff, CombatMotionHistory, CombatProceduralPose } from './CombatRig';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { formatKeyLabel } from '../input/ControlBindings';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
+import { sweepGroundKickVolumes, type GroundKickVolume } from '../physics/GroundKickContact';
 import { RagdollSystem, type RagdollAnimationMotion, type RagdollImpactEvent } from '../physics/RagdollSystem';
 import { PlayerController, type LandingImpact } from '../player/PlayerController';
 import { MOVEMENT_TUNING } from '../player/MovementConfig';
@@ -47,6 +49,7 @@ import {
   COMBAT_DODGE_COUNTER_SIDE_SPEED,
   COMBAT_DODGE_COUNTER_STRIKE_AT_SECONDS,
   COMBAT_MELEE_IDEAL_PUNCH_DISTANCE,
+  COMBAT_MELEE_CLINCH_DISTANCE,
   COMBAT_MELEE_IDEAL_STEP_DISTANCE,
   COMBAT_MELEE_WHIF_FORWARD_METERS,
   COMBAT_MELEE_WHIF_DRIVE_SECONDS,
@@ -653,12 +656,12 @@ const COMBAT_ATTACK_VISUAL_PROFILES: Readonly<Record<
     styleYawDegrees: 14.0, headSlipDegrees: -9.0, lungeSpeed: 3.22,
   },
   'shove-a': {
-    source: 'hook-a', sourceFamily: 'h', character: 'shove', heavy: false,
+    source: 'fight-idle', sourceFamily: 'h', character: 'shove', heavy: false,
     tempoMultiplier: 0.84, reachMultiplier: 0.84, bodyMultiplier: 1.28, firstPersonForwardMeters: 0.090,
     styleYawDegrees: -5.0, headSlipDegrees: 3.0, lungeSpeed: 0.62,
   },
   'shove-b': {
-    source: 'hook-b', sourceFamily: 'h', character: 'shove', heavy: false,
+    source: 'fight-idle', sourceFamily: 'h', character: 'shove', heavy: false,
     tempoMultiplier: 0.84, reachMultiplier: 0.84, bodyMultiplier: 1.28, firstPersonForwardMeters: 0.090,
     styleYawDegrees: 5.0, headSlipDegrees: -3.0, lungeSpeed: 0.62,
   },
@@ -730,8 +733,8 @@ const COMBAT_ATTACK_SOURCE_ANIMATION: Readonly<Record<CombatAttackAnimation, Ani
   'step-b': 'punching-2',
   'step-c': 'punching-3-clean',
   'step-d': 'punching-4-alt',
-  'shove-a': 'hook-a',
-  'shove-b': 'hook-b',
+  'shove-a': 'fight-idle',
+  'shove-b': 'fight-idle',
   'power-a': 'punching-3-clean',
   'power-b': 'punching-4-alt',
   'hook-a': 'hook-a',
@@ -790,6 +793,7 @@ interface ActiveGroundKick {
   readonly pelvisStart: THREE.Vector3;
   readonly targetPoint: THREE.Vector3;
   previousTarget: THREE.Vector3;
+  previousVolumes: readonly GroundKickVolume[];
   sampledElapsed: number;
   elapsed: number;
   impactApplied: boolean;
@@ -1790,6 +1794,12 @@ export class AnimationLab {
   private idleNpcRightForearmBone?: THREE.Bone;
   private idleNpcLeftHandBone?: THREE.Bone;
   private idleNpcRightHandBone?: THREE.Bone;
+  private idleNpcLeftUpperLegBone?: THREE.Bone;
+  private idleNpcLeftLowerLegBone?: THREE.Bone;
+  private idleNpcLeftFootBone?: THREE.Bone;
+  private idleNpcRightUpperLegBone?: THREE.Bone;
+  private idleNpcRightLowerLegBone?: THREE.Bone;
+  private idleNpcRightFootBone?: THREE.Bone;
   private readonly idleNpcActions = new Map<AnimationId, THREE.AnimationAction>();
   private readonly idleNpcCombatAttackActions = new Map<CombatAttackAnimation, THREE.AnimationAction>();
   private idleNpcCombatUpperAction?: THREE.AnimationAction;
@@ -2461,6 +2471,12 @@ export class AnimationLab {
         if (normalized.endsWith('rightforearm')) this.idleNpcRightForearmBone = bone;
         if (normalized.endsWith('lefthand')) this.idleNpcLeftHandBone = bone;
         if (normalized.endsWith('righthand')) this.idleNpcRightHandBone = bone;
+        if (normalized.endsWith('leftupleg')) this.idleNpcLeftUpperLegBone = bone;
+        if (normalized.endsWith('leftleg')) this.idleNpcLeftLowerLegBone = bone;
+        if (normalized.endsWith('leftfoot')) this.idleNpcLeftFootBone = bone;
+        if (normalized.endsWith('rightupleg')) this.idleNpcRightUpperLegBone = bone;
+        if (normalized.endsWith('rightleg')) this.idleNpcRightLowerLegBone = bone;
+        if (normalized.endsWith('rightfoot')) this.idleNpcRightFootBone = bone;
         this.idleNpcBasePose.set(bone.name, {
           position: bone.position.clone(),
           rotation: bone.quaternion.clone(),
@@ -2707,6 +2723,13 @@ export class AnimationLab {
         thirdPerson: this.mixer.clipAction(clip),
         firstPerson: this.firstPersonMixer.clipAction(clip),
       });
+    }
+
+    for (const id of CLINCH_SHOVE_ATTACK_VARIANTS) {
+      const clip = createCombatPushClip(fight, `AnimationLab_CombatPush_${id}`);
+      this.combatAttackStrikingSides.set(id, COMBAT_ATTACK_DESIRED_SIDE[id]);
+      this.combatAttackLayers.set(id, { clip, thirdPerson: this.mixer.clipAction(clip),
+        firstPerson: this.firstPersonMixer.clipAction(clip) });
     }
 
     const hookSources = ['hook-a', 'hook-b', 'hook-c'] as const;
@@ -4014,7 +4037,7 @@ export class AnimationLab {
       this.lastHookVariant = next;
       return next;
     }
-    if (kind === 'big-punch') {
+    if (kind === 'big-punch' && !(spacing === 'close' && targetDistance <= COMBAT_MELEE_CLINCH_DISTANCE)) {
       const next = this.drawCombatAttackVariant(BIG_PUNCH_ATTACK_VARIANTS, this.bigPunchVariantBag, this.lastBigPunchVariant);
       this.lastBigPunchVariant = next;
       return next;
@@ -4024,7 +4047,7 @@ export class AnimationLab {
       // Chest-to-chest contact becomes a real shove. At the outer edge of close
       // range we can still throw a compact/body shot instead of repeating the
       // same two shove gestures every time.
-      const clinched = Number.isFinite(targetDistance) && targetDistance <= 0.56;
+      const clinched = Number.isFinite(targetDistance) && targetDistance <= COMBAT_MELEE_CLINCH_DISTANCE;
       const pool = clinched ? CLINCH_SHOVE_ATTACK_VARIANTS : CLOSE_RANGE_ATTACK_VARIANTS;
       const bag = clinched ? this.closeShoveVariantBag : this.punchVariantBag;
       const next = this.drawCombatAttackVariant(pool, bag, this.lastPunchVariant);
@@ -4083,6 +4106,7 @@ export class AnimationLab {
       this.combatAttackAction = undefined;
     }
     const attackAnimation = animation ?? this.chooseCombatAttackVariant(kind, spacing, targetDistanceAtStart);
+    if (combatAttackVisualProfile(attackAnimation)?.character === 'shove') kind = 'punch';
     const pair = this.combatAttackLayers.get(attackAnimation);
     if (!pair) return;
     if (kind === 'punch') this.lastPunchVariant = attackAnimation;
@@ -4187,7 +4211,8 @@ export class AnimationLab {
     this.currentAnimationElapsed = 0;
     this.player?.setSprintSuppressed(true);
     this.applyCombatAttackLunge(attackAnimation, spacing, replaceCurrent ? 0.42 : 1, duration);
-    this.setStatus(kind === 'big-punch' ? 'COMBAT · BIG PUNCH' : kind === 'hook-counter' ? 'COMBAT · CONTRE HOOK' : 'COMBAT · PUNCH');
+    this.setStatus(visualProfile?.character === 'shove' ? 'COMBAT · POUSSÉE'
+      : kind === 'big-punch' ? 'COMBAT · BIG PUNCH' : kind === 'hook-counter' ? 'COMBAT · CONTRE HOOK' : 'COMBAT · PUNCH');
   }
 
   private finishCombatAttackLayer(): void {
@@ -4272,7 +4297,9 @@ export class AnimationLab {
       this.setPlayerAimForward(this.meleeForward);
       if (!combatAttackTargetFacingAllowed(target.dot(this.meleeForward))) return null;
     }
-    return { direction: target, distance: horizontalDistance };
+    const rootDistance = Math.hypot(this.idleNpcAnchor.position.x - this.avatarAnchor.position.x,
+      this.idleNpcAnchor.position.z - this.avatarAnchor.position.z);
+    return { direction: target, distance: rootDistance };
   }
 
   private updateCombatLockOn(delta: number): void {
@@ -4312,21 +4339,21 @@ export class AnimationLab {
     if (!this.player) return;
     const timing = combatAttackTimingProfile(animation);
     const target = this.combatTargetDirection(this.tempDirection, false, true);
-    // Normal boxing distance is reached through the hips/shoulder and arm. A
-    // click in range (or an air punch) must never move the capsule automatically.
-    const missing = target && target.distance <= 1.50 ? Math.max(0, target.distance - 1.08) : 0;
-    const step = Math.min(missing, spacing === 'far' ? 0.28 : spacing === 'close' ? 0 : 0.16) * Math.min(1, scale);
+    // Boxing distance is reached through the stance and arm. Beyond that, one
+    // small preparation step closes the gap, retaining strafe/retreat inertia.
+    const missing = target && target.distance > 1.07 && target.distance <= 1.50 ? Math.max(0, target.distance - 0.84) : 0;
+    const step = Math.min(missing, spacing === 'far' ? 0.40 : spacing === 'close' ? 0 : 0.26) * Math.min(1, scale);
     if (step < 0.025) { this.player.cancelCombatLunge(); return; }
     this.setCombatAttackForward(this.meleeForward);
     const duration = Math.max(0.16, attackDuration * timing.contactStartFraction);
-    this.player.applyCombatLunge(this.meleeForward, Math.min(1.25, step / (duration * 0.52)), duration, timing.impactFraction);
+    this.player.applyCombatLunge(this.meleeForward, Math.min(1.65, step / (duration * 0.52)), duration, timing.impactFraction);
   }
 
   private updateCombatAttackEngagement(): void {
     const attack = this.combatAttack;
     if (!attack || !this.player) return;
     const target = this.combatTargetDirection(this.tempDirection, false, true);
-    if (attack.elapsed / attack.duration >= attack.contactStartFraction || (target && target.distance < 1.04)) {
+    if (attack.elapsed / attack.duration >= attack.contactStartFraction || (target && target.distance < 0.88)) {
       this.player.cancelCombatLunge();
     }
   }
@@ -4404,12 +4431,17 @@ export class AnimationLab {
     attack.impactApplied = true;
     attack.compressionSeconds = attack.kind === 'big-punch' ? 0.065 : 0.048;
     const contactHand = attack.strikingSide === 'left' ? this.leftHandBone : this.rightHandBone;
-    attack.contactPoint = contactHand?.getWorldPosition(new THREE.Vector3());
+    if (contactHand) {
+      attack.contactPoint = new THREE.Vector3();
+      this.sampleCombatKnuckle(contactHand, attack.contactPoint);
+    }
     this.player?.cancelCombatLunge();
     this.combatImpactAudio.contact(attack.kind === 'big-punch', contact.zone === 'body');
     this.combatCounterGuaranteedTarget = false;
     const shove = combatAttackVisualProfile(attack.animation)?.character === 'shove';
-    this.beginNpcSpacingPush(contact.direction, shove ? 0.26 : attack.kind === 'big-punch' ? 0.11 : 0.055);
+    const pushDirection = shove && this.idleNpcAnchor
+      ? this.idleNpcAnchor.position.clone().sub(this.avatarAnchor.position) : contact.direction;
+    this.beginNpcSpacingPush(pushDirection, shove ? 0.38 : attack.kind === 'big-punch' ? 0.11 : 0.055);
     this.receiveNpcMeleeHit(attack.kind, contact.direction, damage, contact.zone, contact.point);
   }
 
@@ -4435,9 +4467,15 @@ export class AnimationLab {
       const targets = player ? npcTargets : playerTargets;
       const oldTargets = player ? this.combatPreviousTargets.npc : this.combatPreviousTargets.player;
       if (attack && !attack.impactApplied && ready && targets && oldTargets) {
-        const contact = this.findActorSweepContact(player, attack,
+        let contact = this.findActorSweepContact(player, attack,
           attack.strikingSide === 'left' ? previousLeft : previousRight,
           attack.strikingSide === 'left' ? currentLeft : currentRight, delta, targets, oldTargets);
+        if (combatAttackVisualProfile(attack.animation)?.character === 'shove') {
+          const other = this.findActorSweepContact(player, attack,
+            attack.strikingSide === 'left' ? previousRight : previousLeft,
+            attack.strikingSide === 'left' ? currentRight : currentLeft, delta, targets, oldTargets);
+          if (other && (!contact || other.fraction < contact.fraction)) contact = other;
+        }
         if (contact) events.push({ player, attack, contact });
       }
       previousLeft.copy(currentLeft); previousRight.copy(currentRight);
@@ -4462,7 +4500,7 @@ export class AnimationLab {
     this.npcSpacingPushDirection.normalize();
     const duration = 0.18;
     this.npcSpacingPushSeconds = duration;
-    this.npcSpacingPushSpeed = THREE.MathUtils.clamp(distanceMeters / duration, 0.8, 3.2);
+    this.npcSpacingPushSpeed = THREE.MathUtils.clamp(distanceMeters / duration, 0.05, 3.2);
   }
 
   private updateNpcSpacingPush(delta: number): void {
@@ -4703,10 +4741,7 @@ export class AnimationLab {
         if (kind === 'soccer-kick') this.npcRagdoll.getGroundKickSideSurface(this.avatarAnchor.position, target);
         return kind;
       }
-      this.npcRagdoll.getPelvisPose(this.groundKickTargetPelvis, this.tempQuaternionA);
-      this.npcRagdoll.getHeadPose(this.groundKickTargetHead, this.tempQuaternionB);
-      target.copy(this.groundKickTargetPelvis).lerp(this.groundKickTargetHead, 0.30);
-      return 'stomp';
+      return null;
     }
     return null;
   }
@@ -4734,8 +4769,9 @@ export class AnimationLab {
       this.groundKickTargetPoint.z - this.avatarAnchor.position.z,
     );
     const distance = this.tempDirection.length();
-    if (distance > profile.maxTargetDistance || distance < 0.16 || !this.groundKickHasLineOfSight(this.groundKickTargetPoint)) return false;
-    this.tempDirection.multiplyScalar(1 / distance);
+    if (distance > profile.maxTargetDistance || !this.groundKickHasLineOfSight(this.groundKickTargetPoint)) return false;
+    if (distance > 0.035) this.tempDirection.multiplyScalar(1 / distance);
+    else this.tempDirection.set(Math.sin(this.bodyYaw), 0, Math.cos(this.bodyYaw));
     const desiredYaw = Math.atan2(this.tempDirection.x, this.tempDirection.z);
     const startYaw = this.bodyYaw;
     const startYawError = wrapAngleRadians(desiredYaw - startYaw);
@@ -4754,7 +4790,17 @@ export class AnimationLab {
     this.resetCombatState(false);
     this.combatBufferedPunchSeconds = 0;
     this.combatHeavyTapDetector.cancel();
-    const side: CombatStrikeSide = this.lastGroundKickSide === 'right' ? 'left' : 'right';
+    const leftHip = this.leftUpperLegBone?.getWorldPosition(new THREE.Vector3()) ?? this.avatarAnchor.position.clone();
+    const rightHip = this.rightUpperLegBone?.getWorldPosition(new THREE.Vector3()) ?? this.avatarAnchor.position.clone();
+    // The guard's pelvis is diagonal, even when the target is straight ahead.
+    // Classify the approach in the body heading, then calibrate anatomical R/L
+    // from the hips; otherwise every frontal kick selects the same lead leg.
+    const rightAxis = new THREE.Vector3(-Math.cos(startYaw), 0, Math.sin(startYaw));
+    if (rightHip.clone().sub(leftHip).dot(rightAxis) < 0) rightAxis.negate();
+    const lateral = this.groundKickTargetPoint.clone().sub(this.avatarAnchor.position).dot(rightAxis);
+    // Use the near leg for diagonal/underfoot contact; alternate when both are reachable.
+    const side: CombatStrikeSide = Math.abs(lateral) > 0.14 ? (lateral < 0 ? 'left' : 'right')
+      : this.lastGroundKickSide === 'right' ? 'left' : 'right';
     this.lastGroundKickSide = side;
     const foot = side === 'left' ? this.leftFootBone : this.rightFootBone;
     const support = side === 'left' ? this.rightFootBone : this.leftFootBone;
@@ -4779,6 +4825,7 @@ export class AnimationLab {
       pelvisStart: this.hipsBone?.position.clone() ?? new THREE.Vector3(),
       targetPoint,
       previousTarget: this.groundKickTargetPoint.clone(),
+      previousVolumes: this.npcRagdoll?.captureGroundKickVolumes() ?? [],
       sampledElapsed: 0,
       kind,
       side,
@@ -4838,7 +4885,8 @@ export class AnimationLab {
     // A fallen body can still settle during the knee lift. Adjust the landing
     // point during that preparation only; once the leg drives, commit and allow
     // a real miss. Root orientation stays fixed and cannot chase a rolling body.
-    if (liveKind && normalizedBeforeStep < 0.30) {
+    const driveStart = kick.kind === 'stomp' ? 0.43 : kick.kind === 'soccer-kick' ? 0.38 : 0.32;
+    if (liveKind && normalizedBeforeStep < driveStart) {
       const landing = this.groundKickTargetPoint.clone().add(new THREE.Vector3(0, 0.055, 0));
       if (landing.distanceTo(kick.targetPoint) < 0.40) {
         kick.targetPoint.lerp(landing, 1 - Math.exp(-Math.max(0, delta) * 24));
@@ -5015,20 +5063,26 @@ export class AnimationLab {
     const foot = kick.side === 'left' ? this.leftFootBone : this.rightFootBone;
     if (!foot) return;
     foot.getWorldPosition(this.groundKickFootCurrent);
-    if (kick.kind === 'soccer-kick') {
+    if (kick.kind !== 'stomp') {
       // Sweep the instep, not the ankle: the front half of the visible boot
       // reaches a low body before the ankle does, especially at full extension.
       const toe = foot.children.find(child => child.name.toLowerCase().includes('toe'));
       if (toe) this.groundKickFootCurrent.lerp(toe.getWorldPosition(new THREE.Vector3()), 0.55);
     }
     const targetKind = this.resolveGroundKickTarget(this.groundKickTargetPoint);
-    if (this.groundKickFootReady && !kick.impactApplied && targetKind) {
+    const volumes = this.npcRagdoll?.captureGroundKickVolumes() ?? [];
+    if (this.groundKickFootReady && !kick.impactApplied && (this.npcRagdoll || targetKind)) {
       const profile = GROUND_KICK_PROFILES[kick.kind];
-      const contact = sweepCombatContact(this.groundKickFootPrevious, this.groundKickFootCurrent,
-        kick.previousTarget, this.groundKickTargetPoint, profile.contactRadius, delta,
-        kick.sampledElapsed / kick.duration, kick.elapsed / kick.duration, profile.contactStartFraction, profile.contactEndFraction);
-      if (contact && this.groundKickHasLineOfSight(this.groundKickTargetPoint)
-        && this.combatSweepLineOfSight(this.groundKickFootPrevious, new THREE.Vector3(contact.point.x, contact.point.y, contact.point.z))) {
+      const before = kick.sampledElapsed / kick.duration, now = kick.elapsed / kick.duration;
+      const contact = this.npcRagdoll
+        ? sweepGroundKickVolumes(this.groundKickFootPrevious, this.groundKickFootCurrent,
+          kick.previousVolumes, volumes, 0.095, delta, before, now,
+          profile.contactStartFraction, profile.contactEndFraction)
+        : sweepCombatContact(this.groundKickFootPrevious, this.groundKickFootCurrent,
+          kick.previousTarget, this.groundKickTargetPoint, profile.contactRadius + 0.08, delta,
+          before, now, profile.contactStartFraction, profile.contactEndFraction);
+      if (contact && this.groundKickHasLineOfSight(new THREE.Vector3().copy(contact.point))
+        && this.combatSweepLineOfSight(this.groundKickFootPrevious, new THREE.Vector3().copy(contact.point))) {
         kick.impactApplied = true;
         if (kick.kind !== 'get-up-kick') {
           kick.contactFoot = foot.getWorldPosition(new THREE.Vector3());
@@ -5036,9 +5090,10 @@ export class AnimationLab {
           kick.compressionSeconds = kick.kind === 'stomp' ? 0.055 : 0.045;
         }
         this.combatImpactAudio.contact(true, true);
-        this.applyGroundKickDamage(kick.kind, new THREE.Vector3(contact.point.x, contact.point.y, contact.point.z));
+        this.applyGroundKickDamage(kick.kind, new THREE.Vector3().copy(contact.point));
       }
     }
+    kick.previousVolumes = volumes;
     this.groundKickFootReady = true;
     this.groundKickFootPrevious.copy(this.groundKickFootCurrent);
     kick.previousTarget.copy(this.groundKickTargetPoint);
@@ -5060,7 +5115,7 @@ export class AnimationLab {
       this.interruptNpcRecoveryWithGroundKick(this.tempDirection, 1.16, point);
     } else if (this.npcRagdoll) {
       this.npcRagdoll.applyGroundKickImpact(this.tempDirection, profile.impulseStrength, false, point,
-        kind === 'soccer-kick' ? 'soccer-kick' : 'stomp');
+        kind === 'stomp' ? 'stomp' : 'soccer-kick');
       this.npcDownElapsed = 0;
       this.npcGroundKickRecoveryDelay = 1.35;
       if (this.npcHealth <= 0) this.npcResumeCombatAfterRecovery = false;
@@ -5113,7 +5168,7 @@ export class AnimationLab {
     }
     this.combatHeavyUpgradePending = false;
     const attack = this.combatAttack;
-    if (!attack || attack.kind !== 'punch') return;
+    if (!attack || attack.kind !== 'punch' || combatAttackVisualProfile(attack.animation)?.character === 'shove') return;
     const normalized = attack.duration > 1e-5 ? attack.elapsed / attack.duration : 1;
     if (attack.impactApplied || normalized >= attack.contactStartFraction) return;
 
@@ -5830,6 +5885,21 @@ export class AnimationLab {
         : normalized < attack.impactFraction
           ? 1 - THREE.MathUtils.smoothstep(normalized, npcLoadEnd, attack.impactFraction)
           : 0;
+    const stanceReach = THREE.MathUtils.lerp(0.45, 1, THREE.MathUtils.smoothstep(attack.targetDistanceAtStart, 0.65, 1.05));
+    const commitment = (character === 'jab' ? 0.19 : heavy ? 0.25 : character === 'shove' ? 0.12 : 0.22)
+      * stanceReach * reach - 0.024 * npcLoad;
+    transferCombatStance(this.idleNpcHipsBone, [
+      [this.idleNpcLeftUpperLegBone, this.idleNpcLeftLowerLegBone, this.idleNpcLeftFootBone],
+      [this.idleNpcRightUpperLegBone, this.idleNpcRightLowerLegBone, this.idleNpcRightFootBone],
+    ], this.npcToPlayer, commitment, npcLoad);
+    if (character === 'shove') {
+      if (!attack.aimPoint || normalized < attack.contactStartFraction) attack.aimPoint = this.combatPlayerChestPoint.clone();
+      applyCombatPushPose([
+        [this.idleNpcLeftUpperArmBone, this.idleNpcLeftForearmBone, this.idleNpcLeftHandBone],
+        [this.idleNpcRightUpperArmBone, this.idleNpcRightForearmBone, this.idleNpcRightHandBone],
+      ], attack.aimPoint, this.npcToPlayer, normalized, attack.impactFraction, attack.strikingSide);
+      return;
+    }
     const styleYaw = -styleBase * npcLoad * (character === 'jab' ? 0.16 : 0.36)
       + styleBase * reach * (character === 'jab' ? 0.28 : 0.58)
       + THREE.MathUtils.degToRad(attack.strikingSide === 'right' ? 30 : 0) * reach;
@@ -5914,9 +5984,16 @@ export class AnimationLab {
     attack.impactApplied = true;
     attack.compressionSeconds = attack.kind === 'big-punch' ? 0.065 : 0.048;
     const hand = attack.strikingSide === 'left' ? this.idleNpcLeftHandBone : this.idleNpcRightHandBone;
-    attack.contactPoint = hand?.getWorldPosition(new THREE.Vector3());
+    if (hand) {
+      attack.contactPoint = new THREE.Vector3();
+      this.sampleCombatKnuckle(hand, attack.contactPoint);
+    }
     this.combatImpactAudio.contact(attack.kind === 'big-punch', contact.zone === 'body');
     this.receivePlayerMeleeHit(attack.kind, contact.direction, damage, contact.zone, contact.point);
+    if (combatAttackVisualProfile(attack.animation)?.character === 'shove' && this.idleNpcAnchor) {
+      const away = this.avatarAnchor.position.clone().sub(this.idleNpcAnchor.position);
+      this.player?.applyCombatLunge(away, 2.6, 0.23, 0.48, 'shove');
+    }
   }
 
   private chooseNpcCombatAttackVariant(
@@ -5929,7 +6006,7 @@ export class AnimationLab {
       this.lastNpcPunchVariant = next;
       return next;
     }
-    if (kind === 'big-punch') {
+    if (kind === 'big-punch' && !(spacing === 'close' && targetDistance <= COMBAT_MELEE_CLINCH_DISTANCE)) {
       const next = this.drawCombatAttackVariant(BIG_PUNCH_ATTACK_VARIANTS, this.npcBigPunchVariantBag, this.lastNpcBigPunchVariant);
       this.lastNpcBigPunchVariant = next;
       return next;
@@ -5939,7 +6016,7 @@ export class AnimationLab {
     let pool: readonly CombatAttackAnimation[];
     let bag: CombatAttackAnimation[];
     if (spacing === 'close') {
-      const clinched = Number.isFinite(targetDistance) && targetDistance <= 0.56;
+      const clinched = Number.isFinite(targetDistance) && targetDistance <= COMBAT_MELEE_CLINCH_DISTANCE;
       pool = clinched ? CLINCH_SHOVE_ATTACK_VARIANTS : CLOSE_RANGE_ATTACK_VARIANTS;
       bag = clinched ? this.npcClosePunchVariantBag : this.npcPunchVariantBag;
     } else if (spacing === 'far' || spacing === 'out') {
@@ -5991,6 +6068,7 @@ export class AnimationLab {
       this.npcHandSweepReady = false;
     }
     const visual = combatAttackVisualProfile(variant);
+    if (visual?.character === 'shove') kind = 'punch';
     const npcRate = combatAttackPlaybackRate(kind, pair.clip.duration, visual?.tempoMultiplier ?? 1);
     const duration = Math.max(0.08, pair.clip.duration / npcRate);
     const timing = combatAttackTimingProfile(variant);
@@ -6370,6 +6448,13 @@ export class AnimationLab {
       [this.rightFootBone, this.firstPersonRightFootBone],
     ];
     for (const [source, target] of pairs) if (source && target) target.quaternion.copy(source.quaternion);
+    if (this.combatAttack && combatAttackVisualProfile(this.combatAttack.animation)?.character === 'shove') {
+      for (const [source, target] of [
+        [this.leftHandBone, this.firstPersonLeftHandBone], [this.rightHandBone, this.firstPersonRightHandBone],
+      ]) source?.traverse(bone => {
+        if (bone !== source) target?.getObjectByName(bone.name)?.quaternion.copy(bone.quaternion);
+      });
+    }
   }
 
   private updateNpcCombat(delta: number): void {
@@ -6545,7 +6630,7 @@ export class AnimationLab {
 
     // Pursuit now keeps the same upper-body guard as standing combat while only
     // the lower-body layer walks. This matches the player's layered guard.
-    if (distance > 1.35 && distance <= 6.0 && this.npcCombatPhase === 'guard') {
+    if (distance > 1.16 && distance <= 6.0 && this.npcCombatPhase === 'guard') {
       this.meleeOrigin.copy(this.idleNpcAnchor.position).add(new THREE.Vector3(0, 1.10, 0));
       this.meleeForward.copy(this.avatarAnchor.position).add(new THREE.Vector3(0, 1.10, 0)).sub(this.meleeOrigin);
       const pathDistance = this.meleeForward.length();
@@ -6556,7 +6641,7 @@ export class AnimationLab {
         this.cameraRaycaster.far = Math.max(0.06, Math.min(pathDistance - 0.35, 1.25));
         const blocked = this.cameraRaycaster.intersectObjects(this.environmentMeshes, false).length > 0;
         if (!blocked) {
-          const step = Math.min(Math.max(0, distance - 1.24), 1.42 * dt);
+          const step = Math.min(Math.max(0, distance - 1.06), 1.42 * dt);
           if (this.moveNpcCombatStep(this.npcToPlayer, step) > 0) {
             this.startNpcCombatGuardLayers('walking', 0.96);
             return;
@@ -6578,7 +6663,7 @@ export class AnimationLab {
     if (distance > 0.001) this.npcToPlayer.multiplyScalar(1 / distance);
 
     if (
-      distance <= 1.55
+      distance <= 1.18
       && this.npcAttackCooldown <= 0
       && this.npcAttackRecoverySeconds <= 0
       && distance > 0.05
@@ -7953,7 +8038,17 @@ export class AnimationLab {
     target: Readonly<THREE.Vector3>, reach: number, _heavy: boolean, _counter = false, reachScale = 1,
   ): void {
     if (!upper || !forearm || !hand) return;
-    solveCombatTwoBone(upper, forearm, hand, target, Math.min(0.96, reach * reachScale));
+    const weight = Math.min(0.96, reach * reachScale);
+    const knuckle = new THREE.Vector3();
+    this.sampleCombatKnuckle(hand, knuckle);
+    const offset = knuckle.sub(hand.getWorldPosition(new THREE.Vector3()));
+    solveCombatTwoBone(upper, forearm, hand, new THREE.Vector3().copy(target).sub(offset), weight);
+    if (weight > 0.65) {
+      this.sampleCombatKnuckle(hand, knuckle);
+      const error = new THREE.Vector3().copy(target).sub(knuckle);
+      const wrist = hand.getWorldPosition(new THREE.Vector3()).add(error);
+      solveCombatTwoBone(upper, forearm, hand, wrist, weight * 0.70);
+    }
   }
 
   private applyCombatStrikeAimCorrection(): void {
@@ -8014,36 +8109,23 @@ export class AnimationLab {
     // Load through the hips, then transfer body weight over the planted feet.
     // This advances the shoulder naturally instead of stretching the arm or
     // giving every click the same floating, arm-only extension.
-    if (this.hipsBone?.parent) {
-      const feet = [
-        [this.leftUpperLegBone, this.leftLowerLegBone, this.leftFootBone],
-        [this.rightUpperLegBone, this.rightLowerLegBone, this.rightFootBone],
-      ].filter((chain): chain is THREE.Bone[] => chain.every(Boolean)).map(chain => ({
-        chain, point: chain[2]!.getWorldPosition(new THREE.Vector3()),
-        rotation: chain[2]!.getWorldQuaternion(new THREE.Quaternion()),
-      }));
-      const pelvis = this.hipsBone.getWorldPosition(new THREE.Vector3());
-      // Fight Idle begins with the pelvis behind the feet/shoulders. Transfer
-      // weight onto the front support instead of sliding the entire capsule.
-      // Crowded punches stay compact; full range uses the available stance.
-      const stanceReach = Number.isFinite(targetDistance)
-        ? THREE.MathUtils.lerp(0.45, 1, THREE.MathUtils.smoothstep(targetDistance, 0.65, 1.05))
-        : 0.75;
-      const commitment = (character === 'jab' ? 0.19 : heavy ? 0.25 : 0.22)
-        * stanceReach * reachEnvelope - 0.024 * load;
-      pelvis.addScaledVector(this.combatStrikeForwardAxis, commitment);
-      pelvis.y -= 0.028 * load;
-      this.hipsBone.position.copy(this.hipsBone.parent.worldToLocal(pelvis));
-      this.hipsBone.updateWorldMatrix(false, true);
-      const stanceWeight = easeCombat(THREE.MathUtils.clamp((Math.abs(commitment) + 0.028 * load) / 0.025, 0, 1));
-      for (const { chain, point, rotation } of feet) {
-        // Keep strafe/guard knee direction and thigh rotation. The small IK
-        // correction carries the weight shift without forcing a pinched stance.
-        solveCombatTwoBone(chain[0]!, chain[1]!, chain[2]!, point, stanceWeight,
-          undefined, 0.997, THREE.MathUtils.degToRad(12));
-        const parent = chain[2]!.parent!.getWorldQuaternion(new THREE.Quaternion()).invert();
-        chain[2]!.quaternion.copy(parent.multiply(rotation)).normalize();
+    const stanceReach = Number.isFinite(targetDistance)
+      ? THREE.MathUtils.lerp(0.45, 1, THREE.MathUtils.smoothstep(targetDistance, 0.65, 1.05)) : 0.75;
+    const commitment = (character === 'jab' ? 0.19 : heavy ? 0.25 : character === 'shove' ? 0.12 : 0.22)
+      * stanceReach * reachEnvelope - 0.024 * load;
+    transferCombatStance(this.hipsBone, [
+      [this.leftUpperLegBone, this.leftLowerLegBone, this.leftFootBone],
+      [this.rightUpperLegBone, this.rightLowerLegBone, this.rightFootBone],
+    ], this.combatStrikeForwardAxis, commitment, load);
+    if (character === 'shove') {
+      if (this.combatSweepTargetPoints()) {
+        if (!attack.aimPoint || normalized < attack.contactStartFraction) attack.aimPoint = this.combatNpcChestPoint.clone();
+        applyCombatPushPose([
+        [this.leftUpperArmBone, this.leftForearmBone, this.leftHandBone],
+        [this.rightUpperArmBone, this.rightForearmBone, this.rightHandBone],
+      ], attack.aimPoint, this.combatStrikeForwardAxis, normalized, impact, attack.strikingSide);
       }
+      return;
     }
 
     // Let the punch react to the locomotion it came from. A lateral entry coils
@@ -8606,7 +8688,8 @@ export class AnimationLab {
       if (!upper || !forearm || !hand) continue;
       const attack = this.combatAttack;
       let guardWeight = this.firstPersonCombatPoseBlend;
-      if (attack && attack.strikingSide === (side === 0 ? 'left' : 'right')) {
+      if (attack && (attack.strikingSide === (side === 0 ? 'left' : 'right')
+        || combatAttackVisualProfile(attack.animation)?.character === 'shove')) {
         const phase = attack.elapsed / Math.max(1e-5, attack.duration);
         const release = easeCombat(THREE.MathUtils.smoothstep(phase, 0.015, attack.contactStartFraction - 0.045));
         const returnToGuard = easeCombat(THREE.MathUtils.smoothstep(
@@ -9912,11 +9995,14 @@ export class AnimationLab {
     // A downed/recovering opponent turns LMB into a contextual kick before the
     // ordinary punch/counter classifier runs. This prevents a useless standing
     // punch from playing over a body on the floor.
-    if (this.tryStartGroundKick()) {
+    if (this.npcRagdoll || this.npcRecovery) {
+      this.tryStartGroundKick();
       event.preventDefault();
       this.combatLeftPointerHeld = true;
       this.combatLeftPressConsumed = true;
       this.combatHeavyUpgradePending = false;
+      this.combatHeavyTapDetector.cancel();
+      this.combatBufferedPunchSeconds = 0;
       return;
     }
 

@@ -1,6 +1,7 @@
 import RAPIER from '@dimforge/rapier3d';
 import * as THREE from 'three';
 import { PhysicsWorld } from './PhysicsWorld';
+import type { GroundKickVolume } from './GroundKickContact';
 import { activeRagdollAnimationCarry, activeRagdollEnvelope, activeRagdollProfile } from './ActiveRagdollMotion';
 import type { ActiveRagdollProfile } from './ActiveRagdollMotion';
 import {
@@ -735,6 +736,13 @@ export class RagdollSystem {
   }
 
   /** Closest reachable top surface of the actual torso, for a downward stomp. */
+  captureGroundKickVolumes(): GroundKickVolume[] {
+    return [...this.bodies.values()].flatMap(part => part.colliders.filter(collider => collider.isValid())
+      .map(collider => ({ id: collider.handle, shape: collider.shape,
+        position: new THREE.Vector3().copy(collider.translation()),
+        rotation: new THREE.Quaternion(collider.rotation().x, collider.rotation().y, collider.rotation().z, collider.rotation().w) })));
+  }
+
   getGroundKickSurface(from: Readonly<THREE.Vector3>, target: THREE.Vector3): boolean {
     const core = this.bodies.get('core');
     if (!core) return false;
