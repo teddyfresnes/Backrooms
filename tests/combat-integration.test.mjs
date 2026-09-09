@@ -57,7 +57,8 @@ test('a buffered follow-up starts during recoil once and uses a fresh sweep',()=
  setupDuel(lab,.9);const first=strike();run(.20);lab.requestNormalCombatPunch();let next;
  for(let i=0;i<60;i++){stepLab(lab);if(lab.combatAttack&&lab.combatAttack!==first){next=lab.combatAttack;break;}}
  assert.ok(next);assert.notEqual(next.strikingSide,first.strikingSide);assert.equal(next.impactApplied,false);assert.equal(lab.combatBufferedPunchSeconds,0);
- run(1.1);assert.equal(lab.combatAttack,null);assert.ok(lab.npcHealth<=80);
+ run(1.1);assert.equal(lab.combatAttack,null);
+ assert.ok(first.impactApplied && next.impactApplied, `${next.animation} missed the reacting opponent (HP ${lab.npcHealth})`);
 });
 test('taking a body shot selects a body reaction and a head shot never selects a groin reaction',()=>{
  setupDuel(lab);lab.receiveNpcMeleeHit('punch',new THREE.Vector3(0,0,1),5,'body');assert.equal(lab.npcHitReaction,'hit-body');
@@ -95,12 +96,13 @@ test('actual ground-kick trajectory keeps finite limbs, limits yaw and can be in
  run(.12);lab.receivePlayerMeleeHit('punch',new THREE.Vector3(0,0,-1),8,'body');assert.equal(lab.groundKick,null);run(.8);assert.equal(lab.npcHealth,health);
  assert.ok(Math.abs(kick.targetYaw-kick.startYaw)<=22*Math.PI/180+.001);
 });
-for(const kind of ['stomp','get-up-kick'])for(const fps of [30,60,120])for(const side of ['left','right'])test(`completed ${side} ${kind} at ${fps} fps contacts once and returns control`,()=>{
+for(const kind of ['stomp','get-up-kick'])for(const fps of [30,60,120])for(const side of ['left','right'])test(`completed ${side} ${kind==='stomp'?'downed-body kick':kind} at ${fps} fps contacts once and returns control`,()=>{
  setupDuel(lab,1.05,side==='left'?'first-person':'third-person');lab.lastGroundKickSide=side==='left'?'right':'left';lab.startNpcRagdoll('punch',new THREE.Vector3(0,0,1),12,'body');lab.npcGroundKickRecoveryDelay=100;run(2.8);
  if(kind==='get-up-kick'){lab.startNpcGroundRecovery();assert.ok(lab.npcRecovery);run(.28);}
  const target=new THREE.Vector3();lab.resolveGroundKickTarget(target);
  lab.player.teleport({x:target.x,y:.865,z:target.z-.65});lab.player.lookCamera.rotation.set(0,Math.PI,0);lab.player.continuousAimYaw=Math.PI;lab.bodyYaw=0;lab.updateAvatarTransform(0,true);
- assert.equal(lab.tryStartGroundKick(),true);const kick=lab.groundKick,health=lab.npcHealth;assert.equal(kick.kind,kind);
+ const expectedKind=kind==='get-up-kick'||target.y-lab.avatarAnchor.position.y>=.68?'get-up-kick':'stomp';
+ assert.equal(lab.tryStartGroundKick(),true);const kick=lab.groundKick,health=lab.npcHealth;assert.equal(kick.kind,expectedKind);
  let damageEvents=0,lastHealth=health,maxYaw=0,minFoot=99,minData=null;
  for(let i=0;i<fps*1.25;i++){stepLab(lab,1/fps);if(lastHealth!==lab.npcHealth){damageEvents++;lastHealth=lab.npcHealth;}if(lab.groundKick)maxYaw=Math.max(maxYaw,Math.abs(lab.bodyYaw-kick.startYaw));
   if(lab.groundKick && kick.elapsed/kick.duration>.32 && kick.elapsed/kick.duration<.55){

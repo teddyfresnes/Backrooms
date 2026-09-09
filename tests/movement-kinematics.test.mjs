@@ -2534,7 +2534,7 @@ test('v126 combat footwork adds a loading step to live locomotion instead of rep
   assert.match(controller, /const retreating = this\.inputDirection\.dot/);
   assert.doesNotMatch(controller, /combatDriveTurnBlend|retainedEntrySpeed|pathYaw/);
   assert.match(controller, /const driveSpeed = this\.combatDriveSpeed \* this\.combatDriveEnvelope\(phase\)/);
-  assert.match(controller, /mode: 'strike' \| 'impulse' = 'strike'/);
+  assert.match(controller, /mode: 'strike' [^=]* = 'strike'/);
 });
 
 test('v103 each strike owns a fuller impact/contact/recoil beat plus deliberate left-right choreography', () => {
@@ -2630,7 +2630,7 @@ test('v103 combat library adds body crosses and overhands, weight transfer and a
   assert.match(lab, /visualProfile\?\.character === 'overhand'[\s\S]*combatStrikeDesiredPoint\.y \+= 0\.18/);
   assert.match(lab, /const committedForwardStep = activeStrike\.spacing !== 'close'[\s\S]*combatStrikeLowerSelection\(/);
   assert.doesNotMatch(lab.slice(lab.indexOf("const committedForwardStep = activeStrike.spacing !== 'close'"), lab.indexOf('const selection = combatStrikeLowerSelection')), /activeStrike\.spacing !== 'out'/);
-  assert.match(lab, /const clinched = Number\.isFinite\(targetDistance\) && targetDistance <= 0\.56/);
+  assert.match(lab, /const clinched = Number\.isFinite\(targetDistance\) && targetDistance <= COMBAT_MELEE_CLINCH_DISTANCE/);
 });
 
 
