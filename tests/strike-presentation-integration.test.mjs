@@ -102,7 +102,9 @@ for (const pitch of [-.7, 0, .45]) test(`both guard fists stay outside the centr
         const knuckle = new THREE.Vector3(); lab.sampleCombatKnuckle(hand, knuckle);
         const local = lab.firstPersonCamera.worldToLocal(knuckle.clone());
         const projected = knuckle.project(lab.firstPersonCamera);
-        assert.ok(-local.z > .20, `fist reached the eye: ${local.toArray()}`);
+        // Optical depth shrinks when the eyes look up past a low rear fist.
+        // Eye clearance is a physical distance, independent of camera pitch.
+        assert.ok(local.length() > .25, `fist reached the eye: ${local.toArray()}, ${hand.name}, movement ${movement}, frame ${i}`);
         assert.ok(Math.abs(projected.x) > .24 || projected.y < -.32, `fist blocked the reticle: ${projected.toArray()}`);
         assert.ok([...hand.quaternion].every(Number.isFinite));
       }

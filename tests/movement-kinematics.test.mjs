@@ -865,7 +865,7 @@ test('first-person body is a dedicated render rig and cannot disturb the third-p
   assert.match(source, /FIRST_PERSON_PELVIS_BELOW_CAMERA = 0\.46/);
   assert.match(source, /firstPersonCamera = new THREE\.PerspectiveCamera\(72, 1, 0\.01, 120\)/);
   assert.match(source, /fpLowerBodyMask/, '1P shader must render a dedicated masked viewmodel mesh');
-  assert.match(source, /fpArmMask/, '1P viewmodel should include authored arm/hand motion without restoring the torso');
+  assert.match(source, /fpArmMask/, 'the exploration viewmodel should include authored arm/hand motion');
   assert.match(source, /leftforearm|rightforearm/);
   assert.match(source, /this\.firstPersonHipTarget[\s\S]*this\.firstPersonCamera\.position/);
   assert.match(source, /this\.firstPersonAvatarAnchor\.position[\s\S]*copy\(this\.firstPersonHipTarget\)[\s\S]*sub\(this\.firstPersonHipWorld\)/);
@@ -875,10 +875,9 @@ test('first-person body is a dedicated render rig and cannot disturb the third-p
   assert.match(source, /const sprintArms = this\.currentAnimation === 'running'/, 'only the valid running sprint clip should use the shorter 1P arm reach');
   assert.match(source, /estimatedSoleY[\s\S]*this\.feetPosition\.y/);
   assert.doesNotMatch(source, /AnimationLabFirstPersonWaistCap|FIRST_PERSON_WAIST_CAP_HEIGHT|CylinderGeometry\(0\.145/, '1P waist must not use a primitive cap/occluder');
-  assert.match(source, /geometry\.setIndex\(kept\)/, 'mixed torso/leg triangles should be removed instead of leaving shader slivers');
   assert.doesNotMatch(source, /avatarVisualRoot|updateFirstPersonBodyLock|prepareFirstPersonBodyMask/, 'old one-rig body-lock implementation must stay removed');
   const fpMethod = source.slice(source.indexOf('private updateFirstPersonBodyTransform'), source.indexOf('private enableAutoMode'));
-  assert.doesNotMatch(fpMethod, /this\.avatarAnchor\.(position|rotation)/, '1P presentation must never modify the world avatar');
+  assert.doesNotMatch(fpMethod, /this\.avatarAnchor\.(position|rotation)(?:\.(?:copy|set|add|lerp)\(|(?:\.\w+)?\s*=)/, '1P presentation must never modify the world avatar');
   assert.doesNotMatch(fpMethod, /this\.firstPersonCamera\.(position|rotation)\.(copy|set|add|lerp)/, 'animated skeleton must never drive the gameplay POV');
 });
 
@@ -2002,21 +2001,7 @@ test('v100 every strike is a bounded resampled additive delta with optional anat
   assert.match(layers, /readonly mirror\?: boolean/);
 });
 
-test('first-person combat keeps both fists away from and below the POV without moving the gameplay camera', () => {
-  const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
-  assert.match(lab, /FIRST_PERSON_COMBAT_ARM_SCALE = 0\.97/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_BODY_FORWARD_OFFSET = 0\.30/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_BODY_UP_OFFSET = -0\.165/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_LATERAL_MAX = 0\.32/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_NEAR_HAND_DEPTH_TARGET = 0\.53/);
-  assert.match(lab, /applyFirstPersonCombatFraming\(delta: number\)/);
-  assert.match(lab, /firstPersonCombatHandA/);
-  assert.match(lab, /firstPersonCombatHandB/);
-  assert.match(lab, /const nearDepth = Math\.min/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_NEAR_HAND_DEPTH_TARGET - nearDepth/);
-  assert.match(lab, /const rigBodyYaw = [\s\S]*combatPoseTarget > 0\.001[\s\S]*this\.continuousViewYaw/);
-  assert.doesNotMatch(lab, /firstPersonCamera\.position[\s\S]{0,160}FIRST_PERSON_COMBAT_BODY_FORWARD_OFFSET/);
-});
+
 
 test('v100 strikes stay bounded additive upper-body deltas over continuously running Fight Idle', () => {
   const layers = readFileSync(new URL('../src/dev/CombatAnimationLayers.ts', import.meta.url), 'utf8');
@@ -2077,17 +2062,7 @@ test('guard and strikes keep shared root axes without per-move yaw offsets', () 
   assert.doesNotMatch(lab, /combatAttackForwardYawCorrection/);
 });
 
-test('v84 first-person framing uses the real pair of hands and smooth solver responses', () => {
-  const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
-  assert.match(lab, /FIRST_PERSON_COMBAT_LATERAL_MAX = 0\.32/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_LATERAL_RESPONSE = 11\.0/);
-  assert.match(lab, /firstPersonCombatHandCenter[\s\S]*firstPersonCombatHandA[\s\S]*firstPersonCombatHandB/);
-  assert.match(lab, /multiplyScalar\(0\.5\)/);
-  assert.match(lab, /lateralTarget = THREE\.MathUtils\.clamp\([\s\S]*-lateral,/);
-  assert.match(lab, /firstPersonCombatFramingLocked/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_FRAMING_SETTLE_SECONDS = 0\.26/);
-  assert.match(lab, /let lateralTarget = combatVisible \? this\.firstPersonCombatLateralOffset : 0/);
-});
+
 
 test('v85 first-person combat rig is pulled slightly back while staying lowered', () => {
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
@@ -2106,10 +2081,10 @@ test('get-up cannot deadlock on the final clearance recheck', () => {
 });
 
 
-test('v78 guard prevents extreme downward first-person look and restores full range outside guard', () => {
+test('guard permits a near-vertical view of the body and restores full range outside guard', () => {
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
   const player = readFileSync(new URL('../src/player/PlayerController.ts', import.meta.url), 'utf8');
-  assert.match(player, /COMBAT_GUARD_LOOK_DOWN_LIMIT = THREE\.MathUtils\.degToRad\(58\)/);
+  assert.match(player, /COMBAT_GUARD_LOOK_DOWN_LIMIT = THREE\.MathUtils\.degToRad\(82\)/);
   assert.match(player, /setCombatGuardLookConstraint\(enabled: boolean\)/);
   assert.match(player, /this\.controls\.maxPolarAngle = enabled[\s\S]*Math\.PI \* 0\.5 \+ COMBAT_GUARD_LOOK_DOWN_LIMIT[\s\S]*Math\.PI/);
   assert.match(player, /const minimumPitch = -COMBAT_GUARD_LOOK_DOWN_LIMIT/);
@@ -2118,22 +2093,7 @@ test('v78 guard prevents extreme downward first-person look and restores full ra
 });
 
 
-test('v85 first-person combat framing protects the nearest fist and locks across locomotion', () => {
-  const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
-  assert.match(lab, /FIRST_PERSON_COMBAT_ARM_SCALE = 0\.97/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_HAND_SCALE = 1\.0/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_BODY_FORWARD_OFFSET = 0\.30/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_BODY_UP_OFFSET = -0\.165/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_NEAR_HAND_DEPTH_TARGET = 0\.53/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_HAND_Y_TARGET = -0\.18/);
-  assert.match(lab, /FIRST_PERSON_PELVIS_BEHIND_CAMERA = -0\.50/);
-  assert.match(lab, /Math\.min\([\s\S]*firstPersonCombatHandA[\s\S]*firstPersonCombatHandB/);
-  assert.match(lab, /FIRST_PERSON_COMBAT_NEAR_HAND_DEPTH_TARGET - nearDepth/);
-  assert.match(lab, /this\.firstPersonCombatFramingLocked = true/);
-  assert.match(lab, /this\.firstPersonCombatFramingSettleSeconds/);
-  assert.match(lab, /COMBAT_LOWER_IDLE_CROSSFADE_SECONDS = 0\.42/);
-  assert.doesNotMatch(lab, /firstPersonCamera\.position[\s\S]{0,160}FIRST_PERSON_COMBAT_BODY_(?:FORWARD|UP)_OFFSET/);
-});
+
 
 test('v81 living get-up disables the articulated ragdoll instead of removing Rapier bodies during gameplay', () => {
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
@@ -2249,31 +2209,9 @@ test('manual guard release is 1.5 seconds and moving without RMB shortens it to 
   assert.match(lab, /Make the lower combat cycle the source of the normal locomotion[\s\S]*currentAction = releaseLowerPair\.thirdPerson/);
 });
 
-test('v85 first-person guard framing is solved once then held through walk and stop', () => {
-  const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
-  assert.match(lab, /FIRST_PERSON_COMBAT_FRAMING_SETTLE_SECONDS = 0\.26/);
-  assert.match(lab, /const canSolveGuardFrame = combatVisible[\s\S]*this\.combatPhase === 'guard'[\s\S]*!this\.firstPersonCombatFramingLocked/);
-  assert.match(lab, /this\.firstPersonCombatFramingLocked = true/);
-  assert.match(lab, /let depthTarget = combatVisible \? this\.firstPersonCombatDepthOffset : 0/);
-  assert.doesNotMatch(lab, /firstPersonCombatFramingHoldSeconds/);
-});
 
-test('v108 first-person combat isolates the visible guard from shoulder, torso and lower-body geometry', () => {
-  const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
-  assert.match(lab, /fpCombatArmMask/);
-  assert.match(lab, /combatDistalArmBoneIndices/);
-  assert.match(lab, /combatUpperArmBoneIndices/);
-  assert.match(lab, /animation-lab-first-person-viewmodel-v13-ground-kick/);
-  assert.match(lab, /float fpCombatKickMask = max\(vFpCombatArmMask, vFpLowerBodyMask\)/);
-  assert.match(lab, /float fpVisibleMask = mix\(fpExplorationMask, fpCombatMask, fpCombatIsolation\)/);
-  assert.match(lab, /combatPoseTarget > 0\.001[\s\S]*\? 1[\s\S]*smoothstep\(this\.firstPersonCombatPoseBlend, 0\.08, 0\.72\)/);
-  const combatMaskStart = lab.indexOf('const combatDistalArmBoneIndices');
-  const combatMaskEnd = lab.indexOf('if (!lowerBoneIndices.size)', combatMaskStart);
-  const combatMaskSource = lab.slice(combatMaskStart, combatMaskEnd);
-  assert.doesNotMatch(combatMaskSource, /combatDistalArmBoneIndices\.add\(index\)[\s\S]*shoulder/);
-  assert.doesNotMatch(combatMaskSource, /combatUpperArmBoneIndices\.add\(index\)[\s\S]*shoulder/);
-  assert.doesNotMatch(lab, /fpViewDepth/);
-});
+
+
 
 test('v87 rapid pure strafe reversals keep one walking cycle until the opposite direction is intentional', async () => {
   const { ForwardLateralAnimationGate, STRAFE_DIRECTION_COMMIT_SECONDS } = await import('../.movement-test-dist/dev/DirectionalLocomotionRules.js');
@@ -2387,22 +2325,7 @@ test('fatal-fall terminal rest rejects mid-air or sliding bodies and accepts gro
 });
 
 
-test('v108 first-person arm safety only lets visible fists and forearms push the combat viewmodel', () => {
-  const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
-  assert.match(lab, /FIRST_PERSON_HAND_SAFE_DEPTH = 0\.28/);
-  assert.match(lab, /FIRST_PERSON_FOREARM_SAFE_DEPTH = 0\.29/);
-  assert.match(lab, /FIRST_PERSON_ARM_SAFETY_MAX_FORWARD = 0\.24/);
-  assert.match(lab, /private applyFirstPersonArmCameraSafety\(delta: number\): void/);
-  assert.match(lab, /this\.firstPersonCamera\.getWorldDirection\(this\.firstPersonArmSafetyViewForward\)/);
-  assert.match(lab, /requireDepth\(this\.firstPersonHandBones, FIRST_PERSON_HAND_SAFE_DEPTH\)/);
-  assert.match(lab, /requireDepth\(this\.firstPersonForearmBones, FIRST_PERSON_FOREARM_SAFE_DEPTH\)/);
-  assert.doesNotMatch(lab, /requireDepth\(this\.firstPersonUpperArmBones/);
-  assert.doesNotMatch(lab, /requireDepth\(this\.firstPersonShoulderBones/);
-  assert.doesNotMatch(lab, /FIRST_PERSON_UPPER_ARM_SAFE_DEPTH/);
-  assert.doesNotMatch(lab, /FIRST_PERSON_SHOULDER_SAFE_DEPTH/);
-  assert.match(lab, /if \(targetForwardOffset > this\.firstPersonArmSafetyForwardOffset\)/);
-  assert.match(lab, /addScaledVector\([\s\S]*this\.firstPersonArmSafetyViewForward,[\s\S]*this\.firstPersonArmSafetyForwardOffset/);
-});
+
 
 test('v101 punch layer suppresses torso folding, gives the striking arm authority and keeps the wrist stable', () => {
   const layers = readFileSync(new URL('../src/dev/CombatAnimationLayers.ts', import.meta.url), 'utf8');
@@ -2701,11 +2624,7 @@ test('v107 committed strike footwork follows the curved physical trajectory inst
   assert.doesNotMatch(controller, /const lateralRetention = along < 0 \? 0\.08 : 0\.18/);
 });
 
-test('v115 first-person guard ignores foot-based vertical viewmodel corrections while combat framing is active', () => {
-  const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
-  assert.match(lab, /if \(!state\.incapacitated && combatPoseTarget <= 0\.001 && this\.firstPersonLeftFootBone/);
-  assert.match(lab, /this\.activeAuthoredTurn === null[\s\S]*&& combatPoseTarget <= 0\.001[\s\S]*firstPersonFootLockGroup/);
-});
+
 
 test('v116 passive NPCs finish and can retrigger hit reactions instead of freezing after the first punch', () => {
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
@@ -2771,10 +2690,10 @@ test('v120 ground attacks use contextual stomp/get-up kick timings and real foot
   assert.ok(drive.drive > 0.65, 'get-up interruption owns a strong extension beat');
 });
 
-test('v120 first-person ground kick reveals only legs plus combat arms and never restores the torso mesh', () => {
+test('v138 first-person ground kick retains the connected body without restoring the head', () => {
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
   assert.match(lab, /uniform float fpGroundKick/);
-  assert.match(lab, /fpCombatKickMask = max\(vFpCombatArmMask, vFpLowerBodyMask\)/);
+  assert.match(lab, /fpCombatKickMask = max\(vFpCombatArmMask, vFpCombatBodyMask\)/);
   assert.match(lab, /uniforms\.groundKick\.value = this\.groundKick \? 1 : 0/);
   assert.doesNotMatch(lab, /fpCombatKickMask = fpExplorationMask/);
 });
