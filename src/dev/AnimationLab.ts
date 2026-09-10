@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GaitTransition, sampleGaitPhase, alignGaitPhase, createSlideSprintRecoveryClip } from './LocomotionBlend';
 import { createCrouchLocomotionClips, CROUCH_LOCOMOTION_IDS, CROUCH_GAIT_REFERENCE_SPEED } from './CrouchLocomotion';
 import { advanceStrikeClock, CombatImpactAudio } from './CombatFeel';
-import { createCombatPushClip, applyCombatPushPose, transferCombatStance } from './CombatPushMotion';
+import { createCombatPushClip, applyCombatPushPose, combatPushEnvelope, sampleCombatPalm, transferCombatStance } from './CombatPushMotion';
 import { FirstPersonCombatPose, offsetFirstPersonUpperBody } from './FirstPersonCombatPose';
 import { capFirstPersonMask } from './FirstPersonMeshCaps';
 import { ClinchAttackVariation, createCombatHeadbuttClip, headbuttContactDamage } from './CombatHeadbutt';
@@ -411,8 +411,8 @@ const COMBAT_ATTACK_TIMING: Readonly<Record<CombatAttackAnimation, CombatAttackT
   'step-b':      { impactFraction: 0.545, contactStartFraction: 0.460, contactEndFraction: 0.625, finishFraction: 0.930 },
   'step-c':      { impactFraction: 0.565, contactStartFraction: 0.480, contactEndFraction: 0.645, finishFraction: 0.940 },
   'step-d':      { impactFraction: 0.560, contactStartFraction: 0.475, contactEndFraction: 0.640, finishFraction: 0.938 },
-  'shove-a':     { impactFraction: 0.380, contactStartFraction: 0.315, contactEndFraction: 0.455, finishFraction: 0.660 },
-  'shove-b':     { impactFraction: 0.390, contactStartFraction: 0.325, contactEndFraction: 0.465, finishFraction: 0.670 },
+  'shove-a':     { impactFraction: 0.400, contactStartFraction: 0.305, contactEndFraction: 0.500, finishFraction: 0.960 },
+  'shove-b':     { impactFraction: 0.400, contactStartFraction: 0.305, contactEndFraction: 0.500, finishFraction: 0.960 },
   'headbutt':    { impactFraction: 0.480, contactStartFraction: 0.405, contactEndFraction: 0.585, finishFraction: 0.960 },
   'power-a':     { impactFraction: 0.575, contactStartFraction: 0.485, contactEndFraction: 0.655, finishFraction: 0.950 },
   'power-b':     { impactFraction: 0.585, contactStartFraction: 0.495, contactEndFraction: 0.665, finishFraction: 0.952 },
@@ -637,12 +637,12 @@ const COMBAT_ATTACK_VISUAL_PROFILES: Readonly<Record<
   },
   'shove-a': {
     source: 'fight-idle', sourceFamily: 'h', character: 'shove', heavy: false,
-    tempoMultiplier: 0.84, reachMultiplier: 0.84, bodyMultiplier: 1.28, firstPersonForwardMeters: 0.090,
+    tempoMultiplier: 0.96, reachMultiplier: 0.84, bodyMultiplier: 1.28, firstPersonForwardMeters: 0.090,
     styleYawDegrees: -5.0, headSlipDegrees: 3.0, lungeSpeed: 0.62,
   },
   'shove-b': {
     source: 'fight-idle', sourceFamily: 'h', character: 'shove', heavy: false,
-    tempoMultiplier: 0.84, reachMultiplier: 0.84, bodyMultiplier: 1.28, firstPersonForwardMeters: 0.090,
+    tempoMultiplier: 0.96, reachMultiplier: 0.84, bodyMultiplier: 1.28, firstPersonForwardMeters: 0.090,
     styleYawDegrees: 5.0, headSlipDegrees: -3.0, lungeSpeed: 0.62,
   },
   'headbutt': {
@@ -2701,7 +2701,8 @@ export class AnimationLab {
     }
 
     for (const id of CLINCH_SHOVE_ATTACK_VARIANTS) {
-      const clip = createCombatPushClip(fight, `AnimationLab_CombatPush_${id}`);
+      if (!this.character) throw new Error('The push skeleton is unavailable.');
+      const clip = createCombatPushClip(fight, `AnimationLab_CombatPush_${id}`, this.character, COMBAT_ATTACK_DESIRED_SIDE[id]);
       this.combatAttackStrikingSides.set(id, COMBAT_ATTACK_DESIRED_SIDE[id]);
       this.combatAttackLayers.set(id, { clip, thirdPerson: this.mixer.clipAction(clip),
         firstPerson: this.firstPersonMixer.clipAction(clip) });
@@ -4401,6 +4402,7 @@ export class AnimationLab {
     if (!origin || !victim) return null;
     const distance = Math.hypot(victim.position.x - origin.position.x, victim.position.z - origin.position.z);
     const headbutt = attack.animation === 'headbutt';
+    const shove = combatAttackVisualProfile(attack.animation)?.character === 'shove';
     if (distance > (headbutt ? .94 : MELEE_ATTACKS[attack.kind].reach)) return null;
     const before = attack.sampledElapsed / attack.duration;
     const now = attack.elapsed / attack.duration;
@@ -4411,6 +4413,7 @@ export class AnimationLab {
     let result: CombatSweepContact | null = null;
     for (let index = 0; index < zones.length; index += 1) {
       if (headbutt && index !== 0) continue;
+      if (shove && index === 0) continue;
       const contact = sweepCombatContact(previous, current, oldTargets[index]!, targets[index]!,
         headbutt ? .225 : radii[index]!, delta, before, now, attack.contactStartFraction, attack.contactEndFraction);
       if (!contact || (result && result.fraction <= contact.fraction)) continue;
@@ -4431,14 +4434,17 @@ export class AnimationLab {
   private commitPlayerSweepImpact(attack: ActiveMeleeAttack, contact: CombatSweepContact): void {
     if (this.combatAttack !== attack || attack.impactApplied || this.combatHitReaction
       || this.ragdoll || this.recovery || this.npcRagdoll || this.npcRecovery || this.npcHealth <= 0) return;
-    const damage = attack.animation === 'headbutt' ? headbuttContactDamage(contact.distance, contact.fistSpeed)
+    let damage = attack.animation === 'headbutt' ? headbuttContactDamage(contact.distance, contact.fistSpeed)
       : combatPhysicalContactDamage(attack.kind, attack.spacing, contact.distance, contact.fistSpeed, contact.zone);
+    if (combatAttackVisualProfile(attack.animation)?.character === 'shove') damage = Math.min(6, damage);
     if (damage <= 0) return;
     attack.impactApplied = true;
     attack.compressionSeconds = attack.kind === 'big-punch' ? 0.065 : 0.048;
     const contactHand = attack.strikingSide === 'left' ? this.leftHandBone : this.rightHandBone;
     if (attack.animation === 'headbutt' && this.headBone) {
       attack.contactPoint = new THREE.Vector3(); this.sampleCombatForehead(this.headBone, attack.contactPoint);
+    } else if (combatAttackVisualProfile(attack.animation)?.character === 'shove') {
+      attack.contactPoint = contact.point.clone();
     } else if (contactHand) {
       attack.contactPoint = new THREE.Vector3();
       this.sampleCombatKnuckle(contactHand, attack.contactPoint);
@@ -4472,6 +4478,8 @@ export class AnimationLab {
       const head = player ? this.headBone : this.idleNpcHeadBone;
       if (attack?.animation === 'headbutt' && head) {
         this.sampleCombatForehead(head, currentLeft); currentRight.copy(currentLeft);
+      } else if (attack && combatAttackVisualProfile(attack.animation)?.character === 'shove') {
+        sampleCombatPalm(left, currentLeft); sampleCombatPalm(right, currentRight);
       } else {
         this.sampleCombatKnuckle(left, currentLeft); this.sampleCombatKnuckle(right, currentRight);
       }
@@ -5872,10 +5880,11 @@ export class AnimationLab {
     if (attack.animation === 'headbutt') { this.applyCombatHeadbuttPose(true, attack); return; }
     const normalized = attack.duration > 1e-5 ? attack.elapsed / attack.duration : 1;
     const heavy = attack.kind === 'big-punch';
-    const envelope = combatStrikeEnvelope(normalized, heavy, attack.impactFraction);
-    const reach = combatStrikeReachEnvelope(normalized, heavy, attack.impactFraction);
-    if (envelope <= 1e-4 && reach <= 1e-4) return;
     const visual = combatAttackVisualProfile(attack.animation);
+    const envelope = combatStrikeEnvelope(normalized, heavy, attack.impactFraction);
+    const reach = visual?.character === 'shove' ? combatPushEnvelope(normalized, attack.impactFraction).reach
+      : combatStrikeReachEnvelope(normalized, heavy, attack.impactFraction);
+    if (envelope <= 1e-4 && reach <= 1e-4) return;
 
     this.npcToPlayer.set(
       this.avatarAnchor.position.x - this.idleNpcAnchor.position.x,
@@ -5902,12 +5911,13 @@ export class AnimationLab {
           ? 1 - THREE.MathUtils.smoothstep(normalized, npcLoadEnd, attack.impactFraction)
           : 0;
     const stanceReach = THREE.MathUtils.lerp(0.45, 1, THREE.MathUtils.smoothstep(attack.targetDistanceAtStart, 0.65, 1.05));
-    const commitment = (character === 'jab' ? 0.19 : heavy ? 0.25 : character === 'shove' ? 0.12 : 0.22)
-      * stanceReach * reach - 0.024 * npcLoad;
+    const pushPose = character === 'shove' ? combatPushEnvelope(normalized, attack.impactFraction) : null;
+    const commitment = pushPose ? .11 * pushPose.reach - .024 * pushPose.load
+      : (character === 'jab' ? 0.19 : heavy ? 0.25 : 0.22) * stanceReach * reach - 0.024 * npcLoad;
     transferCombatStance(this.idleNpcHipsBone, [
       [this.idleNpcLeftUpperLegBone, this.idleNpcLeftLowerLegBone, this.idleNpcLeftFootBone],
       [this.idleNpcRightUpperLegBone, this.idleNpcRightLowerLegBone, this.idleNpcRightFootBone],
-    ], this.npcToPlayer, commitment, npcLoad);
+    ], this.npcToPlayer, commitment, pushPose?.load ?? npcLoad);
     if (character === 'shove') {
       if (!attack.aimPoint || normalized < attack.contactStartFraction) attack.aimPoint = this.combatPlayerChestPoint.clone();
       applyCombatPushPose([
@@ -5995,14 +6005,17 @@ export class AnimationLab {
   private commitNpcSweepImpact(attack: ActiveMeleeAttack, contact: CombatSweepContact): void {
     if (this.npcAttack !== attack || attack.impactApplied || this.npcHitReaction
       || this.npcRagdoll || this.npcRecovery || this.ragdoll || this.recovery || this.health <= 0) return;
-    const damage = attack.animation === 'headbutt' ? headbuttContactDamage(contact.distance, contact.fistSpeed)
+    let damage = attack.animation === 'headbutt' ? headbuttContactDamage(contact.distance, contact.fistSpeed)
       : combatPhysicalContactDamage(attack.kind, attack.spacing, contact.distance, contact.fistSpeed, contact.zone);
+    if (combatAttackVisualProfile(attack.animation)?.character === 'shove') damage = Math.min(6, damage);
     if (damage <= 0) return;
     attack.impactApplied = true;
     attack.compressionSeconds = attack.kind === 'big-punch' ? 0.065 : 0.048;
     const hand = attack.strikingSide === 'left' ? this.idleNpcLeftHandBone : this.idleNpcRightHandBone;
     if (attack.animation === 'headbutt' && this.idleNpcHeadBone) {
       attack.contactPoint = new THREE.Vector3(); this.sampleCombatForehead(this.idleNpcHeadBone, attack.contactPoint);
+    } else if (combatAttackVisualProfile(attack.animation)?.character === 'shove') {
+      attack.contactPoint = contact.point.clone();
     } else if (hand) {
       attack.contactPoint = new THREE.Vector3();
       this.sampleCombatKnuckle(hand, attack.contactPoint);
@@ -8107,7 +8120,8 @@ export class AnimationLab {
     const heavy = attack.kind === 'big-punch';
     const visualProfile = combatAttackVisualProfile(attack.animation);
     const envelope = combatStrikeEnvelope(normalized, heavy, attack.impactFraction);
-    const reachEnvelope = combatStrikeReachEnvelope(normalized, heavy, attack.impactFraction);
+    const reachEnvelope = visualProfile?.character === 'shove' ? combatPushEnvelope(normalized, attack.impactFraction).reach
+      : combatStrikeReachEnvelope(normalized, heavy, attack.impactFraction);
     if (envelope <= 1e-4 && reachEnvelope <= 1e-4) return;
 
     // Every rebuilt punch owns a slightly different reach/body profile. The
@@ -8158,12 +8172,13 @@ export class AnimationLab {
     // giving every click the same floating, arm-only extension.
     const stanceReach = Number.isFinite(targetDistance)
       ? THREE.MathUtils.lerp(0.45, 1, THREE.MathUtils.smoothstep(targetDistance, 0.65, 1.05)) : 0.75;
-    const commitment = (character === 'jab' ? 0.19 : heavy ? 0.25 : character === 'shove' ? 0.12 : 0.22)
-      * stanceReach * reachEnvelope - 0.024 * load;
+    const pushPose = character === 'shove' ? combatPushEnvelope(normalized, impact) : null;
+    const commitment = pushPose ? .11 * pushPose.reach - .024 * pushPose.load
+      : (character === 'jab' ? 0.19 : heavy ? 0.25 : 0.22) * stanceReach * reachEnvelope - 0.024 * load;
     transferCombatStance(this.hipsBone, [
       [this.leftUpperLegBone, this.leftLowerLegBone, this.leftFootBone],
       [this.rightUpperLegBone, this.rightLowerLegBone, this.rightFootBone],
-    ], this.combatStrikeForwardAxis, commitment, load);
+    ], this.combatStrikeForwardAxis, commitment, pushPose?.load ?? load);
     if (character === 'shove') {
       if (this.combatSweepTargetPoints()) {
         if (!attack.aimPoint || normalized < attack.contactStartFraction) attack.aimPoint = this.combatNpcChestPoint.clone();

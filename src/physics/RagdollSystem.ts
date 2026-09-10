@@ -264,6 +264,7 @@ export class RagdollSystem {
   private combatKnockoutCurl = 0;
   private combatKnockoutSide = 0;
   private combatKnockoutArmHeight = .12;
+  private readonly combatKnockoutHandAnchors = new Map<string, THREE.Vector3>();
   private readonly tempPositionA = new THREE.Vector3();
   private readonly tempPositionB = new THREE.Vector3();
   private readonly tempPositionC = new THREE.Vector3();
@@ -891,19 +892,28 @@ export class RagdollSystem {
     for (const side of [-1, 1]) {
       const arm = this.bodies.get(side < 0 ? 'left-forearm' : 'right-forearm');
       if (!arm) continue;
-      const position = arm.body.worldCom(), speed = arm.body.linvel();
-      const offset = new THREE.Vector3(position.x - center.x, position.y - center.y, position.z - center.z);
-      const target = new THREE.Vector3(side * .14, this.combatKnockoutArmHeight, .14).applyQuaternion(rotation).add(center);
+      const position = arm.body.worldCom(), speed = arm.body.linvel(), angular = arm.body.angvel();
+      const anchor = this.combatKnockoutHandAnchors.get(arm.id);
+      const handPoint = anchor ? anchor.clone().applyQuaternion(new THREE.Quaternion().copy(arm.body.rotation()))
+        .add(new THREE.Vector3().copy(arm.body.translation())) : new THREE.Vector3().copy(position);
+      const lever = handPoint.clone().sub(position);
+      const offset = handPoint.clone().sub(center);
+      const target = new THREE.Vector3(side * .105, this.combatKnockoutArmHeight + .035, .17).applyQuaternion(rotation).add(center);
       const carried = new THREE.Vector3(velocity.x, velocity.y, velocity.z)
         .add(new THREE.Vector3(spin.x, spin.y, spin.z).cross(offset));
-      const relative = new THREE.Vector3(speed.x, speed.y, speed.z).sub(carried);
-      const wanted = target.sub(position).multiplyScalar(5).clampLength(0, 1.5);
+      const relative = new THREE.Vector3(speed.x, speed.y, speed.z)
+        .add(new THREE.Vector3(angular.x, angular.y, angular.z).cross(lever)).sub(carried);
+      const wanted = target.sub(handPoint).multiplyScalar(7).clampLength(0, 1.7);
       const asymmetry = 1 + side * this.combatKnockoutSide * .14;
-      const impulse = wanted.sub(relative).clampLength(0, 1.8)
+      const impulse = wanted.sub(relative).clampLength(0, 2)
         .multiplyScalar(arm.body.mass() * Math.min(1, delta * 14 * envelope * this.combatKnockoutCurl * asymmetry));
-      arm.body.applyImpulse(impulse, true);
+      // Pull the wrist in: this also flexes the physical elbow, rather than
+      // dragging a rigid forearm sideways with the hand still sticking out.
+      // Use a short lever so the brief reflex cannot become a violent arm spin.
+      const application = new THREE.Vector3().copy(position).addScaledVector(lever, .55);
+      arm.body.applyImpulseAtPoint(impulse, application, true);
       // The same application point preserves net linear AND angular momentum.
-      core.body.applyImpulseAtPoint(impulse.clone().negate(), position, true);
+      core.body.applyImpulseAtPoint(impulse.clone().negate(), application, true);
     }
   }
 
@@ -1081,6 +1091,10 @@ export class RagdollSystem {
       membership: RIGHT_FOREARM_GROUP, xHint: rightElbowAxis, fallbackHint: rightElbowFallback.flexDirection,
       startInset: 0.01, endCapRadius: 0.056,
     }, velocity, yawRateRadians);
+    this.combatKnockoutHandAnchors.set('left-forearm', this.worldPointToBodyLocal(
+      leftForeArm, bones.leftHand.getWorldPosition(new THREE.Vector3()), new THREE.Vector3()));
+    this.combatKnockoutHandAnchors.set('right-forearm', this.worldPointToBodyLocal(
+      rightForeArm, bones.rightHand.getWorldPosition(new THREE.Vector3()), new THREE.Vector3()));
     const leftUpperLeg = this.createSegmentBody({
       id: 'left-upper-leg', start: bones.leftUpLeg, end: bones.leftLeg, radius: 0.079, density: 720,
       membership: LEFT_UPPER_LEG_GROUP, xHint: leftKneeAxis, fallbackHint: leftKneeFallback.flexDirection,
@@ -2562,8 +2576,13 @@ export class RagdollSystem {
     const coreAngular = core.body.angvel();
     const head = this.bodies.get('head');
     const readY = (id: string): number => this.bodies.get(id)?.body.translation().y ?? Number.NaN;
-    const requested = ragdollFinalSupportRelease({
-      elapsed: this.elapsed,
+    const knockoutAge = this.elapsed - this.combatKnockoutStartedAt;
+    const earlyKnockout = this.combatKnockoutCurl > 0 && knockoutAge >= .55
+      && this.fatalFallImpactElapsed < 0;
+    let requested = ragdollFinalSupportRelease({
+      // A KO's brief muscle contraction has already ended. Its dead arms must
+      // not act as crutches for another second before grip starts to release.
+      elapsed: this.elapsed + (earlyKnockout ? 1 : 0),
       coreY: corePosition.y,
       headY: head?.body.translation().y ?? Number.NaN,
       forearmYs: [readY('left-forearm'), readY('right-forearm')],
@@ -2573,6 +2592,16 @@ export class RagdollSystem {
       coreAngularSpeed: Math.hypot(coreAngular.x, coreAngular.y, coreAngular.z),
       maxLinearSpeed,
     });
+    if (earlyKnockout && head && Math.hypot(coreLinear.x, coreLinear.y, coreLinear.z) < .72
+      && Math.hypot(coreAngular.x, coreAngular.y, coreAngular.z) < 1.05 && maxLinearSpeed < 1.22) {
+      // The pelvis can already be low while bent elbows hold the rib cage up.
+      // The generic pelvis/limb detector misses this partially seated bridge.
+      const lowest = Math.min(...bodyYs);
+      const headY = head.body.translation().y;
+      const torsoRaise = THREE.MathUtils.smoothstep(headY - corePosition.y, .34, .58);
+      const bodySpan = THREE.MathUtils.smoothstep(headY - lowest, .48, .85);
+      requested = Math.max(requested, .70 * torsoRaise * bodySpan);
+    }
 
     if (requested >= FINAL_SETTLE_RELEASE_THRESHOLD) {
       this.finalSettleReleaseHold = FINAL_SETTLE_HOLD_SECONDS;
