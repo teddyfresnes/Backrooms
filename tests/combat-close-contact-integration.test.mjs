@@ -7,6 +7,7 @@ before(async () => { lab = await createLab(); });
 after(() => lab?.dispose());
 const run = (seconds, fps = 60) => { for (let i = 0; i < Math.ceil(seconds * fps); i++) stepLab(lab, 1 / fps); };
 function duel(distance, view = 'third-person') {
+  lab.playerClinchVariation.reset(); lab.npcClinchVariation.reset();
   lab.player.input.clear(); setupDuel(lab, distance, view);
   lab.idleNpcAnchor.position.set(-14, 0, -12); lab.idleNpcAnchor.rotation.y = Math.PI;
   lab.idleNpcAnchor.updateMatrixWorld(true); lab.syncNpcPlayerBlocker(true);

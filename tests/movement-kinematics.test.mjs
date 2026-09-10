@@ -951,7 +951,7 @@ test('ragdoll system has a short physical reflex phase without pose motors', () 
   assert.doesNotMatch(ragdoll, /setMotorPosition/);
 
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
-  assert.match(lab, /activeResponseScale: quietStart \? 0 : options\.meleeImpact \? 0\.16 : \(options\.fatal \? 0\.76 : 1\)/);
+  assert.match(lab, /activeResponseScale: quietStart \|\| options\.meleeImpact \? 0 : \(options\.fatal \? 0\.76 : 1\)/);
 });
 
 test('manual KILL carries evaluated animation inertia into the ragdoll', () => {
