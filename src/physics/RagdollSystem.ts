@@ -1,5 +1,6 @@
 import RAPIER from '@dimforge/rapier3d';
 import * as THREE from 'three';
+import { combatKnockoutEnvelope } from './CombatKnockoutMotion';
 import { PhysicsWorld } from './PhysicsWorld';
 import type { GroundKickVolume } from './GroundKickContact';
 import { activeRagdollAnimationCarry, activeRagdollEnvelope, activeRagdollProfile } from './ActiveRagdollMotion';
@@ -259,6 +260,10 @@ export class RagdollSystem {
   private readonly ownedBodies: RAPIER.RigidBody[] = [];
   private readonly jointFrameBodies: RAPIER.RigidBody[] = [];
   private readonly impactEvents: RagdollImpactEvent[] = [];
+  private combatKnockoutStartedAt = -Infinity;
+  private combatKnockoutCurl = 0;
+  private combatKnockoutSide = 0;
+  private combatKnockoutArmHeight = .12;
   private readonly tempPositionA = new THREE.Vector3();
   private readonly tempPositionB = new THREE.Vector3();
   private readonly tempPositionC = new THREE.Vector3();
@@ -469,6 +474,7 @@ export class RagdollSystem {
         // keeps the silhouette coherent without forcing it toward an animation.
         this.applyEarlyCoherence();
         this.applyActiveFallReactions(substep);
+        this.applyCombatKnockoutContraction(substep);
         if (this.fatalFallImpactElapsed >= 0) {
           // High-fall deaths are purely passive after impact. In particular,
           // never run the generic support-release helper here: on a violent
@@ -480,7 +486,7 @@ export class RagdollSystem {
           this.applyFatalFallSettling();
         } else {
           this.applyFinalSupportRelease(substep);
-          this.applyFinalPoseRelaxation(substep);
+          if (!Number.isFinite(this.combatKnockoutStartedAt)) this.applyFinalPoseRelaxation(substep);
         }
         this.captureImpactPreStep(substep);
         this.physics.world.step();
@@ -559,6 +565,13 @@ export class RagdollSystem {
       }
     }
     if (!this.settled && safeDelta > 0) {
+      // The shared world advances NPCs and persistent corpses externally.
+      // Use the same brief KO response as the player-owned ragdoll solver.
+      this.applyCombatKnockoutContraction(safeDelta);
+      if (this.combatKnockoutCurl > 0 && this.fatalFallImpactElapsed < 0) {
+        this.applyFinalSupportRelease(safeDelta);
+        this.releaseUnstableBalances();
+      }
       this.enforceSafetyLimits(safeDelta);
       this.updateSettling();
     }
@@ -838,6 +851,60 @@ export class RagdollSystem {
       this.applyContactImpulse('head', impulse.clone().multiplyScalar(0.28), contactPoint);
       this.applyContactImpulse('core', impulse.clone().multiplyScalar(0.72), contactPoint);
     } else this.applyContactImpulse('core', impulse, contactPoint);
+    // A KO loses balance and muscle tone. Do not keep the conscious windmill /
+    // recovery-step reflexes used for an ordinary accidental fall.
+    this.activeResponseScale = 0;
+    this.combatKnockoutStartedAt = this.elapsed;
+    this.combatKnockoutCurl = THREE.MathUtils.clamp(strength, .45, 1.3) * (zone === 'body' ? 1 : .72);
+    this.combatKnockoutArmHeight = zone === 'body' ? .04 : .12;
+    this.combatKnockoutSide = 0;
+    const head = this.bodies.get('head'), core = this.bodies.get('core');
+    if (core) {
+      const orientation = core.body.rotation();
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(new THREE.Quaternion().copy(orientation));
+      // An already horizontal body is a passive impact target. Do not ask its
+      // arms to close as if it were still standing over its feet.
+      this.combatKnockoutCurl *= THREE.MathUtils.smoothstep(Math.abs(up.y), .35, .75);
+    }
+    if (head && core && zone === 'head') {
+      const forward = impulse.clone().normalize(), right = new THREE.Vector3(forward.z, 0, -forward.x).normalize();
+      const center = head.body.worldCom();
+      const lever = contactPoint ? new THREE.Vector3().copy(contactPoint).sub(center) : new THREE.Vector3();
+      this.combatKnockoutSide = THREE.MathUtils.clamp(lever.dot(right) / .10, -1, 1);
+      // Equal/opposite neck impulses create head recoil without inventing
+      // whole-body angular momentum. The existing neck limits bound the snap.
+      const torque = right.multiplyScalar(.055 * THREE.MathUtils.clamp(strength, .45, 1.3));
+      torque.y += this.combatKnockoutSide * .038 * Math.min(1.3, strength);
+      head.body.applyTorqueImpulse(torque, true);
+      core.body.applyTorqueImpulse(torque.clone().negate(), true);
+    }
+  }
+
+  private applyCombatKnockoutContraction(delta: number): void {
+    const envelope = combatKnockoutEnvelope(this.elapsed - this.combatKnockoutStartedAt);
+    if (envelope <= 0 || this.combatKnockoutCurl <= 0 || this.fatalFallImpactElapsed >= 0) return;
+    const core = this.bodies.get('core');
+    if (!core) return;
+    const center = core.body.worldCom(), velocity = core.body.linvel(), spin = core.body.angvel();
+    const orientation = core.body.rotation();
+    const rotation = new THREE.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w);
+    for (const side of [-1, 1]) {
+      const arm = this.bodies.get(side < 0 ? 'left-forearm' : 'right-forearm');
+      if (!arm) continue;
+      const position = arm.body.worldCom(), speed = arm.body.linvel();
+      const offset = new THREE.Vector3(position.x - center.x, position.y - center.y, position.z - center.z);
+      const target = new THREE.Vector3(side * .14, this.combatKnockoutArmHeight, .14).applyQuaternion(rotation).add(center);
+      const carried = new THREE.Vector3(velocity.x, velocity.y, velocity.z)
+        .add(new THREE.Vector3(spin.x, spin.y, spin.z).cross(offset));
+      const relative = new THREE.Vector3(speed.x, speed.y, speed.z).sub(carried);
+      const wanted = target.sub(position).multiplyScalar(5).clampLength(0, 1.5);
+      const asymmetry = 1 + side * this.combatKnockoutSide * .14;
+      const impulse = wanted.sub(relative).clampLength(0, 1.8)
+        .multiplyScalar(arm.body.mass() * Math.min(1, delta * 14 * envelope * this.combatKnockoutCurl * asymmetry));
+      arm.body.applyImpulse(impulse, true);
+      // The same application point preserves net linear AND angular momentum.
+      core.body.applyImpulseAtPoint(impulse.clone().negate(), position, true);
+    }
   }
 
   applyGroundKickImpact(
@@ -1062,7 +1129,7 @@ export class RagdollSystem {
     this.connectFramedUniversal(
       'neck-frame', core, head, neckAnchor,
       X_AXIS, -24, 25, Z_AXIS, -15, 15,
-      29, 7,
+      29, 28, true,
     );
     this.attachNeckGuard(head, neckAnchor, bodyPosition(head.body, new THREE.Vector3()));
 
@@ -1615,6 +1682,7 @@ export class RagdollSystem {
     secondMaxDegrees: number,
     maxSwingDegrees: number,
     maxTwistDegrees: number,
+    allowTwist = false,
   ): void {
     const parentRotation = bodyRotation(parent.body, new THREE.Quaternion());
     const childRotation = bodyRotation(child.body, new THREE.Quaternion());
@@ -1660,6 +1728,7 @@ export class RagdollSystem {
     // dynamic and belongs to the same solver island, so it cannot inject energy.
     const rootFrame = createFrame();
     const swingFrame = createFrame();
+    const twistFrame = allowTwist ? createFrame() : undefined;
     const parentAnchor = this.worldPointToBodyLocal(parent, worldAnchor, new THREE.Vector3());
     const parentFrame = parentRotation.clone().invert().multiply(childRotation).normalize();
     const identity = new THREE.Quaternion();
@@ -1676,10 +1745,9 @@ export class RagdollSystem {
     );
     fixed.setContactsEnabled(false);
 
-    // Stage 1 + stage 2 form a constrained universal joint. The limb therefore
-    // gets the two swing directions gravity needs to reach the floor, but its
-    // long-axis twist remains locked. That is the important difference between
-    // a human joint and a free ball socket in a game ragdoll.
+    // Stage 1 + stage 2 form a constrained universal joint. Limbs get the two
+    // swing directions gravity needs while their long-axis twist stays locked.
+    // The neck alone adds a bounded yaw stage below.
     const axis1 = firstAxisLocal.clone().normalize();
     const first = this.physics.world.createImpulseJoint(
       RAPIER.JointData.revolute(
@@ -1702,11 +1770,11 @@ export class RagdollSystem {
     const second = this.physics.world.createImpulseJoint(
       RAPIER.JointData.revolute(
         { x: 0, y: 0, z: 0 },
-        { x: childAnchor.x, y: childAnchor.y, z: childAnchor.z },
+        twistFrame ? { x: 0, y: 0, z: 0 } : { x: childAnchor.x, y: childAnchor.y, z: childAnchor.z },
         { x: axis2.x, y: axis2.y, z: axis2.z },
       ),
       swingFrame,
-      child.body,
+      twistFrame ?? child.body,
       true,
     ) as RAPIER.RevoluteImpulseJoint;
     second.setContactsEnabled(false);
@@ -1714,6 +1782,17 @@ export class RagdollSystem {
       THREE.MathUtils.degToRad(secondMinDegrees),
       THREE.MathUtils.degToRad(secondMaxDegrees),
     );
+    if (twistFrame) {
+      // Cervical yaw is real articulation, separate from pitch and lateral
+      // flexion. Shoulders and hips retain their existing two-axis frames.
+      const twist = this.physics.world.createImpulseJoint(
+        RAPIER.JointData.revolute({ x: 0, y: 0, z: 0 },
+          { x: childAnchor.x, y: childAnchor.y, z: childAnchor.z }, { x: 0, y: 1, z: 0 }),
+        twistFrame, child.body, true,
+      ) as RAPIER.RevoluteImpulseJoint;
+      twist.setContactsEnabled(false);
+      twist.setLimits(-THREE.MathUtils.degToRad(maxTwistDegrees), THREE.MathUtils.degToRad(maxTwistDegrees));
+    }
 
     // Native revolute limits are the hard stops. This additional cone/twist
     // guard is dissipative only and starts braking before a combined two-axis
