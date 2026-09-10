@@ -30,6 +30,8 @@
     "src/dev/GroundKickRules.ts",
     "src/dev/CombatContact.ts",
     "src/dev/CombatRig.ts",
-    "src/dev/CombatAnimationLayers.ts"
+    "src/dev/CombatAnimationLayers.ts",
+    "src/dev/CombatHeadbutt.ts",
+    "src/physics/CombatKnockoutMotion.ts"
   ]
 }
