@@ -34,6 +34,7 @@ import { createGetUpMotionVariants, type GetUpMotionVariant } from './GetUpMotio
 import { GetUpVariationSelector } from './GetUpVariationRules';
 import { canGetUp, chooseGetUpSide, recoveryReadyForInput, shouldShowGetUpPrompt } from './GetUpRecoveryRules';
 import { analyzeCombatStrikeSource, combatStrikeEnvelope, combatStrikeReachEnvelope, createCombatDodgeClip, createCombatLowerClip, createCombatStrikeUpperClip, createCombatUpperClip, createDirectionalLocomotionBlendClip, firstQuaternionForBone, type CombatStrikeSide } from './CombatAnimationLayers';
+import { groundKickFootRotation, sampleGroundKickFlight } from './GroundKickMotion';
 import {
   CombatHeavyTapDetector,
   MELEE_ATTACKS,
@@ -1534,6 +1535,7 @@ export class AnimationLab {
   private readonly gaitLandmarks = new Map<AnimationId, number>();
   private readonly crouchGaitReferenceSpeeds = new Map<AnimationId, number>();
   private readonly locomotionHeelLocal = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly groundKickNeutralFeet = [new THREE.Quaternion(), new THREE.Quaternion()];
   private visualRunning = false;
   private readonly locomotionPreviousVelocity = new THREE.Vector3();
   private locomotionPitch = 0;
@@ -2338,6 +2340,8 @@ export class AnimationLab {
     for (const [i, foot] of [this.leftFootBone, this.rightFootBone].entries()) {
       if (foot) this.locomotionHeelLocal[i]!.set(0, -this.firstPersonFootToSole, -0.055)
         .applyQuaternion(foot.getWorldQuaternion(new THREE.Quaternion()).invert());
+      if (foot) this.groundKickNeutralFeet[i]!.copy(foot.getWorldQuaternion(new THREE.Quaternion()))
+        .premultiply(this.avatarAnchor.getWorldQuaternion(new THREE.Quaternion()).invert());
     }
     if (this.headBone) {
       // Derive the face axis from the neutral rig, not from assumed FBX bone
@@ -4805,9 +4809,11 @@ export class AnimationLab {
       GROUND_KICK_MAX_ROOT_TURN,
     );
 
+    const entryGaze = this.combatGazeYaw;
     if (this.character) this.playerHitHandoff.capture(this.character, 0.18);
     if (this.firstPersonCharacter) this.firstPersonHitHandoff.capture(this.firstPersonCharacter, 0.18);
     this.resetCombatState(false);
+    this.combatGazeYaw = entryGaze;
     this.combatBufferedPunchSeconds = 0;
     this.combatHeavyTapDetector.cancel();
     const leftHip = this.leftUpperLegBone?.getWorldPosition(new THREE.Vector3()) ?? this.avatarAnchor.position.clone();
@@ -4863,7 +4869,10 @@ export class AnimationLab {
     this.bodyTurning = false;
     this.lookOffsetDegrees = 0;
     this.headLookYaw = 0;
-    this.playAutoImmediate('fight-idle', true, 1);
+    // resetCombatState stopped the layered guard, although currentAnimation
+    // still says Fight Idle. Bypass the same-ID fast path: the kick needs a real
+    // running guard underneath, not the unanimated neutral arms/hips.
+    this.playAnimation('fight-idle', true, 1, false, true);
     this.player.setInputEnabled(false, true);
 
     if (distance > 0.76) {
@@ -5004,46 +5013,9 @@ export class AnimationLab {
       this.hipsBone.position.copy(this.hipsBone.parent.worldToLocal(pelvis));
       this.hipsBone.updateWorldMatrix(false, true);
     }
-    const downward = kick.kind !== 'soccer-kick' && (kick.kind === 'stomp' || kick.targetPoint.y - this.avatarAnchor.position.y < 0.55);
-    const chamber = kick.footStart.clone().lerp(kick.targetPoint, downward ? 1 : 0.65);
-    chamber.y = Math.min(upper.getWorldPosition(new THREE.Vector3()).y - 0.12,
-      Math.max(kick.footStart.y + 0.38, kick.targetPoint.y + 0.24));
-    const target = new THREE.Vector3();
-    if (kick.kind === 'stomp') {
-      // Load first, lift without a pop, then accelerate the sole downwards.
-      chamber.y = Math.min(upper.getWorldPosition(new THREE.Vector3()).y - 0.10,
-        Math.max(kick.footStart.y + 0.54, kick.targetPoint.y + 0.40));
-      if (t < 0.43) target.lerpVectors(kick.footStart, chamber, pose.lift);
-      else if (t < 0.66) target.lerpVectors(chamber, kick.targetPoint, pose.strike);
-      else {
-        target.lerpVectors(kick.targetPoint, kick.footStart, pose.recover);
-        target.y += Math.sin(Math.PI * pose.recover) * 0.12;
-      }
-    } else if (kick.kind === 'soccer-kick') {
-      // A compact low strike driven from the hip, rather than a long football
-      // backswing. The boot meets the flank and stops against its resistance.
-      chamber.copy(kick.footStart).addScaledVector(forward, -0.10)
-        .addScaledVector(right, kick.side === 'left' ? -0.035 : 0.035);
-      chamber.y = Math.max(kick.footStart.y + 0.11, kick.targetPoint.y + 0.035);
-      const through = kick.targetPoint.clone().addScaledVector(forward, 0.10);
-      if (t < 0.38) target.lerpVectors(kick.footStart, chamber, pose.lift);
-      else if (t < 0.66) {
-        target.lerpVectors(chamber, through, pose.strike);
-        target.y += Math.sin(Math.PI * pose.strike) * 0.035;
-      } else {
-        target.lerpVectors(through, kick.footStart, pose.recover);
-        target.y += Math.sin(Math.PI * pose.recover) * 0.10;
-      }
-    } else if (t < 0.32) {
-      target.lerpVectors(kick.footStart, chamber, easeCombat(t / 0.32));
-      target.y += Math.sin(Math.PI * t / 0.32) * 0.09;
-    } else if (t < 0.53) target.lerpVectors(chamber, kick.targetPoint, easeCombat((t - 0.32) / 0.21));
-    else if (t < 0.60) target.copy(kick.targetPoint);
-    else {
-      const retract = easeCombat((t - 0.60) / 0.40);
-      target.lerpVectors(kick.targetPoint, kick.footStart, retract);
-      target.y += Math.sin(Math.PI * retract) * 0.13;
-    }
+    const flight = sampleGroundKickFlight(kick.kind, t, pose, kick.footStart, kick.targetPoint,
+      upper.getWorldPosition(new THREE.Vector3()).y, forward);
+    const target = flight.point;
     if (kick.contactFoot) {
       // Resistance begins only after the visible boot actually touches. Keep
       // the world running while the attacking leg absorbs the collision.
@@ -5057,10 +5029,8 @@ export class AnimationLab {
     const maxReach = kick.kind === 'get-up-kick' ? 0.975 : 0.997;
     const kneePole = limitKneeLateralBend(upper, lower, foot, target, forward, maxReach);
     solveCombatTwoBone(upper, lower, foot, target, weight, kneePole, maxReach, THREE.MathUtils.degToRad(18));
-    // Sole orientation is derived from the starting foot frame, never an Euler
-    // accumulation. It stays level for a stomp and tilts at most 12 degrees.
-    const worldFoot = kick.footRotation.clone().premultiply(new THREE.Quaternion().setFromAxisAngle(right,
-      THREE.MathUtils.degToRad(downward ? 2 : kick.kind === 'soccer-kick' ? 6 : -10) * pose.drive));
+    const worldFoot = groundKickFootRotation(this.groundKickNeutralFeet[kick.side === 'left' ? 0 : 1]!,
+      kick.footRotation, kick.targetYaw, kick.side, flight.anklePitch, flight.footAlignment);
     const parent = foot.parent!.getWorldQuaternion(new THREE.Quaternion()).invert();
     foot.quaternion.slerp(parent.multiply(worldFoot), weight).normalize();
     const supportParent = supportFoot.parent!.getWorldQuaternion(new THREE.Quaternion()).invert();
@@ -7712,7 +7682,10 @@ export class AnimationLab {
     this.pendingStrongTurn = null;
     this.strongTurnLatched = false;
     this.clearAuthoredTurn();
-    if (this.headBone) {
+    // The action ends before this frame's mixer/IK/look evaluation. The bone
+    // currently contains the restored animation base, especially sideways in
+    // a left strafe. Preserve the last presented combat gaze across this handoff.
+    if (this.combatGazeYaw === null && this.headBone) {
       const face = this.combatHeadLocalForward.clone()
         .applyQuaternion(this.headBone.getWorldQuaternion(new THREE.Quaternion()));
       this.combatGazeYaw = Math.atan2(face.x, face.z);
@@ -8246,6 +8219,22 @@ export class AnimationLab {
       this.applyWorldAxisOffset(spine, this.combatStrikeForwardAxis, motionRoll * 0.20);
       this.applyWorldAxisOffset(spine1, this.combatStrikeForwardAxis, motionRoll * 0.32);
       this.applyWorldAxisOffset(chest, this.combatStrikeForwardAxis, motionRoll * 0.48);
+      if (this.headBone) {
+        // A rear cross over the sideways left-strafe pelvis can otherwise
+        // exhaust the neck's 75° counter-turn. Once saturated, the face follows
+        // the fast shoulder recoil instead of its own continuous gaze. Keep
+        // the chest within a comfortable head-turn cone before solving the arm;
+        // doing this after hand contact would move the visible fist off its hit.
+        const face = this.combatHeadLocalForward.clone()
+          .applyQuaternion(this.headBone.getWorldQuaternion(new THREE.Quaternion()));
+        const faceYaw = Math.atan2(face.x, face.z);
+        const gaze = this.combatGazeYaw ?? this.combatAttackAimYaw;
+        const counter = wrapAngleRadians(gaze - faceYaw);
+        const torsoFollow = counter - THREE.MathUtils.clamp(counter, -Math.PI * .36, Math.PI * .36);
+        this.applyWorldYawOffset(spine, torsoFollow * .20);
+        this.applyWorldYawOffset(spine1, torsoFollow * .32);
+        this.applyWorldYawOffset(chest, torsoFollow * .48);
+      }
       this.applyWorldYawOffset(strikingUpperArm, armCorrection - resolvedStyleYaw * 0.62);
     };
 
@@ -8594,19 +8583,20 @@ export class AnimationLab {
     this.applyWorldYawOffset(this.neckBone, this.headLookYaw * 0.34);
     this.applyWorldYawOffset(this.headBone, this.headLookYaw * 0.5);
 
-    if (this.headBone && (this.combatAttack || this.combatPhase === 'guard' || this.actionFacingReturnActive || this.combatGazeYaw !== null)
-      && !this.combatHitReaction && !this.groundKick && !this.combatDodge) {
+    if (this.headBone && (this.combatAttack || this.groundKick || this.combatPhase === 'guard' || this.actionFacingReturnActive || this.combatGazeYaw !== null)
+      && !this.combatHitReaction && !this.combatDodge) {
       // The chest must rotate into a punch; the face must keep watching the
       // opponent. Apply a world-space counter-yaw through neck/head, leaving the
       // authored chin tuck, pitch, roll and positional weight shift intact.
-      const facing = this.combatAttack ? this.combatAttackAimYaw : this.continuousViewYaw;
+      const facing = this.groundKick ? this.groundKick.targetYaw
+        : this.combatAttack ? this.combatAttackAimYaw : this.continuousViewYaw;
       const target = this.combatTargetDirection(new THREE.Vector3(), false, true);
       const targetYaw = target ? Math.atan2(target.direction.x, target.direction.z) : facing;
       const gazeOffset = Math.atan2(Math.sin(targetYaw - facing), Math.cos(targetYaw - facing));
       const face = this.combatHeadLocalForward.clone()
         .applyQuaternion(this.headBone.getWorldQuaternion(new THREE.Quaternion()));
       const faceYaw = Math.atan2(face.x, face.z);
-      const combatGazeActive = this.combatAttack || this.combatPhase === 'guard';
+      const combatGazeActive = this.combatAttack || this.groundKick || this.combatPhase === 'guard';
       const desiredGazeYaw = combatGazeActive ? facing + THREE.MathUtils.clamp(gazeOffset, -0.55, 0.55) : faceYaw;
       // Keep the final strike gaze when returning to guard, then let the eyes
       // and head catch the new view. A newly sampled camera yaw is not a pose.
