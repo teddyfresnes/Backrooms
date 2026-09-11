@@ -9,6 +9,37 @@ const run = (frames, dt = 1 / 60) => { for (let i = 0; i < frames; i++) stepLab(
 const duel = (distance, view = 'third-person') => { lab.player.input.clear(); setupDuel(lab, distance, view); };
 
 for (const fps of [30, 60, 120]) for (const side of ['left', 'right']) {
+  test(`a ${side} strafe never snaps the face when a punch ends at ${fps} fps`, () => {
+    for (const variant of ['jab-a', 'cross-b', 'hook-a']) {
+      duel(1.3);
+      lab.player.input.pressed.add(lab.player.input.bindings[side]);
+      run(30);
+      const faceYaw = () => {
+        const face = lab.combatHeadLocalForward.clone().applyQuaternion(lab.headBone.getWorldQuaternion(new THREE.Quaternion()));
+        return Math.atan2(face.x, face.z);
+      };
+      let previous = faceYaw(), maximumStep = 0, endStep = 0;
+      lab.startCombatAttackLayer(variant === 'hook-a' ? 'hook-counter' : 'punch', variant, false, 'medium', 1.3);
+      const attack = lab.combatAttack;
+      let ended = false;
+      for (let i = 0; i < Math.ceil(fps * 1.2); i++) {
+        const active = lab.combatAttack === attack;
+        stepLab(lab, 1 / fps);
+        const yaw = faceYaw();
+        const difference = Math.abs(Math.atan2(Math.sin(yaw - previous), Math.cos(yaw - previous)));
+        maximumStep = Math.max(maximumStep, difference);
+        if (active && lab.combatAttack !== attack) { endStep = difference; ended = true; }
+        previous = yaw;
+      }
+      assert.ok(ended, `${variant} never finished`);
+      assert.ok(endStep < 6 * Math.PI / 180, `${variant} face jumped ${endStep * 180 / Math.PI}° on return`);
+      assert.ok(maximumStep < (320 / fps + 1) * Math.PI / 180,
+        `${variant} face jumped ${maximumStep * 180 / Math.PI}° during the orbit`);
+    }
+  });
+}
+
+for (const fps of [30, 60, 120]) for (const side of ['left', 'right']) {
   test(`a ${side} orbit keeps its lateral momentum through a cross at ${fps} fps`, () => {
     duel(1.3);
     lab.player.input.pressed.add(lab.player.input.bindings[side]);

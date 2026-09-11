@@ -54,6 +54,12 @@ for (const kind of ['stomp', 'soccer-kick']) for (const side of ['left', 'right'
     const foot = side === 'left' ? lab.leftFootBone : lab.rightFootBone;
     const lower = side === 'left' ? lab.leftLowerLegBone : lab.rightLowerLegBone;
     const firstFoot = side === 'left' ? lab.firstPersonLeftFootBone : lab.firstPersonRightFootBone;
+    // Anatomical shoe axes are calibrated from the real rig's neutral pose.
+    // A foot bone's +Z is not the shoe's toe direction on these FBXs.
+    const neutralInverse = lab.groundKickNeutralFeet[side === 'left' ? 0 : 1].clone().invert();
+    const shoeForward = new THREE.Vector3(0, 0, 1).applyQuaternion(neutralInverse);
+    const shoeUp = new THREE.Vector3(0, 1, 0).applyQuaternion(neutralInverse);
+    let maxShoeYaw = 0, maxSoleTilt = 0, orientedFrames = 0;
     const beforeKnee = lower.quaternion.clone().normalize();
     const start = foot.getWorldPosition(new THREE.Vector3());
     const health = lab.npcHealth;
@@ -79,6 +85,18 @@ for (const kind of ['stomp', 'soccer-kick']) for (const side of ['left', 'right'
           resistanceError = Math.max(resistanceError, point.distanceTo(kick.contactFoot));
         }
         const phase = kick.elapsed / kick.duration;
+        if (lab.groundKick && phase >= .40 && phase <= .78) {
+          const hips = lab.hipsBone.getWorldPosition(new THREE.Vector3());
+          assert.ok(lab.leftHandBone.getWorldPosition(new THREE.Vector3()).y > hips.y + .10
+            && lab.rightHandBone.getWorldPosition(new THREE.Vector3()).y > hips.y + .10,
+          'kick lost its fighting guard and fell back to neutral arms');
+          const rotation = foot.getWorldQuaternion(new THREE.Quaternion());
+          const direction = shoeForward.clone().applyQuaternion(rotation);
+          const angle = Math.atan2(direction.x, direction.z) - kick.targetYaw;
+          maxShoeYaw = Math.max(maxShoeYaw, Math.abs(Math.atan2(Math.sin(angle), Math.cos(angle))));
+          maxSoleTilt = Math.max(maxSoleTilt, Math.acos(THREE.MathUtils.clamp(shoeUp.clone().applyQuaternion(rotation).y, -1, 1)));
+          orientedFrames++;
+        }
         if (kick.elapsed <= .11) earlyLift = Math.max(earlyLift, point.y - start.y);
         if (lab.groundKick && phase > (kind === 'stomp' ? .43 : .38) && !kick.impactApplied) {
           maxDownSpeed = Math.max(maxDownSpeed, (previous.y - point.y) * fps);
@@ -102,6 +120,10 @@ for (const kind of ['stomp', 'soccer-kick']) for (const side of ['left', 'right'
       }
       assert.equal(contacts, 1, JSON.stringify({ closest, closestPose })); assert.equal(damageEvents, 1);
       assert.equal(health - lab.npcHealth, kind === 'stomp' ? 22 : 20);
+      assert.ok(orientedFrames > 5);
+      assert.ok(maxShoeYaw < 12 * Math.PI / 180, `shoe turned sideways ${maxShoeYaw * 180 / Math.PI}°`);
+      assert.ok(maxSoleTilt < (kind === 'stomp' ? 14 : 30) * Math.PI / 180,
+        `sole twisted ${maxSoleTilt * 180 / Math.PI}°`);
       assert.ok(firstFrameStep < 5 * Math.PI / 180, `knee snapped ${firstFrameStep * 180 / Math.PI} degrees`);
       assert.ok(earlyLift < .04, `foot popped up ${earlyLift}m before loading`);
       assert.ok(maxBootStep < 25 / fps, `boot rotated ${maxBootStep}rad at ${maxBootPhase}`);
