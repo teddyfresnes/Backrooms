@@ -1,0 +1,118 @@
+.emote-overlay[hidden] { display: none; }
+.emote-overlay { --emote-mint: #a2f4cd; --emote-ink: #0c2119; position: fixed; inset: 0; z-index: 80; display: grid; justify-items: center; align-items: safe center; padding: 20px; background: rgb(4 12 16 / 68%); backdrop-filter: blur(6px); color: #f1f7f5; font: 400 1rem/1.45 Inter, system-ui, sans-serif; overflow-y: auto; overscroll-behavior: contain; }
+.emote-overlay *, .emote-overlay *::before, .emote-overlay *::after { box-sizing: border-box; }
+.animation-lab .emote-overlay button { font: inherit; text-align: center; cursor: pointer; color: inherit; padding: 0; border: 0; border-radius: 0; background: none; transition: background .16s, border-color .16s, box-shadow .16s, transform .16s; }
+.animation-lab .emote-overlay button:disabled { opacity: .45; cursor: default; }
+.animation-lab .emote-overlay button:focus-visible { outline: 3px solid var(--emote-mint); outline-offset: 4px; }
+.emote-overlay svg, .emote-launcher svg { width: 24px; height: 24px; flex: 0 0 auto; }
+.emote-overlay kbd, .emote-launcher kbd { font: 500 .75rem/1.3 Inter, system-ui, sans-serif; color: #acbeb8; padding: 3px 6px; border: 1px solid rgb(221 255 239 / 16%); border-radius: 5px; background: rgb(255 255 255 / 4%); }
+.emote-dialog { width: min(1000px, 100%); padding: 26px 30px 18px; border: 1px solid rgb(198 230 215 / 16%); border-radius: 26px; background: #162427; box-shadow: 0 24px 100px rgb(0 0 0 / 35%); animation: emote-enter .2s ease-out; }
+.emote-dialog--wheel { width: min(600px, 100%); background: linear-gradient(155deg, rgb(24 41 44 / 96%), rgb(15 28 32 / 96%)); }
+.emote-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.emote-heading-group { display: flex; align-items: center; gap: 14px; }
+.emote-eyebrow { margin: 0 0 3px; color: #92aca3; font-size: .75rem; font-weight: 600; letter-spacing: .13em; }
+.emote-header h2 { margin: 0; font-size: 1.875rem; line-height: 1.2; font-weight: 600; letter-spacing: -.035em; }
+.animation-lab .emote-overlay .emote-close { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px; color: #b6c6c0; border-radius: 12px; }
+.animation-lab .emote-overlay .emote-close:hover, .animation-lab .emote-overlay .emote-icon-button:hover { background: rgb(255 255 255 / 7%); }
+.animation-lab .emote-overlay .emote-icon-button { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid rgb(255 255 255 / 12%); border-radius: 12px; }
+.emote-wheel { position: relative; width: min(58vh, 520px, 100%); aspect-ratio: 1; margin: 8px auto 0; }
+.emote-wheel::before { content: ''; position: absolute; inset: 17%; border: 1px solid rgb(169 234 206 / 10%); border-radius: 50%; box-shadow: 0 0 0 32px rgb(169 234 206 / 2%); pointer-events: none; }
+.animation-lab .emote-overlay .emote-slot { position: absolute; left: calc(50% + var(--slot-x)); top: calc(50% + var(--slot-y)); transform: translate(-50%, -50%); width: 22%; height: 23%; padding: 3px 5px 5px; display: flex; flex-direction: column; align-items: center; justify-content: end; border: 1px solid rgb(218 255 235 / 12%); border-radius: 20px; background: #24363a; color: #dce8e3; }
+.emote-slot img { display: block; width: 100%; min-height: 0; height: 70%; object-fit: contain; pointer-events: none; }
+.emote-slot > span:last-child { width: 100%; font-size: .875rem; line-height: 1.18; min-height: 1.18em; }
+.emote-slot kbd { position: absolute; top: 7px; left: 7px; padding: 0; border: 0; background: none; color: #92aca3; }
+.animation-lab .emote-overlay .emote-slot:hover, .animation-lab .emote-overlay .emote-slot.is-selected { background: #b2f5d5; border-color: #b2f5d5; color: #11291f; box-shadow: 0 0 0 5px rgb(162 244 205 / 9%), 0 8px 28px rgb(0 0 0 / 18%); }
+.emote-slot.is-selected kbd, .emote-slot:hover kbd { color: #3a6b54; }
+.animation-lab .emote-overlay .emote-slot.is-empty { border-style: dashed; background: rgb(255 255 255 / 2%); color: #96aaa2; }
+.emote-placeholder { flex: 1; display: grid; place-items: center; color: #78978a; }
+.animation-lab .emote-overlay .emote-wheel-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 28%; aspect-ratio: 1; display: flex; justify-content: center; align-items: center; flex-direction: column; gap: 6px; padding: 10px; border-radius: 50%; border: 1px solid rgb(180 240 213 / 24%); background: #203536; box-shadow: 0 0 0 8px rgb(187 242 216 / 3%); }
+.emote-wheel-center > svg { width: 22px; height: 22px; color: var(--emote-mint); }
+.emote-wheel-center > span { font-size: .875rem; line-height: 1.25; font-weight: 600; }
+.emote-wheel-center small { font-size: .75rem; color: #9cb7ab; }
+.animation-lab .emote-overlay .emote-wheel-center:hover { background: #2b4843; border-color: var(--emote-mint); }
+.emote-wheel-caption { margin: 0 0 14px; min-height: 1.5em; text-align: center; font-size: 1rem; color: #c8dbd1; }
+.emote-footer { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding-top: 14px; border-top: 1px solid rgb(211 238 223 / 10%); color: #9fb4aa; font-size: .875rem; }
+.emote-footer > span { display: flex; align-items: center; gap: 8px; }
+.emote-star-hint { color: var(--emote-mint); font-size: 1.25rem; }
+.emote-collection { display: grid; grid-template-columns: 210px 1fr; gap: 26px; margin: 26px 0 22px; }
+.emote-inspector { display: flex; flex-direction: column; border-radius: 20px; overflow: hidden; background: radial-gradient(ellipse at 50% 30%, #365b52, #203333 70%); }
+.emote-preview-stage { min-height: 205px; height: 230px; display: grid; place-items: center; }
+.emote-preview-stage canvas { display: block; width: 100%; height: 100%; object-fit: contain; }
+.emote-inspector-info { padding: 0 18px 18px; }
+.emote-inspector h3 { margin: 0 0 16px; font-size: 1.375rem; line-height: 1.25; letter-spacing: -.025em; font-weight: 600; }
+.animation-lab .emote-overlay .emote-play { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 10px; border-radius: 12px; background: var(--emote-mint); color: var(--emote-ink); font-size: .875rem; font-weight: 600; }
+.emote-play svg { width: 18px; height: 18px; fill: currentColor; stroke: none; }
+.animation-lab .emote-overlay .emote-play:hover { background: #c5ffe3; transform: translateY(-1px); }
+.emote-stop-hint { margin: 9px 0 0; color: #adc9bb; font-size: .75rem; text-align: center; }
+.emote-card-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; align-content: start; }
+.emote-card { position: relative; overflow: hidden; min-width: 0; border: 1px solid rgb(210 237 222 / 10%); border-radius: 16px; background: #213236; transition: border-color .15s, background .15s; }
+.emote-card:hover { background: #2b4040; }
+.emote-card.is-selected { border-color: var(--emote-mint); background: #29453e; box-shadow: inset 0 0 0 1px var(--emote-mint); }
+.animation-lab .emote-overlay .emote-card-select { width: 100%; height: 158px; display: flex; flex-direction: column; align-items: center; justify-content: end; gap: 4px; padding: 26px 7px 10px; }
+.emote-card-select img { width: 100%; height: 82px; min-height: 0; object-fit: contain; }
+.emote-card-select > span:last-child { font-size: .875rem; line-height: 1.25; min-height: 2.5em; display: grid; align-items: center; }
+.animation-lab .emote-overlay .emote-favorite { position: absolute; top: 4px; right: 4px; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 10px; color: #8da79c; }
+.emote-favorite svg { width: 18px; height: 18px; }
+.animation-lab .emote-overlay .emote-favorite[aria-pressed="true"] { color: var(--emote-mint); }
+.emote-favorite[aria-pressed="true"] svg { fill: currentColor; }
+.animation-lab .emote-overlay .emote-favorite:hover { color: var(--emote-mint); background: rgb(183 247 216 / 10%); }
+.emote-favorites { padding: 16px; border: 1px solid rgb(201 235 216 / 12%); border-radius: 17px; margin-bottom: 20px; }
+.emote-favorites-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; }
+.emote-favorites-heading strong { font-size: .875rem; font-weight: 600; }
+.emote-favorites-heading strong span { font-size: .75rem; font-weight: 400; color: #94aea1; margin-left: 6px; }
+.emote-favorites-heading p { margin: 0; font-size: .875rem; color: #9fb7ab; }
+.animation-lab .emote-overlay .emote-favorites-heading button { margin-left: auto; font-size: .875rem; color: var(--emote-mint); text-decoration: underline; }
+.emote-favorite-strip { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+.animation-lab .emote-overlay .emote-mini-slot { position: relative; min-width: 0; min-height: 100px; padding: 4px; border: 1px solid rgb(201 235 216 / 8%); border-radius: 10px; background: #213337; display: flex; flex-direction: column; align-items: center; }
+.emote-mini-slot img { width: 100%; height: 52px; object-fit: contain; }
+.emote-mini-slot kbd { position: absolute; top: 4px; left: 6px; padding: 0; border: 0; background: none; font-size: .75rem; }
+.emote-mini-slot > span:last-child { display: block; width: 100%; font-size: .875rem; line-height: 1.2; }
+.animation-lab .emote-overlay .emote-mini-slot:hover { border-color: var(--emote-mint); background: #2c4940; }
+.is-replacing .emote-mini-slot { outline: 1px dashed var(--emote-mint); outline-offset: 2px; }
+.animation-lab .emote-launcher { position: fixed; z-index: 15; left: 24px; bottom: 24px; display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-height: 46px; border: 1px solid rgb(220 255 235 / 20%); border-radius: 14px; background: rgb(15 32 33 / 90%); color: #e7f5ed; font: 500 .875rem/1.3 Inter, system-ui, sans-serif; backdrop-filter: blur(10px); }
+.animation-lab .emote-launcher:hover { background: #28433d; border-color: #a2f4cd; }
+.animation-lab .emote-launcher:disabled { opacity: .4; cursor: default; }
+.emote-launcher svg { width: 20px; height: 20px; color: #a2f4cd; }
+.animation-lab.is-emote-menu-open > :not(.emote-overlay):not(.animation-lab__canvas) { visibility: hidden; }
+@keyframes emote-enter { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+@media (max-width: 760px) {
+  .emote-overlay { padding: 12px; align-items: safe center; }
+  .emote-dialog { padding: 18px 16px 14px; border-radius: 22px; }
+  .emote-header h2 { font-size: 1.5rem; }
+  .emote-close kbd { display: none; }
+  .emote-collection { grid-template-columns: 1fr; gap: 16px; margin: 20px 0 16px; }
+  .emote-inspector { display: grid; grid-template-columns: 120px 1fr; align-items: center; }
+  .emote-preview-stage { height: 154px; min-height: 0; }
+  .emote-inspector-info { padding: 16px 14px 16px 0; }
+  .emote-inspector h3 { font-size: 1.125rem; margin-bottom: 12px; }
+  .emote-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .animation-lab .emote-overlay .emote-card-select { height: 144px; padding-top: 22px; }
+  .emote-card-select img { height: 70px; }
+  .emote-favorites { padding: 12px; }
+  .emote-favorite-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .emote-footer { font-size: .875rem; }
+  .emote-wheel { width: min(58vh, 100%); }
+  .animation-lab .emote-overlay .emote-slot { border-radius: 15px; padding: 2px 3px 4px; }
+  .emote-slot img { height: 62%; }
+  .emote-wheel-center small { display: none; }
+  .emote-slot kbd { top: 4px; left: 5px; }
+  .animation-lab .emote-launcher { left: 14px; bottom: 14px; }
+}
+@media (max-height: 520px) and (min-width: 761px) {
+  .emote-overlay { place-items: start center; }
+  .emote-dialog--wheel { margin: auto; }
+  .emote-wheel { width: min(68vh, 420px); }
+  .emote-header h2 { font-size: 1.5rem; }
+}
+@media (max-width: 340px) {
+  .emote-wheel { width: 100%; aspect-ratio: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 18px auto; }
+  .emote-wheel::before { display: none; }
+  .animation-lab .emote-overlay .emote-slot { position: relative; left: auto; top: auto; transform: none; width: 100%; height: auto; min-height: 112px; }
+  .emote-slot img { height: 64px; }
+  .animation-lab .emote-overlay .emote-wheel-center { position: static; transform: none; width: 100%; aspect-ratio: auto; border-radius: 14px; grid-column: 1 / -1; min-height: 70px; order: -1; }
+  .emote-wheel-center > span br { display: none; }
+  .emote-footer { flex-wrap: wrap; }
+  .emote-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .emote-inspector { grid-template-columns: 80px 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .emote-dialog { animation: none; } .animation-lab .emote-overlay button { transition: none; } }

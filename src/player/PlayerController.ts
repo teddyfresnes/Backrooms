@@ -222,6 +222,13 @@ export class PlayerController {
     } catch { /* Embedded browsers may deny pointer capture synchronously. */ }
   }
 
+  unlock(): void {
+    const playing = this.isLocked;
+    this.fallbackPlaying = false;
+    try { if (this.controls.isLocked) this.controls.unlock(); } catch { /* Pointer capture is optional in embedded browsers. */ }
+    if (playing) this.callbacks.onLockChange(false);
+  }
+
   setIncapacitated(enabled: boolean): void {
     this.incapacitated = enabled;
     if (!enabled) return;

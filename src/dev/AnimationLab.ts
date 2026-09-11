@@ -11,6 +11,8 @@ import { solveCombatTwoBone, limitKneeLateralBend, easeCombat, CombatPoseHandoff
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { formatKeyLabel } from '../input/ControlBindings';
+import { EMOTES, type EmoteId } from './EmoteCatalog';
+import { EmoteMenu } from './EmoteMenu';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { sweepGroundKickVolumes, type GroundKickVolume } from '../physics/GroundKickContact';
 import { RagdollSystem, type RagdollAnimationMotion, type RagdollImpactEvent } from '../physics/RagdollSystem';
@@ -250,6 +252,7 @@ const RAGDOLL_LANDING_RECOVERY_BLEND_THRESHOLD = 0.34;
 const RAGDOLL_LANDING_DAMAGE_THRESHOLD = 12;
 
 const ANIMATIONS = [
+  ...EMOTES.map(({ id, label }) => ({ id, label, emote: true as const })),
   { id: 'idle', label: 'Idle · sleeping', file: 'idle.fbx' },
   { id: 'idle-action', label: 'Idle · action', file: 'idle-action.fbx' },
   { id: 'idle-looking', label: 'Idle · looking', file: 'looking.fbx' },
@@ -1900,6 +1903,10 @@ export class AnimationLab {
   private disposed = false;
   private ready = false;
   private panelVisible = true;
+  private readonly emoteMenu: EmoteMenu;
+  private activeEmote: EmoteId | null = null;
+  private emotePreviousView: ViewMode | null = null;
+  private emoteResumePlaying = false;
   private panel?: HTMLElement;
   private hint?: HTMLElement;
   private modeButton?: HTMLButtonElement;
@@ -1947,6 +1954,23 @@ export class AnimationLab {
     this.scene.add(this.firstPersonAvatarAnchor);
     this.configureScene();
     this.createHud();
+    this.emoteMenu = new EmoteMenu(this.root, {
+      onOpen: () => {
+        this.emoteResumePlaying = this.player?.isLocked ?? false;
+        this.root.classList.add('is-emote-menu-open');
+        this.player?.setInputEnabled(false);
+        this.player?.unlock();
+        this.hint?.classList.add('is-hidden');
+      },
+      onClose: (resume) => {
+        this.root.classList.remove('is-emote-menu-open');
+        this.previousTime = performance.now();
+        this.accumulator = 0;
+        if (resume && this.emoteResumePlaying) this.player?.lock();
+        else this.hint?.classList.toggle('is-hidden', this.player?.isLocked ?? false);
+      },
+      onPlay: (id) => this.playEmote(id),
+    });
     this.resize();
     window.addEventListener('resize', this.resize);
     window.addEventListener('keydown', this.onGlobalKeyDown);
@@ -1992,9 +2016,10 @@ export class AnimationLab {
       if (this.disposed) return;
       this.ready = true;
       this.playAnimation('idle', true);
+      this.emoteMenu.prepare(this.character!, new Map(EMOTES.map(emote => [emote.id, this.animations.get(emote.id)!.clip])));
       this.updateAvatarTransform(0, true);
       this.setStatus('PRÊT');
-      if (this.hint) this.hint.innerHTML = '<strong>CLIQUER POUR JOUER</strong><span>ZQSD : déplacement · clic droit : garde · clic gauche en garde : frappe / maintenir : enchaîner · sans capture souris : clic droit maintenu pour regarder · Échap : pause</span>';
+      if (this.hint) this.hint.innerHTML = '<strong>CLIQUER POUR JOUER</strong><span>ZQSD : déplacement · C : emotes · clic droit : garde · clic gauche en garde : frappe / maintenir : enchaîner · sans capture souris : clic droit maintenu pour regarder · Échap : pause</span>';
     } catch (error) {
       this.setStatus('ERREUR ASSET');
       if (this.hint) this.hint.innerHTML = `<strong>ERREUR DE CHARGEMENT</strong><span>${error instanceof Error ? error.message : String(error)}</span>`;
@@ -2412,6 +2437,20 @@ export class AnimationLab {
       firstPersonAction.enabled = true;
       firstPersonAction.setEffectiveWeight(1);
       this.firstPersonAnimations.set(entry.id, { clip, action: firstPersonAction });
+    }));
+
+    await Promise.all(EMOTES.map(async (emote) => {
+      const data = await new THREE.FileLoader().setResponseType('json').loadAsync(`/assets/emotes/${emote.file}.json`) as unknown as {
+        sourceHipRestY: number; clip: Parameters<typeof THREE.AnimationClip.parse>[0];
+      };
+      const source = THREE.AnimationClip.parse(data.clip);
+      const sourceHips = new THREE.Bone();
+      sourceHips.position.y = data.sourceHipRestY;
+      const hipVertical = this.hipsBone ? { sourceBone: sourceHips, targetBone: this.hipsBone } : undefined;
+      const clip = inPlaceClip(source, emote.id, false, hipVertical);
+      if (!clip.tracks.length) throw new Error(`Emote invalide : ${emote.label}`);
+      this.animations.set(emote.id, { clip, action: this.mixer!.clipAction(clip) });
+      this.firstPersonAnimations.set(emote.id, { clip, action: this.firstPersonMixer!.clipAction(clip) });
     }));
 
     if (this.slideRecoverySource) {
@@ -3186,6 +3225,7 @@ export class AnimationLab {
 
   private enableAutoMode(): void {
     if (this.ragdoll) return;
+    this.stopEmote();
     this.playbackMode = 'auto';
     this.modeButton?.classList.add('is-active');
     this.autoCandidate = this.currentAnimation;
@@ -3214,6 +3254,7 @@ export class AnimationLab {
 
   private forceAnimation(id: AnimationId): void {
     if (!this.ready || this.ragdoll) return;
+    this.stopEmote();
     this.resetCombatState(true);
     this.playbackMode = 'forced';
     this.forcedAnimation = id;
@@ -3224,6 +3265,42 @@ export class AnimationLab {
     this.modeButton?.classList.remove('is-active');
     this.playAnimation(id, !isOneShotAnimation(id), this.playbackSpeed, false, true);
     this.updateAnimationButtonState();
+  }
+
+  private playEmote(id: EmoteId): boolean {
+    if (!this.ready || !this.player || this.ragdoll || this.recovery || this.recoveryCameraBlend >= 0 || this.health <= 0) return false;
+    const state = this.player.getDebugState();
+    if (!state.grounded || state.airborne || state.incapacitated || state.sliding || state.crouching || state.lowPosture) return false;
+    this.stopEmote();
+    this.resetCombatState(true);
+    this.playbackMode = 'auto';
+    this.modeButton?.classList.add('is-active');
+    this.autoOneShot = null;
+    this.idleSequenceOneShot = null;
+    this.pendingStrongTurn = null;
+    this.clearAuthoredTurn();
+    this.emotePreviousView = this.viewMode;
+    this.activeEmote = id;
+    this.setViewMode('third-person');
+    this.emoteResumePlaying = true;
+    const emote = EMOTES.find(entry => entry.id === id)!;
+    this.playAnimation(id, emote.mode === 'loop', 1, false, true);
+    return true;
+  }
+
+  private stopEmote(): void {
+    if (!this.activeEmote) return;
+    this.activeEmote = null;
+    const previousView = this.emotePreviousView;
+    this.emotePreviousView = null;
+    this.idleResumeMode = 'action';
+    this.idleSequencePhase = 'action';
+    this.idleSequenceElapsed = 0;
+    this.idleSequenceOneShot = null;
+    this.autoOneShot = null;
+    this.autoCandidateElapsed = 0;
+    this.playAnimation('idle-action', true, 1, false, true);
+    if (previousView) this.setViewMode(previousView);
   }
 
   private playAnimation(
@@ -3403,7 +3480,7 @@ export class AnimationLab {
   }
 
   private combatIsEligible(): boolean {
-    if (!this.ready || !this.player || this.ragdoll || this.recovery || this.health <= 0) return false;
+    if (!this.ready || !this.player || this.emoteMenu.isOpen || this.ragdoll || this.recovery || this.health <= 0) return false;
     const state = this.player.getDebugState();
     return this.player.isLocked
       && !state.incapacitated
@@ -7097,6 +7174,7 @@ export class AnimationLab {
 
   private applyDamage(amount: number): void {
     if (amount <= 0 || this.ragdoll || !this.player || this.player.isIncapacitated) return;
+    this.stopEmote();
     this.health = THREE.MathUtils.clamp(this.health - amount, 0, MAX_HEALTH);
     this.secondsSinceDamage = 0;
     this.damageFlash = Math.max(this.damageFlash, THREE.MathUtils.clamp(0.34 + amount / 68, 0, 1));
@@ -7192,6 +7270,16 @@ export class AnimationLab {
     if (!this.player || !this.ready || this.playbackMode !== 'auto') return;
     const state = this.player.getDebugState();
     const intent = this.player.getMovementIntent();
+    if (this.activeEmote) {
+      const emote = EMOTES.find(entry => entry.id === this.activeEmote)!;
+      const interrupted = force || !state.grounded || state.airborne || state.incapacitated || state.crouching
+        || state.lowPosture || state.sliding || Math.abs(intent.forward) + Math.abs(intent.right) > 0
+        || this.combatPhase !== 'none' || !!this.combatHitReaction;
+      const finished = emote.mode === 'once' && !!this.currentAction
+        && this.currentAction.time >= this.animations.get(emote.id)!.clip.duration - .015;
+      if (interrupted || finished) this.stopEmote();
+      else return;
+    }
     this.visualMovementRightIntent = this.forwardLateralAnimationGate.update(
       intent.forward,
       intent.right,
@@ -8568,6 +8656,7 @@ export class AnimationLab {
   }
 
   private applyHeadLook(delta: number): void {
+    if (this.activeEmote) return;
     // Mixer animation is evaluated first each frame, then the look is layered.
     // A downed player is different: the impact pose must stay frozen, so only
     // neck/head receive the small remaining look cone (no spine/body twist).
@@ -9425,6 +9514,8 @@ export class AnimationLab {
     };
   }): void {
     if (!this.ready || this.ragdoll || this.recovery || this.recoveryCameraBlend >= 0 || !this.physics || !this.player || !this.character) return;
+    this.emoteMenu.close(false);
+    this.stopEmote();
     if (options.fatal) {
       this.health = 0;
       this.damageFlash = Math.max(this.damageFlash, 0.92);
@@ -9774,6 +9865,7 @@ export class AnimationLab {
 
   private readonly onCombatMouseDown = (event: MouseEvent): void => {
     if (!this.ready || !this.player?.isLocked || event.target !== this.renderer.domElement) return;
+    if (event.button === 0 || event.button === 2) this.stopEmote();
     if (this.ragdoll || this.recovery || this.player.isIncapacitated || this.combatHitReaction) return;
     if (event.button === 2) {
       event.preventDefault();
@@ -9916,6 +10008,15 @@ export class AnimationLab {
     if (event.repeat || event.defaultPrevented || !this.ready) return;
     if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
 
+    if (event.code === 'KeyC' || event.key.toLowerCase() === 'c') {
+      event.preventDefault();
+      this.emoteMenu.open();
+      return;
+    }
+    if (this.emoteMenu.isOpen) return;
+    if (this.activeEmote && (Object.values(this.settings.controls).includes(event.code)
+      || event.code === 'KeyF' || event.code === 'Escape')) this.stopEmote();
+
     if (event.code === 'KeyF') {
       this.combatCounterModifierHeld = true;
       this.combatHeavyTapDetector.cancel();
@@ -9974,15 +10075,15 @@ export class AnimationLab {
 
   private readonly onPlayerLockChange = (locked: boolean): void => {
     if (!locked) this.resetCombatState(true);
-    this.player?.setInputEnabled(this.ragdoll || this.recovery || this.recoveryCameraBlend >= 0 ? false : locked);
+    this.player?.setInputEnabled(this.emoteMenu.isOpen || this.ragdoll || this.recovery || this.recoveryCameraBlend >= 0 ? false : locked);
     this.updateRecoveryPrompt();
-    this.hint?.classList.toggle('is-hidden', locked);
+    this.hint?.classList.toggle('is-hidden', locked || this.emoteMenu.isOpen);
     this.previousTime = performance.now();
     this.accumulator = 0;
   };
 
   private readonly onCanvasClick = (): void => {
-    if (!this.ready) return;
+    if (!this.ready || this.emoteMenu.isOpen) return;
     this.combatImpactAudio.unlock();
     if (!this.player?.isLocked) this.player?.lock();
   };
@@ -10012,6 +10113,14 @@ export class AnimationLab {
   }
 
   private readonly frame = (now: number): void => {
+    if (!this.disposed && this.player && this.emoteMenu.isOpen) {
+      const delta = Math.min(.05, Math.max(0, (now - this.previousTime) / 1000));
+      this.previousTime = now;
+      this.accumulator = 0;
+      this.emoteMenu.update(delta);
+      this.renderer.render(this.scene, this.viewMode === 'first-person' ? this.firstPersonCamera : this.thirdPersonCamera);
+      return;
+    }
     this.playerProceduralPose.restore(!this.ragdoll && !this.recovery);
     this.firstPersonProceduralPose.restore(!this.ragdoll && !this.recovery);
     this.npcProceduralPose.restore(!this.npcRagdoll && !this.npcRecovery);
@@ -10274,6 +10383,7 @@ export class AnimationLab {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.emoteMenu.dispose();
     this.combatImpactAudio.dispose();
     this.renderer.setAnimationLoop(null);
     window.removeEventListener('resize', this.resize);
