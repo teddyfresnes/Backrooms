@@ -28,6 +28,7 @@
     "src/dev/CombatGuardRules.ts",
     "src/dev/CombatMeleeRules.ts",
     "src/dev/GroundKickRules.ts",
+    "src/dev/GroundKickMotion.ts",
     "src/dev/CombatContact.ts",
     "src/dev/CombatRig.ts",
     "src/dev/CombatAnimationLayers.ts",
