@@ -9,7 +9,7 @@ const out=path.join(root,'.movement-test-dist/headless-lab.mjs');
 mkdirSync(path.dirname(out),{recursive:true});
 await build({entryPoints:[path.join(root,'src/dev/AnimationLab.ts')],outfile:out,bundle:true,platform:'node',format:'esm',packages:'external',loader:{'.css':'empty'},plugins:[{
  name:'headless-surfaces',setup(b){
-  b.onResolve({filter:/^three$/},args=>args.importer.endsWith('AnimationLab.ts')?{path:path.join(root,'tests/support/three-headless.mjs')}:undefined);
+  b.onResolve({filter:/^three$/},args=>/\/(?:AnimationLab|EmotePreview)\.ts$/.test(args.importer)?{path:path.join(root,'tests/support/three-headless.mjs')}:undefined);
   b.onResolve({filter:/^@dimforge\/rapier3d$/},()=>({path:path.join(root,'tests/support/rapier-headless.mjs')}));
  }
 }]});
@@ -18,7 +18,7 @@ for(const key of ['window','document','HTMLElement','HTMLCanvasElement','MouseEv
 globalThis.requestAnimationFrame=()=>0;globalThis.cancelAnimationFrame=()=>{};
 window.HTMLCanvasElement.prototype.getContext=function(){return new Proxy({canvas:this,getImageData:()=>({data:new Uint8ClampedArray(this.width*this.height*4)}),createImageData:()=>({data:new Uint8ClampedArray(this.width*this.height*4)}),createLinearGradient:()=>({addColorStop(){}}),createRadialGradient:()=>({addColorStop(){}}),createPattern:()=>({setTransform(){}})}, {get:(t,k)=>t[k]??(()=>{}),set:(t,k,v)=>(t[k]=v,true)});};
 THREE.TextureLoader.prototype.load=function(url,onLoad){const texture=new THREE.Texture();queueMicrotask(()=>onLoad?.(texture));return texture;};
-THREE.FileLoader.prototype.load=function(url,onLoad,_progress,onError){try{const data=readFileSync(path.join(root,'public',url));const buffer=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength);queueMicrotask(()=>onLoad(buffer));}catch(e){queueMicrotask(()=>onError?.(e));}};
+THREE.FileLoader.prototype.load=function(url,onLoad,_progress,onError){try{const data=readFileSync(path.join(root,'public',url));const result=this.responseType==='json'?JSON.parse(data.toString('utf8')):this.responseType==='text'?data.toString('utf8'):data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength);queueMicrotask(()=>onLoad(result));}catch(e){queueMicrotask(()=>onError?.(e));}};
 export const {AnimationLab}=await import(out);
 export async function createLab(){const app=document.createElement('div');document.body.append(app);const lab=new AnimationLab(app);await lab.initialize();lab.renderer.setAnimationLoop(null);return lab;}
 export function stepLab(lab,delta=1/60){lab.frame(lab.previousTime+delta*1000);}
