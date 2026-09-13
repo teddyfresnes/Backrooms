@@ -9,7 +9,7 @@ const out=path.join(root,'.movement-test-dist/headless-lab.mjs');
 mkdirSync(path.dirname(out),{recursive:true});
 await build({entryPoints:[path.join(root,'src/dev/AnimationLab.ts')],outfile:out,bundle:true,platform:'node',format:'esm',packages:'external',loader:{'.css':'empty'},plugins:[{
  name:'headless-surfaces',setup(b){
-  b.onResolve({filter:/^three$/},args=>/\/(?:AnimationLab|EmotePreview)\.ts$/.test(args.importer)?{path:path.join(root,'tests/support/three-headless.mjs')}:undefined);
+  b.onResolve({filter:/^three$/},args=>/\/AnimationLab\.ts$/.test(args.importer)?{path:path.join(root,'tests/support/three-headless.mjs')}:undefined);
   b.onResolve({filter:/^@dimforge\/rapier3d$/},()=>({path:path.join(root,'tests/support/rapier-headless.mjs')}));
  }
 }]});
