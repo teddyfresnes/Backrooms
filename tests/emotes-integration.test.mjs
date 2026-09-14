@@ -1,6 +1,7 @@
 import test, { after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { createLab, stepLab } from './support/headless-lab.mjs';
+import { readFileSync } from 'node:fs';
+import { createLab, stepLab, THREE } from './support/headless-lab.mjs';
 
 const lab = await createLab();
 const ids = ['greeting', 'clapping', 'pointing', 'salute', 'hip-hop', 'wave', 'freeze', 'sweat', 'laying', 'kip-up'].map(name => `emote-${name}`);
@@ -15,8 +16,19 @@ const moveMouse = (x, y) => {
 const run = seconds => { for (let i = 0; i < Math.ceil(seconds * 60); i++) stepLab(lab); };
 const menu = lab.emoteMenu;
 const enter = () => { lab.player.controls.isLocked = false; lab.player.lock(); lab.npcAttackCooldown = 100; };
+const place = (x = -10, z = -12) => {
+  enter(); lab.player.input.clear(); lab.health = 100;
+  lab.player.teleport({ x, y: .865, z }); lab.player.grounded = true;
+  lab.player.continuousAimYaw = -Math.PI; lab.player.lookCamera.rotation.set(0, -Math.PI, 0);
+  lab.updateAvatarTransform(0, true);
+};
+const wall = (x, z, width = .1, depth = .3, y = 1, height = 1) => lab.physics.addChunk('emote-test-obstacle', [{
+  id: 'obstacle', kind: 'wall', center: { x, y, z }, halfExtents: { x: width, y: height, z: depth },
+}], { x: 0, y: 0, z: 0 });
 
 afterEach(() => {
+  if (lab.physics.hasChunk('emote-test-obstacle')) lab.physics.removeChunk('emote-test-obstacle');
+  lab.syncNpcPlayerBlocker(true);
   menu.close(); menu.onBlur(); lab.stopEmote(); lab.player.controls.isLocked = false;
   lab.player.input.clear();
   lab.player.fallbackPlaying = false; lab.player.setInputEnabled(false); lab.resetCombatState(true);
@@ -44,8 +56,8 @@ test('all ten supplied animations have real, compatible channels and retargeted 
   }
 });
 
-test('C opens eight HUD slots while movement, pointer capture, aim and world updates continue', () => {
-  enter(); lab.player.controls.isLocked = true; key('KeyC', 'c');
+test('Tab opens eight HUD slots while movement, pointer capture, aim and world updates continue', () => {
+  enter(); lab.player.controls.isLocked = true; key('Tab', 'Tab');
   assert.equal(menu.isOpen, true); assert.equal(lab.player.isLocked, true);
   assert.equal(lab.player.controls.isLocked, true);
   assert.equal(menu.element.querySelectorAll('[data-slot]').length, 8);
@@ -76,7 +88,7 @@ test('central collection supports replacing a full favorite wheel without playin
   assert.equal(menu.favorites[2], 'emote-laying'); assert.equal(menu.replacement, null);
   assert.equal(new Set(menu.favorites).size, 8);
   assert.deepEqual(JSON.parse(localStorage.getItem('backrooms.emote-favorites.v1')), menu.favorites);
-  const restored = new menu.constructor(lab.root, { onOpen() {}, onClose() {}, onPlay() { return false; }, isPointerLocked() { return false; }, isGameControl() { return false; } });
+  const restored = new menu.constructor(lab.root, { onOpen() {}, onClose() {}, onPlay() { return false; }, isPointerLocked() { return false; }, isGameControl() { return false; }, getUnavailableReason() { return null; } });
   assert.deepEqual(restored.favorites, menu.favorites); restored.dispose();
 });
 
@@ -111,12 +123,12 @@ test('a static laying pose holds its lowered hips and stops on a damage event', 
   lab.applyDamage(5); assert.equal(lab.activeEmote, null);
 });
 
-test('keyboard shortcuts select immediately, leave jump and Tab available, and Escape closes in one press', () => {
+test('keyboard shortcuts select immediately, leave jump and C available, and Escape closes in one press', () => {
   menu.favorites = ids.slice(0, 8); enter(); menu.open();
   key('ArrowRight', 'ArrowRight'); assert.ok(document.activeElement.hasAttribute('data-slot'));
   key('Digit2', 'é'); assert.equal(lab.activeEmote, 'emote-clapping'); assert.equal(menu.isOpen, false);
   menu.open(); menu.element.querySelector('[data-action="collection"]').click();
-  const tab = new KeyboardEvent('keydown', { code: 'Tab', key: 'Tab', bubbles: true, cancelable: true });
+  const tab = new KeyboardEvent('keydown', { code: 'KeyC', key: 'c', bubbles: true, cancelable: true });
   window.dispatchEvent(tab); assert.equal(tab.defaultPrevented, false);
   const jump = new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true, cancelable: true });
   let passed = false; const observe = event => { if (event === jump) passed = true; };
@@ -127,13 +139,13 @@ test('keyboard shortcuts select immediately, leave jump and Tab available, and E
   key('Escape', 'Escape'); assert.equal(menu.isOpen, false); assert.equal(lab.player.isLocked, true);
 });
 
-test('a short C tap stays open and a held C flick selects on release without waiting for a frame', () => {
+test('a short Tab tap stays open and a held Tab flick selects on release without waiting for a frame', () => {
   menu.favorites = ids.slice(0, 8); enter(); lab.player.controls.isLocked = true;
-  key('KeyC', 'c'); menu.heldAt = performance.now(); release('KeyC', 'c');
+  key('Tab', 'Tab'); menu.heldAt = performance.now(); release('Tab', 'Tab');
   assert.equal(menu.isOpen, true);
-  key('KeyC', 'c'); assert.equal(menu.isOpen, false);
-  key('KeyC', 'c'); menu.heldAt = performance.now() - 250;
-  moveMouse(0, -2000); release('KeyC', 'c');
+  key('Tab', 'Tab'); assert.equal(menu.isOpen, false);
+  key('Tab', 'Tab'); menu.heldAt = performance.now() - 250;
+  moveMouse(0, -2000); release('Tab', 'Tab');
   assert.equal(menu.isOpen, false); assert.equal(lab.activeEmote, 'emote-greeting');
   assert.equal(lab.player.controls.isLocked, true);
 });
@@ -185,4 +197,109 @@ test('an emote is refused while airborne and combat can interrupt a dancing play
   assert.equal(lab.activeEmote, 'emote-wave');
   lab.renderer.domElement.dispatchEvent(new MouseEvent('mousedown', { button: 2, bubbles: true }));
   assert.equal(lab.activeEmote, null);
+});
+
+test('C no longer opens the menu and Tab suppresses browser focus navigation', () => {
+  place(); key('KeyC', 'c'); assert.equal(menu.isOpen, false);
+  const focus = document.activeElement;
+  const event = new KeyboardEvent('keydown', { code: 'Tab', key: 'Tab', bubbles: true, cancelable: true });
+  window.dispatchEvent(event);
+  assert.equal(menu.isOpen, true); assert.equal(event.defaultPrevented, true);
+  assert.equal(document.activeElement, focus);
+  key('KeyC', 'c'); assert.equal(menu.isOpen, true);
+  key('Tab', 'Tab'); assert.equal(menu.isOpen, false);
+});
+
+for (const view of ['first-person', 'third-person']) test(`hip-hop follows the supplied root trajectory in ${view} while aim remains free`, () => {
+  place(); lab.setViewMode(view); lab.player.controls.isLocked = true;
+  const data = JSON.parse(readFileSync(new URL('../public/assets/emotes/hip-hop.json', import.meta.url)));
+  const source = data.clip.tracks.find(track => track.name.endsWith('Hips.position'));
+  const vertical = lab.animations.get('emote-hip-hop').clip.tracks.find(track => track.name.endsWith('Hips.position'));
+  const scale = vertical.values[1] / source.values[1] * lab.character.scale.x;
+  const start = lab.player.position.clone();
+  assert.equal(lab.playEmote('emote-hip-hop'), true);
+  const facing = lab.bodyYaw;
+  moveMouse(180, 25); run(2.5);
+  const raw = new THREE.LinearInterpolant(source.times, source.values, 3).evaluate(lab.emoteElapsed);
+  const expected = new THREE.Vector3((raw[0] - source.values[0]) * scale, 0, (raw[2] - source.values[2]) * scale);
+  const actual = lab.player.position.clone().sub(start); actual.y = 0;
+  assert.ok(actual.length() > .12, `dance still planted: ${actual.toArray()}`);
+  assert.ok(actual.distanceTo(expected) < .012, `root path ${actual.toArray()} vs source ${expected.toArray()}`);
+  assert.equal(lab.bodyYaw, facing); assert.equal(lab.viewMode, view);
+  assert.notEqual(lab.player.getContinuousAimYawRadians(), -Math.PI);
+  assert.equal(lab.activeEmote, 'emote-hip-hop');
+  if (view === 'first-person') {
+    const physicalFoot = lab.leftFootBone.getWorldPosition(new THREE.Vector3());
+    const visibleFoot = lab.firstPersonLeftFootBone.getWorldPosition(new THREE.Vector3());
+    assert.ok(physicalFoot.distanceTo(visibleFoot) < .02, 'camera framing canceled the emote body movement');
+  }
+});
+
+test('a looping dance crosses its loop boundary without teleporting or accumulating drift', () => {
+  place(); lab.setViewMode('third-person'); assert.equal(lab.playEmote('emote-hip-hop'), true);
+  const start = lab.player.position.clone(), previous = start.clone();
+  let maxStep = 0, minX = start.x, maxX = start.x;
+  const frames = Math.ceil(lab.animations.get('emote-hip-hop').clip.duration * 60);
+  for (let i = 0; i < frames; i++) {
+    stepLab(lab); maxStep = Math.max(maxStep, previous.distanceTo(lab.player.position));
+    minX = Math.min(minX, lab.player.position.x); maxX = Math.max(maxX, lab.player.position.x); previous.copy(lab.player.position);
+  }
+  assert.ok(maxX - minX > .5, `dance excursion: ${maxX - minX}`); assert.ok(start.distanceTo(lab.player.position) < .03);
+  for (let i = 0; i < 4; i++) { stepLab(lab); maxStep = Math.max(maxStep, previous.distanceTo(lab.player.position)); previous.copy(lab.player.position); }
+  assert.ok(maxStep < .07, `loop jump: ${maxStep}`); assert.equal(lab.activeEmote, 'emote-hip-hop');
+});
+
+test('a traveling held pose retains its final physical position instead of snapping back', () => {
+  place(); assert.equal(lab.playEmote('emote-freeze'), true);
+  const start = lab.player.position.clone(); run(6.4);
+  assert.equal(lab.activeEmote, 'emote-freeze'); assert.ok(start.distanceTo(lab.player.position) > 1.5);
+  const settled = lab.player.position.clone(); run(.4);
+  assert.ok(settled.distanceTo(lab.player.position) < .003);
+  lab.stopEmote(); stepLab(lab); assert.ok(settled.distanceTo(lab.player.position) < .003);
+});
+
+test('insufficient room grays the dance, blocks mouse and number selection, and leaves small gestures available', () => {
+  place(); wall(-9.28, -12); menu.favorites = ids.slice(0, 8); menu.open();
+  const dance = menu.element.querySelector('[data-emote="emote-hip-hop"]');
+  assert.equal(dance.disabled, true); assert.equal(dance.getAttribute('aria-disabled'), 'true');
+  assert.equal(dance.title, 'Pas assez de place');
+  assert.equal(menu.element.querySelector('[data-emote="emote-clapping"]').disabled, false);
+  dance.click(); key('Digit5', '5'); assert.equal(lab.activeEmote, null); assert.equal(menu.isOpen, true);
+  assert.equal(lab.playEmote('emote-hip-hop'), false);
+  menu.element.querySelector('[data-action="collection"]').click();
+  assert.equal(menu.element.querySelector('[data-card="emote-hip-hop"]').classList.contains('is-unavailable'), true);
+  assert.equal(menu.element.querySelector('[data-card="emote-hip-hop"] [data-emote-reason]').textContent, 'Pas assez de place');
+  assert.equal(menu.element.querySelector('[data-favorite="emote-hip-hop"]').disabled, false);
+  lab.physics.removeChunk('emote-test-obstacle'); menu.refreshAvailability(true);
+  assert.equal(menu.element.querySelector('[data-emote="emote-hip-hop"]').disabled, false);
+  menu.element.querySelector('[data-emote="emote-hip-hop"]').click(); assert.equal(lab.activeEmote, 'emote-hip-hop');
+});
+
+test('clearance follows facing and includes nearby actors, low ceilings and unsupported floor', () => {
+  place(); wall(-9.2, -12);
+  assert.equal(lab.getEmoteUnavailableReason('emote-hip-hop'), 'Pas assez de place');
+  lab.bodyYaw = Math.PI / 2;
+  assert.equal(lab.getEmoteUnavailableReason('emote-hip-hop'), null);
+  lab.physics.removeChunk('emote-test-obstacle'); lab.bodyYaw = 0;
+  lab.physics.setMeleeOpponentBlocker({ x: -9.1, y: .865, z: -12 }, true);
+  lab.physics.stepDynamics(1 / 60);
+  assert.equal(lab.getEmoteUnavailableReason('emote-hip-hop'), 'Pas assez de place');
+  assert.equal(lab.getEmoteUnavailableReason('emote-clapping'), null);
+  lab.syncNpcPlayerBlocker(true);
+  wall(-10, -12, 2, 2, 1.6, .1);
+  assert.equal(lab.getEmoteUnavailableReason('emote-clapping'), 'Pas assez de place');
+  lab.physics.removeChunk('emote-test-obstacle'); place(-9, -9.35);
+  assert.equal(lab.getEmoteUnavailableReason('emote-hip-hop'), 'Pas assez de place', 'pose over a pit was accepted');
+});
+
+test('a new obstruction stops an active dance and authored movement cannot tunnel through a wall', () => {
+  place(); assert.equal(lab.playEmote('emote-hip-hop'), true); run(.6);
+  wall(-9.28, -12); run(.25);
+  assert.equal(lab.activeEmote, null);
+  lab.physics.removeChunk('emote-test-obstacle'); place(); wall(-9, -12, .1, 2);
+  lab.player.setAnimationRootStep({ x: 1.8, y: 0, z: 0 }); lab.player.fixedUpdate(1 / 60);
+  assert.ok(lab.player.position.x < -9.42, `capsule crossed wall: ${lab.player.position.x}`);
+  assert.equal(lab.player.isAnimationRootBlocked(), true);
+  const stopped = lab.player.position.clone(); lab.player.fixedUpdate(1 / 60);
+  assert.ok(stopped.distanceTo(lab.player.position) < .003, 'authored motion left residual velocity');
 });
