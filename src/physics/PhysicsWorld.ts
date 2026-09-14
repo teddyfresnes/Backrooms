@@ -228,6 +228,34 @@ export class PhysicsWorld {
     this.meleeOpponentCollider?.setEnabled(enabled);
   }
 
+  /** Read-only full-animation clearance, including limbs, root path and floor. */
+  hasAnimationSpace(feet: Vec3Data, yaw: number, bounds: THREE.Box3, groundPoints: readonly THREE.Vector3[]): boolean {
+    const rotation = new THREE.Quaternion().setFromAxisAngle(THREE.Object3D.DEFAULT_UP, yaw);
+    const center = bounds.getCenter(new THREE.Vector3()).applyQuaternion(rotation).add(feet);
+    const half = bounds.getSize(new THREE.Vector3()).multiplyScalar(.5);
+    const solid = (collider: RAPIER.Collider): boolean => collider.isEnabled() && (collider.parent()?.isEnabled() ?? true);
+    if (this.world.intersectionWithShape(center, rotation, new RAPIER.Cuboid(half.x, half.y, half.z),
+      RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, this.playerCollider, this.playerBody, solid)) return false;
+    const point = new THREE.Vector3();
+    const supported = (x: number, z: number): boolean => {
+      const hit = this.world.castRayAndGetNormal(new RAPIER.Ray({ x, y: feet.y + .45, z }, { x: 0, y: -1, z: 0 }),
+        .7, true, RAPIER.QueryFilterFlags.ONLY_FIXED | RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+        undefined, this.playerCollider, this.playerBody, solid);
+      return !!hit && hit.normal.y > .92 && Math.abs(.45 - hit.timeOfImpact) < .10;
+    };
+    for (const root of groundPoints) {
+      point.copy(root).applyQuaternion(rotation).add(feet);
+      for (const [dx, dz] of [[0, 0], [.22, 0], [-.22, 0], [0, .22], [0, -.22]]) {
+        if (!supported(point.x + dx!, point.z + dz!)) return false;
+      }
+    }
+    for (const x of [bounds.min.x, bounds.max.x]) for (const z of [bounds.min.z, bounds.max.z]) {
+      point.set(x, 0, z).applyQuaternion(rotation).add(feet);
+      if (!supported(point.x, point.z)) return false;
+    }
+    return true;
+  }
+
   move(desiredDelta: Vec3Data): CharacterMotionResult {
     // KCC shape casts do not inherit the capsule's simulation collision groups.
     // Pass them explicitly or every articulated limb still blocks the player.

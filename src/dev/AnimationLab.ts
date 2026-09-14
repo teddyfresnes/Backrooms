@@ -13,6 +13,7 @@ import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.j
 import { formatKeyLabel } from '../input/ControlBindings';
 import { EMOTES, type EmoteId } from './EmoteCatalog';
 import { EmoteMenu } from './EmoteMenu';
+import { prepareEmoteMotion, type EmoteMotion } from './EmoteMotion';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { sweepGroundKickVolumes, type GroundKickVolume } from '../physics/GroundKickContact';
 import { RagdollSystem, type RagdollAnimationMotion, type RagdollImpactEvent } from '../physics/RagdollSystem';
@@ -1906,6 +1907,14 @@ export class AnimationLab {
   private readonly emoteMenu: EmoteMenu;
   private activeEmote: EmoteId | null = null;
   private emoteMovingOnStart = false;
+  private readonly emoteMotions = new Map<EmoteId, EmoteMotion>();
+  private emoteElapsed = 0;
+  private emoteFacingYaw = 0;
+  private emoteClearanceElapsed = 0;
+  private readonly emoteRootBefore = new THREE.Vector3();
+  private readonly emoteRootAfter = new THREE.Vector3();
+  private readonly emoteRootStep = new THREE.Vector3();
+  private readonly emoteSpaceOrigin = new THREE.Vector3();
   private panel?: HTMLElement;
   private hint?: HTMLElement;
   private modeButton?: HTMLButtonElement;
@@ -1967,6 +1976,7 @@ export class AnimationLab {
       },
       isPointerLocked: () => this.player?.controls.isLocked ?? false,
       isGameControl: (code) => Object.values(this.settings.controls).includes(code),
+      getUnavailableReason: (id) => this.getEmoteUnavailableReason(id),
     });
     this.resize();
     window.addEventListener('resize', this.resize);
@@ -2016,7 +2026,7 @@ export class AnimationLab {
       this.emoteMenu.prepare(new Map(EMOTES.map(emote => [emote.id, this.animations.get(emote.id)!.clip])));
       this.updateAvatarTransform(0, true);
       this.setStatus('PRÊT');
-      if (this.hint) this.hint.innerHTML = '<strong>CLIQUER POUR JOUER</strong><span>ZQSD : déplacement · C : emotes · clic droit : garde · clic gauche en garde : frappe / maintenir : enchaîner · sans capture souris : clic droit maintenu pour regarder · Échap : pause</span>';
+      if (this.hint) this.hint.innerHTML = '<strong>CLIQUER POUR JOUER</strong><span>ZQSD : déplacement · Tab : emotes · clic droit : garde · clic gauche en garde : frappe / maintenir : enchaîner · sans capture souris : clic droit maintenu pour regarder · Échap : pause</span>';
     } catch (error) {
       this.setStatus('ERREUR ASSET');
       if (this.hint) this.hint.innerHTML = `<strong>ERREUR DE CHARGEMENT</strong><span>${error instanceof Error ? error.message : String(error)}</span>`;
@@ -2446,6 +2456,8 @@ export class AnimationLab {
       const hipVertical = this.hipsBone ? { sourceBone: sourceHips, targetBone: this.hipsBone } : undefined;
       const clip = inPlaceClip(source, emote.id, false, hipVertical);
       if (!clip.tracks.length) throw new Error(`Emote invalide : ${emote.label}`);
+      if (this.character && this.hipsBone) this.emoteMotions.set(emote.id,
+        prepareEmoteMotion(this.character, clip, source, data.sourceHipRestY, this.hipsBone));
       this.animations.set(emote.id, { clip, action: this.mixer!.clipAction(clip) });
       this.firstPersonAnimations.set(emote.id, { clip, action: this.firstPersonMixer!.clipAction(clip) });
     }));
@@ -2975,6 +2987,22 @@ export class AnimationLab {
 
   private updateFirstPersonBodyTransform(delta = 0, snapScale = false): void {
     if (!this.player || !this.firstPersonCharacter || !this.firstPersonHipsBone) return;
+    if (this.activeEmote) {
+      // Emotes share the physical body's placement; camera framing must not
+      // cancel their authored pelvis motion or stretch their planted feet.
+      this.player.setCombatGuardLookConstraint(false);
+      this.firstPersonViewmodelScale = 1;
+      this.firstPersonCharacter.scale.copy(this.firstPersonBaseScale);
+      this.firstPersonAvatarAnchor.position.copy(this.avatarAnchor.position);
+      this.firstPersonAvatarAnchor.rotation.copy(this.avatarAnchor.rotation);
+      this.firstPersonAvatarAnchor.updateMatrixWorld(true);
+      this.firstPersonHipsBone.getWorldPosition(this.firstPersonHipWorld);
+      for (const uniforms of this.firstPersonClipUniforms) {
+        uniforms.clipY.value = this.firstPersonHipWorld.y + FIRST_PERSON_BODY_CLIP_ABOVE_HIPS;
+        uniforms.combatIsolation.value = 0; uniforms.groundKick.value = 0;
+      }
+      return;
+    }
     // Dedicated CS/GTA-style legs view-model. The world avatar and gameplay POV
     // are untouched; only this second render rig is framed around the camera.
     const state = this.player.getDebugState();
@@ -3265,9 +3293,7 @@ export class AnimationLab {
   }
 
   private playEmote(id: EmoteId): boolean {
-    if (!this.ready || !this.player || this.ragdoll || this.recovery || this.recoveryCameraBlend >= 0 || this.health <= 0) return false;
-    const state = this.player.getDebugState();
-    if (!state.grounded || state.airborne || state.incapacitated || state.sliding || state.crouching || state.lowPosture) return false;
+    if (!this.player || this.getEmoteUnavailableReason(id)) return false;
     this.stopEmote();
     this.resetCombatState(true);
     this.playbackMode = 'auto';
@@ -3278,6 +3304,9 @@ export class AnimationLab {
     this.clearAuthoredTurn();
     const intent = this.player.getMovementIntent();
     this.emoteMovingOnStart = Math.abs(intent.forward) + Math.abs(intent.right) > 0;
+    this.emoteElapsed = 0;
+    this.emoteFacingYaw = this.bodyYaw;
+    this.emoteClearanceElapsed = 0;
     this.activeEmote = id;
     const emote = EMOTES.find(entry => entry.id === id)!;
     this.playAnimation(id, emote.mode === 'loop', 1, false, true);
@@ -3288,6 +3317,8 @@ export class AnimationLab {
     if (!this.activeEmote) return;
     this.activeEmote = null;
     this.emoteMovingOnStart = false;
+    this.emoteElapsed = 0;
+    this.player?.setAnimationRootStep(this.emoteRootStep.set(0, 0, 0));
     this.idleResumeMode = 'action';
     this.idleSequencePhase = 'action';
     this.idleSequenceElapsed = 0;
@@ -3295,6 +3326,36 @@ export class AnimationLab {
     this.autoOneShot = null;
     this.autoCandidateElapsed = 0;
     this.playAnimation('idle-action', true, 1, false, true);
+  }
+
+  private getEmoteUnavailableReason(id: EmoteId, active = false): string | null {
+    if (!this.ready || !this.player || !this.physics || this.ragdoll || this.recovery || this.recoveryCameraBlend >= 0 || this.health <= 0) return 'Disponible debout, au sol';
+    const state = this.player.getDebugState();
+    if (!state.grounded || state.airborne || state.incapacitated || state.sliding || state.crouching || state.lowPosture || state.traversing || state.noclip) return 'Disponible debout, au sol';
+    const motion = this.emoteMotions.get(id);
+    if (!motion) return 'Animation indisponible';
+    this.physics.getFeetPosition(this.emoteSpaceOrigin);
+    const yaw = active ? this.emoteFacingYaw : this.bodyYaw;
+    if (active) {
+      motion.sample(this.emoteElapsed, EMOTES.find(entry => entry.id === id)!.mode === 'loop', this.emoteRootBefore)
+        .applyAxisAngle(THREE.Object3D.DEFAULT_UP, yaw);
+      this.emoteSpaceOrigin.sub(this.emoteRootBefore);
+    }
+    return this.physics.hasAnimationSpace(this.emoteSpaceOrigin, yaw, motion.bounds, motion.groundPoints)
+      ? null : 'Pas assez de place';
+  }
+
+  private updateEmoteRootMotion(delta: number): void {
+    if (!this.activeEmote || !this.player) return;
+    const motion = this.emoteMotions.get(this.activeEmote);
+    if (!motion) return;
+    const loop = EMOTES.find(entry => entry.id === this.activeEmote)!.mode === 'loop';
+    motion.sample(this.emoteElapsed, loop, this.emoteRootBefore);
+    this.emoteElapsed += delta;
+    motion.sample(this.emoteElapsed, loop, this.emoteRootAfter);
+    this.emoteRootStep.copy(this.emoteRootAfter).sub(this.emoteRootBefore)
+      .applyAxisAngle(THREE.Object3D.DEFAULT_UP, this.emoteFacingYaw);
+    this.player.setAnimationRootStep(this.emoteRootStep);
   }
 
   private playAnimation(
@@ -7823,6 +7884,17 @@ export class AnimationLab {
       return;
     }
 
+    if (this.activeEmote) {
+      // The authored dance keeps its facing and trajectory while the player
+      // looks around freely. Procedural idle turns must not fight its feet.
+      this.continuousViewYaw = aimBodyYaw;
+      this.bodyYaw = this.emoteFacingYaw;
+      this.avatarAnchor.rotation.y = this.bodyYaw;
+      this.bodyTurning = false; this.bodyTurnRate = 0; this.headLookYaw = 0;
+      this.pendingStrongTurn = null;
+      return;
+    }
+
     // This value is already unbounded and continuous at the input source; no
     // atan2/Euler unwrap is needed here, so repeated authored turns cannot flip
     // the sign of the player's mouse yaw at a ±π boundary. Keep the exact POV
@@ -10002,8 +10074,9 @@ export class AnimationLab {
     if (event.repeat || event.defaultPrevented || !this.ready) return;
     if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
 
-    if ((event.code === 'KeyC' || event.key.toLowerCase() === 'c') && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    if (event.code === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
+      event.stopImmediatePropagation();
       this.emoteMenu.open(true);
       return;
     }
@@ -10186,7 +10259,9 @@ export class AnimationLab {
       this.accumulator = Math.min(this.accumulator + rawDelta, MAX_ACCUMULATOR);
       while (this.accumulator >= FIXED_DELTA) {
         if (this.player.isLocked) {
+          this.updateEmoteRootMotion(FIXED_DELTA);
           this.player.fixedUpdate(FIXED_DELTA);
+          if (this.activeEmote && this.player.isAnimationRootBlocked()) this.stopEmote();
           if (this.corpses.length > 0 && this.physics) {
             const diagnostics = this.player.getDebugState();
             this.physics.getPosition(this.corpsePlayerPosition);
@@ -10211,6 +10286,13 @@ export class AnimationLab {
     // evaluated, so camera, torso and locomotion all agree on the same target in
     // this frame rather than chasing it one frame apart.
     this.updateCombatLockOn(rawDelta);
+    if (this.activeEmote) {
+      this.emoteClearanceElapsed += rawDelta;
+      if (this.emoteClearanceElapsed >= .2) {
+        this.emoteClearanceElapsed = 0;
+        if (this.getEmoteUnavailableReason(this.activeEmote, true)) this.stopEmote();
+      }
+    }
     this.updateAvatarTransform(rawDelta);
     if (this.viewMode === 'third-person') this.updateThirdPersonCamera(rawDelta);
     if (this.playbackMode === 'auto') this.updateAutoAnimation(rawDelta);

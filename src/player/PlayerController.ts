@@ -66,6 +66,8 @@ export class PlayerController {
   private readonly velocity = new THREE.Vector3();
   private readonly previousHorizontalVelocity = new THREE.Vector3();
   private readonly previousPosition = new THREE.Vector3();
+  private readonly animationRootStep = new THREE.Vector3();
+  private animationRootBlocked = false;
   private readonly renderedPosition = new THREE.Vector3();
   private readonly lastSafePosition = new THREE.Vector3();
   private readonly slideDirection = new THREE.Vector3();
@@ -365,6 +367,8 @@ export class PlayerController {
   }
   toggleNoclip(): boolean { return this.setNoclipEnabled(!this.noclipEnabled); }
   getViewDirection(target = new THREE.Vector3()): THREE.Vector3 { return this.controls.getDirection(target); }
+  setAnimationRootStep(step: Readonly<Vec3Data>): void { this.animationRootStep.set(step.x, 0, step.z); }
+  isAnimationRootBlocked(): boolean { return this.animationRootBlocked; }
   /** The mesh and camera must consume the same interpolated capsule pose. */
   getRenderedFeetPosition(target = new THREE.Vector3()): THREE.Vector3 {
     this.physics.getFeetPosition(target);
@@ -689,6 +693,7 @@ export class PlayerController {
   }
 
   private resetTransientMovement(): void {
+    this.animationRootStep.set(0, 0, 0); this.animationRootBlocked = false;
     this.traversal = undefined;
     this.traversalProgress = 0;
     this.previousTraversalProgress = 0;
@@ -776,6 +781,8 @@ export class PlayerController {
   }
 
   fixedUpdate(delta: number): void {
+    const rootX = this.animationRootStep.x, rootZ = this.animationRootStep.z;
+    this.animationRootStep.set(0, 0, 0); this.animationRootBlocked = false;
     this.previousPosition.copy(this.position);
     this.previousCapsuleCenterOffset = this.physics.crouchCenterOffset;
     this.previousGaitPhase = this.gaitPhase;
@@ -970,8 +977,8 @@ export class PlayerController {
     this.verticalVelocity = Math.max(this.verticalVelocity, -MOVEMENT_TUNING.locomotion.terminalFallSpeed);
     const impactVelocity = this.verticalVelocity;
     const wasGrounded = this.grounded;
-    const intendedX = this.velocity.x * delta;
-    const intendedZ = this.velocity.z * delta;
+    const intendedX = this.velocity.x * delta + rootX;
+    const intendedZ = this.velocity.z * delta + rootZ;
 
     const result = this.physics.move({
       x: intendedX,
@@ -979,6 +986,9 @@ export class PlayerController {
       z: intendedZ,
     });
     this.position.copy(result.position);
+    const rootDistance = Math.hypot(rootX, rootZ);
+    this.animationRootBlocked = rootDistance > .0001
+      && Math.hypot(result.moved.x - intendedX, result.moved.z - intendedZ) > Math.max(.0025, rootDistance * .2);
     this.grounded = result.grounded;
     this.groundedTime = this.grounded ? (wasGrounded ? this.groundedTime + delta : 0) : 0;
 
