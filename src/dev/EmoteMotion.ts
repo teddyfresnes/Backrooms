@@ -4,6 +4,7 @@ import * as THREE from 'three';
 export class EmoteMotion {
   readonly bounds = new THREE.Box3();
   readonly groundPoints: THREE.Vector3[] = [];
+  groundOffset = 0;
   private readonly interpolant: THREE.Interpolant;
   private readonly cycleOffset = new THREE.Vector3();
 
@@ -28,6 +29,8 @@ export function prepareEmoteMotion(
   source: THREE.AnimationClip,
   sourceHipRestY: number,
   hips: THREE.Bone,
+  groundPose = false,
+  staysLow = false,
 ): EmoteMotion {
   const sourcePosition = source.tracks.find(track => /hips\.position$/i.test(track.name));
   if (!sourcePosition) throw new Error(`Missing root motion: ${pose.name}`);
@@ -65,8 +68,9 @@ export function prepareEmoteMotion(
       motion.sample(time, false, root);
       const cell = `${Math.round(root.x / .12)},${Math.round(root.z / .12)}`;
       if (!groundCells.has(cell)) { groundCells.add(cell); motion.groundPoints.push(root.clone()); }
-      // Keep the physical standing capsule clear throughout the root path.
-      for (const sign of [-1, 1]) {
+      if (i === 0 && groundPose) motion.groundOffset = -new THREE.Box3().setFromObject(character, true).applyMatrix4(parentInverse).min.y;
+      // Only poses which stand up need room for the live standing capsule.
+      for (const sign of staysLow ? [] : [-1, 1]) {
         motion.bounds.expandByPoint(point.set(root.x + sign * .35, .07, root.z + sign * .35));
         motion.bounds.expandByPoint(point.set(root.x + sign * .35, 1.73, root.z + sign * .35));
       }
@@ -79,6 +83,7 @@ export function prepareEmoteMotion(
       }
     }
     // Shoes and hands may touch the floor; never treat their contact as a wall.
+    motion.bounds.translate(new THREE.Vector3(0, motion.groundOffset, 0));
     motion.bounds.min.y = Math.max(.07, motion.bounds.min.y);
   } finally {
     mixer.stopAllAction(); mixer.uncacheRoot(character);

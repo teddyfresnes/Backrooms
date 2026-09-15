@@ -229,11 +229,12 @@ export class PhysicsWorld {
   }
 
   /** Read-only full-animation clearance, including limbs, root path and floor. */
-  hasAnimationSpace(feet: Vec3Data, yaw: number, bounds: THREE.Box3, groundPoints: readonly THREE.Vector3[]): boolean {
+  hasAnimationSpace(feet: Vec3Data, yaw: number, bounds: THREE.Box3, groundPoints: readonly THREE.Vector3[], ignoredBodies: ReadonlySet<number> = new Set<number>()): boolean {
     const rotation = new THREE.Quaternion().setFromAxisAngle(THREE.Object3D.DEFAULT_UP, yaw);
     const center = bounds.getCenter(new THREE.Vector3()).applyQuaternion(rotation).add(feet);
     const half = bounds.getSize(new THREE.Vector3()).multiplyScalar(.5);
-    const solid = (collider: RAPIER.Collider): boolean => collider.isEnabled() && (collider.parent()?.isEnabled() ?? true);
+    const solid = (collider: RAPIER.Collider): boolean => collider.isEnabled()
+      && (collider.parent()?.isEnabled() ?? true) && !ignoredBodies.has(collider.parent()?.handle ?? -1);
     if (this.world.intersectionWithShape(center, rotation, new RAPIER.Cuboid(half.x, half.y, half.z),
       RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, this.playerCollider, this.playerBody, solid)) return false;
     const point = new THREE.Vector3();
@@ -254,6 +255,15 @@ export class PhysicsWorld {
       if (!supported(point.x, point.z)) return false;
     }
     return true;
+  }
+
+  /** Floor under a prone body; this does not require enough height to stand. */
+  findAnimationGround(pelvis: Vec3Data): THREE.Vector3 | null {
+    const rayY = pelvis.y + .45;
+    const hit = this.world.castRayAndGetNormal(new RAPIER.Ray({ x: pelvis.x, y: rayY, z: pelvis.z }, { x: 0, y: -1, z: 0 }),
+      2.2, true, RAPIER.QueryFilterFlags.ONLY_FIXED | RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
+    if (!hit || hit.normal.y < .92 || hit.timeOfImpact < .3) return null;
+    return new THREE.Vector3(pelvis.x, rayY - hit.timeOfImpact, pelvis.z);
   }
 
   move(desiredDelta: Vec3Data): CharacterMotionResult {

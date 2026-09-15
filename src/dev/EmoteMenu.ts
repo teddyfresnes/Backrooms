@@ -1,4 +1,5 @@
-import { EMOTES, EMOTE_SLOTS, EMOTE_STORAGE_KEY, loadEmoteFavorites, type EmoteId } from './EmoteCatalog';
+import { EMOTES, EMOTE_STORAGE_KEY, GROUND_EMOTE_STORAGE_KEY, getEmotePosture, loadEmoteFavorites, type EmoteId, type EmotePosture } from './EmoteCatalog';
+import { controlCodeFromKeyboardEvent } from '../input/ControlBindings';
 import './EmoteMenu.css';
 
 const icon = (name: 'star' | 'grid' | 'close' | 'back') => {
@@ -15,8 +16,9 @@ const shortLabel: Record<EmoteId, string> = {
   'emote-freeze': 'Freeze', 'emote-sweat': 'Ouf', 'emote-laying': 'Au sol', 'emote-kip-up': 'Kip-up',
 };
 const polar = (radius: number, angle: number) => [180 + radius * Math.sin(angle), 180 - radius * Math.cos(angle)];
-const sectorPath = (index: number): string => {
-  const a = (index * 45 - 21) * Math.PI / 180, b = (index * 45 + 21) * Math.PI / 180;
+const sectorPath = (index: number, slots: number): string => {
+  const angle = 360 / slots;
+  const a = (index * angle - angle / 2 + 2) * Math.PI / 180, b = (index * angle + angle / 2 - 2) * Math.PI / 180;
   const [ax, ay] = polar(174, a), [bx, by] = polar(174, b), [cx, cy] = polar(70, b), [dx, dy] = polar(70, a);
   return `M${ax},${ay} A174,174 0 0 1 ${bx},${by} L${cx},${cy} A70,70 0 0 0 ${dx},${dy}Z`;
 };
@@ -27,6 +29,9 @@ interface EmoteMenuCallbacks {
   onPlay(id: EmoteId): boolean;
   isPointerLocked(): boolean;
   isGameControl(code: string): boolean;
+  isMovementControl(code: string): boolean;
+  isMoving(): boolean;
+  getPosture(): EmotePosture;
   getUnavailableReason(id: EmoteId): string | null;
 }
 
@@ -34,6 +39,9 @@ interface EmoteMenuCallbacks {
 export class EmoteMenu {
   readonly element = document.createElement('div');
   favorites = loadEmoteFavorites();
+  private groundFavorites = loadEmoteFavorites('ground');
+  private posture: EmotePosture = 'standing';
+  private elapsed = 0;
   isOpen = false;
   private ready = false;
   private view: 'wheel' | 'collection' = 'wheel';
@@ -43,8 +51,6 @@ export class EmoteMenu {
   private readonly unavailable = new Map<EmoteId, string>();
   private nextAvailabilityCheck = 0;
   private previousFocus: HTMLElement | null = null;
-  private heldAt: number | null = null;
-  private pointerMoved = false;
   private pointerX = 0;
   private pointerY = 0;
   private wheelRect = { left: 0, top: 0, width: 360, height: 360 };
@@ -60,7 +66,6 @@ export class EmoteMenu {
     this.element.addEventListener('pointerover', this.onHover);
     this.element.addEventListener('focusin', this.onHover);
     window.addEventListener('keydown', this.onKeyDown, true);
-    window.addEventListener('keyup', this.onKeyUp, true);
     window.addEventListener('mousemove', this.onMouseMove, true);
     window.addEventListener('mousedown', this.onMouseDown, true);
     window.addEventListener('mouseup', this.onMouseUp, true);
@@ -77,13 +82,13 @@ export class EmoteMenu {
     this.render();
   }
 
-  open(fromKey = false): void {
-    if (this.isOpen || !this.ready) return;
+  open(): void {
+    if (this.isOpen || !this.ready || this.callbacks.isMoving()) return;
     this.previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.isOpen = true;
     this.selectedIndex = -1;
-    this.heldAt = fromKey ? performance.now() : null;
-    this.pointerMoved = false;
+    this.posture = this.callbacks.getPosture();
+    this.resetLifetime();
     this.view = 'wheel';
     this.replacement = null;
     this.element.hidden = false;
@@ -95,13 +100,21 @@ export class EmoteMenu {
   close(): void {
     if (!this.isOpen) return;
     this.isOpen = false;
-    this.heldAt = null;
     this.replacement = null;
     this.element.hidden = true;
     this.hoveredButton = null;
     this.callbacks.onClose();
     if (document.activeElement instanceof HTMLElement && this.element.contains(document.activeElement)) this.previousFocus?.focus({ preventScroll: true });
   }
+
+  private get wheelFavorites(): (EmoteId | null)[] {
+    return this.posture === 'ground' ? this.groundFavorites : this.favorites.map(id => id && getEmotePosture(id) === 'standing' ? id : null);
+  }
+
+  private get entries() { return EMOTES.filter(emote => getEmotePosture(emote.id) === this.posture); }
+  private get title(): string { return this.posture === 'ground' ? 'Emotes au sol' : 'Emotes'; }
+  private get help(): string { return `<kbd>1–${this.wheelFavorites.length}</kbd> ou clic · disparaît en 2 s`; }
+  private resetLifetime(): void { this.elapsed = 0; this.element.style.opacity = '1'; }
 
   private image(id: EmoteId | null): string {
     const emote = EMOTES.find(entry => entry.id === id);
@@ -118,14 +131,14 @@ export class EmoteMenu {
   }
 
   private wheelMarkup(): string {
-    return `<div class="emote-wheel"><svg class="emote-ring" viewBox="0 0 360 360" aria-hidden="true">${this.favorites.map((_id, index) => `<path d="${sectorPath(index)}" data-ring-slot="${index}"/>`).join('')}</svg>${this.favorites.map((id, index) => {
-      const angle = index * Math.PI / 4;
+    return `<div class="emote-wheel"><svg class="emote-ring" viewBox="0 0 360 360" aria-hidden="true">${this.wheelFavorites.map((_id, index) => `<path d="${sectorPath(index, this.wheelFavorites.length)}" data-ring-slot="${index}"/>`).join('')}</svg>${this.wheelFavorites.map((id, index) => {
+      const angle = index * Math.PI * 2 / this.wheelFavorites.length;
       return `<button type="button" class="emote-slot${id ? '' : ' is-empty'}" style="--slot-x:${Math.sin(angle) * 34}%;--slot-y:${-Math.cos(angle) * 34}%" data-slot="${index}"${id ? ` data-emote="${id}"` : ' data-action="collection"'} aria-label="${index + 1} : ${EMOTES.find(e => e.id === id)?.label ?? 'Ajouter un favori'}"><kbd>${index + 1}</kbd>${this.image(id)}<span>${id ? shortLabel[id] : 'Ajouter'}</span></button>`;
-    }).join('')}<button type="button" class="emote-wheel-center" data-action="collection">${icon('grid')}<span>Tout voir</span></button></div><div class="emote-caption"><strong data-wheel-caption aria-live="polite">Emotes</strong><span data-wheel-help>${this.heldAt !== null ? '<kbd>Tab</kbd> maintenu : viser puis relâcher' : '<kbd>1–8</kbd> ou clic · <kbd>Tab</kbd> fermer'}</span></div>`;
+    }).join('')}<button type="button" class="emote-wheel-center" data-action="collection">${icon('grid')}<span>Tout voir</span></button></div><div class="emote-caption"><strong data-wheel-caption aria-live="polite">${this.title}</strong><span data-wheel-help>${this.help}</span></div>`;
   }
 
   private collectionMarkup(): string {
-    return `<header class="emote-header"><button type="button" data-action="wheel" class="emote-icon-button" aria-label="Revenir à la roue">${icon('back')}</button><h2>Toutes les emotes</h2><button type="button" data-action="close" class="emote-icon-button" aria-label="Fermer">${icon('close')}</button></header><div class="emote-card-grid">${EMOTES.map(emote => `<div class="emote-card" data-card="${emote.id}"><button type="button" class="emote-card-select" data-emote="${emote.id}" aria-label="Jouer : ${emote.label}">${this.image(emote.id)}<span>${emote.label}<small data-emote-reason></small></span></button><button type="button" class="emote-favorite" data-favorite="${emote.id}" aria-label="${this.favorites.includes(emote.id) ? 'Retirer' : 'Ajouter'} ${emote.label} ${this.favorites.includes(emote.id) ? 'des' : 'aux'} favoris" aria-pressed="${this.favorites.includes(emote.id)}">${icon('star')}</button></div>`).join('')}</div><div class="emote-favorites"><div class="emote-favorites-heading"><strong>Favoris <span>${this.favorites.filter(Boolean).length}/${EMOTE_SLOTS}</span></strong>${this.replacement ? '<button type="button" data-action="cancel-replace">Annuler</button>' : ''}</div><p role="status" data-favorite-status>${this.replacement ? `Remplacer quel favori par « ${EMOTES.find(e => e.id === this.replacement)!.label} » ?` : '☆ pour personnaliser votre roue'}</p><div class="emote-favorite-strip${this.replacement ? ' is-replacing' : ''}">${this.favorites.map((id, index) => `<button type="button" class="emote-mini-slot" data-replace="${index}" aria-label="${this.replacement ? 'Remplacer' : 'Retirer'} le favori ${index + 1} : ${EMOTES.find(e => e.id === id)?.label ?? 'Libre'}"><kbd>${index + 1}</kbd><span>${id ? shortLabel[id] : '+'}</span></button>`).join('')}</div></div><footer class="emote-footer">Clic : jouer · <kbd>Tab</kbd> fermer</footer>`;
+    return `<header class="emote-header"><button type="button" data-action="wheel" class="emote-icon-button" aria-label="Revenir à la roue">${icon('back')}</button><h2>${this.posture === 'ground' ? 'Au sol' : 'Debout'}</h2><button type="button" data-action="close" class="emote-icon-button" aria-label="Fermer">${icon('close')}</button></header><div class="emote-card-grid">${this.entries.map(emote => `<div class="emote-card" data-card="${emote.id}"><button type="button" class="emote-card-select" data-emote="${emote.id}" aria-label="Jouer : ${emote.label}">${this.image(emote.id)}<span>${emote.label}<small data-emote-reason></small></span></button><button type="button" class="emote-favorite" data-favorite="${emote.id}" aria-label="${this.wheelFavorites.includes(emote.id) ? 'Retirer' : 'Ajouter'} ${emote.label} ${this.wheelFavorites.includes(emote.id) ? 'des' : 'aux'} favoris" aria-pressed="${this.wheelFavorites.includes(emote.id)}">${icon('star')}</button></div>`).join('')}</div><div class="emote-favorites"><div class="emote-favorites-heading"><strong>Favoris <span>${this.wheelFavorites.filter(Boolean).length}/${this.wheelFavorites.length}</span></strong>${this.replacement ? '<button type="button" data-action="cancel-replace">Annuler</button>' : ''}</div><p role="status" data-favorite-status>${this.replacement ? `Remplacer quel favori par « ${EMOTES.find(e => e.id === this.replacement)!.label} » ?` : '☆ pour personnaliser votre roue'}</p><div class="emote-favorite-strip${this.replacement ? ' is-replacing' : ''}">${this.wheelFavorites.map((id, index) => `<button type="button" class="emote-mini-slot" data-replace="${index}" aria-label="${this.replacement ? 'Remplacer' : 'Retirer'} le favori ${index + 1} : ${EMOTES.find(e => e.id === id)?.label ?? 'Libre'}"><kbd>${index + 1}</kbd><span>${id ? shortLabel[id] : '+'}</span></button>`).join('')}</div></div><footer class="emote-footer">Clic : jouer · <kbd>Tab</kbd> fermer</footer>`;
   }
 
   private resetPointer(): void {
@@ -139,8 +152,15 @@ export class EmoteMenu {
   }
 
   /** Only DOM updates, once per game frame. No preview renderer or skeleton sampling. */
-  update(): void {
+  update(delta = 0): void {
     if (!this.isOpen) return;
+    this.elapsed += Math.max(0, delta);
+    if (this.elapsed >= 2 || this.callbacks.isMoving()) { this.close(); return; }
+    this.element.style.opacity = String(1 - this.elapsed / 2);
+    const posture = this.callbacks.getPosture();
+    if (posture !== this.posture) {
+      this.posture = posture; this.selectedIndex = -1; this.replacement = null; this.render();
+    }
     this.refreshAvailability();
     if (!this.dirtyPointer) return;
     this.dirtyPointer = false;
@@ -150,7 +170,7 @@ export class EmoteMenu {
       const dx = (this.pointerX - this.wheelRect.left - this.wheelRect.width / 2) * 360 / this.wheelRect.width;
       const dy = (this.pointerY - this.wheelRect.top - this.wheelRect.height / 2) * 360 / this.wheelRect.height;
       const distance = Math.hypot(dx, dy);
-      const index = distance > 70 && distance < 186 ? Math.round((Math.atan2(dx, -dy) * 180 / Math.PI + 360) / 45) % 8 : -1;
+      const index = distance > 70 && distance < 186 ? Math.round((Math.atan2(dx, -dy) * 180 / Math.PI + 360) / (360 / this.wheelFavorites.length)) % this.wheelFavorites.length : -1;
       this.selectSlot(index);
       this.hoverButton(distance < 70 ? this.element.querySelector('[data-action="collection"]') : index >= 0 ? this.element.querySelector(`[data-slot="${index}"]`) : null);
     } else {
@@ -171,25 +191,25 @@ export class EmoteMenu {
     if (this.selectedIndex === index) return;
     this.selectedIndex = index;
     this.element.querySelectorAll<HTMLElement>('[data-slot], [data-ring-slot]').forEach(node => node.classList.toggle('is-selected', Number(node.dataset.slot ?? node.dataset.ringSlot) === index));
-    const id = this.favorites[index];
+    const id = this.wheelFavorites[index];
     const caption = this.element.querySelector('[data-wheel-caption]');
-    if (caption) caption.textContent = id ? EMOTES.find(emote => emote.id === id)!.label : 'Emotes';
+    if (caption) caption.textContent = id ? EMOTES.find(emote => emote.id === id)!.label : this.title;
     this.updateWheelHelp();
   }
 
   private updateWheelHelp(): void {
     const help = this.element.querySelector<HTMLElement>('[data-wheel-help]');
     if (!help) return;
-    const id = this.favorites[this.selectedIndex];
+    const id = this.wheelFavorites[this.selectedIndex];
     const reason = id ? this.unavailable.get(id) : null;
     help.classList.toggle('is-warning', !!reason);
-    help.innerHTML = reason ?? (this.heldAt !== null ? '<kbd>Tab</kbd> maintenu : viser puis relâcher' : '<kbd>1–8</kbd> ou clic · <kbd>Tab</kbd> fermer');
+    help.innerHTML = reason ?? this.help;
   }
 
   private refreshAvailability(force = false): void {
     if (!this.isOpen || (!force && performance.now() < this.nextAvailabilityCheck)) return;
     this.nextAvailabilityCheck = performance.now() + 200;
-    for (const emote of EMOTES) {
+    for (const emote of this.entries) {
       const reason = this.available.has(emote.id) ? this.callbacks.getUnavailableReason(emote.id) : 'Animation indisponible';
       if (reason) this.unavailable.set(emote.id, reason); else this.unavailable.delete(emote.id);
     }
@@ -204,14 +224,14 @@ export class EmoteMenu {
       if (note) note.textContent = reason ?? '';
     });
     this.element.querySelectorAll<SVGElement>('[data-ring-slot]').forEach(sector => {
-      const id = this.favorites[Number(sector.dataset.ringSlot)];
+      const id = this.wheelFavorites[Number(sector.dataset.ringSlot)];
       sector.classList.toggle('is-unavailable', !!id && this.unavailable.has(id));
     });
     this.updateWheelHelp();
   }
 
   private saveFavorites(): void {
-    try { localStorage.setItem(EMOTE_STORAGE_KEY, JSON.stringify(this.favorites)); } catch { /* Device-local preference. */ }
+    try { localStorage.setItem(this.posture === 'ground' ? GROUND_EMOTE_STORAGE_KEY : EMOTE_STORAGE_KEY, JSON.stringify(this.wheelFavorites)); } catch { /* Device-local preference. */ }
     const point = [this.pointerX, this.pointerY];
     this.render();
     [this.pointerX, this.pointerY] = point;
@@ -219,16 +239,17 @@ export class EmoteMenu {
   }
 
   private toggleFavorite(id: EmoteId): void {
-    const existing = this.favorites.indexOf(id), free = this.favorites.indexOf(null);
+    const existing = this.wheelFavorites.indexOf(id), free = this.wheelFavorites.indexOf(null);
     this.replacement = null;
-    if (existing >= 0) this.favorites[existing] = null;
-    else if (free >= 0) this.favorites[free] = id;
+    const favorites = this.posture === 'ground' ? this.groundFavorites : this.favorites;
+    if (existing >= 0) favorites[existing] = null;
+    else if (free >= 0) favorites[free] = id;
     else { this.replacement = id; this.render(); return; }
     this.saveFavorites();
   }
 
   private play(id: EmoteId): void {
-    if (!this.available.has(id)) return;
+    if (!this.available.has(id) || getEmotePosture(id) !== this.posture) return;
     this.refreshAvailability(true);
     const reason = this.unavailable.get(id);
     if (reason) {
@@ -239,22 +260,24 @@ export class EmoteMenu {
     if (this.callbacks.onPlay(id)) this.close();
     else {
       const status = this.element.querySelector('[data-favorite-status], [data-wheel-caption]');
-      if (status) status.textContent = 'Disponible debout, au sol.';
+      if (status) status.textContent = 'Animation momentanément indisponible.';
     }
   }
 
   private activate(button: HTMLButtonElement): void {
     if (button.disabled) return;
+    this.resetLifetime();
     const { action, emote, favorite, replace } = button.dataset;
     if (action === 'close') this.close();
     else if (action === 'wheel' || action === 'collection') {
-      this.view = action === 'wheel' ? 'wheel' : 'collection'; this.selectedIndex = -1; this.replacement = null; this.heldAt = null; this.render();
+      this.view = action === 'wheel' ? 'wheel' : 'collection'; this.selectedIndex = -1; this.replacement = null; this.render();
     } else if (action === 'cancel-replace') { this.replacement = null; this.render(); }
     else if (favorite) this.toggleFavorite(favorite as EmoteId);
     else if (replace !== undefined) {
       const index = Number(replace);
-      if (this.replacement) { this.favorites[index] = this.replacement; this.replacement = null; }
-      else this.favorites[index] = null;
+      const favorites = this.posture === 'ground' ? this.groundFavorites : this.favorites;
+      if (this.replacement) { favorites[index] = this.replacement; this.replacement = null; }
+      else favorites[index] = null;
       this.saveFavorites();
     } else if (emote) this.play(emote as EmoteId);
   }
@@ -273,16 +296,18 @@ export class EmoteMenu {
     const button = (event.target as Element).closest<HTMLButtonElement>('button');
     if (!button || !this.element.contains(button)) return;
     this.hoverButton(button);
-    if (button.dataset.slot !== undefined) { this.pointerMoved = true; this.selectSlot(Number(button.dataset.slot)); }
+    if (button.dataset.slot !== undefined) { this.selectSlot(Number(button.dataset.slot)); }
   };
 
   private consume(event: Event): void { event.preventDefault(); event.stopImmediatePropagation(); }
   private readonly onKeyDown = (event: KeyboardEvent): void => {
-    if (!this.isOpen || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (!this.isOpen) return;
+    if (this.callbacks.isMovementControl(controlCodeFromKeyboardEvent(event))) { this.close(); return; }
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.code === 'Tab' || event.code === 'Escape') {
       this.consume(event); if (!event.repeat) this.close();
     } else if (/^(?:Digit|Numpad)[1-8]$/.test(event.code) && !this.callbacks.isGameControl(event.code)) {
-      this.consume(event); const id = this.favorites[Number(event.code.at(-1)) - 1]; if (id && !event.repeat) this.play(id);
+      this.consume(event); const id = this.wheelFavorites[Number(event.code.at(-1)) - 1]; if (id && !event.repeat) this.play(id);
     } else if (event.code === 'Enter') {
       this.consume(event); this.update(); if (!event.repeat) (this.hoveredButton ?? this.element.querySelector<HTMLButtonElement>('[data-action="collection"]'))?.click();
     } else if (event.code.startsWith('Arrow') && !this.callbacks.isGameControl(event.code)) {
@@ -296,22 +321,8 @@ export class EmoteMenu {
     // Movement keys, jump, and guard keep their ordinary gameplay behavior.
   };
 
-  private readonly onKeyUp = (event: KeyboardEvent): void => {
-    if (!this.isOpen || this.heldAt === null || event.code !== 'Tab') return;
-    const held = performance.now() - this.heldAt; this.heldAt = null;
-    if (held < 160 || this.view !== 'wheel') {
-      this.updateWheelHelp();
-      return;
-    }
-    this.consume(event);
-    this.update();
-    const id = this.pointerMoved ? this.favorites[this.selectedIndex] : null;
-    if (id) this.play(id); else this.close();
-  };
-
   private readonly onMouseMove = (event: MouseEvent): void => {
     if (!this.isOpen || !this.callbacks.isPointerLocked()) return;
-    this.pointerMoved ||= event.movementX !== 0 || event.movementY !== 0;
     this.pointerX += event.movementX || 0;
     this.pointerY += event.movementY || 0;
     if (this.view === 'wheel') {
@@ -344,13 +355,14 @@ export class EmoteMenu {
   };
   private readonly onScroll = (event: WheelEvent): void => {
     if (!this.isOpen || this.view !== 'collection' || !this.callbacks.isPointerLocked()) return;
+    this.resetLifetime();
     event.preventDefault(); this.element.querySelector<HTMLElement>('.emote-panel')!.scrollTop += event.deltaY; this.dirtyPointer = true;
   };
   private readonly onResize = (): void => { if (this.isOpen) this.resetPointer(); };
   private readonly onBlur = (): void => { this.swallowRelease = false; this.swallowClick = false; this.close(); };
 
   dispose(): void {
-    window.removeEventListener('keydown', this.onKeyDown, true); window.removeEventListener('keyup', this.onKeyUp, true);
+    window.removeEventListener('keydown', this.onKeyDown, true);
     window.removeEventListener('mousemove', this.onMouseMove, true); window.removeEventListener('mousedown', this.onMouseDown, true);
     window.removeEventListener('mouseup', this.onMouseUp, true); window.removeEventListener('click', this.onWindowClick, true);
     window.removeEventListener('wheel', this.onScroll, true); window.removeEventListener('resize', this.onResize); window.removeEventListener('blur', this.onBlur);

@@ -10,8 +10,8 @@ import { sweepCombatContact, combatChainReady, CombatBalance, stepCombatSpring }
 import { solveCombatTwoBone, limitKneeLateralBend, easeCombat, CombatPoseHandoff, CombatMotionHistory, CombatProceduralPose } from './CombatRig';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { formatKeyLabel } from '../input/ControlBindings';
-import { EMOTES, type EmoteId } from './EmoteCatalog';
+import { equivalentKeyCodes, formatKeyLabel } from '../input/ControlBindings';
+import { EMOTES, getEmotePosture, type EmoteId } from './EmoteCatalog';
 import { EmoteMenu } from './EmoteMenu';
 import { prepareEmoteMotion, type EmoteMotion } from './EmoteMotion';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
@@ -1906,6 +1906,10 @@ export class AnimationLab {
   private panelVisible = true;
   private readonly emoteMenu: EmoteMenu;
   private activeEmote: EmoteId | null = null;
+  private recoveryEmote: EmoteId | null = null;
+  private readonly groundEmotePreparations = new Map<EmoteId, {
+    owner: RagdollSystem | GetUpRecovery; recovery: GetUpRecovery; bounds: THREE.Box3;
+  }>();
   private emoteMovingOnStart = false;
   private readonly emoteMotions = new Map<EmoteId, EmoteMotion>();
   private emoteElapsed = 0;
@@ -1976,6 +1980,14 @@ export class AnimationLab {
       },
       isPointerLocked: () => this.player?.controls.isLocked ?? false,
       isGameControl: (code) => Object.values(this.settings.controls).includes(code),
+      isMovementControl: (code) => [this.settings.controls.forward, this.settings.controls.backward,
+        this.settings.controls.left, this.settings.controls.right, this.settings.controls.jump, this.settings.controls.crouch]
+        .some(binding => equivalentKeyCodes(binding).includes(code)),
+      isMoving: () => {
+        const intent = this.player?.getMovementIntent();
+        return !!intent && Math.abs(intent.forward) + Math.abs(intent.right) > 0;
+      },
+      getPosture: () => this.getPlayerEmotePosture(),
       getUnavailableReason: (id) => this.getEmoteUnavailableReason(id),
     });
     this.resize();
@@ -2457,7 +2469,8 @@ export class AnimationLab {
       const clip = inPlaceClip(source, emote.id, false, hipVertical);
       if (!clip.tracks.length) throw new Error(`Emote invalide : ${emote.label}`);
       if (this.character && this.hipsBone) this.emoteMotions.set(emote.id,
-        prepareEmoteMotion(this.character, clip, source, data.sourceHipRestY, this.hipsBone));
+        prepareEmoteMotion(this.character, clip, source, data.sourceHipRestY, this.hipsBone,
+          getEmotePosture(emote.id) === 'ground', emote.id === 'emote-laying'));
       this.animations.set(emote.id, { clip, action: this.mixer!.clipAction(clip) });
       this.firstPersonAnimations.set(emote.id, { clip, action: this.firstPersonMixer!.clipAction(clip) });
     }));
@@ -3294,6 +3307,7 @@ export class AnimationLab {
 
   private playEmote(id: EmoteId): boolean {
     if (!this.player || this.getEmoteUnavailableReason(id)) return false;
+    if (getEmotePosture(id) === 'ground') return this.playGroundEmote(id);
     this.stopEmote();
     this.resetCombatState(true);
     this.playbackMode = 'auto';
@@ -3328,12 +3342,60 @@ export class AnimationLab {
     this.playAnimation('idle-action', true, 1, false, true);
   }
 
+  private getPlayerEmotePosture(): 'standing' | 'ground' {
+    return this.ragdoll || this.recovery ? 'ground' : 'standing';
+  }
+
+  private clearGroundEmotePreparations(): void {
+    for (const entry of this.groundEmotePreparations.values()) entry.recovery.dispose();
+    this.groundEmotePreparations.clear();
+  }
+
+  private getGroundEmotePlacement(id: EmoteId): { origin: THREE.Vector3; yaw: number; groundY: number } | null {
+    const motion = this.emoteMotions.get(id);
+    const owner = this.recovery ?? this.ragdoll;
+    const root = this.activeCorpseRoot;
+    const character = root?.children[0] as THREE.Group | undefined;
+    const clip = this.animations.get(id)?.clip;
+    if (!motion || !owner || !root || !character || !clip || !this.physics) return null;
+    const floor = this.physics.findAnimationGround(owner.getPelvisPosition());
+    if (!floor) return null;
+    let prepared = this.groundEmotePreparations.get(id);
+    if (prepared && (prepared.owner !== owner || !prepared.recovery.matchesCurrentPose())) {
+      prepared.recovery.dispose(); this.groundEmotePreparations.delete(id); prepared = undefined;
+    }
+    if (!prepared) {
+      try {
+        const recovery = new GetUpRecovery(root, character, clip, 'back', floor.y, {
+          preparationSeconds: .45, holdFinalPose: id === 'emote-laying', rootMotion: motion,
+        });
+        prepared = { owner, recovery, bounds: motion.bounds.clone().union(recovery.preparationBounds) };
+        this.groundEmotePreparations.set(id, prepared);
+      } catch (error) {
+        console.error('[emote] Unable to prepare ground pose', error);
+        return null;
+      }
+    }
+    return { origin: prepared.recovery.groundOrigin, yaw: prepared.recovery.targetYaw, groundY: floor.y };
+  }
+
   private getEmoteUnavailableReason(id: EmoteId, active = false): string | null {
-    if (!this.ready || !this.player || !this.physics || this.ragdoll || this.recovery || this.recoveryCameraBlend >= 0 || this.health <= 0) return 'Disponible debout, au sol';
-    const state = this.player.getDebugState();
-    if (!state.grounded || state.airborne || state.incapacitated || state.sliding || state.crouching || state.lowPosture || state.traversing || state.noclip) return 'Disponible debout, au sol';
+    if (!this.ready || !this.player || !this.physics || this.health <= 0) return 'Animation indisponible';
+    const posture = getEmotePosture(id);
+    if (posture !== this.getPlayerEmotePosture()) return posture === 'ground' ? 'Disponible au sol' : 'Disponible debout';
     const motion = this.emoteMotions.get(id);
     if (!motion) return 'Animation indisponible';
+    if (posture === 'ground') {
+      if (this.recovery && !this.recovery.isHolding) return 'Transition en cours';
+      if (this.ragdoll && !recoveryReadyForInput(this.ragdoll.isRecoveryReady, this.ragdollElapsed)) return 'Attendre la fin de la chute';
+      const plan = this.getGroundEmotePlacement(id);
+      if (!plan) return 'Sol stable nécessaire';
+      return this.physics.hasAnimationSpace(plan.origin, plan.yaw, this.groundEmotePreparations.get(id)!.bounds, motion.groundPoints, this.ragdoll?.getOwnedBodyHandles())
+        ? null : 'Pas assez de place';
+    }
+    if (this.recoveryCameraBlend >= 0) return 'Transition en cours';
+    const state = this.player.getDebugState();
+    if (!state.grounded || state.airborne || state.incapacitated || state.sliding || state.crouching || state.lowPosture || state.traversing || state.noclip) return 'Disponible debout';
     this.physics.getFeetPosition(this.emoteSpaceOrigin);
     const yaw = active ? this.emoteFacingYaw : this.bodyYaw;
     if (active) {
@@ -3343,6 +3405,32 @@ export class AnimationLab {
     }
     return this.physics.hasAnimationSpace(this.emoteSpaceOrigin, yaw, motion.bounds, motion.groundPoints)
       ? null : 'Pas assez de place';
+  }
+
+  private playGroundEmote(id: EmoteId): boolean {
+    const plan = this.getGroundEmotePlacement(id);
+    const prepared = this.groundEmotePreparations.get(id);
+    if (!plan || !prepared || !this.player) return false;
+    const recovery = prepared.recovery;
+    this.groundEmotePreparations.delete(id);
+    this.clearGroundEmotePreparations();
+    this.recovery?.dispose();
+    recovery.start();
+    this.ragdoll?.suspendForRecovery();
+    this.ragdoll = undefined;
+    this.ragdollMode = null;
+    this.ragdollElapsed = 0;
+    this.recovery = recovery;
+    this.recoveryEmote = id;
+    this.recoveryStandPosition = recovery.standingPosition.clone();
+    this.recoveryGroundAvailable = false;
+    this.recoveryRequested = false;
+    this.player.setInputEnabled(false);
+    this.player.setCameraMotionEnabled(false);
+    this.setStatus(EMOTES.find(entry => entry.id === id)!.label.toUpperCase());
+    this.updateRecoveryPrompt();
+    this.applyViewMode(false);
+    return true;
   }
 
   private updateEmoteRootMotion(delta: number): void {
@@ -9294,6 +9382,12 @@ export class AnimationLab {
   private refreshRecoveryAvailability(wideSearch = false): void {
     this.recoveryStandPosition = null;
     this.recoveryGroundAvailable = false;
+    if (this.recovery?.isHolding && this.health > 0 && this.physics) {
+      this.recoveryStandPosition = this.physics.findStandingRecoveryPosition(this.recovery.getPelvisPosition(), undefined, wideSearch);
+      this.recoveryGroundAvailable = this.recoveryStandPosition !== null;
+      this.updateRecoveryPrompt();
+      return;
+    }
     // Always evaluate a nearby standing spot for a living ragdoll. Prompt
     // visibility is intentionally independent from the sleep state so combat
     // knockdowns can never hide the E affordance forever because one limb keeps
@@ -9331,6 +9425,7 @@ export class AnimationLab {
   }
 
   private canStartRecovery(): boolean {
+    if (this.recovery?.isHolding) return this.ready && this.health > 0 && this.recoveryGroundAvailable;
     return canGetUp({
       alive: this.health > 0,
       ragdollMode: this.ragdollMode,
@@ -9348,7 +9443,7 @@ export class AnimationLab {
       ragdollMode: this.ragdollMode,
       recovering: this.recovery !== null,
       inputEnabled: this.ready,
-    });
+    }) || (this.recovery?.isHolding === true && this.health > 0);
     const key = this.recoveryPrompt.querySelector('kbd');
     if (key) key.textContent = formatKeyLabel(this.settings.controls.interact);
     this.recoveryPrompt.classList.toggle('visible', visible);
@@ -9368,13 +9463,14 @@ export class AnimationLab {
   }
 
   private startGetUp(): void {
-    if (!this.canStartRecovery() || !this.ragdoll || !this.physics
+    if (!this.canStartRecovery() || (!this.ragdoll && !this.recovery?.isHolding) || !this.physics
       || !this.player || !this.activeCorpseRoot || !this.character) return;
     const ragdoll = this.ragdoll;
     const root = this.activeCorpseRoot;
     const character = root.children[0] as THREE.Group | undefined;
     if (!character) return;
-    const hipPose = ragdoll.getPelvisPose(new THREE.Vector3(), new THREE.Quaternion());
+    const previousRecovery = this.recovery;
+    const hipPose = (ragdoll ?? previousRecovery)!.getPelvisPose(new THREE.Vector3(), new THREE.Quaternion());
     const anatomicalRotation = hipPose.rotation.clone()
       .multiply(this.recoveryRestHipsRotation.clone().invert());
     this.recoveryFront.set(0, 0, 1).applyQuaternion(anatomicalRotation);
@@ -9413,6 +9509,8 @@ export class AnimationLab {
     // an unexpected animation setup error leaves the still-living ragdoll intact
     // instead of stranding the player with input disabled and no recovery state.
     try {
+      this.clearGroundEmotePreparations();
+      previousRecovery?.dispose();
       recovery.start();
     } catch (error) {
       recovery.dispose();
@@ -9428,13 +9526,15 @@ export class AnimationLab {
     // rig instead, then let World.free() reclaim it with the rest of the world.
     // The get-up animation owns the visual skeleton from this point onward.
     this.playerGetUpVariation.commit(side, choice);
-    ragdoll.suspendForRecovery();
+    if (ragdoll) ragdoll.suspendForRecovery();
     this.recoveryRequested = false;
     this.ragdoll = undefined;
     this.ragdollMode = null;
     this.ragdollElapsed = 0;
     this.ragdollDamageApplied = false;
     this.recovery = recovery;
+    this.recoveryEmote = null;
+    this.emoteMenu.close();
     this.recoveryStandPosition = initialStand.clone();
     this.recoveryGroundAvailable = false;
     this.player.setInputEnabled(false);
@@ -9445,7 +9545,7 @@ export class AnimationLab {
   }
 
   private finishGetUp(): void {
-    if (!this.recovery || !this.recovery.isFinished || !this.physics || !this.player
+    if (!this.recovery || !this.recovery.isFinished || this.recovery.isHolding || !this.physics || !this.player
       || !this.character || !this.firstPersonCharacter || !this.mixer || !this.firstPersonMixer) return;
     const recovery = this.recovery;
     // Recheck with the released ragdoll gone. Never reactivate a standing capsule
@@ -9495,9 +9595,12 @@ export class AnimationLab {
     this.mixer.timeScale = 1;
     this.firstPersonMixer.timeScale = 1;
 
+    this.clearGroundEmotePreparations();
     recovery.dispose();
     this.disposeTransientCorpse(recovery.root);
     this.recovery = null;
+    this.recoveryEmote = null;
+    this.emoteMenu.close();
     this.activeCorpseRoot = undefined;
     this.recoveryStandPosition = null;
     this.recoveryGroundAvailable = false;
@@ -9582,6 +9685,7 @@ export class AnimationLab {
     if (!this.ready || this.ragdoll || this.recovery || this.recoveryCameraBlend >= 0 || !this.physics || !this.player || !this.character) return;
     this.emoteMenu.close();
     this.stopEmote();
+    this.clearGroundEmotePreparations();
     if (options.fatal) {
       this.health = 0;
       this.damageFlash = Math.max(this.damageFlash, 0.92);
@@ -10071,15 +10175,16 @@ export class AnimationLab {
   };
 
   private readonly onGlobalKeyDown = (event: KeyboardEvent): void => {
-    if (event.repeat || event.defaultPrevented || !this.ready) return;
+    if (event.defaultPrevented || !this.ready) return;
     if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
 
     if (event.code === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      this.emoteMenu.open(true);
+      if (!event.repeat) this.emoteMenu.open();
       return;
     }
+    if (event.repeat) return;
     if (this.activeEmote && (Object.values(this.settings.controls).includes(event.code)
       || event.code === 'KeyF' || event.code === 'Escape')) this.stopEmote();
 
@@ -10101,12 +10206,12 @@ export class AnimationLab {
 
     // Recovery is deliberately available even if pointer lock was lost during
     // the fall. The E prompt must remain useful whenever the living body is down.
-    if (event.code === this.settings.controls.interact && this.recovery?.isFinished) {
+    if (event.code === this.settings.controls.interact && this.recovery?.isFinished && !this.recovery.isHolding) {
       event.preventDefault();
       this.finishGetUp();
       return;
     }
-    if (event.code === this.settings.controls.interact && this.ragdollMode !== null && this.ragdollMode !== 'dead') {
+    if (event.code === this.settings.controls.interact && (this.recovery?.isHolding || (this.ragdollMode !== null && this.ragdollMode !== 'dead'))) {
       event.preventDefault();
       // E is a request, not a one-frame eligibility check. If the body still
       // needs a fraction of a second to settle or the nearby NPC temporarily
@@ -10179,12 +10284,12 @@ export class AnimationLab {
   }
 
   private readonly frame = (now: number): void => {
-    this.emoteMenu.update();
     this.playerProceduralPose.restore(!this.ragdoll && !this.recovery);
     this.firstPersonProceduralPose.restore(!this.ragdoll && !this.recovery);
     this.npcProceduralPose.restore(!this.npcRagdoll && !this.npcRecovery);
     if (this.disposed || !this.player) return;
     const measuredDelta = Math.max(0, (now - this.previousTime) / 1000);
+    this.emoteMenu.update(measuredDelta);
     const rawDelta = Math.min(0.05, measuredDelta);
     this.previousTime = now;
     this.bloodImpactClock += rawDelta;
@@ -10203,7 +10308,10 @@ export class AnimationLab {
         this.accumulator -= FIXED_DELTA;
       }
       this.recovery.update(rawDelta);
-      if (this.recovery.isFinished) this.finishGetUp();
+      if (this.recovery.isHolding) {
+        this.refreshRecoveryAvailability(this.recoveryRequested);
+        if (this.recoveryRequested && this.canStartRecovery()) this.startGetUp();
+      } else if (this.recovery.isFinished) this.finishGetUp();
       if (this.recovery) {
         if (this.viewMode === 'first-person') this.updateDeadFirstPersonCamera(rawDelta);
         else this.updateThirdPersonCamera(rawDelta);
@@ -10465,6 +10573,7 @@ export class AnimationLab {
     this.ragdoll?.dispose();
     this.npcRagdoll?.dispose();
     this.npcRecovery?.dispose();
+    this.clearGroundEmotePreparations();
     this.recovery?.dispose();
     this.recovery = null;
     for (const corpse of this.corpses) corpse.ragdoll.dispose();
