@@ -13,6 +13,9 @@ const moveMouse = (x, y) => {
   document.dispatchEvent(event);
   return event;
 };
+const clickPointer = () => {
+  for (const type of ['mousedown', 'mouseup', 'click']) lab.renderer.domElement.dispatchEvent(new MouseEvent(type, { button: 0, bubbles: true, cancelable: true }));
+};
 const run = seconds => { for (let i = 0; i < Math.ceil(seconds * 60); i++) stepLab(lab); };
 const menu = lab.emoteMenu;
 const enter = () => { lab.player.controls.isLocked = false; lab.player.lock(); lab.npcAttackCooldown = 100; };
@@ -169,6 +172,80 @@ test('a native pointer click selects the virtual sector without punching or reop
   assert.equal(lab.activeEmote, 'emote-pointing'); assert.equal(menu.isOpen, false);
   assert.equal(lab.combatAttack, null); assert.equal(lab.combatPhase, 'none');
   assert.equal(lab.player.controls.isLocked, true);
+});
+
+test('the central return button closes in one click and all emotes is an icon of four dots', () => {
+  menu.favorites = ids.slice(0, 8); lab.player.controls.isLocked = true; menu.open();
+  assert.equal(menu.wheelRect.left + menu.wheelRect.width / 2, window.innerWidth / 2);
+  assert.equal(menu.wheelRect.top + menu.wheelRect.height / 2, window.innerHeight / 2);
+  const back = menu.element.querySelector('.emote-wheel-back');
+  const all = menu.element.querySelector('.emote-wheel-all');
+  assert.equal(back.getAttribute('aria-label'), 'Revenir au jeu');
+  assert.equal(all.querySelectorAll('circle').length, 4);
+  assert.equal(all.textContent.trim(), '');
+  clickPointer();
+  assert.equal(menu.isOpen, false); assert.equal(lab.combatAttack, null);
+  assert.equal(lab.player.controls.isLocked, true);
+});
+
+test('hovering with the game cursor restores opacity, pauses expiry and restarts a linear fade on leaving', () => {
+  menu.favorites = ids.slice(0, 8); lab.player.controls.isLocked = true; menu.open();
+  run(1); assert.ok(Math.abs(Number(menu.element.style.opacity) - .5) < .001);
+  const mouse = moveMouse(menu.wheelRect.width / 3, 0);
+  assert.equal(mouse.defaultPrevented, false);
+  run(3); assert.equal(menu.isOpen, true); assert.equal(menu.element.style.opacity, '1');
+  moveMouse(menu.wheelRect.width, 0);
+  assert.equal(menu.hoveredButton, null); assert.equal(menu.element.style.opacity, '1');
+  run(.5); assert.ok(Math.abs(Number(menu.element.style.opacity) - .75) < .001);
+  // Re-entering restores the full menu, rather than resuming an almost expired timer.
+  moveMouse(-menu.wheelRect.width, 0); run(2.2);
+  assert.equal(menu.isOpen, true); assert.equal(menu.element.style.opacity, '1');
+  key(lab.settings.controls.forward, 'z'); assert.equal(menu.isOpen, false);
+  release(lab.settings.controls.forward, 'z');
+});
+
+test('the small four-dot target opens the collection under pointer lock without moving the cursor', () => {
+  menu.favorites = ids.slice(0, 8); lab.player.controls.isLocked = true; menu.open();
+  moveMouse(0, 37.2 * menu.wheelRect.width / 360);
+  assert.equal(menu.hoveredButton?.className.includes('emote-wheel-all'), true);
+  const point = [menu.pointerX, menu.pointerY]; clickPointer();
+  assert.equal(menu.element.querySelectorAll('[data-card]').length, 8);
+  assert.deepEqual([menu.pointerX, menu.pointerY], point);
+  assert.equal(lab.combatAttack, null); assert.equal(lab.player.controls.isLocked, true);
+  run(3); assert.equal(menu.isOpen, true); assert.equal(menu.element.style.opacity, '1');
+  menu.element.querySelector('[data-favorite="emote-pointing"]').click();
+  assert.deepEqual([menu.pointerX, menu.pointerY], point);
+  run(2.2); assert.equal(menu.isOpen, true);
+  menu.element.querySelector('[data-action="wheel"]').click();
+  assert.ok(menu.element.querySelector('.emote-wheel-back'));
+  assert.deepEqual([menu.pointerX, menu.pointerY], point);
+  moveMouse(-window.innerWidth, -window.innerHeight); run(2.02);
+  assert.equal(menu.isOpen, false);
+});
+
+test('a normal cursor keeps the picker visible across slots and resumes expiry outside it', () => {
+  menu.favorites = ids.slice(0, 8); lab.player.controls.isLocked = false; menu.open();
+  const x = menu.wheelRect.left + menu.wheelRect.width * .8;
+  const y = menu.wheelRect.top + menu.wheelRect.height * .5;
+  window.dispatchEvent(new MouseEvent('mousemove', { clientX: x, clientY: y, bubbles: true }));
+  run(3); assert.equal(menu.isOpen, true); assert.equal(menu.element.style.opacity, '1');
+  menu.element.querySelector('[data-action="collection"]').click();
+  const first = menu.element.querySelector('[data-emote="emote-greeting"]');
+  const second = menu.element.querySelector('[data-emote="emote-clapping"]');
+  first.dispatchEvent(new window.PointerEvent('pointerout', { relatedTarget: second, bubbles: true }));
+  second.dispatchEvent(new window.PointerEvent('pointerover', { relatedTarget: first, bubbles: true }));
+  run(3); assert.equal(menu.isOpen, true);
+  window.dispatchEvent(new MouseEvent('mousemove', { clientX: 0, clientY: 0, bubbles: true }));
+  run(1); assert.ok(Math.abs(Number(menu.element.style.opacity) - .5) < .001);
+  run(1.02); assert.equal(menu.isOpen, false);
+});
+
+test('clicking a gap inside the wheel does not punch the character', () => {
+  lab.player.controls.isLocked = true; menu.open();
+  moveMouse(0, 66 * menu.wheelRect.width / 360);
+  assert.equal(menu.hoveredButton, null); clickPointer();
+  assert.equal(menu.isOpen, true); assert.equal(lab.activeEmote, null);
+  assert.equal(lab.combatAttack, null); assert.equal(lab.combatPhase, 'none');
 });
 
 test('pressing Tab while movement is held leaves exploration uninterrupted and does not display the overlay', () => {
