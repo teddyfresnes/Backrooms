@@ -1,4 +1,4 @@
-import test, { after, afterEach } from 'node:test';
+import test, { after, afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createLab, stepLab, THREE } from './support/headless-lab.mjs';
@@ -25,6 +25,8 @@ const place = (x = -10, z = -12) => {
 const wall = (x, z, width = .1, depth = .3, y = 1, height = 1) => lab.physics.addChunk('emote-test-obstacle', [{
   id: 'obstacle', kind: 'wall', center: { x, y, z }, halfExtents: { x: width, y: height, z: depth },
 }], { x: 0, y: 0, z: 0 });
+
+beforeEach(() => place());
 
 afterEach(() => {
   if (lab.physics.hasChunk('emote-test-obstacle')) lab.physics.removeChunk('emote-test-obstacle');
@@ -56,7 +58,7 @@ test('all ten supplied animations have real, compatible channels and retargeted 
   }
 });
 
-test('Tab opens eight HUD slots while movement, pointer capture, aim and world updates continue', () => {
+test('Tab opens eight HUD slots without blocking aim or the world and movement closes immediately', () => {
   enter(); lab.player.controls.isLocked = true; key('Tab', 'Tab');
   assert.equal(menu.isOpen, true); assert.equal(lab.player.isLocked, true);
   assert.equal(lab.player.controls.isLocked, true);
@@ -72,33 +74,39 @@ test('Tab opens eight HUD slots while movement, pointer capture, aim and world u
   assert.notEqual(lab.player.getContinuousAimYawRadians(), yaw);
   assert.ok(lab.combatClock > clock); assert.ok(lab.currentAnimationElapsed > time);
   assert.ok(position.distanceTo(lab.player.position) > .1);
-  assert.equal(menu.isOpen, true);
-  menu.element.querySelector('[data-action="collection"]').click();
+  assert.equal(menu.isOpen, false);
+  release(lab.settings.controls.forward, 'z');
+  menu.open(); menu.element.querySelector('[data-action="collection"]').click();
   const nextClock = lab.combatClock; run(.1);
   assert.ok(lab.combatClock > nextClock); assert.equal(lab.player.isLocked, true);
 });
 
-test('central collection supports replacing a full favorite wheel without playing an emote', () => {
+test('the standing collection filters out ground emotes and saves its own favorites without playing', () => {
   menu.favorites = ids.slice(0, 8); enter(); menu.open();
   menu.element.querySelector('[data-action="collection"]').click();
-  assert.equal(menu.element.querySelectorAll('[data-card]').length, 10);
-  menu.element.querySelector('[data-favorite="emote-laying"]').click();
-  assert.equal(menu.replacement, 'emote-laying'); assert.equal(lab.activeEmote, null);
-  menu.element.querySelector('[data-replace="2"]').click();
-  assert.equal(menu.favorites[2], 'emote-laying'); assert.equal(menu.replacement, null);
-  assert.equal(new Set(menu.favorites).size, 8);
+  assert.equal(menu.element.querySelectorAll('[data-card]').length, 8);
+  assert.equal(menu.element.querySelector('[data-card="emote-laying"]'), null);
+  assert.equal(menu.element.querySelector('[data-card="emote-kip-up"]'), null);
+  menu.element.querySelector('[data-favorite="emote-pointing"]').click();
+  assert.equal(menu.favorites[2], null); assert.equal(lab.activeEmote, null);
+  menu.element.querySelector('[data-favorite="emote-pointing"]').click();
+  assert.equal(menu.favorites[2], 'emote-pointing');
   assert.deepEqual(JSON.parse(localStorage.getItem('backrooms.emote-favorites.v1')), menu.favorites);
-  const restored = new menu.constructor(lab.root, { onOpen() {}, onClose() {}, onPlay() { return false; }, isPointerLocked() { return false; }, isGameControl() { return false; }, getUnavailableReason() { return null; } });
+  const restored = new menu.constructor(lab.root, {
+    onOpen() {}, onClose() {}, onPlay() { return false; }, isPointerLocked() { return false; },
+    isGameControl() { return false; }, isMovementControl() { return false; }, isMoving() { return false; },
+    getPosture() { return 'standing'; }, getUnavailableReason() { return null; },
+  });
   assert.deepEqual(restored.favorites, menu.favorites); restored.dispose();
 });
 
-test('favorite toggles preserve the slot and a free slot accepts a new favorite', () => {
-  menu.favorites = ids.slice(0, 8); enter(); menu.open();
+test('favorite toggles preserve another empty slot and put the chosen emote in the first free slot', () => {
+  menu.favorites = ids.slice(0, 8); menu.favorites[0] = null; enter(); menu.open();
   menu.element.querySelector('[data-action="collection"]').click();
   menu.element.querySelector('[data-favorite="emote-pointing"]').click();
   assert.equal(menu.favorites[2], null);
-  menu.element.querySelector('[data-favorite="emote-kip-up"]').click();
-  assert.equal(menu.favorites[2], 'emote-kip-up'); assert.equal(menu.replacement, null);
+  menu.element.querySelector('[data-favorite="emote-pointing"]').click();
+  assert.equal(menu.favorites[0], 'emote-pointing'); assert.equal(menu.favorites[2], null);
 });
 
 test('a wheel click plays immediately without changing the view and a new movement interrupts it', () => {
@@ -116,11 +124,12 @@ test('a one-shot returns to exploration after its clip completes', () => {
   assert.equal(lab.activeEmote, null); assert.ok(!lab.currentAnimation.startsWith('emote-'));
 });
 
-test('a static laying pose holds its lowered hips and stops on a damage event', () => {
-  enter(); assert.equal(lab.playEmote('emote-laying'), true); run(.7);
-  assert.equal(lab.activeEmote, 'emote-laying'); assert.ok(lab.hipsBone.position.y < .4);
-  assert.ok(lab.character.position.toArray().every(Number.isFinite));
-  lab.applyDamage(5); assert.equal(lab.activeEmote, null);
+test('ground-only emotes cannot start from a standing avatar or appear in saved standing slots', () => {
+  place(); assert.equal(lab.playEmote('emote-laying'), false); assert.equal(lab.playEmote('emote-kip-up'), false);
+  menu.favorites = ['emote-laying', 'emote-kip-up', ...ids.slice(2, 8)]; menu.open();
+  assert.equal(menu.element.querySelector('[data-emote="emote-laying"]'), null);
+  assert.equal(menu.element.querySelector('[data-emote="emote-kip-up"]'), null);
+  assert.equal(menu.element.querySelector('[data-slot="0"]').classList.contains('is-empty'), true);
 });
 
 test('keyboard shortcuts select immediately, leave jump and C available, and Escape closes in one press', () => {
@@ -134,20 +143,23 @@ test('keyboard shortcuts select immediately, leave jump and C available, and Esc
   let passed = false; const observe = event => { if (event === jump) passed = true; };
   window.addEventListener('keydown', observe);
   window.dispatchEvent(jump); window.removeEventListener('keydown', observe);
-  assert.equal(passed, true); assert.equal(menu.isOpen, true);
+  assert.equal(passed, true); assert.equal(menu.isOpen, false);
   release('Space', ' ');
-  key('Escape', 'Escape'); assert.equal(menu.isOpen, false); assert.equal(lab.player.isLocked, true);
+  menu.open(); key('Escape', 'Escape'); assert.equal(menu.isOpen, false); assert.equal(lab.player.isLocked, true);
 });
 
-test('a short Tab tap stays open and a held Tab flick selects on release without waiting for a frame', () => {
-  menu.favorites = ids.slice(0, 8); enter(); lab.player.controls.isLocked = true;
-  key('Tab', 'Tab'); menu.heldAt = performance.now(); release('Tab', 'Tab');
-  assert.equal(menu.isOpen, true);
-  key('Tab', 'Tab'); assert.equal(menu.isOpen, false);
-  key('Tab', 'Tab'); menu.heldAt = performance.now() - 250;
+test('a single Tab tap fades linearly for two seconds without release selecting or changing capture', () => {
+  menu.favorites = ids.slice(0, 8); place(); lab.player.controls.isLocked = true;
+  key('Tab', 'Tab'); release('Tab', 'Tab');
+  assert.equal(menu.isOpen, true); assert.equal(menu.element.style.opacity, '1');
+  run(.5); assert.ok(Math.abs(Number(menu.element.style.opacity) - .75) < .001);
+  run(.5); assert.ok(Math.abs(Number(menu.element.style.opacity) - .5) < .001);
   moveMouse(0, -2000); release('Tab', 'Tab');
-  assert.equal(menu.isOpen, false); assert.equal(lab.activeEmote, 'emote-greeting');
+  assert.equal(menu.isOpen, true); assert.equal(lab.activeEmote, null);
+  run(1.02); assert.equal(menu.isOpen, false); assert.equal(menu.element.hidden, true);
   assert.equal(lab.player.controls.isLocked, true);
+  key('Tab', 'Tab'); assert.equal(menu.element.style.opacity, '1');
+  key('Tab', 'Tab'); assert.equal(menu.isOpen, false);
 });
 
 test('a native pointer click selects the virtual sector without punching or reopening the menu', () => {
@@ -159,11 +171,11 @@ test('a native pointer click selects the virtual sector without punching or reop
   assert.equal(lab.player.controls.isLocked, true);
 });
 
-test('choosing while a movement key is held keeps moving and starts the emote in the current view', () => {
-  menu.favorites = ids.slice(0, 8); enter(); lab.setViewMode('third-person');
+test('pressing Tab while movement is held leaves exploration uninterrupted and does not display the overlay', () => {
+  menu.favorites = ids.slice(0, 8); place(); lab.setViewMode('third-person');
   key(lab.settings.controls.forward, 'z'); run(.15);
-  const position = lab.player.position.clone(); menu.open(); key('Digit2', 'é'); run(.2);
-  assert.equal(lab.activeEmote, 'emote-clapping'); assert.equal(lab.viewMode, 'third-person');
+  const position = lab.player.position.clone(); key('Tab', 'Tab'); run(.2);
+  assert.equal(menu.isOpen, false); assert.equal(lab.activeEmote, null); assert.equal(lab.viewMode, 'third-person');
   assert.ok(position.distanceTo(lab.player.position) > .1);
   assert.equal(lab.player.isLocked, true);
 });
@@ -171,7 +183,7 @@ test('choosing while a movement key is held keeps moving and starts the emote in
 test('the collection plays in one click and an empty sector opens favorite management', () => {
   enter(); menu.favorites = ids.slice(0, 8); menu.favorites[0] = null; menu.open();
   menu.element.querySelector('[data-ring-slot="0"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-  assert.equal(menu.element.querySelectorAll('[data-card]').length, 10);
+  assert.equal(menu.element.querySelectorAll('[data-card]').length, 8);
   menu.element.querySelector('[data-emote="emote-hip-hop"]').click();
   assert.equal(lab.activeEmote, 'emote-hip-hop'); assert.equal(menu.isOpen, false);
 });
@@ -182,7 +194,7 @@ test('a number remapped to movement remains available while the wheel is open', 
     lab.settings.controls.forward = 'Digit1'; lab.player.input.setBindings(lab.settings.controls);
     enter(); menu.open(); key('Digit1', '&');
     assert.equal(lab.player.getMovementIntent().forward, 1);
-    assert.equal(menu.isOpen, true); assert.equal(lab.activeEmote, null);
+    assert.equal(menu.isOpen, false); assert.equal(lab.activeEmote, null);
   } finally {
     lab.settings.controls = bindings; lab.player.input.setBindings(bindings);
   }
@@ -208,6 +220,26 @@ test('C no longer opens the menu and Tab suppresses browser focus navigation', (
   assert.equal(document.activeElement, focus);
   key('KeyC', 'c'); assert.equal(menu.isOpen, true);
   key('Tab', 'Tab'); assert.equal(menu.isOpen, false);
+});
+
+test('Tab auto-repeat still suppresses browser navigation after the overlay has faded', () => {
+  place(); key('Tab', 'Tab'); run(2.02);
+  const event = new KeyboardEvent('keydown', { code: 'Tab', key: 'Tab', repeat: true, bubbles: true, cancelable: true });
+  window.dispatchEvent(event);
+  assert.equal(event.defaultPrevented, true); assert.equal(menu.isOpen, false);
+});
+
+test('logical AZERTY movement closes the overlay in the input event before a game frame', () => {
+  place(); menu.open(); key('KeyW', 'z');
+  assert.equal(menu.isOpen, false); assert.equal(lab.player.getMovementIntent().forward, 1);
+});
+
+test('the equivalent right Control crouch closes the overlay even with the Control modifier set', () => {
+  place(); menu.open();
+  const event = new KeyboardEvent('keydown', { code: 'ControlRight', key: 'Control', ctrlKey: true, bubbles: true, cancelable: true });
+  window.dispatchEvent(event);
+  assert.equal(menu.isOpen, false); assert.equal(event.defaultPrevented, false);
+  assert.equal(lab.player.getMovementIntent().crouch, true);
 });
 
 for (const view of ['first-person', 'third-person']) test(`hip-hop follows the supplied root trajectory in ${view} while aim remains free`, () => {
