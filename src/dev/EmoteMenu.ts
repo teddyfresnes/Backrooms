@@ -384,7 +384,6 @@ export class EmoteMenu {
       this.pointerY = event.clientY;
     }
     this.dirtyPointer = true;
-    this.update();
     // Do not consume mousemove: PointerLockControls and PlayerController still aim normally.
   };
 
