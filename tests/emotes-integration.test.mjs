@@ -195,6 +195,7 @@ test('hovering with the game cursor restores opacity, pauses expiry and restarts
   assert.equal(mouse.defaultPrevented, false);
   run(3); assert.equal(menu.isOpen, true); assert.equal(menu.element.style.opacity, '1');
   moveMouse(menu.wheelRect.width, 0);
+  menu.update();
   assert.equal(menu.hoveredButton, null); assert.equal(menu.element.style.opacity, '1');
   run(.5); assert.ok(Math.abs(Number(menu.element.style.opacity) - .75) < .001);
   // Re-entering restores the full menu, rather than resuming an almost expired timer.
@@ -207,6 +208,7 @@ test('hovering with the game cursor restores opacity, pauses expiry and restarts
 test('the small four-dot target opens the collection under pointer lock without moving the cursor', () => {
   menu.favorites = ids.slice(0, 8); lab.player.controls.isLocked = true; menu.open();
   moveMouse(0, 37.2 * menu.wheelRect.width / 360);
+  menu.update();
   assert.equal(menu.hoveredButton?.className.includes('emote-wheel-all'), true);
   const point = [menu.pointerX, menu.pointerY]; clickPointer();
   assert.equal(menu.element.querySelectorAll('[data-card]').length, 8);
@@ -243,6 +245,7 @@ test('a normal cursor keeps the picker visible across slots and resumes expiry o
 test('clicking a gap inside the wheel does not punch the character', () => {
   lab.player.controls.isLocked = true; menu.open();
   moveMouse(0, 66 * menu.wheelRect.width / 360);
+  menu.update();
   assert.equal(menu.hoveredButton, null); clickPointer();
   assert.equal(menu.isOpen, true); assert.equal(lab.activeEmote, null);
   assert.equal(lab.combatAttack, null); assert.equal(lab.combatPhase, 'none');
