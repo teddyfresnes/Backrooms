@@ -10,7 +10,12 @@ const down = (view = 'third-person') => {
   menu.close(); lab.player.input.clear(); lab.health = 100;
   lab.player.lock(); lab.npcAttackCooldown = 100; lab.recoveryCameraBlend = -1;
   lab.player.teleport({ x: -14, y: .865, z: -12 }); lab.player.grounded = true;
+  lab.player.continuousAimYaw = -Math.PI; lab.player.lookCamera.rotation.set(0, -Math.PI, 0); lab.bodyYaw = 0;
+  lab.playAnimation('idle-action', true, 1, false, true);
   lab.setViewMode(view); lab.updateAvatarTransform(0, true);
+  // Every fall starts from a settled standing pose, not the previous test's
+  // outgoing recovery blend. The physical ground pose itself remains untouched.
+  run(.4);
   lab.startRagdoll({ fatal: false }); run(2.2);
   assert.ok(lab.ragdoll); assert.equal(lab.getPlayerEmotePosture(), 'ground');
 };
@@ -110,7 +115,7 @@ for (const view of ['first-person', 'third-person']) test(`kip-up first aligns o
 });
 
 test('a low ceiling allows a lying pose but grays kip-up because the rise needs more height', () => {
-  down(); assert.equal(lab.playEmote('emote-laying'), true); run(1);
+  down(); assert.equal(lab.playEmote('emote-laying'), true, lab.getEmoteUnavailableReason('emote-laying') ?? 'lying failed'); run(1);
   const plan = lab.getGroundEmotePlacement('emote-laying');
   obstacle({ x: plan.origin.x, y: .9, z: plan.origin.z }, { x: 2, y: .08, z: 2 });
   assert.equal(lab.getEmoteUnavailableReason('emote-laying'), null);
@@ -129,7 +134,7 @@ test('a held lying pose can start kip-up or the ordinary E recovery with a conti
   assert.equal(menu.isOpen, false); assert.equal(lab.recoveryEmote, 'emote-kip-up');
   assert.ok(lab.recovery.getPelvisPosition().distanceTo(start.position) < .00001);
   run(3); assert.ok(!lab.recovery, 'the ordinary recovery did not finish');
-  down(); assert.equal(lab.playEmote('emote-laying'), true); run(1);
+  down(); assert.equal(lab.playEmote('emote-laying'), true, lab.getEmoteUnavailableReason('emote-laying') ?? 'lying failed'); run(1);
   key(lab.settings.controls.interact);
   assert.ok(lab.recovery && !lab.recovery.isHolding); assert.equal(lab.recoveryEmote, null);
   run(5); assert.ok(!lab.recovery, 'the ordinary recovery did not finish'); assert.equal(lab.player.isIncapacitated, false);

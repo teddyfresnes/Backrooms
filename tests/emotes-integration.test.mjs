@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createLab, stepLab, THREE } from './support/headless-lab.mjs';
 
 const lab = await createLab();
-const ids = ['greeting', 'clapping', 'pointing', 'salute', 'hip-hop', 'wave', 'freeze', 'sweat', 'laying', 'kip-up'].map(name => `emote-${name}`);
+const ids = ['greeting', 'clapping', 'pointing', 'salute', 'hip-hop', 'wave', 'freeze', 'sweat', 'laying', 'kip-up', 'middle-finger', 'follow-me', 'wait'].map(name => `emote-${name}`);
 const key = (code, value = '') => window.dispatchEvent(new KeyboardEvent('keydown', { code, key: value, bubbles: true, cancelable: true }));
 const release = (code, value = '') => window.dispatchEvent(new KeyboardEvent('keyup', { code, key: value, bubbles: true, cancelable: true }));
 const moveMouse = (x, y) => {
@@ -40,7 +40,7 @@ afterEach(() => {
 });
 after(() => lab.dispose());
 
-test('all ten supplied animations have real, compatible channels and retargeted root height', () => {
+test('all thirteen emotes have real, compatible channels and retargeted root height', () => {
   const bones = new Set(); lab.character.traverse(object => { if (object.isBone) bones.add(object.name); });
   for (const id of ids) {
     const clip = lab.animations.get(id)?.clip;
@@ -87,7 +87,7 @@ test('Tab opens eight HUD slots without blocking aim or the world and movement c
 test('the standing collection filters out ground emotes and saves its own favorites without playing', () => {
   menu.favorites = ids.slice(0, 8); enter(); menu.open();
   menu.element.querySelector('[data-action="collection"]').click();
-  assert.equal(menu.element.querySelectorAll('[data-card]').length, 8);
+  assert.equal(menu.element.querySelectorAll('[data-card]').length, 11);
   assert.equal(menu.element.querySelector('[data-card="emote-laying"]'), null);
   assert.equal(menu.element.querySelector('[data-card="emote-kip-up"]'), null);
   menu.element.querySelector('[data-favorite="emote-pointing"]').click();
@@ -211,7 +211,7 @@ test('the small four-dot target opens the collection under pointer lock without 
   menu.update();
   assert.equal(menu.hoveredButton?.className.includes('emote-wheel-all'), true);
   const point = [menu.pointerX, menu.pointerY]; clickPointer();
-  assert.equal(menu.element.querySelectorAll('[data-card]').length, 8);
+  assert.equal(menu.element.querySelectorAll('[data-card]').length, 11);
   assert.deepEqual([menu.pointerX, menu.pointerY], point);
   assert.equal(lab.combatAttack, null); assert.equal(lab.player.controls.isLocked, true);
   run(3); assert.equal(menu.isOpen, true); assert.equal(menu.element.style.opacity, '1');
@@ -263,7 +263,7 @@ test('pressing Tab while movement is held leaves exploration uninterrupted and d
 test('the collection plays in one click and an empty sector opens favorite management', () => {
   enter(); menu.favorites = ids.slice(0, 8); menu.favorites[0] = null; menu.open();
   menu.element.querySelector('[data-ring-slot="0"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-  assert.equal(menu.element.querySelectorAll('[data-card]').length, 8);
+  assert.equal(menu.element.querySelectorAll('[data-card]').length, 11);
   menu.element.querySelector('[data-emote="emote-hip-hop"]').click();
   assert.equal(lab.activeEmote, 'emote-hip-hop'); assert.equal(menu.isOpen, false);
 });
@@ -361,13 +361,132 @@ test('a looping dance crosses its loop boundary without teleporting or accumulat
   assert.ok(maxStep < .07, `loop jump: ${maxStep}`); assert.equal(lab.activeEmote, 'emote-hip-hop');
 });
 
-test('a traveling held pose retains its final physical position instead of snapping back', () => {
-  place(); assert.equal(lab.playEmote('emote-freeze'), true);
-  const start = lab.player.position.clone(); run(6.4);
-  assert.equal(lab.activeEmote, 'emote-freeze'); assert.ok(start.distanceTo(lab.player.position) > 1.5);
-  const settled = lab.player.position.clone(); run(.4);
-  assert.ok(settled.distanceTo(lab.player.position) < .003);
-  lab.stopEmote(); stepLab(lab); assert.ok(settled.distanceTo(lab.player.position) < .003);
+for (const view of ['first-person', 'third-person']) test(`Freeze finishes upright without returning backwards or holding its final pose in ${view}`, () => {
+  place(); run(.4); lab.setViewMode(view); const restY = lab.hipsBone.position.y;
+  assert.equal(lab.playEmote('emote-freeze'), true);
+  const start = lab.player.position.clone(); run(5.57);
+  const settled = lab.player.position.clone(); assert.ok(start.distanceTo(settled) > 1.5);
+  let pelvis = lab.hipsBone.getWorldPosition(new THREE.Vector3()), maxStep = 0;
+  for (let i = 0; i < 75; i++) {
+    stepLab(lab); const next = lab.hipsBone.getWorldPosition(new THREE.Vector3());
+    maxStep = Math.max(maxStep, next.distanceTo(pelvis)); pelvis = next;
+    assert.ok(settled.distanceTo(lab.player.position) < .003, 'the recovery tail moved the player backwards');
+  }
+  assert.equal(lab.activeEmote, null); assert.ok(!lab.currentAnimation.startsWith('emote-'));
+  assert.ok(Math.abs(lab.hipsBone.position.y - restY) < .02, 'the hips remained in a lowered dance pose');
+  assert.ok(maxStep < .12, `the final pose snapped by ${maxStep} metres`);
+  const from = lab.player.position.clone(); key(lab.settings.controls.forward, 'z'); run(.2);
+  assert.ok(from.distanceTo(lab.player.position) > .1); release(lab.settings.controls.forward, 'z');
+});
+
+for (const view of ['first-person', 'third-person']) test(`RMB above the wheel immediately guards and its release passes through in ${view}`, () => {
+  lab.setViewMode(view); lab.player.controls.isLocked = true; menu.open();
+  const down = new MouseEvent('mousedown', { button: 2, bubbles: true, cancelable: true });
+  let passed = false; const observe = event => { if (event === down) passed = true; };
+  window.addEventListener('mousedown', observe); lab.renderer.domElement.dispatchEvent(down); window.removeEventListener('mousedown', observe);
+  assert.equal(menu.isOpen, false); assert.equal(passed, true);
+  assert.equal(lab.combatPointerHeld, true); assert.equal(lab.combatLatchReason, 'manual');
+  assert.notEqual(lab.combatPhase, 'none');
+  lab.renderer.domElement.dispatchEvent(new MouseEvent('mouseup', { button: 2, bubbles: true }));
+  assert.equal(lab.combatPointerHeld, false);
+});
+
+test('RMB with a normal cursor above a UI button guards instead of playing an emote', () => {
+  lab.player.controls.isLocked = false; menu.open();
+  menu.element.querySelector('[data-slot="1"]').dispatchEvent(new MouseEvent('mousedown', { button: 2, bubbles: true, cancelable: true }));
+  assert.equal(menu.isOpen, false); assert.equal(lab.activeEmote, null);
+  assert.equal(lab.combatPointerHeld, true); assert.notEqual(lab.combatPhase, 'none');
+  window.dispatchEvent(new MouseEvent('mouseup', { button: 2 })); assert.equal(lab.combatPointerHeld, false);
+});
+
+for (const native of [true, false]) test(`an outside left click closes the picker and immediately attacks from guard (${native ? 'game' : 'normal'} cursor)`, () => {
+  lab.player.controls.isLocked = native;
+  lab.renderer.domElement.dispatchEvent(new MouseEvent('mousedown', { button: 2, bubbles: true, cancelable: true }));
+  run(.3); menu.open();
+  if (native) moveMouse(window.innerWidth, 0);
+  const down = new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true });
+  lab.renderer.domElement.dispatchEvent(down);
+  assert.equal(menu.isOpen, false); assert.equal(lab.combatLeftPointerHeld, true);
+  assert.ok(lab.combatAttack, 'the first outside click did not reach the attack');
+  lab.renderer.domElement.dispatchEvent(new MouseEvent('mouseup', { button: 0, bubbles: true }));
+});
+
+test('a pending UI left-button release never swallows the guard button release', () => {
+  lab.player.controls.isLocked = true; menu.open();
+  lab.renderer.domElement.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true }));
+  assert.equal(menu.isOpen, false); assert.equal(menu.swallowRelease, true);
+  lab.renderer.domElement.dispatchEvent(new MouseEvent('mousedown', { button: 2, bubbles: true, cancelable: true }));
+  assert.equal(lab.combatPointerHeld, true);
+  lab.renderer.domElement.dispatchEvent(new MouseEvent('mouseup', { button: 2, bubbles: true }));
+  assert.equal(lab.combatPointerHeld, false); assert.equal(menu.swallowRelease, true);
+  lab.renderer.domElement.dispatchEvent(new MouseEvent('mouseup', { button: 0, bubbles: true }));
+});
+
+test('an outside click without a down event closes the normal-cursor overlay', () => {
+  lab.player.controls.isLocked = false; menu.open();
+  lab.renderer.domElement.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  assert.equal(menu.isOpen, false);
+});
+
+test('sprint, interaction and the combat modifier close the picker without consuming the keyboard input', () => {
+  for (const code of ['ShiftRight', lab.settings.controls.interact, 'KeyF']) {
+    menu.open(); assert.equal(menu.isOpen, true);
+    const event = new KeyboardEvent('keydown', { code, bubbles: true, cancelable: true });
+    let passed = false; const observe = other => { if (other === event) passed = true; };
+    window.addEventListener('keydown', observe); window.dispatchEvent(event); window.removeEventListener('keydown', observe);
+    assert.equal(menu.isOpen, false); assert.equal(passed, true); assert.equal(event.defaultPrevented, false);
+    release(code);
+  }
+});
+
+for (const view of ['first-person', 'third-person']) for (const id of ['emote-middle-finger', 'emote-follow-me', 'emote-wait']) test(`${id} works without another character, can be favorited and finishes without root drift in ${view}`, () => {
+  lab.setViewMode(view);
+  const start = lab.player.position.clone(); menu.favorites = ids.slice(0, 8); menu.favorites[0] = null;
+  assert.equal(lab.getEmoteUnavailableReason(id), null); menu.open();
+  menu.element.querySelector('[data-action="collection"]').click();
+  const card = menu.element.querySelector(`[data-card="${id}"]`); assert.ok(card); assert.equal(card.querySelector('[data-emote]').disabled, false);
+  card.querySelector('[data-favorite]').click(); assert.equal(menu.favorites[0], id);
+  menu.element.querySelector('[data-action="wheel"]').click(); key('Digit1', '1');
+  assert.equal(lab.activeEmote, id); run(.9); assert.equal(lab.activeEmote, id);
+  if (view === 'first-person') {
+    const physical = lab.rightHandBone.getWorldPosition(new THREE.Vector3());
+    const visible = lab.firstPersonRightHandBone.getWorldPosition(new THREE.Vector3());
+    assert.ok(physical.distanceTo(visible) < .04, 'first-person framing changed the gesture');
+  }
+  run(2); assert.equal(lab.activeEmote, null); assert.ok(!lab.currentAnimation.startsWith('emote-'));
+  assert.ok(start.distanceTo(lab.player.position) < .003);
+});
+
+test('the middle-finger pose extends the middle finger while folding the other fingers', () => {
+  assert.equal(lab.playEmote('emote-middle-finger'), true); run(.9);
+  const find = suffix => lab.character.getObjectByName(`mixamorig${suffix}`) ?? (() => {
+    let result; lab.character.traverse(object => { if (object.isBone && object.name.toLowerCase().endsWith(suffix.toLowerCase())) result = object; }); return result;
+  })();
+  const chord = name => {
+    const points = [1, 2, 3].map(i => find(`RightHand${name}${i}`).getWorldPosition(new THREE.Vector3()));
+    return points[0].distanceTo(points[2]) / (points[0].distanceTo(points[1]) + points[1].distanceTo(points[2]));
+  };
+  assert.ok(chord('Middle') > .95); assert.ok(chord('Index') < .85); assert.ok(chord('Ring') < .85); assert.ok(chord('Pinky') < .85);
+});
+
+test('a new free gesture can replace an existing favorite when all eight slots are occupied', () => {
+  menu.favorites = ids.slice(0, 8); menu.open(); menu.element.querySelector('[data-action="collection"]').click();
+  menu.element.querySelector('[data-favorite="emote-wait"]').click();
+  assert.equal(menu.replacement, 'emote-wait'); assert.equal(lab.activeEmote, null);
+  menu.element.querySelector('[data-replace="0"]').click();
+  assert.equal(menu.favorites[0], 'emote-wait'); assert.equal(menu.replacement, null);
+  assert.equal(JSON.parse(localStorage.getItem('backrooms.emote-favorites.v1'))[0], 'emote-wait');
+  menu.element.querySelector('[data-action="wheel"]').click(); key('Digit1', '1');
+  assert.equal(lab.activeEmote, 'emote-wait'); assert.equal(menu.isOpen, false);
+});
+
+test('raised fingertips gray the middle-finger gesture under a ceiling that still permits a lower open-palm gesture', () => {
+  wall(-10.21, -11.83, .11, .13, 1.78, .035);
+  assert.equal(lab.getEmoteUnavailableReason('emote-middle-finger'), 'Pas assez de place');
+  assert.equal(lab.getEmoteUnavailableReason('emote-wait'), null);
+  menu.open(); menu.element.querySelector('[data-action="collection"]').click();
+  assert.equal(menu.element.querySelector('[data-emote="emote-middle-finger"]').disabled, true);
+  assert.equal(menu.element.querySelector('[data-emote="emote-wait"]').disabled, false);
 });
 
 test('insufficient room grays the dance, blocks mouse and number selection, and leaves small gestures available', () => {
