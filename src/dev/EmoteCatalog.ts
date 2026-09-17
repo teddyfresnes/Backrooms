@@ -5,10 +5,13 @@ export const EMOTES = [
   { id: 'emote-salute', label: 'Salut militaire', file: 'salute', mode: 'once', sample: .38 },
   { id: 'emote-hip-hop', label: 'Hip-hop', file: 'hip-hop', mode: 'loop', sample: .3 },
   { id: 'emote-wave', label: 'Vague', file: 'wave', mode: 'loop', sample: .42 },
-  { id: 'emote-freeze', label: 'Freeze', file: 'freeze', mode: 'hold', sample: .6 },
+  { id: 'emote-freeze', label: 'Freeze', file: 'freeze', mode: 'once', sample: .6 },
   { id: 'emote-sweat', label: 'S’essuyer le front', file: 'sweat', mode: 'once', sample: .45 },
   { id: 'emote-laying', label: 'S’allonger', file: 'laying', mode: 'hold', sample: .5 },
   { id: 'emote-kip-up', label: 'Kip-up', file: 'kip-up', mode: 'once', sample: .35 },
+  { id: 'emote-middle-finger', label: 'Doigt d’honneur', file: 'middle-finger', icon: 'middle-finger.svg', gesture: 'middle-finger', mode: 'once', sample: .4 },
+  { id: 'emote-follow-me', label: 'Suis-moi', file: 'follow-me', icon: 'follow-me.svg', gesture: 'follow-me', mode: 'once', sample: .4 },
+  { id: 'emote-wait', label: 'Attends', file: 'wait', icon: 'wait.svg', gesture: 'wait', mode: 'once', sample: .4 },
 ] as const;
 
 export type EmotePosture = 'standing' | 'ground';

@@ -14,6 +14,7 @@ const shortLabel: Record<EmoteId, string> = {
   'emote-greeting': 'Saluer', 'emote-clapping': 'Bravo', 'emote-pointing': 'Pointer',
   'emote-salute': 'Salut', 'emote-hip-hop': 'Hip-hop', 'emote-wave': 'Vague',
   'emote-freeze': 'Freeze', 'emote-sweat': 'Ouf', 'emote-laying': 'Au sol', 'emote-kip-up': 'Kip-up',
+  'emote-middle-finger': 'Doigt', 'emote-follow-me': 'Suis-moi', 'emote-wait': 'Attends',
 };
 const polar = (radius: number, angle: number) => [180 + radius * Math.sin(angle), 180 - radius * Math.cos(angle)];
 const sectorPath = (index: number, slots: number): string => {
@@ -27,6 +28,7 @@ interface EmoteMenuCallbacks {
   onOpen(): void;
   onClose(): void;
   onPlay(id: EmoteId): boolean;
+  onGamePointerDown?(event: MouseEvent): void;
   isPointerLocked(): boolean;
   isGameControl(code: string): boolean;
   isMovementControl(code: string): boolean;
@@ -66,6 +68,7 @@ export class EmoteMenu {
     this.element.className = 'emote-overlay';
     this.element.hidden = true;
     this.element.addEventListener('click', this.onClick);
+    this.element.addEventListener('contextmenu', event => event.preventDefault());
     this.element.addEventListener('pointerover', this.onHover);
     this.element.addEventListener('pointerout', this.onPointerOut);
     this.element.addEventListener('focusin', this.onHover);
@@ -131,7 +134,7 @@ export class EmoteMenu {
 
   private image(id: EmoteId | null): string {
     const emote = EMOTES.find(entry => entry.id === id);
-    return emote ? `<img src="/assets/emotes/icons/${emote.file}.png" alt="" draggable="false" width="64" height="64">` : '<span class="emote-empty">+</span>';
+    return emote ? `<img src="/assets/emotes/icons/${'icon' in emote ? emote.icon : `${emote.file}.png`}" alt="" draggable="false" width="64" height="64">` : '<span class="emote-empty">+</span>';
   }
 
   private render(resetPosition = false): void {
@@ -351,7 +354,8 @@ export class EmoteMenu {
   private consume(event: Event): void { event.preventDefault(); event.stopImmediatePropagation(); }
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     if (!this.isOpen) return;
-    if (this.callbacks.isMovementControl(controlCodeFromKeyboardEvent(event))) { this.close(); return; }
+    const code = controlCodeFromKeyboardEvent(event);
+    if (this.callbacks.isMovementControl(code) || this.callbacks.isGameControl(code)) { this.close(); return; }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.code === 'Tab' || event.code === 'Escape') {
       this.consume(event); if (!event.repeat) this.close();
@@ -388,23 +392,36 @@ export class EmoteMenu {
   };
 
   private readonly onMouseDown = (event: MouseEvent): void => {
-    if (!this.isOpen || !this.callbacks.isPointerLocked() || (event.button !== 0 && event.button !== 2)) return;
+    if (!this.isOpen) return;
+    if (event.button !== 0) {
+      const fromPicker = this.element.contains(event.target as Node);
+      this.close();
+      // RMB is always a gameplay press, even when the normal cursor is over UI.
+      if (fromPicker) this.callbacks.onGamePointerDown?.(event);
+      return;
+    }
+    if (!this.callbacks.isPointerLocked()) {
+      if (!this.element.querySelector('.emote-panel')?.contains(event.target as Node)) this.close();
+      return;
+    }
     this.pointerActive = true;
     this.dirtyPointer = true;
     this.update();
-    if (event.button === 2) { this.consume(event); this.swallowRelease = true; this.close(); }
-    else if (this.pointerInside) {
-      this.consume(event); this.swallowRelease = true;
-      if (this.hoveredButton) this.activate(this.hoveredButton);
-    }
+    if (!this.pointerInside) { this.close(); return; }
+    this.consume(event); this.swallowRelease = true;
+    if (this.hoveredButton) this.activate(this.hoveredButton);
   };
   private readonly onMouseUp = (event: MouseEvent): void => {
-    if (!this.swallowRelease) return;
+    if (!this.swallowRelease || event.button !== 0) return;
     this.consume(event); this.swallowRelease = false; this.swallowClick = event.button === 0;
   };
   private readonly onWindowClick = (event: MouseEvent): void => {
-    if (!this.swallowClick) return;
-    this.consume(event); this.swallowClick = false;
+    if (this.swallowClick && event.button === 0) { this.consume(event); this.swallowClick = false; return; }
+    if (!this.isOpen || this.element.contains(event.target as Node)) return;
+    if (this.callbacks.isPointerLocked()) {
+      this.dirtyPointer = true; this.update();
+      if (!this.pointerInside) this.close();
+    } else this.close();
   };
   private readonly onScroll = (event: WheelEvent): void => {
     if (!this.isOpen || this.view !== 'collection' || !this.callbacks.isPointerLocked()) return;

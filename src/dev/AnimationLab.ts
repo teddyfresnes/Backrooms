@@ -14,6 +14,7 @@ import { equivalentKeyCodes, formatKeyLabel } from '../input/ControlBindings';
 import { EMOTES, getEmotePosture, type EmoteId } from './EmoteCatalog';
 import { EmoteMenu } from './EmoteMenu';
 import { prepareEmoteMotion, type EmoteMotion } from './EmoteMotion';
+import { createGestureEmote, finishFreezeEmote } from './GestureEmotes';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { sweepGroundKickVolumes, type GroundKickVolume } from '../physics/GroundKickContact';
 import { RagdollSystem, type RagdollAnimationMotion, type RagdollImpactEvent } from '../physics/RagdollSystem';
@@ -1978,8 +1979,10 @@ export class AnimationLab {
         if (played && !this.player?.isLocked) this.player?.lock();
         return played;
       },
+      onGamePointerDown: event => this.onCombatMouseDown(event, true),
       isPointerLocked: () => this.player?.controls.isLocked ?? false,
-      isGameControl: (code) => Object.values(this.settings.controls).includes(code),
+      isGameControl: (code) => code === 'KeyF' || Object.values(this.settings.controls)
+        .some(binding => equivalentKeyCodes(binding).includes(code)),
       isMovementControl: (code) => [this.settings.controls.forward, this.settings.controls.backward,
         this.settings.controls.left, this.settings.controls.right, this.settings.controls.jump, this.settings.controls.crouch]
         .some(binding => equivalentKeyCodes(binding).includes(code)),
@@ -2459,18 +2462,22 @@ export class AnimationLab {
     }));
 
     await Promise.all(EMOTES.map(async (emote) => {
-      const data = await new THREE.FileLoader().setResponseType('json').loadAsync(`/assets/emotes/${emote.file}.json`) as unknown as {
+      const data = 'gesture' in emote ? null : await new THREE.FileLoader().setResponseType('json').loadAsync(`/assets/emotes/${emote.file}.json`) as unknown as {
         sourceHipRestY: number; clip: Parameters<typeof THREE.AnimationClip.parse>[0];
       };
-      const source = THREE.AnimationClip.parse(data.clip);
+      let source = 'gesture' in emote ? createGestureEmote(character, this.animations.get('idle')!.clip, emote.gesture) : THREE.AnimationClip.parse(data!.clip);
+      const sourceHipRestY = data?.sourceHipRestY ?? this.hipsBone!.position.y;
       const sourceHips = new THREE.Bone();
-      sourceHips.position.y = data.sourceHipRestY;
+      sourceHips.position.y = sourceHipRestY;
       const hipVertical = this.hipsBone ? { sourceBone: sourceHips, targetBone: this.hipsBone } : undefined;
-      const clip = inPlaceClip(source, emote.id, false, hipVertical);
+      let clip = inPlaceClip(source, emote.id, false, hipVertical);
+      if (emote.id === 'emote-freeze' && this.hipsBone) {
+        ({ pose: clip, source } = finishFreezeEmote(clip, source, this.animations.get('idle')!.clip, this.hipsBone));
+      }
       if (!clip.tracks.length) throw new Error(`Emote invalide : ${emote.label}`);
       if (this.character && this.hipsBone) this.emoteMotions.set(emote.id,
-        prepareEmoteMotion(this.character, clip, source, data.sourceHipRestY, this.hipsBone,
-          getEmotePosture(emote.id) === 'ground', emote.id === 'emote-laying'));
+        prepareEmoteMotion(this.character, clip, source, sourceHipRestY, this.hipsBone,
+          getEmotePosture(emote.id) === 'ground', emote.id === 'emote-laying', 'gesture' in emote));
       this.animations.set(emote.id, { clip, action: this.mixer!.clipAction(clip) });
       this.firstPersonAnimations.set(emote.id, { clip, action: this.firstPersonMixer!.clipAction(clip) });
     }));
@@ -2973,12 +2980,12 @@ export class AnimationLab {
       || this.combatPhase === 'guard'
       || this.combatPhase === 'exit'
       || this.firstPersonCombatReleaseSeconds > 0;
-    const targetArmScale = combatArms
+    const targetArmScale = this.activeEmote ? 1 : combatArms
       ? FIRST_PERSON_COMBAT_ARM_SCALE + FIRST_PERSON_COMBAT_VISUAL_ARM_SCALE_BONUS
       : sprintArms
         ? FIRST_PERSON_SPRINT_ARM_SCALE
         : FIRST_PERSON_ARM_SCALE;
-    const targetHandScale = combatArms
+    const targetHandScale = this.activeEmote ? 1 : combatArms
       ? FIRST_PERSON_COMBAT_HAND_SCALE + FIRST_PERSON_COMBAT_VISUAL_HAND_SCALE_BONUS
       : sprintArms
         ? FIRST_PERSON_SPRINT_HAND_SCALE
@@ -10033,8 +10040,8 @@ export class AnimationLab {
     }
   }
 
-  private readonly onCombatMouseDown = (event: MouseEvent): void => {
-    if (!this.ready || !this.player?.isLocked || event.target !== this.renderer.domElement) return;
+  private readonly onCombatMouseDown = (event: MouseEvent, fromEmotePicker = false): void => {
+    if (!this.ready || !this.player?.isLocked || (!fromEmotePicker && event.target !== this.renderer.domElement)) return;
     if (event.button === 0 || event.button === 2) this.stopEmote();
     if (this.ragdoll || this.recovery || this.player.isIncapacitated || this.combatHitReaction) return;
     if (event.button === 2) {

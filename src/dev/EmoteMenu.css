@@ -3,6 +3,7 @@
 .emote-overlay *, .emote-overlay *::before, .emote-overlay *::after { box-sizing: border-box; }
 .animation-lab .emote-overlay button { appearance: none; pointer-events: auto; color: inherit; background: none; border: 0; border-radius: 0; padding: 0; font: inherit; text-align: center; cursor: pointer; }
 .animation-lab .emote-overlay button:focus-visible { outline: 2px solid var(--emote-accent); outline-offset: 3px; }
+.animation-lab .emote-overlay button:disabled { pointer-events: none; }
 .emote-overlay svg { width: 20px; height: 20px; }
 .emote-overlay kbd { font: 500 .75rem/1.2 Inter, system-ui, sans-serif; color: #b9bcb5; }
 .emote-panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 24px)); }

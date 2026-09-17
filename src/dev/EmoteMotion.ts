@@ -31,6 +31,7 @@ export function prepareEmoteMotion(
   hips: THREE.Bone,
   groundPose = false,
   staysLow = false,
+  includeFingerTips = false,
 ): EmoteMotion {
   const sourcePosition = source.tracks.find(track => /hips\.position$/i.test(track.name));
   if (!sourcePosition) throw new Error(`Missing root motion: ${pose.name}`);
@@ -50,7 +51,8 @@ export function prepareEmoteMotion(
     const bone = object as THREE.Bone;
     if (!bone.isBone) return;
     saved.push({ bone, position: bone.position.clone(), rotation: bone.quaternion.clone() });
-    if (/(hips|spine\d*|neck|head|shoulder|arm|forearm|hand|upleg|leg|foot|toebase)$/i.test(bone.name)) landmarks.push(bone);
+    if (/(hips|spine\d*|neck|head|shoulder|arm|forearm|hand|upleg|leg|foot|toebase)$/i.test(bone.name)
+      || (includeFingerTips && /hand(?:thumb|index|middle|ring|pinky)[123]$/i.test(bone.name))) landmarks.push(bone);
   });
   const mixer = new THREE.AnimationMixer(character);
   const action = mixer.clipAction(pose).setLoop(THREE.LoopOnce, 1);
@@ -76,7 +78,8 @@ export function prepareEmoteMotion(
       }
       for (const bone of landmarks) {
         bone.getWorldPosition(point).applyMatrix4(parentInverse).add(root);
-        const radius = /head|hips|spine\d*$/i.test(bone.name) ? .16 : .10;
+        const radius = /hand(?:thumb|index|middle|ring|pinky)[123]$/i.test(bone.name) ? .04
+          : /head|hips|spine\d*$/i.test(bone.name) ? .16 : .10;
         padding.setScalar(radius);
         motion.bounds.expandByPoint(point.clone().sub(padding));
         motion.bounds.expandByPoint(point.add(padding));
