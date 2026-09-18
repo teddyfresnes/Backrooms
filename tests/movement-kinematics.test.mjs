@@ -2273,17 +2273,17 @@ test('v94 lethal high falls stay passive until a grounded whole-body terminal re
   assert.match(ragdoll, /this\.activeResponseScale = 0/,
     'active fall reflexes must stop injecting motion after the lethal landing');
   const fatalBranchStart = ragdoll.indexOf('if (this.fatalFallImpactElapsed >= 0) {');
-  const fatalBranchEnd = ragdoll.indexOf('} else {', fatalBranchStart);
+  const fatalBranchEnd = ragdoll.indexOf('} else if (!this.groundRestCandidate)', fatalBranchStart);
   const fatalBranch = ragdoll.slice(fatalBranchStart, fatalBranchEnd);
   assert.doesNotMatch(fatalBranch, /applyFinalSupportRelease/,
     'violent floor impacts must never reuse the generic anti-perch helper that can create a planted-limb pivot');
   assert.doesNotMatch(ragdoll, /applyFatalFallAntiOrbit/,
     'fatal settling must not project per-limb velocities every substep; that can fight joints and create orbit forces');
-  assert.match(ragdoll, /private updateFatalFallTerminalRest\(delta: number\): boolean/);
+  assert.match(ragdoll, /private updateGroundTerminalRest\(delta: number\): boolean/);
   assert.match(ragdoll, /RAPIER\.QueryFilterFlags\.ONLY_FIXED/,
     'terminal rest must prove support against fixed world geometry, not another ragdoll limb');
-  assert.match(ragdoll, /fatalFallTerminalRestEligible\(\{/);
-  assert.match(ragdoll, /fatalFallGroundRestHold < FATAL_FALL_TERMINAL_REST_HOLD_SECONDS/,
+  assert.match(ragdoll, /ragdollTerminalRestEligible\(\{/);
+  assert.match(ragdoll, /groundRestHold < FATAL_FALL_TERMINAL_REST_HOLD_SECONDS/,
     'support must remain stable for a hold window before terminal sleep');
   assert.match(ragdoll, /for \(const body of this\.ownedBodies\)[\s\S]*body\.sleep\(\)/,
     'once genuinely down, the entire articulated island including joint frames must sleep together');
