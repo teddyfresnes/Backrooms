@@ -1,12 +1,12 @@
 .emote-overlay[hidden] { display: none; }
-.emote-overlay { --emote-accent: #ffdb85; position: fixed; inset: 0; z-index: 80; pointer-events: none; color: #f3f3ee; font: 400 1rem/1.35 Inter, system-ui, sans-serif; }
+.emote-overlay { --emote-accent: #ffdb85; position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; pointer-events: none; color: #f3f3ee; font: 400 1rem/1.35 Inter, system-ui, sans-serif; }
 .emote-overlay *, .emote-overlay *::before, .emote-overlay *::after { box-sizing: border-box; }
 .animation-lab .emote-overlay button { appearance: none; pointer-events: auto; color: inherit; background: none; border: 0; border-radius: 0; padding: 0; font: inherit; text-align: center; cursor: pointer; }
 .animation-lab .emote-overlay button:focus-visible { outline: 2px solid var(--emote-accent); outline-offset: 3px; }
 .animation-lab .emote-overlay button:disabled { pointer-events: none; }
 .emote-overlay svg { width: 20px; height: 20px; }
 .emote-overlay kbd { font: 500 .75rem/1.2 Inter, system-ui, sans-serif; color: #b9bcb5; }
-.emote-panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 24px)); }
+.emote-panel { position: relative; min-width: 0; min-height: 0; width: min(360px, calc(100vw - 24px)); }
 .emote-panel--wheel { aspect-ratio: 1; }
 .emote-wheel { position: relative; width: 100%; aspect-ratio: 1; }
 .emote-overlay .emote-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }

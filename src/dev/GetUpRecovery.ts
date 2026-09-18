@@ -154,6 +154,10 @@ export class GetUpRecovery {
       // Physical toes can already be a little below the floor. Correct that
       // over the first frames instead of popping the whole body upward.
       lift = Math.min(lift, this.preparationLift + Math.max(0, delta) * 4);
+      // A newly captured asymmetric resting pose can put a toe deeper than the
+      // gradual lift covers on its first frame. Bound that inherited visual
+      // penetration while the normal smooth correction finishes the alignment.
+      lift = Math.max(lift, this.groundY - .05 - bottom);
       this.preparationLift = lift;
     }
     if (lift > 0) {

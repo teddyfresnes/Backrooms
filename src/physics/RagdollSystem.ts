@@ -8,7 +8,7 @@ import type { ActiveRagdollProfile } from './ActiveRagdollMotion';
 import {
   FINAL_SETTLE_RELEASE_THRESHOLD,
   FATAL_FALL_TERMINAL_REST_HOLD_SECONDS,
-  fatalFallTerminalRestEligible,
+  ragdollTerminalRestEligible,
   ragdollFinalRelaxationEnvelope,
   ragdollFinalSupportRelease,
   ragdollLegScissorClosure,
@@ -235,6 +235,13 @@ const bodyPosition = (body: RAPIER.RigidBody, target = new THREE.Vector3()): THR
   return target.set(value.x, value.y, value.z);
 };
 
+const inverseAngularInertiaAlong = (body: RAPIER.RigidBody, axis: THREE.Vector3): number => {
+  const inertia = body.effectiveWorldInvInertia();
+  return axis.x * (inertia.m11 * axis.x + inertia.m12 * axis.y + inertia.m13 * axis.z)
+    + axis.y * (inertia.m21 * axis.x + inertia.m22 * axis.y + inertia.m23 * axis.z)
+    + axis.z * (inertia.m31 * axis.x + inertia.m32 * axis.y + inertia.m33 * axis.z);
+};
+
 const wrapAngle = (angle: number): number => {
   let wrapped = angle;
   while (wrapped > Math.PI) wrapped -= Math.PI * 2;
@@ -321,7 +328,9 @@ export class RagdollSystem {
   private fatalFallImpactElapsed = -1;
   private fatalFallImpactStrength = 0;
   private fatalFallSupportRestored = false;
-  private fatalFallGroundRestHold = 0;
+  private groundRestHold = 0;
+  private groundRestCandidate = false;
+  private lastExternalImpactAt = -Infinity;
 
   private constructor(
     private readonly physics: PhysicsWorld,
@@ -427,7 +436,7 @@ export class RagdollSystem {
     this.fatalFallImpactElapsed = 0;
     this.fatalFallImpactStrength = THREE.MathUtils.clamp((impactSpeed - 6.5) / 8.5, 0, 1);
     this.fatalFallSupportRestored = false;
-    this.fatalFallGroundRestHold = 0;
+    this.resetGroundRestAfterImpact();
 
     // A lethal floor impact must never keep the generic anti-perch state alive:
     // lowering limb friction / increasing core gravity can turn the first hand
@@ -453,7 +462,13 @@ export class RagdollSystem {
   }
 
   fixedUpdate(delta: number): void {
-    if (this.settled) return;
+    if (this.settled) {
+      if (this.ownedBodies.every(body => !body.isValid() || body.isSleeping())) return;
+      // Removing a support or another physical body hitting the island may wake
+      // it without going through a gameplay impulse. Resume the physical fall.
+      this.settled = false;
+      this.resetGroundRestAfterImpact();
+    }
     const safeDelta = Math.max(0, delta);
     if (safeDelta <= 0) return;
     this.elapsed += safeDelta;
@@ -485,7 +500,7 @@ export class RagdollSystem {
           // Let Rapier collapse the body naturally, using damping only.
           this.restoreFatalFallSupportState();
           this.applyFatalFallSettling();
-        } else {
+        } else if (!this.groundRestCandidate) {
           this.applyFinalSupportRelease(substep);
           if (!Number.isFinite(this.combatKnockoutStartedAt)) this.applyFinalPoseRelaxation(substep);
         }
@@ -498,10 +513,10 @@ export class RagdollSystem {
       this.physics.world.timestep = previousTimestep;
     }
 
-    if (!this.quietStart && this.fatalFallImpactElapsed < 0) this.releaseUnstableBalances();
-    const fatalRested = this.updateFatalFallTerminalRest(safeDelta);
+    if (!this.quietStart && !this.groundRestCandidate && this.fatalFallImpactElapsed < 0) this.releaseUnstableBalances();
+    const rested = this.updateGroundTerminalRest(safeDelta);
     this.syncSkeleton();
-    if (!fatalRested) this.updateSettling();
+    if (!rested) this.updateSettling();
   }
 
   private captureImpactPreStep(delta: number): void {
@@ -559,8 +574,10 @@ export class RagdollSystem {
     this.traversalQuietSeconds = quietCore ? this.traversalQuietSeconds + safeDelta : 0;
     const anyAwake = this.ownedBodies.some((body) => body.isValid() && !body.isSleeping());
     if (anyAwake) {
+      if (this.settled) this.resetGroundRestAfterImpact();
       this.settled = false;
       this.elapsed += safeDelta;
+      if (this.fatalFallImpactElapsed >= 0) this.fatalFallImpactElapsed += safeDelta;
       if (!this.selfCollisionsEnabled && this.elapsed >= SELF_COLLISION_DELAY) {
         this.enableSelfCollisions();
       }
@@ -569,12 +586,15 @@ export class RagdollSystem {
       // The shared world advances NPCs and persistent corpses externally.
       // Use the same brief KO response as the player-owned ragdoll solver.
       this.applyCombatKnockoutContraction(safeDelta);
-      if (this.combatKnockoutCurl > 0 && this.fatalFallImpactElapsed < 0) {
+      if (this.fatalFallImpactElapsed >= 0) {
+        this.restoreFatalFallSupportState();
+        this.applyFatalFallSettling();
+      } else if (!this.groundRestCandidate && !this.quietStart) {
         this.applyFinalSupportRelease(safeDelta);
         this.releaseUnstableBalances();
       }
       this.enforceSafetyLimits(safeDelta);
-      this.updateSettling();
+      if (!this.updateGroundTerminalRest(safeDelta)) this.updateSettling();
     }
     this.updateTraversalSupport();
     this.syncSkeleton();
@@ -709,6 +729,7 @@ export class RagdollSystem {
     }, true);
     this.playerNudgeCooldown = 0.075;
     this.settled = false;
+    this.resetGroundRestAfterImpact();
   }
 
   syncSkeleton(): void {
@@ -834,6 +855,7 @@ export class RagdollSystem {
     part.body.applyImpulseAtPoint(impulse, application, true);
     this.settled = false;
     this.settledElapsed = 0;
+    this.resetGroundRestAfterImpact();
     for (const body of this.ownedBodies) if (body.isValid()) body.wakeUp();
   }
 
@@ -2540,21 +2562,18 @@ export class RagdollSystem {
     const limitedTarget = current + requestedChange;
     if (Math.abs(limitedTarget - current) < 1e-6) return;
 
-    // Preserve the pair's mean angular velocity along this axis while reducing
-    // the relative component. For equal inertias this strictly reduces kinetic
-    // energy; importantly it never introduces the large counter-kick the old
-    // post-solver correction could create.
-    const mean = (parentAlong + childAlong) * 0.5;
-    const targetParentAlong = mean - limitedTarget * 0.5;
-    const targetChildAlong = mean + limitedTarget * 0.5;
-    this.tempAngularA.addScaledVector(axisWorld, targetParentAlong - parentAlong);
-    this.tempAngularB.addScaledVector(axisWorld, targetChildAlong - childAlong);
-    parent.body.setAngvel(
-      { x: this.tempAngularA.x, y: this.tempAngularA.y, z: this.tempAngularA.z }, false,
-    );
-    child.body.setAngvel(
-      { x: this.tempAngularB.x, y: this.tempAngularB.y, z: this.tempAngularB.z }, false,
-    );
+    // Equal velocity changes are not a brake for unequal inertias: the light
+    // limb's spin was transferred to the much heavier torso, adding energy and
+    // angular momentum. Solve an equal/opposite torque impulse with the full
+    // world-space inverse inertia tensors instead. This conserves momentum and
+    // can only remove relative rotational energy, including on tilted bodies.
+    const inverseInertia = inverseAngularInertiaAlong(parent.body, axisWorld)
+      + inverseAngularInertiaAlong(child.body, axisWorld);
+    if (!Number.isFinite(inverseInertia) || inverseInertia <= 1e-8) return;
+    const impulse = (limitedTarget - current) / inverseInertia;
+    const torque = { x: axisWorld.x * impulse, y: axisWorld.y * impulse, z: axisWorld.z * impulse };
+    child.body.applyTorqueImpulse(torque, false);
+    parent.body.applyTorqueImpulse({ x: -torque.x, y: -torque.y, z: -torque.z }, false);
   }
 
   private applyFinalSupportRelease(delta: number): void {
@@ -2833,12 +2852,56 @@ export class RagdollSystem {
     }
   }
 
-  private updateFatalFallTerminalRest(delta: number): boolean {
-    if (this.fatalFallImpactElapsed < 0 || delta <= 0 || this.settled) return this.settled;
+  private resetGroundRestAfterImpact(): void {
+    this.groundRestHold = 0;
+    this.groundRestCandidate = false;
+    this.lastExternalImpactAt = this.elapsed;
+  }
+
+  /** Real floor/step contacts, including the offset rib-cage collider.
+   * Walls, ceilings and other limbs are not fixed support. */
+  private fixedSupportHeight(part: RagdollBody): number | null {
+    let height: number | null = null;
+    for (const collider of part.colliders) {
+      this.physics.world.contactPairsWith(collider, other => {
+        if (!other.parent()?.isFixed() || other.isSensor()) return;
+        this.physics.world.contactPair(collider, other, (manifold, flipped) => {
+          const upwardNormal = manifold.normal().y * (flipped ? 1 : -1);
+          if (upwardNormal < 0.56) return;
+          for (let index = 0; index < manifold.numSolverContacts(); index += 1) {
+            if (manifold.solverContactDist(index) > 0.025) continue;
+            const y = manifold.solverContactPoint(index).y;
+            height = height === null ? y : Math.min(height, y);
+          }
+        });
+      });
+    }
+    return height;
+  }
+
+  private coreCloseToFixedSupport(core: RagdollBody): boolean {
+    // A horizontal torso may rest on its elbows or thigh rather than touch the
+    // floor itself. Allow that small anatomical clearance only when three other
+    // parts have real fixed contacts. Sample both pelvis AND rib cage, since a
+    // pelvis-only ray misses a body spanning several stair treads.
+    return core.colliders.some(collider => {
+      const position = collider.translation();
+      const hit = this.physics.world.castRayAndGetNormal(new RAPIER.Ray(
+        { x: position.x, y: position.y + 0.018, z: position.z },
+        { x: 0, y: -1, z: 0 },
+      ), 0.46, true, RAPIER.QueryFilterFlags.ONLY_FIXED);
+      return !!hit && hit.normal.y >= 0.56;
+    });
+  }
+
+  private updateGroundTerminalRest(delta: number): boolean {
+    if (delta <= 0 || this.settled) return this.settled;
+    if (this.fatalFallImpactElapsed < 0 && this.elapsed < MIN_SETTLE_TIME) return false;
 
     const parts = [...this.bodies.values()].filter((part) => part.body.isValid());
     if (parts.length < 3) {
-      this.fatalFallGroundRestHold = 0;
+      this.groundRestHold = 0;
+      this.groundRestCandidate = false;
       return false;
     }
 
@@ -2849,21 +2912,25 @@ export class RagdollSystem {
     let maxLinearSpeed = 0;
     let maxAngularSpeed = 0;
     let maxAbsVerticalSpeed = 0;
+    let totalMass = 0;
 
     for (const part of parts) {
-      const position = part.body.translation();
+      const position = part.body.worldCom();
       const linear = part.body.linvel();
       const angular = part.body.angvel();
-      center.add(this.tempPositionC.set(position.x, position.y, position.z));
-      meanVelocity.add(this.tempPositionD.set(linear.x, linear.y, linear.z));
+      const mass = part.body.mass();
+      totalMass += mass;
+      center.addScaledVector(this.tempPositionC.set(position.x, position.y, position.z), mass);
+      meanVelocity.addScaledVector(this.tempPositionD.set(linear.x, linear.y, linear.z), mass);
       minY = Math.min(minY, position.y);
       maxY = Math.max(maxY, position.y);
       maxLinearSpeed = Math.max(maxLinearSpeed, Math.hypot(linear.x, linear.y, linear.z));
       maxAngularSpeed = Math.max(maxAngularSpeed, Math.hypot(angular.x, angular.y, angular.z));
       maxAbsVerticalSpeed = Math.max(maxAbsVerticalSpeed, Math.abs(linear.y));
     }
-    center.multiplyScalar(1 / parts.length);
-    meanVelocity.multiplyScalar(1 / parts.length);
+    if (totalMass <= 1e-6) return false;
+    center.multiplyScalar(1 / totalMass);
+    meanVelocity.multiplyScalar(1 / totalMass);
 
     // Coherent angular velocity is used only as a detector. Unlike the removed
     // anti-orbit pass, this never rewrites per-part velocities while the body is
@@ -2871,50 +2938,49 @@ export class RagdollSystem {
     const coherentOmega = this.tempAngularC.set(0, 0, 0);
     let radiusSquaredSum = 0;
     for (const part of parts) {
-      const position = part.body.translation();
+      const position = part.body.worldCom();
       const velocity = part.body.linvel();
       const radius = this.tempPositionC.set(position.x, position.y, position.z).sub(center);
       const relativeVelocity = this.tempPositionD
         .set(velocity.x, velocity.y, velocity.z)
         .sub(meanVelocity);
-      coherentOmega.add(this.tempPositionE.crossVectors(radius, relativeVelocity));
-      radiusSquaredSum += radius.lengthSq();
+      const mass = part.body.mass();
+      coherentOmega.addScaledVector(this.tempPositionE.crossVectors(radius, relativeVelocity), mass);
+      radiusSquaredSum += radius.lengthSq() * mass;
     }
     if (radiusSquaredSum > 1e-5) coherentOmega.multiplyScalar(1 / radiusSquaredSum);
     else coherentOmega.set(0, 0, 0);
 
-    const supportIds = [
-      'core', 'head',
-      'left-forearm', 'right-forearm',
-      'left-upper-leg', 'right-upper-leg',
-      'left-lower-leg', 'right-lower-leg',
-    ] as const;
     let supportCount = 0;
     let coreSupported = false;
-    for (const id of supportIds) {
-      const part = this.bodies.get(id);
-      if (!part?.body.isValid()) continue;
-      const position = part.body.translation();
-      const rayLength = id === 'core' ? 0.34 : id === 'head' ? 0.24 : 0.28;
-      const hit = this.physics.world.castRayAndGetNormal(
-        new RAPIER.Ray(
-          { x: position.x, y: position.y + 0.018, z: position.z },
-          { x: 0, y: -1, z: 0 },
-        ),
-        rayLength,
-        true,
-        RAPIER.QueryFilterFlags.ONLY_FIXED,
-      );
-      const supported = !!hit && hit.normal.y >= 0.56;
-      if (!supported) continue;
+    let lowestSupport = Infinity;
+    let highestSupport = -Infinity;
+    for (const part of parts) {
+      const supportHeight = this.fixedSupportHeight(part);
+      if (supportHeight === null) continue;
       supportCount += 1;
-      if (id === 'core') coreSupported = true;
+      lowestSupport = Math.min(lowestSupport, supportHeight);
+      highestSupport = Math.max(highestSupport, supportHeight);
+      if (part.id === 'core') coreSupported = true;
     }
 
-    const eligible = fatalFallTerminalRestEligible({
-      elapsedSinceImpact: this.fatalFallImpactElapsed,
+    const core = this.bodies.get('core');
+    const coreUprightness = core?.body.isValid()
+      ? Math.abs(this.tempY.copy(this.finalNeckAnchorCoreLocal).normalize()
+        .applyQuaternion(bodyRotation(core.body, this.tempQuaternionA)).y)
+      : 1;
+    if (!coreSupported && supportCount >= 3 && core?.body.isValid()) {
+      coreSupported = this.coreCloseToFixedSupport(core);
+    }
+    const eligible = ragdollTerminalRestEligible({
+      elapsedSinceImpact: Math.min(
+        this.fatalFallImpactElapsed >= 0 ? this.fatalFallImpactElapsed : this.elapsed,
+        this.elapsed - this.lastExternalImpactAt,
+      ),
       coreSupported,
       supportCount,
+      coreUprightness,
+      supportHeightSpan: supportCount > 0 ? highestSupport - lowestSupport : 0,
       verticalSpan: Math.max(0, maxY - minY),
       meanHorizontalSpeed: Math.hypot(meanVelocity.x, meanVelocity.z),
       meanVerticalSpeed: meanVelocity.y,
@@ -2928,12 +2994,22 @@ export class RagdollSystem {
       // Drop the hold quickly if any limb starts falling again. This is the key
       // protection against the old "freeze before the body reaches the floor"
       // failure: support + low vertical motion must be continuous.
-      this.fatalFallGroundRestHold = Math.max(0, this.fatalFallGroundRestHold - delta * 3.5);
+      this.groundRestHold = 0;
+      this.groundRestCandidate = false;
       return false;
     }
 
-    this.fatalFallGroundRestHold += delta;
-    if (this.fatalFallGroundRestHold < FATAL_FALL_TERMINAL_REST_HOLD_SECONDS) return false;
+    if (!this.groundRestCandidate) {
+      // Once already down, late anti-perch/hip/head helpers must not wake the
+      // body during its rest hold. A new fall or external impulse cancels this
+      // candidate and returns full control to the dynamic solver.
+      this.groundRestCandidate = true;
+      this.restoreFinalSupportRelease();
+      this.restoreFinalPoseRelaxation();
+      this.finalHeadRelaxTriggered = true;
+    }
+    this.groundRestHold += delta;
+    if (this.groundRestHold < FATAL_FALL_TERMINAL_REST_HOLD_SECONDS) return false;
 
     // The corpse is now demonstrably down. Put the entire articulated solver
     // island to sleep in one operation so no joint-frame or distal limb remains
@@ -2947,6 +3023,11 @@ export class RagdollSystem {
     for (const body of this.ownedBodies) {
       if (body.isValid()) body.sleep();
     }
+    for (const part of parts) {
+      part.lastLinearSpeed = 0;
+      part.lastAngularSpeed = 0;
+      part.preStepVelocity.set(0, 0, 0);
+    }
     this.restoreFinalPoseRelaxation();
     this.settled = true;
     return true;
@@ -2955,6 +3036,10 @@ export class RagdollSystem {
   private restoreFatalFallSupportState(): void {
     if (this.fatalFallSupportRestored) return;
     this.fatalFallSupportRestored = true;
+    this.restoreFinalSupportRelease();
+  }
+
+  private restoreFinalSupportRelease(): void {
     this.finalSettleReleaseStrength = 0;
     this.finalSettleReleaseHold = 0;
 

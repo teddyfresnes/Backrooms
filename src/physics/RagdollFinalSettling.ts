@@ -21,23 +21,33 @@ export interface FatalFallTerminalRestSample {
   readonly maxLinearSpeed: number;
   readonly maxAngularSpeed: number;
   readonly coherentAngularSpeed: number;
+  /** Absolute world-up component of the torso's anatomical vertical axis. */
+  readonly coreUprightness?: number;
+  /** Actual fixed contact heights can differ across several stair treads. */
+  readonly supportHeightSpan?: number;
 }
 
 /**
- * A fatal high-fall ragdoll is allowed to sleep only after it has demonstrably
- * collapsed onto fixed level geometry. This is deliberately stricter than a
+ * Any fallen ragdoll is allowed to sleep only after it has demonstrably
+ * collapsed onto fixed geometry. This is deliberately stricter than a
  * plain speed threshold: a body that is still falling, hanging from a limb, or
  * sliding across the floor must remain dynamic. Once the torso is supported and
  * the full body has stayed low and vertically quiet, we can safely put the whole
  * articulated island to sleep at once. That prevents the solver/joints from
  * sustaining the pathological late "orbit around an invisible point" loop.
  */
-export const fatalFallTerminalRestEligible = (sample: FatalFallTerminalRestSample): boolean => {
+export const ragdollTerminalRestEligible = (sample: FatalFallTerminalRestSample): boolean => {
+  if (Object.values(sample).some(value => typeof value === 'number' && !Number.isFinite(value))) return false;
   if (sample.elapsedSinceImpact < FATAL_FALL_TERMINAL_REST_MIN_SECONDS) return false;
   if (!sample.coreSupported || sample.supportCount < 3) return false;
-  if (sample.verticalSpan > 0.92) return false;
+  const raisedSpan = sample.verticalSpan - Math.max(0, sample.supportHeightSpan ?? 0);
+  if (raisedSpan > 0.92) return false;
+  // On stairs an inverted/curled torso can already lie across several treads.
+  // Judge its remaining height above those contacts, not the world's Y axis
+  // alone. An upright, still-raised torso on flat ground remains ineligible.
+  if ((sample.coreUprightness ?? 0) > 0.78 && raisedSpan > 0.55) return false;
   if (Math.abs(sample.meanVerticalSpeed) > 0.28 || sample.maxAbsVerticalSpeed > 0.56) return false;
-  if (sample.meanHorizontalSpeed > 0.62) return false;
+  if (sample.meanHorizontalSpeed > 0.24) return false;
 
   const naturallyQuiet = sample.maxLinearSpeed <= 1.12 && sample.maxAngularSpeed <= 2.85;
   const groundedOrbit = sample.coherentAngularSpeed >= 0.42
@@ -45,6 +55,9 @@ export const fatalFallTerminalRestEligible = (sample: FatalFallTerminalRestSampl
     && sample.maxAngularSpeed <= 7.2;
   return naturallyQuiet || groundedOrbit;
 };
+
+// Kept for the existing callers of the original high-fall eligibility rule.
+export const fatalFallTerminalRestEligible = ragdollTerminalRestEligible;
 
 export interface RagdollFinalSettleSample {
   readonly elapsed: number;
