@@ -1,0 +1,18 @@
+.pair-hud[hidden] { display: none; }
+.pair-hud { position: fixed; z-index: 85; left: 50%; bottom: max(28px, 7vh); transform: translateX(-50%); width: min(420px, calc(100vw - 24px)); border: 1px solid #ffdb854a; border-radius: 14px; padding: 15px 18px; background: #111415ed; color: #f3f3ee; text-align: center; font: 400 14px/1.4 Inter, system-ui, sans-serif; box-shadow: 0 8px 35px #0005; }
+.pair-hud__eyebrow { color: #ffdb85; letter-spacing: .12em; font-size: 10px; margin-bottom: 4px; }
+.pair-hud strong { font-size: 16px; font-weight: 600; }
+.pair-hud p { margin: 6px 0 10px; color: #c0c5ba; }
+.pair-hud__buttons, .pair-hud__choices { display: flex; justify-content: center; gap: 8px; }
+.pair-hud__choices button { flex: 1; min-width: 0; display: grid; justify-items: center; gap: 4px; }
+.pair-hud__choices kbd { margin-right: 0; }
+.animation-lab .pair-hud button { border: 1px solid #ffffff30; border-radius: 8px; padding: 9px 12px; background: #282d27; color: #f3f3ee; font: inherit; cursor: pointer; }
+.animation-lab .pair-hud button[data-pair-accept] { border-color: #ffdb8580; }
+.animation-lab .pair-hud button:disabled { opacity: .5; cursor: default; }
+.animation-lab .pair-hud button:hover:not(:disabled), .animation-lab .pair-hud button:focus-visible, .animation-lab .pair-hud button.is-hovered { background: #454535; outline-color: #ffdb85; }
+.pair-hud-cursor[hidden] { display: none; }
+.pair-hud-cursor { position: fixed; z-index: 86; top: -4px; left: -4px; width: 8px; height: 8px; border: 1px solid #15191a; background: #ffdb85; border-radius: 50%; pointer-events: none; }
+.pair-hud kbd { display: inline-block; margin-right: 6px; font: 600 11px/1.2 Inter, system-ui, sans-serif; color: #ffdb85; }
+.pair-hud__timer { margin-top: 12px; height: 3px; background: #ffffff16; overflow: hidden; border-radius: 2px; }
+.pair-hud__timer span { display: block; height: 100%; background: #ffdb85; transform-origin: left; }
+@media (max-width: 480px) { .pair-hud { padding: 12px; bottom: 18px; } .animation-lab .pair-hud button { padding: 9px; } }
