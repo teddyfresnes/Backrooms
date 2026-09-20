@@ -1,6 +1,7 @@
 import { EMOTES, EMOTE_STORAGE_KEY, GROUND_EMOTE_STORAGE_KEY, getEmotePosture, loadEmoteFavorites, type EmoteId, type EmotePosture } from './EmoteCatalog';
 import { controlCodeFromKeyboardEvent } from '../input/ControlBindings';
 import './EmoteMenu.css';
+import { PAIR_ACTIONS, type PairAction } from './PairInteractionRules';
 
 const icon = (name: 'star' | 'grid' | 'close' | 'back') => {
   const paths = {
@@ -35,6 +36,8 @@ interface EmoteMenuCallbacks {
   isMoving(): boolean;
   getPosture(): EmotePosture;
   getUnavailableReason(id: EmoteId): string | null;
+  getPairUnavailableReason?(id: PairAction): string | null;
+  onPair?(id: PairAction): boolean;
 }
 
 /** A HUD picker: never takes ownership of movement, aim, or the game clock. */
@@ -46,7 +49,7 @@ export class EmoteMenu {
   private elapsed = 0;
   isOpen = false;
   private ready = false;
-  private view: 'wheel' | 'collection' = 'wheel';
+  private view: 'wheel' | 'collection' | 'pair' = 'wheel';
   private selectedIndex = -1;
   private replacement: EmoteId | null = null;
   private readonly available = new Set<EmoteId>();
@@ -141,7 +144,7 @@ export class EmoteMenu {
     this.hoveredButton = null;
     this.element.classList.toggle('has-game-pointer', this.callbacks.isPointerLocked());
     this.element.innerHTML = `<section class="emote-panel emote-panel--${this.view}" role="region" aria-label="${this.view === 'wheel' ? 'Roue des emotes' : 'Toutes les emotes'}">
-      ${this.view === 'wheel' ? this.wheelMarkup() : this.collectionMarkup()}
+      ${this.view === 'wheel' ? this.wheelMarkup() + this.pairLauncherMarkup() : this.view === 'pair' ? this.pairMarkup() : this.collectionMarkup()}
     </section><span class="emote-cursor" aria-hidden="true" data-cursor></span>`;
     if (this.isOpen) { this.refreshAvailability(true); this.resetPointer(resetPosition); }
   }
@@ -175,6 +178,14 @@ export class EmoteMenu {
     this.update();
   }
 
+  private pairLauncherMarkup(): string {
+    return this.callbacks.onPair ? '<button type="button" class="emote-pair-link" data-action="pair">À deux <span>Proposer une interaction</span></button>' : '';
+  }
+
+  private pairMarkup(): string {
+    return `<header class="emote-header"><button type="button" data-action="wheel" class="emote-icon-button" aria-label="Revenir aux emotes">${icon('back')}</button><h2>À deux</h2><button type="button" data-action="close" class="emote-icon-button" aria-label="Fermer">${icon('close')}</button></header><p class="emote-pair-intro">Regarde une personne proche, puis propose-lui un geste. Elle accepte avec <kbd>Tab</kbd>.</p><div class="emote-pair-list">${PAIR_ACTIONS.map(action => `<button type="button" data-pair="${action.id}"><strong>${action.label}</strong><span>${action.detail}</span><small data-pair-reason></small></button>`).join('')}</div><footer class="emote-footer">Invitation valable 4 s · éloignement : annuler</footer>`;
+  }
+
   /** Only DOM updates, once per game frame. No preview renderer or skeleton sampling. */
   update(delta = 0): void {
     if (!this.isOpen) return;
@@ -202,7 +213,12 @@ export class EmoteMenu {
       const dx = (this.pointerX - this.wheelRect.left - this.wheelRect.width / 2) * 360 / this.wheelRect.width;
       const dy = (this.pointerY - this.wheelRect.top - this.wheelRect.height / 2) * 360 / this.wheelRect.height;
       const distance = Math.hypot(dx, dy);
-      this.setPointerInside(this.pointerActive && distance < 186);
+      const pairBox = this.element.querySelector<HTMLElement>('[data-action="pair"]')?.getBoundingClientRect();
+      const pairHit = !!this.callbacks.onPair && (pairBox && pairBox.width > 0
+        ? this.pointerX >= pairBox.left && this.pointerX <= pairBox.right && this.pointerY >= pairBox.top && this.pointerY <= pairBox.bottom
+        : Math.abs(this.pointerX - this.wheelRect.left - this.wheelRect.width / 2) <= 120
+          && this.pointerY >= this.wheelRect.top - 55 && this.pointerY <= this.wheelRect.top - 12);
+      this.setPointerInside(this.pointerActive && (distance < 186 || pairHit));
       const index = this.pointerActive && distance > 70 && distance < 186 ? Math.round((Math.atan2(dx, -dy) * 180 / Math.PI + 360) / (360 / this.wheelFavorites.length)) % this.wheelFavorites.length : -1;
       this.selectSlot(index);
       // Match the two separate central targets, including under pointer lock.
@@ -210,7 +226,7 @@ export class EmoteMenu {
         ? Math.abs(dx) <= 18 && Math.abs(dy - 37.2) <= 18 ? 'collection'
           : Math.abs(dx) <= 40 && Math.abs(dy + 12.4) <= 36 ? 'close' : null
         : null;
-      this.hoverButton(centralAction ? this.element.querySelector(`.emote-wheel-center [data-action="${centralAction}"]`)
+      this.hoverButton(pairHit ? this.element.querySelector('[data-action="pair"]') : centralAction ? this.element.querySelector(`.emote-wheel-center [data-action="${centralAction}"]`)
         : index >= 0 ? this.element.querySelector(`[data-slot="${index}"]`) : null);
     } else {
       this.setPointerInside(this.pointerActive && this.pointerX >= this.wheelRect.left && this.pointerX <= this.wheelRect.left + this.wheelRect.width
@@ -250,6 +266,11 @@ export class EmoteMenu {
   private refreshAvailability(force = false): void {
     if (!this.isOpen || (!force && performance.now() < this.nextAvailabilityCheck)) return;
     this.nextAvailabilityCheck = performance.now() + 200;
+    this.element.querySelectorAll<HTMLButtonElement>('[data-pair]').forEach(button => {
+      const reason = this.callbacks.getPairUnavailableReason?.(button.dataset.pair as PairAction) ?? null;
+      button.disabled = !!reason; button.title = reason ?? '';
+      button.querySelector('[data-pair-reason]')!.textContent = reason ?? 'Proposer';
+    });
     for (const emote of this.entries) {
       const reason = this.available.has(emote.id) ? this.callbacks.getUnavailableReason(emote.id) : 'Animation indisponible';
       if (reason) this.unavailable.set(emote.id, reason); else this.unavailable.delete(emote.id);
@@ -305,10 +326,10 @@ export class EmoteMenu {
   private activate(button: HTMLButtonElement): void {
     if (button.disabled) return;
     this.resetLifetime();
-    const { action, emote, favorite, replace } = button.dataset;
+    const { action, emote, favorite, replace, pair } = button.dataset;
     if (action === 'close') this.close();
-    else if (action === 'wheel' || action === 'collection') {
-      this.view = action === 'wheel' ? 'wheel' : 'collection'; this.selectedIndex = -1; this.replacement = null; this.render();
+    else if (action === 'wheel' || action === 'collection' || action === 'pair') {
+      this.view = action; this.selectedIndex = -1; this.replacement = null; this.render();
     } else if (action === 'cancel-replace') { this.replacement = null; this.render(); }
     else if (favorite) this.toggleFavorite(favorite as EmoteId);
     else if (replace !== undefined) {
@@ -317,7 +338,8 @@ export class EmoteMenu {
       if (this.replacement) { favorites[index] = this.replacement; this.replacement = null; }
       else favorites[index] = null;
       this.saveFavorites();
-    } else if (emote) this.play(emote as EmoteId);
+    } else if (pair && this.callbacks.onPair?.(pair as PairAction)) this.close();
+    else if (emote) this.play(emote as EmoteId);
   }
 
   private readonly onClick = (event: MouseEvent): void => {
@@ -360,13 +382,17 @@ export class EmoteMenu {
     if (event.code === 'Tab' || event.code === 'Escape') {
       this.consume(event); if (!event.repeat) this.close();
     } else if (/^(?:Digit|Numpad)[1-8]$/.test(event.code) && !this.callbacks.isGameControl(event.code)) {
-      this.consume(event); const id = this.wheelFavorites[Number(event.code.at(-1)) - 1]; if (id && !event.repeat) this.play(id);
+      this.consume(event);
+      if (this.view === 'pair') {
+        const button = this.element.querySelector<HTMLButtonElement>(`[data-pair="${PAIR_ACTIONS[Number(event.code.at(-1)) - 1]?.id}"]`);
+        if (button && !event.repeat) this.activate(button);
+      } else { const id = this.wheelFavorites[Number(event.code.at(-1)) - 1]; if (id && !event.repeat) this.play(id); }
     } else if (event.code === 'Enter') {
       this.consume(event); this.update(); if (!event.repeat) (this.hoveredButton ?? this.element.querySelector<HTMLButtonElement>('[data-action="collection"]'))?.click();
     } else if (event.code.startsWith('Arrow') && !this.callbacks.isGameControl(event.code)) {
       this.consume(event);
       this.resetLifetime();
-      const buttons = [...this.element.querySelectorAll<HTMLButtonElement>(this.view === 'wheel' ? '[data-slot]' : this.replacement ? '[data-replace]' : '[data-emote]')].filter(button => !button.disabled);
+      const buttons = [...this.element.querySelectorAll<HTMLButtonElement>(this.view === 'wheel' ? '[data-slot], [data-action="pair"]' : this.view === 'pair' ? '[data-pair]' : this.replacement ? '[data-replace]' : '[data-emote]')].filter(button => !button.disabled);
       const index = buttons.indexOf(this.hoveredButton!);
       const step = event.code === 'ArrowLeft' ? -1 : event.code === 'ArrowRight' ? 1 : this.view === 'collection' ? (event.code === 'ArrowUp' ? -2 : 2) : event.code === 'ArrowUp' ? -1 : 1;
       const button = buttons[(index + step + buttons.length) % buttons.length];

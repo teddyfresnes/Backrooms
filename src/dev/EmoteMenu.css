@@ -38,6 +38,18 @@
 .emote-cursor { position: fixed; left: -4px; top: -4px; width: 8px; height: 8px; background: var(--emote-accent); border: 1px solid #15191a; border-radius: 50%; pointer-events: none; display: none; }
 .has-game-pointer.has-active-pointer .emote-cursor { display: block; }
 .emote-panel--collection { width: min(384px, calc(100vw - 24px)); max-height: min(82vh, 640px); padding: 16px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #666b5d transparent; border: 1px solid rgb(255 255 255 / 17%); border-radius: 16px; background: rgb(17 20 21 / 95%); pointer-events: auto; }
+.emote-panel--pair { width: min(384px, calc(100vw - 24px)); max-height: 82vh; padding: 16px; overflow-y: auto; border: 1px solid #ffdb8540; border-radius: 16px; background: rgb(17 20 21 / 95%); pointer-events: auto; }
+.animation-lab .emote-overlay .emote-pair-link { position: absolute; width: 240px; height: 43px; left: 50%; top: -55px; transform: translateX(-50%); border: 1px solid #ffdb854a; border-radius: 10px; background: #111415ed; color: #ffdb85; font-size: 14px; }
+.emote-pair-link span { display: block; color: #b9bcb5; font-size: 11px; }
+.animation-lab .emote-overlay .emote-pair-link:hover, .animation-lab .emote-overlay .emote-pair-link.is-hovered { background: #353931; }
+.emote-pair-intro { font-size: 12px; color: #b9bcb5; margin: 0 0 12px; }
+.emote-pair-list { display: grid; gap: 7px; }
+.animation-lab .emote-overlay .emote-pair-list button { display: grid; gap: 3px; text-align: left; padding: 11px 12px; border: 1px solid #ffffff1c; border-radius: 9px; }
+.emote-pair-list strong { font-size: 14px; font-weight: 500; }
+.emote-pair-list span { color: #b9bcb5; font-size: 11px; }
+.emote-pair-list small { color: #ffdb85; font-size: 11px; }
+.animation-lab .emote-overlay .emote-pair-list button:hover:not(:disabled), .animation-lab .emote-overlay .emote-pair-list button.is-hovered { background: #353931; }
+.animation-lab .emote-overlay .emote-pair-list button:disabled { opacity: .45; }
 .emote-header { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
 .emote-header h2 { flex: 1; margin: 0; font-size: 1rem; font-weight: 600; }
 .animation-lab .emote-overlay .emote-icon-button { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; color: #c4c8be; }

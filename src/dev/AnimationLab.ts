@@ -13,6 +13,9 @@ import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.j
 import { equivalentKeyCodes, formatKeyLabel } from '../input/ControlBindings';
 import { EMOTES, getEmotePosture, type EmoteId } from './EmoteCatalog';
 import { EmoteMenu } from './EmoteMenu';
+import { PairInteractionCoordinator, PAIR_REACH_METERS, RPS_LABELS, pairActionLabel, pairUnavailableReason, rpsWinner, type PairAction, type PairActor, type RpsChoice } from './PairInteractionRules';
+import { PairInteractionHud } from './PairInteractionHud';
+import { PairInteractionRig } from './PairInteractionMotion';
 import { prepareEmoteMotion, type EmoteMotion } from './EmoteMotion';
 import { createGestureEmote, finishFreezeEmote } from './GestureEmotes';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
@@ -1906,6 +1909,27 @@ export class AnimationLab {
   private ready = false;
   private panelVisible = true;
   private readonly emoteMenu: EmoteMenu;
+  private readonly pairCoordinator = new PairInteractionCoordinator();
+  private readonly pairHud: PairInteractionHud;
+  private pairPlayerRig?: PairInteractionRig;
+  private pairNpcRig?: PairInteractionRig;
+  private pairDownRig?: PairInteractionRig;
+  private pairClock = 0;
+  private pairAlignmentElapsed = 0;
+  private pairMessageUntil = 0;
+  private pairMessage = '';
+  private pairBotRequest: PairAction | null = null;
+  private pairBotApproachElapsed = 0;
+  private pairBotSequence = 0;
+  private readonly pairRaycaster = new THREE.Raycaster();
+  private readonly pairHelpContact = new THREE.Vector3();
+  private readonly pairHelperEyeOffset = new THREE.Vector3();
+  private pairHelpGripStarted = false;
+  private pairHelpGripHold = 0;
+  private pairHelpWaitElapsed = 0;
+  private pairHelpReachError = 0;
+  private pairHelpFrontWeight = 1;
+  private pairHelpApproachGoal: THREE.Vector3 | null = null;
   private activeEmote: EmoteId | null = null;
   private recoveryEmote: EmoteId | null = null;
   private readonly groundEmotePreparations = new Map<EmoteId, {
@@ -1967,6 +1991,15 @@ export class AnimationLab {
     this.scene.add(this.firstPersonAvatarAnchor);
     this.configureScene();
     this.createHud();
+    this.pairHud = new PairInteractionHud(this.root, {
+      accept: () => this.acceptPairInvitation('player'),
+      cancel: () => this.cancelPairInteraction(),
+      choose: choice => this.choosePairHand(choice),
+      hasSession: () => this.pairCoordinator.session !== null,
+      isPointerLocked: () => this.player?.controls.isLocked ?? false,
+      isMovement: code => [this.settings.controls.forward, this.settings.controls.backward, this.settings.controls.left,
+        this.settings.controls.right, this.settings.controls.jump, this.settings.controls.crouch].some(binding => equivalentKeyCodes(binding).includes(code)),
+    });
     this.emoteMenu = new EmoteMenu(this.root, {
       onOpen: () => {
         this.hint?.classList.add('is-hidden');
@@ -1992,6 +2025,8 @@ export class AnimationLab {
       },
       getPosture: () => this.getPlayerEmotePosture(),
       getUnavailableReason: (id) => this.getEmoteUnavailableReason(id),
+      getPairUnavailableReason: id => this.getPairUnavailableReason(id, 'player'),
+      onPair: id => this.requestPairInteraction(id, 'player'),
     });
     this.resize();
     window.addEventListener('resize', this.resize);
@@ -2039,6 +2074,8 @@ export class AnimationLab {
       this.ready = true;
       this.playAnimation('idle', true);
       this.emoteMenu.prepare(new Map(EMOTES.map(emote => [emote.id, this.animations.get(emote.id)!.clip])));
+      this.pairPlayerRig = new PairInteractionRig(this.avatarAnchor, this.character!);
+      this.pairNpcRig = new PairInteractionRig(this.idleNpcAnchor!, this.idleNpcCharacter!);
       this.updateAvatarTransform(0, true);
       this.setStatus('PRÊT');
       if (this.hint) this.hint.innerHTML = '<strong>CLIQUER POUR JOUER</strong><span>ZQSD : déplacement · Tab : emotes · clic droit : garde · clic gauche en garde : frappe / maintenir : enchaîner · sans capture souris : clic droit maintenu pour regarder · Échap : pause</span>';
@@ -2174,6 +2211,7 @@ export class AnimationLab {
       <button type="button" data-switch="anims" class="is-active">ANIMS</button>
       <button type="button" data-action="kill" class="animation-lab__kill" title="Mort physique instantanée (P)">KILL</button>
       <button type="button" data-action="npc-combat">NPC COMBAT: OFF</button>
+      <button type="button" data-action="bot-interact" title="Le bot vient proposer un geste ; Tab pour accepter. Si tu es au sol, il propose de t’aider.">BOT : INTERAGIR</button>
       <button type="button" data-view="first-person">1ST PERSON</button>
       <button type="button" data-view="third-person" class="is-active">3RD PERSON</button>
     `;
@@ -2183,6 +2221,7 @@ export class AnimationLab {
     this.killButton.addEventListener('click', () => this.killPlayer());
     this.npcCombatButton = switcher.querySelector<HTMLButtonElement>('[data-action="npc-combat"]')!;
     this.npcCombatButton.addEventListener('click', () => this.toggleNpcCombat());
+    switcher.querySelector<HTMLButtonElement>('[data-action="bot-interact"]')!.addEventListener('click', () => this.requestBotInteraction());
     for (const button of switcher.querySelectorAll<HTMLButtonElement>('[data-view]')) {
       const mode = button.dataset.view as ViewMode;
       this.viewButtons.set(mode, button);
@@ -2980,12 +3019,12 @@ export class AnimationLab {
       || this.combatPhase === 'guard'
       || this.combatPhase === 'exit'
       || this.firstPersonCombatReleaseSeconds > 0;
-    const targetArmScale = this.activeEmote ? 1 : combatArms
+    const targetArmScale = this.activeEmote || this.pairCoordinator.session ? 1 : combatArms
       ? FIRST_PERSON_COMBAT_ARM_SCALE + FIRST_PERSON_COMBAT_VISUAL_ARM_SCALE_BONUS
       : sprintArms
         ? FIRST_PERSON_SPRINT_ARM_SCALE
         : FIRST_PERSON_ARM_SCALE;
-    const targetHandScale = this.activeEmote ? 1 : combatArms
+    const targetHandScale = this.activeEmote || this.pairCoordinator.session ? 1 : combatArms
       ? FIRST_PERSON_COMBAT_HAND_SCALE + FIRST_PERSON_COMBAT_VISUAL_HAND_SCALE_BONUS
       : sprintArms
         ? FIRST_PERSON_SPRINT_HAND_SCALE
@@ -3007,7 +3046,7 @@ export class AnimationLab {
 
   private updateFirstPersonBodyTransform(delta = 0, snapScale = false): void {
     if (!this.player || !this.firstPersonCharacter || !this.firstPersonHipsBone) return;
-    if (this.activeEmote) {
+    if (this.activeEmote || this.pairCoordinator.session) {
       // Emotes share the physical body's placement; camera framing must not
       // cancel their authored pelvis motion or stretch their planted feet.
       this.player.setCombatGuardLookConstraint(false);
@@ -3440,6 +3479,437 @@ export class AnimationLab {
     return true;
   }
 
+  private pairActorPosition(actor: PairActor): THREE.Vector3 {
+    if (actor === 'npc') {
+      if (this.npcRagdoll) return this.npcRagdoll.getPelvisPose().position;
+      if (this.npcRecovery) return this.npcRecovery.getPelvisPosition();
+      return this.idleNpcAnchor?.position.clone() ?? new THREE.Vector3();
+    }
+    if (this.ragdoll) return this.ragdoll.getPelvisPose().position;
+    if (this.recovery) return this.recovery.getPelvisPosition();
+    return this.physics?.getFeetPosition(new THREE.Vector3()) ?? this.avatarAnchor.position.clone();
+  }
+
+  private pairStanding(actor: PairActor): boolean {
+    if (actor === 'npc') return !this.npcRagdoll && !this.npcRecovery && this.npcHealth > 0;
+    const state = this.player?.getDebugState();
+    return !this.ragdoll && !this.recovery && this.health > 0 && !!state?.grounded
+      && !state.crouching && !state.lowPosture && !state.sliding && !state.incapacitated;
+  }
+
+  private pairLineOfSight(from: PairActor): boolean {
+    const target = from === 'player' ? 'npc' : 'player';
+    const start = this.pairActorPosition(from).add(new THREE.Vector3(0, this.pairStanding(from) ? 1.35 : .18, 0));
+    const end = this.pairActorPosition(target).add(new THREE.Vector3(0, this.pairStanding(target) ? 1.25 : .18, 0));
+    const direction = end.sub(start), distance = direction.length();
+    if (distance < .05) return true;
+    this.pairRaycaster.set(start, direction.divideScalar(distance));
+    this.pairRaycaster.near = .025; this.pairRaycaster.far = Math.max(.025, distance - .08);
+    return this.pairRaycaster.intersectObjects(this.environmentMeshes, false).length === 0;
+  }
+
+  private getPairUnavailableReason(kind: PairAction, from: PairActor, pending = false): string | null {
+    if (!this.ready || !this.player || !this.pairPlayerRig || !this.pairNpcRig) return 'Chargement des personnages';
+    const target = from === 'player' ? 'npc' : 'player';
+    const a = this.pairActorPosition(from), b = this.pairActorPosition(target);
+    const direction = b.clone().sub(a);
+    const distance = Math.hypot(direction.x, direction.z);
+    const eye = a.clone().add(new THREE.Vector3(0, this.pairStanding(from) ? 1.5 : .15, 0));
+    const aim = b.clone().add(new THREE.Vector3(0, this.pairStanding(target) ? 1.25 : .20, 0)).sub(eye).normalize();
+    const look = from === 'player'
+      ? new THREE.Vector3(0, 0, -1).applyQuaternion(this.player.getLookQuaternion())
+      : new THREE.Vector3(Math.sin(this.idleNpcAnchor!.rotation.y), 0, Math.cos(this.idleNpcAnchor!.rotation.y));
+    if (from === 'npc') { aim.y = 0; aim.normalize(); }
+    const down = target === 'npc' ? !!this.npcRagdoll : !!this.ragdoll || !!this.recovery?.isHolding;
+    const targetReady = target === 'npc' ? this.npcRagdoll?.isRecoveryReady ?? false
+      : this.canStartRecovery();
+    return pairUnavailableReason(kind, { distance, heightDifference: a.y - b.y, lookDot: look.dot(aim),
+      lineOfSight: this.pairLineOfSight(from), senderStanding: this.pairStanding(from), targetStanding: this.pairStanding(target),
+      targetDown: down, targetReady, alive: this.health > 0 && this.npcHealth > 0,
+      busy: !pending && (!!this.pairCoordinator.invitation || !!this.pairCoordinator.session || !!this.pairBotRequest
+        || !!this.combatAttack || !!this.npcAttack || !!this.combatHitReaction || !!this.npcHitReaction || !!this.groundKick),
+    }, !pending);
+  }
+
+  private quietPairCombat(): void {
+    this.stopEmote(); this.resetCombatState(true);
+    this.npcCombatEnabled = false; this.npcResumeCombatAfterRecovery = false;
+    this.npcAttack = null; this.npcHitReaction = null; this.npcSpacingPushSeconds = 0;
+    this.stopNpcCombatGuardLayers(.16);
+    if (!this.npcRagdoll && !this.npcRecovery) this.playNpcAnimation('idle', true, 1, true);
+    this.updateNpcUi();
+  }
+
+  private requestPairInteraction(kind: PairAction, from: PairActor): boolean {
+    if (from === 'npc' && (this.ragdoll || this.recovery?.isHolding)) this.refreshRecoveryAvailability(true);
+    const reason = this.getPairUnavailableReason(kind, from);
+    if (reason) { this.showPairMessage(reason); return false; }
+    this.quietPairCombat();
+    if (!this.pairCoordinator.request(kind, from, this.pairClock)) return false;
+    this.emoteMenu.close(); this.updatePairHud();
+    return true;
+  }
+
+  private acceptPairInvitation(actor: PairActor): boolean {
+    const invitation = this.pairCoordinator.invitation;
+    if (!invitation) return false;
+    if (invitation.kind === 'help-up' && actor === 'player') this.refreshRecoveryAvailability(true);
+    const valid = !this.getPairUnavailableReason(invitation.kind, invitation.from, true);
+    if (!this.pairCoordinator.accept(actor, this.pairClock, valid)) { this.updatePairHud(); return false; }
+    this.pairAlignmentElapsed = 0; this.pairHelpGripStarted = false;
+    this.pairHelpGripHold = 0; this.pairHelpWaitElapsed = 0;
+    this.pairHelpReachError = 0;
+    this.pairHelpFrontWeight = 1;
+    this.pairHelpApproachGoal = null;
+    this.emoteMenu.close(); this.quietPairCombat();
+    this.player?.setInputEnabled(false); if (!this.player?.isLocked) this.player?.lock();
+    if (this.pairCoordinator.session!.kind === 'rps') {
+      // Commit the bot's independent choice BEFORE the player's UI choice.
+      this.pairCoordinator.choose('npc', (['rock', 'paper', 'scissors'] as const)[Math.floor(Math.random() * 3)]!);
+    }
+    if (this.pairStanding('player')) { this.playbackMode = 'auto'; this.playAnimation('idle', true, 1, false, true); }
+    this.updatePairHud(); return true;
+  }
+
+  private choosePairHand(choice: RpsChoice): void {
+    if (this.pairCoordinator.choose('player', choice)) this.updatePairHud();
+  }
+
+  private showPairMessage(message: string): void {
+    this.pairMessage = message; this.pairMessageUntil = this.pairClock + 2.4; this.updatePairHud();
+  }
+
+  private cancelPairInteraction(message?: string): void {
+    const session = this.pairCoordinator.session;
+    if (session?.kind === 'help-up') {
+      (session.to === 'player' ? this.recovery : this.npcRecovery)?.releaseAssistedGrip();
+    }
+    this.pairBotRequest = null; this.pairCoordinator.cancel();
+    if (session) {
+      if (this.pairStanding('player') && this.character) {
+        this.playerHitHandoff.capture(this.character, .24);
+        if (this.firstPersonCharacter) this.firstPersonHitHandoff.capture(this.firstPersonCharacter, .24);
+        this.playAnimation('idle', true, 1, false, true);
+      }
+      if (this.pairStanding('npc') && this.idleNpcCharacter) {
+        this.npcHitHandoff.capture(this.idleNpcCharacter, .24);
+        this.playNpcAnimation('idle', true, 1, true);
+      }
+    }
+    this.pairDownRig?.restore(); this.pairDownRig = undefined;
+    this.player?.setInputEnabled(!!this.player?.isLocked && !this.ragdoll && !this.recovery && this.recoveryCameraBlend < 0);
+    this.pairMessageUntil = 0;
+    if (message) this.showPairMessage(message); else this.updatePairHud();
+  }
+
+  private requestBotInteraction(): void {
+    if (!this.ready || !this.player || !this.pairNpcRig) return;
+    if (this.pairCoordinator.session || this.pairCoordinator.invitation || this.pairBotRequest) {
+      this.cancelPairInteraction('Interaction annulée'); return;
+    }
+    if (!this.pairStanding('npc') || this.health <= 0) { this.showPairMessage('Le bot doit être debout et vous devez être vivants.'); return; }
+    if (!this.pairStanding('player') && !this.ragdoll && !this.recovery?.isHolding) {
+      this.showPairMessage('Termine ton action avant d’interagir.'); return;
+    }
+    this.quietPairCombat();
+    this.pairBotRequest = this.ragdoll || this.recovery?.isHolding ? 'help-up'
+      : (['rps', 'high-five', 'fist-bump'] as const)[this.pairBotSequence++ % 3]!;
+    this.pairBotApproachElapsed = 0; this.emoteMenu.close();
+    this.showPairMessage('Le bot vient te proposer une interaction.');
+  }
+
+  private updatePairInvitations(delta: number): void {
+    if (!this.ready || !this.player) return;
+    if (this.pairBotRequest && this.idleNpcAnchor) {
+      this.pairBotApproachElapsed += delta;
+      const target = this.pairActorPosition('player');
+      const look = new THREE.Vector3(0, 0, -1).applyQuaternion(this.player.getLookQuaternion());
+      look.y = 0; if (look.lengthSq() < .1) look.set(0, 0, 1); look.normalize();
+      const destination = target.clone().addScaledVector(look, 1.05);
+      const step = destination.sub(this.idleNpcAnchor.position); step.y = 0;
+      const distance = step.length();
+      const face = target.clone().sub(this.idleNpcAnchor.position);
+      this.idleNpcAnchor.rotation.y = dampAngleRadians(this.idleNpcAnchor.rotation.y, Math.atan2(face.x, face.z), expAlpha(delta, 8));
+      if (distance > .12) {
+        this.playNpcAnimation('walking', true, .78);
+        this.moveNpcCombatStep(step.normalize(), Math.min(distance, .92 * delta));
+      } else {
+        this.playNpcAnimation('idle', true, 1);
+        const kind = this.pairBotRequest;
+        if (kind === 'help-up') this.refreshRecoveryAvailability(true);
+        if (!this.getPairUnavailableReason(kind, 'npc', true)) {
+          this.pairBotRequest = null; this.requestPairInteraction(kind, 'npc');
+        }
+      }
+      if (this.pairBotRequest && this.pairBotApproachElapsed > 9) this.cancelPairInteraction('Le bot ne peut pas te rejoindre ici.');
+    }
+    const invitation = this.pairCoordinator.invitation;
+    if (invitation) {
+      const reason = this.pairCoordinator.updateInvitation(this.pairClock,
+        !this.getPairUnavailableReason(invitation.kind, invitation.from, true));
+      if (!reason && invitation.to === 'npc' && this.pairClock - invitation.createdAt >= .65) this.acceptPairInvitation('npc');
+    }
+    this.updatePairHud();
+  }
+
+  private updatePairHud(): void {
+    const invitation = this.pairCoordinator.invitation, session = this.pairCoordinator.session;
+    if (invitation) {
+      this.pairHud.show({ mode: invitation.to === 'player' ? 'invitation' : 'waiting',
+        title: `${invitation.to === 'player' ? 'Le bot propose' : 'Proposé au bot'} : ${pairActionLabel(invitation.kind)}`,
+        detail: invitation.to === 'player' ? 'Tab pour accepter · éloignez-vous pour annuler' : 'Le bot peut accepter tant que vous restez proches.',
+        remaining: invitation.expiresAt - this.pairClock });
+    } else if (session?.stage === 'choosing') {
+      this.pairHud.show({ mode: 'choosing', title: 'Pierre · feuille · ciseaux', choiceLocked: this.pairCoordinator.hasChosen('player'),
+        detail: 'Choisis avec 1, 2, 3 ou un clic. Les choix restent secrets.', remaining: Math.max(0, 4 - (this.pairClock - session.acceptedAt)) });
+    } else if (session) {
+      const choices = this.pairCoordinator.visibleChoices();
+      const winner = choices && rpsWinner(choices.player, choices.npc);
+      this.pairHud.show({ mode: choices ? 'result' : 'playing', title: choices
+        ? winner === 'tie' ? 'Égalité' : winner === 'a' ? 'Tu gagnes' : 'Le bot gagne' : pairActionLabel(session.kind),
+        detail: choices ? `Toi : ${RPS_LABELS[choices.player]} · Bot : ${RPS_LABELS[choices.npc]}`
+          : session.stage === 'aligning' ? 'On se place… · Échap pour annuler'
+          : session.kind === 'rps' ? ['Prêts…', 'Pierre…', 'Feuille…', 'Ciseaux…'][Math.min(3, Math.floor(session.elapsed / .55))]!
+          : session.kind === 'help-up' ? 'Prendre appui, tirer, puis retrouver l’équilibre.' : 'Échap ou déplacement pour interrompre' });
+    } else this.pairHud.show(this.pairMessageUntil > this.pairClock
+      ? { mode: 'message', title: this.pairMessage, detail: '' } : null);
+  }
+
+  private advancePairPhysics(delta: number, playerStep?: THREE.Vector3): void {
+    this.accumulator = Math.min(this.accumulator + delta, MAX_ACCUMULATOR);
+    while (this.accumulator >= FIXED_DELTA) {
+      if (this.ragdoll) this.ragdoll.fixedUpdate(FIXED_DELTA);
+      else if (this.recovery) this.physics?.stepDynamics(FIXED_DELTA);
+      else if (!this.player!.isLocked) this.physics?.stepDynamics(FIXED_DELTA);
+      else {
+        if (playerStep) this.player!.setAnimationRootStep(playerStep.clone().multiplyScalar(FIXED_DELTA));
+        this.player!.fixedUpdate(FIXED_DELTA);
+      }
+      for (const corpse of this.corpses) corpse.ragdoll.passiveUpdate(FIXED_DELTA);
+      this.npcRagdoll?.passiveUpdate(FIXED_DELTA);
+      this.accumulator -= FIXED_DELTA;
+    }
+    if (!this.ragdoll && !this.recovery) this.player!.renderUpdate(delta, this.accumulator / FIXED_DELTA);
+  }
+
+  private groundPairRig(rig: PairInteractionRig): void {
+    const position = rig.root.getWorldPosition(new THREE.Vector3());
+    this.pairRaycaster.set(position.clone().add(new THREE.Vector3(0, 1, 0)), new THREE.Vector3(0, -1, 0));
+    this.pairRaycaster.near = .01; this.pairRaycaster.far = 2;
+    const floor = this.pairRaycaster.intersectObjects(this.environmentMeshes, false).find(hit => (hit.face?.normal.y ?? 0) > .7);
+    if (floor) rig.ground(floor.point.y, this.firstPersonFootToSole);
+  }
+
+  private framePairInteraction(delta: number): void {
+    const session = this.pairCoordinator.session;
+    if (!session || !this.player || !this.physics || !this.pairPlayerRig || !this.pairNpcRig || !this.idleNpcAnchor) return;
+    const playerPosition = this.pairActorPosition('player'), npcPosition = this.pairActorPosition('npc');
+    const distance = Math.hypot(playerPosition.x - npcPosition.x, playerPosition.z - npcPosition.z);
+    if (this.health <= 0 || this.npcHealth <= 0 || distance > PAIR_REACH_METERS || !this.pairLineOfSight(session.from)
+      || (session.kind !== 'help-up' && (!this.pairStanding('player') || !this.pairStanding('npc')))
+      || (session.kind === 'help-up' && !this.pairStanding(session.from))) {
+      this.cancelPairInteraction('Interaction interrompue'); return;
+    }
+    if (session.stage === 'choosing' && this.pairClock - session.acceptedAt >= 4) {
+      this.cancelPairInteraction('Aucun choix : manche annulée'); return;
+    }
+    const forward = npcPosition.clone().sub(playerPosition); forward.y = 0; forward.normalize();
+    const npcForward = forward.clone().negate();
+    if (session.kind === 'help-up' && this.pairDownRig) {
+      const towardHead = this.pairDownRig.getHead().sub(this.pairActorPosition(session.from));
+      towardHead.y = 0; towardHead.normalize();
+      if (session.from === 'player') { forward.copy(towardHead); npcForward.copy(towardHead).negate(); }
+      else { npcForward.copy(towardHead); forward.copy(towardHead).negate(); }
+    }
+    this.pairHelperEyeOffset.set(0, 0, 0);
+    let playerStep: THREE.Vector3 | undefined;
+    if (session.stage === 'aligning') {
+      this.pairAlignmentElapsed += delta;
+      const helperNpc = session.from === 'npc';
+      let alignmentPoint = playerPosition, alignmentDistance = session.kind === 'rps' ? 1.05 : .70;
+      if (session.kind === 'help-up') {
+        const downCharacter = session.to === 'npc' ? this.idleNpcCharacter
+          : this.activeCorpseRoot?.children[0] as THREE.Group | undefined;
+        const downRoot = session.to === 'npc' ? this.idleNpcAnchor : this.activeCorpseRoot;
+        if (!downCharacter || !downRoot) { this.cancelPairInteraction('Relevé indisponible'); return; }
+        this.pairDownRig ??= new PairInteractionRig(downRoot, downCharacter);
+        alignmentPoint = this.pairActorPosition(session.to); alignmentDistance = .78;
+      }
+      const moving = session.kind === 'help-up' && !helperNpc ? playerPosition : npcPosition;
+      const offset = alignmentPoint.clone().sub(moving); offset.y = 0;
+      const error = offset.length() - alignmentDistance;
+      if (Math.abs(error) > .015) {
+        offset.normalize().multiplyScalar(Math.sign(error));
+        if (session.kind === 'help-up' && !helperNpc) { playerStep = offset.multiplyScalar(.8); this.playAnimation('walking', true, .7); }
+        else { this.playNpcAnimation('walking', true, .7); this.moveNpcCombatStep(offset, Math.min(Math.abs(error), .8 * delta)); }
+      } else if (this.pairAlignmentElapsed > .3) {
+        this.playNpcAnimation('idle', true, 1);
+        if (session.kind === 'help-up' && !helperNpc) this.playAnimation('idle', true, 1, false, true);
+        if (session.kind === 'help-up') {
+          if (session.to === 'player') { this.refreshRecoveryAvailability(true); this.startGetUp(.8, true); }
+          else this.startNpcGroundRecovery(.8, true);
+          const recovery = session.to === 'player' ? this.recovery : this.npcRecovery;
+          if (!recovery) { this.cancelPairInteraction('Pas assez d’espace pour se relever ici'); return; }
+          this.pairHelpContact.copy(this.pairDownRig!.getContactPoint('clasp'));
+          this.pairCoordinator.beginPlayback(recovery.duration + .55);
+        } else this.pairCoordinator.beginPlayback();
+      }
+      if (this.pairAlignmentElapsed > 3) { this.cancelPairInteraction('Laisse un peu plus d’espace pour le geste'); return; }
+    }
+    let helperTravel: THREE.Vector3 | undefined;
+    const assisted = session.kind === 'help-up' ? session.to === 'player' ? this.recovery : this.npcRecovery : null;
+    if (assisted && this.pairDownRig) {
+      if (assisted.isWaitingForAssistGrip) this.pairHelpWaitElapsed += delta;
+      const helperPosition = this.pairActorPosition(session.from);
+      const facing = this.pairDownRig.getFacing();
+      const recipientCenter = this.pairActorPosition(session.to);
+      const recipientShoulder = this.pairDownRig.find('rightarm')!.getWorldPosition(new THREE.Vector3());
+      if (assisted.isPreparedForAssist && !this.pairHelpApproachGoal) {
+        const side = recipientShoulder.clone().sub(this.pairDownRig.find('leftarm')!.getWorldPosition(new THREE.Vector3()));
+        side.y = 0;
+        if (side.lengthSq() < .01) side.set(Math.cos(assisted.targetYaw), 0, -Math.sin(assisted.targetYaw));
+        this.pairHelpApproachGoal = recipientShoulder.clone().addScaledVector(side.normalize(), .60);
+      }
+      const goal = this.pairHelpApproachGoal ?? recipientShoulder.clone().addScaledVector(facing, .45);
+      const goalDirection = goal.clone().sub(recipientCenter); goalDirection.y = 0;
+      const arcRadius = Math.max(1.02, goalDirection.length() + .15);
+      const radius = helperPosition.clone().sub(recipientCenter); radius.y = 0;
+      const currentRadius = radius.length();
+      const angularError = Math.atan2(goalDirection.x, goalDirection.z) - Math.atan2(radius.x, radius.z);
+      const turn = Math.atan2(Math.sin(angularError), Math.cos(angularError));
+      this.pairHelpFrontWeight = assisted.isWaitingForAssistGrip
+        ? assisted.isPreparedForAssist ? easeCombat((Math.cos(turn) - .5) / .35) : 0 : 1;
+      let toward = goal.clone().sub(helperPosition); toward.y = 0;
+      let error = assisted.isWaitingForAssistGrip ? toward.length() : this.pairHelpReachError > 0 ? Math.min(.08, this.pairHelpReachError) : 0;
+      if (assisted.isWaitingForAssistGrip && assisted.isPreparedForAssist) {
+        if (Math.abs(turn) > .26) {
+          // Walk around the prone body, rather than through it or pulling it
+          // from behind. Keep the authored get-up orientation unchanged.
+          const direction = radius.clone().normalize();
+          if (currentRadius < arcRadius - .08) toward = direction;
+          else toward = new THREE.Vector3(direction.z, 0, -direction.x).multiplyScalar(Math.sign(turn))
+            .addScaledVector(direction, THREE.MathUtils.clamp((arcRadius - currentRadius) * 3, -.3, .3));
+          error = .85 * delta;
+        } else {
+          toward = goal.clone().sub(helperPosition); toward.y = 0;
+          error = toward.length();
+        }
+      } else if (!assisted.isWaitingForAssistGrip && this.pairHelpReachError > 0) {
+        toward = this.pairDownRig.find('rightarm')!.getWorldPosition(new THREE.Vector3()).sub(helperPosition); toward.y = 0;
+      }
+      if (session.elapsed >= assisted.duration) {
+        toward.copy(this.pairActorPosition(session.to)).sub(helperPosition); toward.y = 0;
+        error = Math.min(0, toward.length() - .70);
+      }
+      if (Math.abs(error) > .006 && assisted.isPreparedForAssist) {
+        toward.normalize().multiplyScalar(Math.sign(error));
+        helperTravel = toward.clone();
+        const speed = assisted.isWaitingForAssistGrip && this.pairHelpFrontWeight < .9 ? .85 : .65;
+        const backing = session.elapsed >= assisted.duration && error < 0;
+        if (session.from === 'player') { playerStep = toward.multiplyScalar(speed); this.playAnimation('walking', true, .7, backing); }
+        else {
+          this.playNpcAnimation('walking', true, .7);
+          if (backing) this.npcCurrentAction?.setEffectiveTimeScale(-.7);
+          this.moveNpcCombatStep(toward, Math.min(Math.abs(error), speed * delta));
+        }
+      } else if (!assisted.isWaitingForAssistGrip) {
+        if (session.from === 'player') this.playAnimation('idle', true, 1);
+        else this.playNpcAnimation('idle', true, 1);
+      }
+      if (this.pairHelpWaitElapsed > 9) { this.cancelPairInteraction('Impossible de prendre la main ici'); return; }
+    }
+    this.advancePairPhysics(delta, playerStep);
+    if (this.pairStanding('player')) {
+      this.player.getRenderedFeetPosition(this.feetPosition); this.avatarAnchor.position.copy(this.feetPosition);
+      const playerFacing = session.from === 'player' && helperTravel && this.pairHelpFrontWeight < .9 ? helperTravel : forward;
+      this.bodyYaw = dampAngleRadians(this.bodyYaw, Math.atan2(playerFacing.x, playerFacing.z), expAlpha(delta, 9));
+      this.avatarAnchor.rotation.y = this.bodyYaw;
+      if (assisted?.isWaitingForAssistGrip) this.player.focusCombatAimYaw(Math.atan2(forward.x, forward.z), delta, 6, 120);
+    }
+    if (this.pairStanding('npc')) {
+      const npcFacing = session.from === 'npc' && helperTravel && this.pairHelpFrontWeight < .9 ? helperTravel : npcForward;
+      this.idleNpcAnchor.rotation.y = dampAngleRadians(this.idleNpcAnchor.rotation.y, Math.atan2(npcFacing.x, npcFacing.z), expAlpha(delta, 9));
+    }
+    if (!this.ragdoll && !this.recovery) {
+      this.gaitTransition.update(delta);
+      this.mixer?.update(delta); this.firstPersonMixer?.update(delta);
+      this.playerProceduralPose.capture(this.character); this.groundPairRig(this.pairPlayerRig); this.pairPlayerRig.capture();
+    }
+    if (!this.npcRagdoll && !this.npcRecovery) {
+      this.idleNpcMixer?.update(delta); this.npcProceduralPose.capture(this.idleNpcCharacter);
+      this.groundPairRig(this.pairNpcRig); this.pairNpcRig.capture();
+    }
+    if (session.stage === 'playing') {
+      this.pairCoordinator.advance(delta);
+      if (session.kind === 'help-up') {
+        const recovery = session.to === 'player' ? this.recovery : this.npcRecovery;
+        if (!recovery || !this.pairDownRig) { this.cancelPairInteraction('Relevé interrompu'); return; }
+        recovery.update(delta); this.pairDownRig.capture();
+        if (recovery.isWaitingForAssistGrip && recovery.isPreparedForAssist) session.elapsed = Math.min(session.elapsed, .8);
+        const helper = session.from === 'player' ? this.pairPlayerRig : this.pairNpcRig;
+        const helperForward = session.from === 'player' ? forward : npcForward;
+        const recipientForward = helperForward.clone().negate();
+        const grip = easeCombat(session.elapsed / .65) * this.pairHelpFrontWeight
+          * (1 - easeCombat((session.elapsed - recovery.duration) / .5));
+        const recipientShoulder = this.pairDownRig.find('rightarm')!.getWorldPosition(new THREE.Vector3());
+        const helperHeadBefore = helper.getHead();
+        helper.helpStance(recipientShoulder.clone().add(new THREE.Vector3(0, .12, 0)), helperForward, grip);
+        if (session.from === 'player') this.pairHelperEyeOffset.copy(helper.getHead()).sub(helperHeadBefore);
+        this.pairHelpReachError = helper.find('rightarm')!.getWorldPosition(new THREE.Vector3()).distanceTo(recipientShoulder)
+          - .94 * (helper.armLength + this.pairDownRig.armLength);
+        // The authored rise can swing its free hand far behind the helper.
+        // Anchor the clasp in the overlap of the two current arm spans instead.
+        // This follows the rising shoulders while both actors keep a real grip.
+        const contact = helper.find('rightarm')!.getWorldPosition(new THREE.Vector3()).lerp(recipientShoulder,
+          helper.armLength / (helper.armLength + this.pairDownRig.armLength));
+        contact.y = Math.max(contact.y, recovery.groundOrigin.y + .36);
+        this.pairHelpContact.copy(contact);
+        helper.help(this.pairHelpContact, helperForward, grip);
+        this.pairDownRig.help(this.pairHelpContact, recipientForward, grip);
+        const contactGap = helper.getContactPoint('clasp').distanceTo(this.pairDownRig.getContactPoint('clasp'));
+        if (recovery.isWaitingForAssistGrip && recovery.isPreparedForAssist) {
+          this.pairHelpGripHold = grip >= .98 && contactGap < .008 && this.pairHelpReachError <= 0 ? this.pairHelpGripHold + delta : 0;
+          if (this.pairHelpGripHold >= .09) {
+            this.pairHelpGripStarted = true; recovery.releaseAssistedGrip();
+            if (session.from === 'player') this.playAnimation('idle', true, 1, false, true);
+            else this.playNpcAnimation('idle', true, 1, true);
+          }
+        }
+      } else {
+        const common = this.avatarAnchor.position.clone().lerp(this.idleNpcAnchor.position, .5);
+        common.y = Math.min(this.pairPlayerRig.getChest().y, this.pairNpcRig.getChest().y) + (session.kind === 'high-five' ? .23 : -.12);
+        const choices = this.pairCoordinator.visibleChoices();
+        this.pairPlayerRig.standing(session.kind, session.elapsed, common, forward, choices?.player);
+        this.pairNpcRig.standing(session.kind, session.elapsed, common, npcForward, choices?.npc);
+        const lookWeight = easeCombat(session.elapsed / .5) * .6;
+        this.pairPlayerRig.lookAt(this.pairNpcRig.getHead(), forward, lookWeight);
+        this.pairNpcRig.lookAt(this.pairPlayerRig.getHead(), npcForward, lookWeight);
+      }
+    }
+    if (!this.ragdoll && !this.recovery && this.character && this.firstPersonCharacter) {
+      copyGetUpPose(this.character, this.firstPersonCharacter);
+      this.applyFirstPersonArmTuning(delta);
+      this.updateFirstPersonBodyTransform(delta);
+      if (this.viewMode === 'first-person' && session.kind === 'help-up' && session.from === 'player') {
+        this.firstPersonCamera.position.add(this.pairHelperEyeOffset);
+      }
+    }
+    this.captureRagdollMotionFrame(delta);
+    if (this.recovery || this.ragdoll) {
+      if (this.viewMode === 'first-person') this.updateDeadFirstPersonCamera(delta);
+      else this.updateThirdPersonCamera(delta);
+    } else if (this.viewMode === 'third-person') this.updateThirdPersonCamera(delta);
+    if (session.stage === 'playing' && session.elapsed >= session.duration) {
+      if (session.kind === 'help-up') {
+        this.pairDownRig?.restore();
+        if (session.to === 'player') this.finishGetUp(); else this.finishNpcGroundRecovery();
+      }
+      this.cancelPairInteraction();
+    }
+    this.updatePairHud(); this.updateMotionFx(); this.updateHud(); this.bloodDecals.update(delta);
+    this.renderer.render(this.scene, this.viewMode === 'first-person' ? this.firstPersonCamera : this.thirdPersonCamera);
+  }
+
   private updateEmoteRootMotion(delta: number): void {
     if (!this.activeEmote || !this.player) return;
     const motion = this.emoteMotions.get(this.activeEmote);
@@ -3631,6 +4101,7 @@ export class AnimationLab {
 
   private combatIsEligible(): boolean {
     if (!this.ready || !this.player || this.ragdoll || this.recovery || this.health <= 0) return false;
+    if (this.pairCoordinator.session || this.pairCoordinator.invitation || this.pairBotRequest) return false;
     const state = this.player.getDebugState();
     return this.player.isLocked
       && !state.incapacitated
@@ -5907,6 +6378,7 @@ export class AnimationLab {
   }
 
   private resetNpcOpponent(enableCombat: boolean): void {
+    this.cancelPairInteraction();
     this.npcClinchVariation.reset();
     this.npcRecoveryHandoffSeconds = 0;
     this.npcBalance.reset(); this.playerBalance.reset();
@@ -5966,6 +6438,7 @@ export class AnimationLab {
 
   private toggleNpcCombat(): void {
     if (!this.ready || !this.idleNpcCharacter) return;
+    this.cancelPairInteraction();
     if (this.npcRagdoll || this.npcRecovery || this.npcHealth <= 0) {
       this.resetNpcOpponent(true);
       return;
@@ -6390,7 +6863,7 @@ export class AnimationLab {
     this.updateNpcUi();
   }
 
-  private startNpcGroundRecovery(): void {
+  private startNpcGroundRecovery(preparationSeconds = 0, waitForAssistGrip = false): void {
     if (!this.physics || !this.idleNpcAnchor || !this.idleNpcCharacter || !this.idleNpcMixer || !this.npcRagdoll || this.npcRecovery || this.npcHealth <= 0) return;
     const ragdoll = this.npcRagdoll;
     const hipPose = ragdoll.getPelvisPose(new THREE.Vector3(), new THREE.Quaternion());
@@ -6412,7 +6885,7 @@ export class AnimationLab {
     const clip = variant.clip;
     let recovery: GetUpRecovery;
     try {
-      recovery = new GetUpRecovery(this.idleNpcAnchor, this.idleNpcCharacter, clip, side, stand.y - 0.865);
+      recovery = new GetUpRecovery(this.idleNpcAnchor, this.idleNpcCharacter, clip, side, stand.y - 0.865, { preparationSeconds, waitForAssistGrip });
       recovery.retargetStandingPosition(stand);
       recovery.start();
     } catch (error) {
@@ -6689,6 +7162,7 @@ export class AnimationLab {
 
   private updateNpcCombat(delta: number): void {
     if (!this.idleNpcMixer || !this.idleNpcAnchor || !this.player) return;
+    if (this.pairCoordinator.session || this.pairBotRequest || this.pairCoordinator.invitation) return;
     const dt = Math.max(0, delta);
     this.npcGroundKickRecoveryDelay = Math.max(0, this.npcGroundKickRecoveryDelay - dt);
     this.syncNpcPlayerBlocker(!this.npcRagdoll && !this.npcRecovery && this.npcHealth > 0);
@@ -6709,7 +7183,7 @@ export class AnimationLab {
         this.npcDownElapsed,
         this.npcGroundKickRecoveryDelay,
         this.groundKick !== null,
-      )) this.startNpcGroundRecovery();
+      ) && !this.emoteMenu.isOpen) this.startNpcGroundRecovery();
       this.updateNpcUi();
       return;
     }
@@ -9469,7 +9943,7 @@ export class AnimationLab {
     });
   }
 
-  private startGetUp(): void {
+  private startGetUp(preparationSeconds = 0, waitForAssistGrip = false): void {
     if (!this.canStartRecovery() || (!this.ragdoll && !this.recovery?.isHolding) || !this.physics
       || !this.player || !this.activeCorpseRoot || !this.character) return;
     const ragdoll = this.ragdoll;
@@ -9498,7 +9972,7 @@ export class AnimationLab {
     const clip = variants.find(candidate => candidate.id === choice.id)!.clip;
     let recovery: GetUpRecovery;
     try {
-      recovery = new GetUpRecovery(root, character, clip, side, initialStand.y - 0.865);
+      recovery = new GetUpRecovery(root, character, clip, side, initialStand.y - 0.865, { preparationSeconds, waitForAssistGrip });
       // IMPORTANT: `initialStand` is the capsule center already validated by
       // PhysicsWorld. Do not re-run clearance around the FBX-derived target: the
       // supplied get-up clips have their own lying root offsets and that second
@@ -10041,6 +10515,7 @@ export class AnimationLab {
   }
 
   private readonly onCombatMouseDown = (event: MouseEvent, fromEmotePicker = false): void => {
+    if (this.pairCoordinator.session || this.pairCoordinator.invitation || this.pairBotRequest) return;
     if (!this.ready || !this.player?.isLocked || (!fromEmotePicker && event.target !== this.renderer.domElement)) return;
     if (event.button === 0 || event.button === 2) this.stopEmote();
     if (this.ragdoll || this.recovery || this.player.isIncapacitated || this.combatHitReaction) return;
@@ -10192,6 +10667,7 @@ export class AnimationLab {
       return;
     }
     if (event.repeat) return;
+    if (this.pairCoordinator.session && event.code !== 'KeyP') return;
     if (this.activeEmote && (Object.values(this.settings.controls).includes(event.code)
       || event.code === 'KeyF' || event.code === 'Escape')) this.stopEmote();
 
@@ -10253,7 +10729,8 @@ export class AnimationLab {
 
   private readonly onPlayerLockChange = (locked: boolean): void => {
     if (!locked) this.resetCombatState(true);
-    this.player?.setInputEnabled(this.ragdoll || this.recovery || this.recoveryCameraBlend >= 0 ? false : locked);
+    if (!locked && this.pairCoordinator.session) this.cancelPairInteraction();
+    this.player?.setInputEnabled(this.ragdoll || this.recovery || this.recoveryCameraBlend >= 0 || this.pairCoordinator.session ? false : locked);
     this.updateRecoveryPrompt();
     this.hint?.classList.toggle('is-hidden', locked || this.emoteMenu.isOpen);
     this.previousTime = performance.now();
@@ -10291,6 +10768,7 @@ export class AnimationLab {
   }
 
   private readonly frame = (now: number): void => {
+    this.pairPlayerRig?.restore(); this.pairNpcRig?.restore(); this.pairDownRig?.restore();
     this.playerProceduralPose.restore(!this.ragdoll && !this.recovery);
     this.firstPersonProceduralPose.restore(!this.ragdoll && !this.recovery);
     this.npcProceduralPose.restore(!this.npcRagdoll && !this.npcRecovery);
@@ -10299,6 +10777,12 @@ export class AnimationLab {
     this.emoteMenu.update(measuredDelta);
     const rawDelta = Math.min(0.05, measuredDelta);
     this.previousTime = now;
+    this.pairClock += measuredDelta;
+    this.updatePairInvitations(rawDelta);
+    if (this.pairCoordinator.session) {
+      this.framePairInteraction(rawDelta);
+      return;
+    }
     this.bloodImpactClock += rawDelta;
     this.combatClock += rawDelta;
     this.currentAnimationElapsed += rawDelta;
@@ -10567,6 +11051,7 @@ export class AnimationLab {
     if (this.disposed) return;
     this.disposed = true;
     this.emoteMenu.dispose();
+    this.pairHud.dispose();
     this.combatImpactAudio.dispose();
     this.renderer.setAnimationLoop(null);
     window.removeEventListener('resize', this.resize);

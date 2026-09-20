@@ -11,6 +11,7 @@ interface BonePose {
 interface RecoveryOptions {
   preparationSeconds?: number;
   holdFinalPose?: boolean;
+  waitForAssistGrip?: boolean;
   rootMotion?: { sample(seconds: number, loop: boolean, target: THREE.Vector3): THREE.Vector3 };
 }
 
@@ -50,6 +51,7 @@ export class GetUpRecovery {
   private preparationLift = 0;
   private elapsed = 0;
   private started = false;
+  private assistGripReleased = true;
 
   constructor(
     root: THREE.Group,
@@ -63,6 +65,7 @@ export class GetUpRecovery {
     this.character = character;
     this.side = side;
     this.preparationSeconds = Math.max(0, options.preparationSeconds ?? 0);
+    this.assistGripReleased = !options.waitForAssistGrip;
     const find = (suffix: string): THREE.Bone => {
       let result: THREE.Bone | undefined;
       character.traverse((object) => {
@@ -99,6 +102,23 @@ export class GetUpRecovery {
       ]),
     ]));
 
+    if (options.waitForAssistGrip) {
+      // Physics can leave small local joint offsets in its final snapshot.
+      // The assisted authored pose must use the model's actual bone lengths.
+      // The captured hold above still preserves the original physical pose;
+      // preparation blends these offsets out rather than snapping the body.
+      character.traverse(object => {
+        const mesh = object as THREE.SkinnedMesh;
+        if (!mesh.isSkinnedMesh) return;
+        mesh.skeleton.bones.forEach((bone, index) => {
+          const parentIndex = mesh.skeleton.bones.indexOf(bone.parent as THREE.Bone);
+          if (parentIndex < 0 || /hips$/i.test(bone.name)) return;
+          const local = mesh.skeleton.boneInverses[parentIndex]!.clone()
+            .multiply(mesh.skeleton.boneInverses[index]!.clone().invert());
+          bone.position.setFromMatrixPosition(local);
+        });
+      });
+    }
     this.mixer = new THREE.AnimationMixer(character);
     this.action = this.mixer.clipAction(clip);
     this.action.reset().setLoop(THREE.LoopOnce, 1);
@@ -235,8 +255,11 @@ export class GetUpRecovery {
 
   update(delta: number): void {
     if (!this.started || this.isFinished) return;
-    const step = Math.max(0, Math.min(0.05, delta));
+    let step = Math.max(0, Math.min(0.05, delta));
     const before = this.elapsed;
+    if (!this.assistGripReleased && this.preparationSeconds > 0) {
+      step = Math.min(step, Math.max(0, this.preparationSeconds - 1e-5 - before));
+    }
     this.elapsed = Math.min(this.duration, this.elapsed + step);
     if (before < this.preparationSeconds && this.elapsed >= this.preparationSeconds) {
       this.mixer.update(this.preparationSeconds - before);
@@ -270,6 +293,9 @@ export class GetUpRecovery {
   get isFinished(): boolean { return this.started && this.elapsed >= this.duration - 1e-4; }
   get isHolding(): boolean { return this.options.holdFinalPose === true && this.isFinished; }
   get animationTime(): number { return Math.max(0, this.elapsed - this.preparationSeconds); }
+  get isWaitingForAssistGrip(): boolean { return !this.assistGripReleased; }
+  get isPreparedForAssist(): boolean { return this.elapsed >= this.preparationSeconds - 2e-5; }
+  releaseAssistedGrip(): void { this.assistGripReleased = true; }
 
   getHeadPose(
     position = new THREE.Vector3(),
