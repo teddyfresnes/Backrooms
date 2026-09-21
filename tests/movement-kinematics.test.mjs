@@ -1673,7 +1673,7 @@ test('recovery validates floor/capsule clearance before E, reserves that exact c
   assert.match(lab, /this\.recoveryStandPosition = this\.physics\.findStandingRecoveryPosition\([\s\S]*ignoredBodies/);
   assert.match(lab, /const initialStand = this\.recoveryStandPosition\?\.clone\(\)/);
   assert.match(lab, /recovery\.retargetStandingPosition\(initialStand\)/);
-  assert.doesNotMatch(lab.slice(lab.indexOf('  private startGetUp(): void'), lab.indexOf('  private finishGetUp(): void')), /findStandingRecoveryPosition\(\s*recovery\.standingPosition/);
+  assert.doesNotMatch(lab.slice(lab.indexOf('  private startGetUp('), lab.indexOf('  private finishGetUp(): void')), /findStandingRecoveryPosition\(\s*recovery\.standingPosition/);
   assert.match(lab, /private finishGetUp\(\)[\s\S]*findStandingRecoveryPosition\(recovery\.standingPosition\)/);
 });
 
@@ -2098,7 +2098,7 @@ test('guard permits a near-vertical view of the body and restores full range out
 test('v81 living get-up disables the articulated ragdoll instead of removing Rapier bodies during gameplay', () => {
   const lab = readFileSync(new URL('../src/dev/AnimationLab.ts', import.meta.url), 'utf8');
   const ragdoll = readFileSync(new URL('../src/physics/RagdollSystem.ts', import.meta.url), 'utf8');
-  const start = lab.slice(lab.indexOf('  private startGetUp(): void'), lab.indexOf('  private finishGetUp(): void'));
+  const start = lab.slice(lab.indexOf('  private startGetUp('), lab.indexOf('  private finishGetUp(): void'));
   assert.match(start, /ragdoll\.suspendForRecovery\(\)/);
   assert.doesNotMatch(start, /ragdoll\.dispose\(\)/);
   assert.match(ragdoll, /suspendForRecovery\(\): void/);
