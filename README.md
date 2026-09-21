@@ -1,4 +1,4 @@
-# Backrooms v142 — ZIP complet autonome en assets
+# Backrooms v143 — ZIP complet autonome en assets
 
 Emotes : un simple appui sur **Tab** ouvre une roue au centre exact de l’écran, indépendamment de sa légende. Sans interaction, elle s’efface linéairement en **2 secondes** ; le survol la garde entièrement visible, avec le curseur normal ou celui du jeu. Sortir de la roue ou de la collection relance le fondu de 2 secondes. La grande flèche centrale revient au jeu ; les quatre petits points ouvrent toutes les emotes et les favoris. **1–8** ou un clic joue un favori ; tout déplacement ferme immédiatement l’overlay, même pendant le survol. La visée et la simulation restent actives. La roue et la collection affichent seulement les emotes de la posture actuelle, avec des favoris séparés debout / au sol. Au sol, **1** sélectionne « S’allonger » et **2** « Kip-up » par défaut. Le personnage rejoint progressivement la pose initiale avant de jouer l’animation. **E** permet toujours de se relever depuis la pose allongée. Les emotes sans espace libre ou sans sol stable sont grisées ; un plafond bas peut autoriser la pose allongée tout en bloquant le Kip-up. Les danses conservent leur trajectoire d’origine via la collision physique.
 
@@ -8,4 +8,6 @@ Extraire le ZIP puis lancer **LANCER-WINDOWS.bat** (Node.js requis). Le build, l
 
 Lire **LIRE-MOI.txt**. Verification : `node scripts/verify-delivery.mjs`.
 
-Dernière évolution : menu des emotes centré et correction du frein physique des articulations. Toutes les chutes disposent maintenant d'un repos stable, y compris les corps persistants après le respawn ; un nouveau coup les réveille normalement. Détails dans **MOVEMENT_V142.md**.
+**Tab → À deux** : regarde le bot à moins de 1,9 m pour proposer pierre-feuille-ciseaux, une tape dans la main, un check ou un relevé accompagné. Les propositions disparaissent après 4 secondes ou si les personnages s'éloignent. Le bouton **BOT : INTERAGIR** fait venir le bot : **Tab** accepte sa proposition, **Échap** la refuse. Il propose son aide si le joueur est au sol. Pour pierre-feuille-ciseaux, **1 / 2 / 3** ou le curseur permettent de verrouiller un choix secret ; les deux personnages le révèlent ensemble. Un déplacement ou Échap interrompt le geste. L'aide exige un corps vivant, stabilisé et un espace de relevé valide.
+
+Dernière évolution : interactions à deux synchronisées, mains et doigts articulés, prise de main vérifiée avant le relevé et caméra de l'aidant liée à sa posture. Détails dans **MOVEMENT_V143.md**. Le repos physique des chutes et des corps persistants reste décrit dans **MOVEMENT_V142.md**.
