@@ -29,7 +29,11 @@ const wall = (x, z, width = .1, depth = .3, y = 1, height = 1) => lab.physics.ad
   id: 'obstacle', kind: 'wall', center: { x, y, z }, halfExtents: { x: width, y: height, z: depth },
 }], { x: 0, y: 0, z: 0 });
 
-beforeEach(() => place());
+beforeEach(() => {
+  // These cases exercise the solo picker. Facing a nearby actor now opens
+  // the paired picker, which has its own integration coverage.
+  lab.idleNpcAnchor.position.x = -18; lab.syncNpcPlayerBlocker(true); place();
+});
 
 afterEach(() => {
   if (lab.physics.hasChunk('emote-test-obstacle')) lab.physics.removeChunk('emote-test-obstacle');
@@ -110,6 +114,20 @@ test('favorite toggles preserve another empty slot and put the chosen emote in t
   assert.equal(menu.favorites[2], null);
   menu.element.querySelector('[data-favorite="emote-pointing"]').click();
   assert.equal(menu.favorites[0], 'emote-pointing'); assert.equal(menu.favorites[2], null);
+});
+
+test('Tout keeps short card labels and shows availability in one shared status only',()=>{
+  enter();menu.open();menu.element.querySelector('[data-action="collection"]').click();
+  const cards=[...menu.element.querySelectorAll('[data-card]')];assert.equal(cards.length,11);
+  assert.equal(menu.element.querySelectorAll('[role="status"]').length,1);
+  assert.equal(menu.element.querySelector('[data-favorite-status]').textContent,'');
+  for(const card of cards){
+    assert.equal(card.querySelectorAll('small, p').length,0);
+    assert.ok(card.querySelector('[data-emote] > span').textContent.length<=9);
+    assert.ok(card.querySelector('[data-emote] img'));assert.ok(card.querySelector('[data-favorite]'));
+  }
+  const first=cards[0].querySelector('[data-emote]');first.dispatchEvent(new Event('focusin',{bubbles:true}));
+  assert.equal(menu.element.querySelector('[data-favorite-status]').textContent,first.getAttribute('aria-label').replace('Jouer : ',''));
 });
 
 test('a wheel click plays immediately without changing the view and a new movement interrupts it', () => {
@@ -499,7 +517,11 @@ test('insufficient room grays the dance, blocks mouse and number selection, and 
   assert.equal(lab.playEmote('emote-hip-hop'), false);
   menu.element.querySelector('[data-action="collection"]').click();
   assert.equal(menu.element.querySelector('[data-card="emote-hip-hop"]').classList.contains('is-unavailable'), true);
-  assert.equal(menu.element.querySelector('[data-card="emote-hip-hop"] [data-emote-reason]').textContent, 'Pas assez de place');
+  assert.equal(menu.element.querySelectorAll('[data-emote-reason]').length,0);
+  const blocked=menu.element.querySelector('[data-card="emote-hip-hop"] [data-emote]');
+  blocked.dispatchEvent(new Event('pointerover',{bubbles:true}));
+  assert.equal(menu.element.querySelector('[data-favorite-status]').textContent,'Pas assez de place');
+  assert.equal(menu.element.querySelectorAll('[role="status"]').length,1);
   assert.equal(menu.element.querySelector('[data-favorite="emote-hip-hop"]').disabled, false);
   lab.physics.removeChunk('emote-test-obstacle'); menu.refreshAvailability(true);
   assert.equal(menu.element.querySelector('[data-emote="emote-hip-hop"]').disabled, false);

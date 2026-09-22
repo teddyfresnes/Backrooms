@@ -13,15 +13,38 @@ function ready(view='third-person',distance=1.05){
 afterEach(()=>{lab.cancelPairInteraction();lab.emoteMenu.close();lab.player.input.clear();});
 after(()=>lab.dispose());
 
-test('Tab overlay exposes paired invitations and rejects a target behind the player',()=>{
-  ready();key('Tab');lab.emoteMenu.element.querySelector('[data-action="pair"]').click();
+test('Tab directly exposes only paired invitations when looking at a nearby partner',()=>{
+  ready();key('Tab');
   assert.equal(lab.emoteMenu.element.querySelectorAll('[data-pair]').length,4);
+  assert.equal(lab.emoteMenu.element.querySelector('[data-emote], [data-slot], [data-action="wheel"], [data-action="collection"]'),null);
   assert.equal(lab.emoteMenu.element.querySelector('[data-pair="high-five"]').disabled,false);
   assert.equal(lab.emoteMenu.element.querySelector('[data-pair="help-up"]').disabled,true);
   lab.emoteMenu.element.querySelector('[data-pair="high-five"]').click();
   assert.ok(lab.pairCoordinator.invitation);assert.equal(lab.pairCoordinator.session,null);
   lab.cancelPairInteraction();lab.player.setLookQuaternion(new THREE.Quaternion());
   assert.equal(lab.requestPairInteraction('high-five','player'),false);
+});
+test('Tab keeps solo emotes when the nearby person is behind the player',()=>{
+  ready();lab.player.setLookQuaternion(new THREE.Quaternion());key('Tab');
+  assert.equal(lab.emoteMenu.element.querySelectorAll('[data-pair]').length,0);
+  assert.equal(lab.emoteMenu.element.querySelectorAll('[data-slot]').length,8);
+});
+test('Tab keeps solo emotes when the person is out of reach',()=>{
+  ready('third-person',2.4);key('Tab');
+  assert.equal(lab.emoteMenu.element.querySelectorAll('[data-pair]').length,0);
+  assert.equal(lab.emoteMenu.element.querySelectorAll('[data-slot]').length,8);
+});
+test('paired menu closes when its partner moves away instead of exposing solo shortcuts',()=>{
+  ready();key('Tab');lab.idleNpcAnchor.position.z+=3;stepLab(lab);
+  assert.equal(lab.emoteMenu.isOpen,false);assert.equal(lab.pairCoordinator.invitation,null);
+});
+test('selecting in the paired menu moves the game cursor while keeping aim on the partner',()=>{
+  ready();key('Tab');const before=lab.player.getLookQuaternion().clone(),x=lab.emoteMenu.pointerX;
+  const event=new MouseEvent('mousemove',{bubbles:true,cancelable:true});
+  Object.defineProperties(event,{movementX:{value:120},movementY:{value:20}});document.dispatchEvent(event);
+  stepLab(lab);assert.equal(event.defaultPrevented,true);assert.equal(lab.emoteMenu.pointerX,x+120);
+  assert.ok(before.angleTo(lab.player.getLookQuaternion())<1e-8);
+  assert.equal(lab.emoteMenu.element.querySelector('[data-pair="high-five"]').disabled,false);
 });
 test('incoming Tab takes priority over an already-open emote overlay',()=>{
   ready();assert.equal(lab.requestPairInteraction('high-five','npc'),true);lab.emoteMenu.open();
@@ -91,6 +114,43 @@ for(const choice of ['rock','paper','scissors'])test(`RPS keeps both choices pri
   }
   assert.ok(hiddenFrames>0);assert.ok(revealed);assert.equal(lab.pairCoordinator.session,null);
 });
+for(const choice of ['rock','paper','scissors'])for(const fps of [30,120])for(const view of ['first-person','third-person'])
+test(`RPS ${choice} keeps both arms outside the torso and blends without wrist snaps at ${fps} Hz in ${view}`,()=>{
+  ready(view);
+  if(view==='first-person'){
+    const p=lab.idleNpcAnchor.position,yaw=1.2;
+    lab.player.teleport({x:p.x-Math.sin(yaw)*1.05,y:.865,z:p.z-Math.cos(yaw)*1.05});
+    const eye=lab.pairActorPosition('player').add(new THREE.Vector3(0,1.5,0));
+    lab.player.setLookQuaternion(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(eye,p.clone().add(new THREE.Vector3(0,1.25,0)),new THREE.Vector3(0,1,0))));run(.6);
+  }
+  const rigs=[lab.pairPlayerRig,lab.pairNpcRig],lengths=rigs.map(r=>r.armLength),previous=[];
+  assert.equal(lab.requestPairInteraction('rps','player'),true);run(.7);lab.choosePairHand(choice);
+  let frames=0,maxSpeed=0,maxAngularSpeed=0;
+  for(let i=0;i<Math.ceil(5*fps);i++){
+    stepLab(lab,1/fps);const s=lab.pairCoordinator.session;if(s?.stage!=='playing')continue;
+    rigs.forEach((r,n)=>{
+      const a=r.find('rightarm').getWorldPosition(new THREE.Vector3()),b=r.find('leftarm').getWorldPosition(new THREE.Vector3());
+      const center=a.clone().lerp(b,.5),side=a.clone().sub(b);side.y=0;const halfSpan=side.length()/2;side.normalize();
+      for(const arm of ['right','left'])for(const suffix of ['forearm','hand']){
+        const point=r.find(arm+suffix).getWorldPosition(new THREE.Vector3());
+        const clearance=point.sub(center).dot(side)*(arm==='right'?1:-1);
+        assert.ok(clearance>halfSpan*.75,`${arm} ${suffix} crossed the torso at ${s.elapsed}s: ${clearance}m`);
+      }
+      assert.ok(Math.abs(r.armLength-lengths[n])<1e-6,'RPS stretched an arm');
+      const wrist=r.hand.getWorldPosition(new THREE.Vector3()),rotation=r.hand.getWorldQuaternion(new THREE.Quaternion());
+      if(previous[n]){
+        maxSpeed=Math.max(maxSpeed,wrist.distanceTo(previous[n].wrist)*fps);
+        maxAngularSpeed=Math.max(maxAngularSpeed,rotation.angleTo(previous[n].rotation)*fps);
+      }
+      previous[n]={wrist,rotation};
+    });
+    assert.ok(lab.rightHandBone.getWorldPosition(new THREE.Vector3()).distanceTo(lab.firstPersonRightHandBone.getWorldPosition(new THREE.Vector3()))<.012);
+    frames++;
+  }
+  assert.ok(frames>fps*3);assert.ok(maxSpeed<3,`hand velocity ${maxSpeed}m/s`);
+  assert.ok(maxAngularSpeed<10,`wrist snapped at ${maxAngularSpeed}rad/s`);
+  assert.equal(lab.pairCoordinator.session,null);
+});
 test('RPS without a player choice exits cleanly after four seconds',()=>{
   ready();lab.requestPairInteraction('rps','npc');key('Tab');run(4.1);
   assert.equal(lab.pairCoordinator.session,null);assert.ok(!lab.player.getDebugState().incapacitated);
@@ -120,7 +180,8 @@ test('a rendered wall between the two actors blocks an invitation',()=>{
   ready();const wall=new THREE.Mesh(new THREE.BoxGeometry(2,2,.12),new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));
   wall.position.copy(lab.avatarAnchor.position).lerp(lab.idleNpcAnchor.position,.5);wall.position.y=1;wall.updateMatrixWorld(true);
   lab.environmentMeshes.push(wall);
-  try{assert.ok(lab.getPairUnavailableReason('high-five','player'));assert.equal(lab.requestPairInteraction('high-five','player'),false);}
+  try{assert.ok(lab.getPairUnavailableReason('high-five','player'));assert.equal(lab.requestPairInteraction('high-five','player'),false);
+    key('Tab');assert.equal(lab.emoteMenu.element.querySelectorAll('[data-pair]').length,0);}
   finally{lab.environmentMeshes.splice(lab.environmentMeshes.indexOf(wall),1);wall.geometry.dispose();wall.material.dispose();}
 });
 
@@ -153,7 +214,11 @@ for(const target of ['player','npc'])for(const fps of [30,120])test(`helping the
     if(Math.hypot(pelvis.x-player.x,pelvis.z-player.z)>1.65){lab.player.teleport({x:pelvis.x,y:.865,z:pelvis.z-1.25});run(.3);}
     const eye=lab.pairActorPosition('player').add(new THREE.Vector3(0,1.5,0)),p=lab.pairActorPosition('npc').add(new THREE.Vector3(0,.2,0));
     lab.player.setLookQuaternion(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(eye,p,new THREE.Vector3(0,1,0))));
-    run(.2);assert.equal(lab.requestPairInteraction('help-up','player'),true,lab.getPairUnavailableReason('help-up','player'));
+    run(.2);key('Tab');
+    assert.equal(lab.emoteMenu.element.querySelector('[data-emote], [data-slot], [data-action="wheel"]'),null);
+    assert.equal(lab.emoteMenu.element.querySelector('[data-pair="help-up"]').disabled,false,lab.getPairUnavailableReason('help-up','player'));
+    assert.equal(lab.emoteMenu.element.querySelector('[data-pair="high-five"]').disabled,true);
+    lab.emoteMenu.element.querySelector('[data-pair="help-up"]').click();assert.ok(lab.pairCoordinator.invitation);
   }
   const hp=lab.health,npcHp=lab.npcHealth,eyeY=lab.firstPersonCamera.position.y;let graspedFrames=0,sawPreparation=false,finished=false,lastGrip={},lowestEye=eyeY;
   for(let i=0;i<Math.ceil(18*fps);i++){
