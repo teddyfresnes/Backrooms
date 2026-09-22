@@ -5,7 +5,8 @@ import { RPS_REVEAL_SECONDS, type PairAction, type RpsChoice } from './PairInter
 type HandShape = RpsChoice | 'clasp';
 const up = new THREE.Vector3(0, 1, 0);
 const normalizeName = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '');
-const windowWeight = (time: number, duration: number) => easeCombat(time / .48) * (1 - easeCombat((time - duration + .5) / .5));
+const windowWeight = (time: number, duration: number, blendIn = .48, blendOut = .5) =>
+  easeCombat(time / blendIn) * (1 - easeCombat((time - duration + blendOut) / blendOut));
 
 /** A shared world-space contact drives both actors. Anatomical limb lengths are
  * retained; local rotations are rebuilt from the authored pose every frame. */
@@ -135,18 +136,33 @@ export class PairInteractionRig {
       }
     }
   }
+  private armSide(forward: THREE.Vector3): THREE.Vector3 {
+    this.upper.updateWorldMatrix(true, false);
+    const side = this.upper.getWorldPosition(new THREE.Vector3())
+      .sub(this.require('leftarm').getWorldPosition(new THREE.Vector3()));
+    const lateral = new THREE.Vector3(forward.z, 0, -forward.x);
+    // A +Z-facing FBX has its anatomical right shoulder on -X. Derive
+    // handedness from the skeleton rather than mirroring the arm across it.
+    return lateral.multiplyScalar(side.dot(lateral) < 0 ? -1 : 1);
+  }
   /** Two iterations align palm/knuckle centres, rather than just wrist origins. */
   reach(contact: THREE.Vector3, normal: THREE.Vector3, finger: THREE.Vector3, shape: HandShape,
-    weight: number, forward: THREE.Vector3): void {
-    const right = new THREE.Vector3(forward.z, 0, -forward.x);
-    const pole = right.clone().addScaledVector(up, -.55);
-    this.orientHand(normal, finger, weight); this.fingers(shape, normal, finger, weight);
+    weight: number, forward: THREE.Vector3, pole = this.armSide(forward).addScaledVector(up, -.55)): void {
+    if (weight <= 1e-6) return;
+    const affected = [this.upper, this.lower, this.hand,
+      ...[...this.fingerRest.keys()].filter(bone => /righthand/i.test(bone.name))];
+    const authored = weight < 1 ? affected.map(bone => bone.quaternion.clone()) : null;
+    // Solve the complete anatomical pose, then blend it once. Blending each
+    // IK pass separately made the wrist roll and the hand overshoot on entry.
+    this.orientHand(normal, finger, 1); this.fingers(shape, normal, finger, 1);
     for (let i = 0; i < 2; i++) {
       const wrist = this.hand.getWorldPosition(new THREE.Vector3());
       const offset = this.getContactPoint(shape).sub(wrist);
-      solveCombatTwoBone(this.upper, this.lower, this.hand, contact.clone().sub(offset), weight, pole, .975, Math.PI / 2);
-      this.orientHand(normal, finger, weight);
+      solveCombatTwoBone(this.upper, this.lower, this.hand, contact.clone().sub(offset), 1, pole, .975, Math.PI / 2);
+      this.orientHand(normal, finger, 1);
     }
+    if (authored) affected.forEach((bone, index) => bone.quaternion.slerpQuaternions(authored[index]!, bone.quaternion.clone(), weight).normalize());
+    this.upper.updateWorldMatrix(false, true);
   }
   lookAt(point: THREE.Vector3, _forward: THREE.Vector3, weight: number): void {
     const direction = point.clone().sub(this.getHead()).normalize();
@@ -163,17 +179,22 @@ export class PairInteractionRig {
     forward: THREE.Vector3, choice?: RpsChoice): void {
     const right = new THREE.Vector3(forward.z, 0, -forward.x);
     if (kind === 'rps') {
-      const weight = windowWeight(time, 3.85);
-      const beat = THREE.MathUtils.clamp((time - .45) / .55, 0, 3);
-      const pump = beat < 3 ? .095 * (1 - Math.cos(beat * Math.PI * 2)) / 2 : 0;
-      const target = this.getChest().addScaledVector(forward, .30).addScaledVector(right, .19);
-      target.y -= .13 + pump;
+      const weight = windowWeight(time, 3.85, .62, .62);
+      const beat = THREE.MathUtils.clamp((time - .62) / ((RPS_REVEAL_SECONDS - .62) / 3), 0, 3);
+      const pump = beat < 3 ? .075 * (1 - Math.cos(beat * Math.PI * 2)) / 2 : 0;
+      const side = this.armSide(forward);
+      // Work in front of the participating shoulder. The elbow stays beside
+      // the ribs; the three count beats flex the forearm, not the whole arm
+      // across the chest. Both rigs use the same clock and reveal instant.
+      this.rotateWorld(this.find('spine2'), right, .018 * weight);
+      const target = this.upper.getWorldPosition(new THREE.Vector3())
+        .addScaledVector(forward, .34).addScaledVector(side, .025);
+      target.y = this.getChest().y - .13 - pump;
       const revealed = time >= RPS_REVEAL_SECONDS && choice;
       const reveal = easeCombat((time - RPS_REVEAL_SECONDS) / .16);
       // Every choice remains a fist until the SAME reveal instant on both rigs.
-      this.reach(target, up.clone().negate(), forward, 'rock', weight, forward);
+      this.reach(target, up.clone().negate(), forward, 'rock', weight, forward, side.multiplyScalar(.35).addScaledVector(up, -1));
       if (revealed) this.fingers(choice, up.clone().negate(), forward, reveal * weight);
-      this.rotateWorld(this.find('spine2'), right, .025 * weight);
       return;
     }
     const high = kind === 'high-five', duration = high ? 2.8 : 2.5;

@@ -36,6 +36,7 @@ interface EmoteMenuCallbacks {
   isMoving(): boolean;
   getPosture(): EmotePosture;
   getUnavailableReason(id: EmoteId): string | null;
+  hasPairTarget?(requireLook?: boolean): boolean;
   getPairUnavailableReason?(id: PairAction): string | null;
   onPair?(id: PairAction): boolean;
 }
@@ -50,6 +51,7 @@ export class EmoteMenu {
   isOpen = false;
   private ready = false;
   private view: 'wheel' | 'collection' | 'pair' = 'wheel';
+  private contextualPair = false;
   private selectedIndex = -1;
   private replacement: EmoteId | null = null;
   private readonly available = new Set<EmoteId>();
@@ -101,7 +103,8 @@ export class EmoteMenu {
     this.pointerActive = false;
     this.pointerInside = false;
     this.resetLifetime();
-    this.view = 'wheel';
+    this.contextualPair = this.callbacks.hasPairTarget?.() ?? false;
+    this.view = this.contextualPair ? 'pair' : 'wheel';
     this.replacement = null;
     this.element.hidden = false;
     // Opening does not focus a modal or release the gameplay pointer.
@@ -143,7 +146,7 @@ export class EmoteMenu {
   private render(resetPosition = false): void {
     this.hoveredButton = null;
     this.element.classList.toggle('has-game-pointer', this.callbacks.isPointerLocked());
-    this.element.innerHTML = `<section class="emote-panel emote-panel--${this.view}" role="region" aria-label="${this.view === 'wheel' ? 'Roue des emotes' : 'Toutes les emotes'}">
+    this.element.innerHTML = `<section class="emote-panel emote-panel--${this.view}" role="region" aria-label="${this.view === 'wheel' ? 'Roue des emotes' : this.view === 'pair' ? 'Interactions à deux' : 'Toutes les emotes'}">
       ${this.view === 'wheel' ? this.wheelMarkup() + this.pairLauncherMarkup() : this.view === 'pair' ? this.pairMarkup() : this.collectionMarkup()}
     </section><span class="emote-cursor" aria-hidden="true" data-cursor></span>`;
     if (this.isOpen) { this.refreshAvailability(true); this.resetPointer(resetPosition); }
@@ -157,14 +160,14 @@ export class EmoteMenu {
   }
 
   private collectionMarkup(): string {
-    return `<header class="emote-header"><button type="button" data-action="wheel" class="emote-icon-button" aria-label="Revenir à la roue">${icon('back')}</button><h2>${this.posture === 'ground' ? 'Au sol' : 'Debout'}</h2><button type="button" data-action="close" class="emote-icon-button" aria-label="Fermer">${icon('close')}</button></header><div class="emote-card-grid">${this.entries.map(emote => `<div class="emote-card" data-card="${emote.id}"><button type="button" class="emote-card-select" data-emote="${emote.id}" aria-label="Jouer : ${emote.label}">${this.image(emote.id)}<span>${emote.label}<small data-emote-reason></small></span></button><button type="button" class="emote-favorite" data-favorite="${emote.id}" aria-label="${this.wheelFavorites.includes(emote.id) ? 'Retirer' : 'Ajouter'} ${emote.label} ${this.wheelFavorites.includes(emote.id) ? 'des' : 'aux'} favoris" aria-pressed="${this.wheelFavorites.includes(emote.id)}">${icon('star')}</button></div>`).join('')}</div><div class="emote-favorites"><div class="emote-favorites-heading"><strong>Favoris <span>${this.wheelFavorites.filter(Boolean).length}/${this.wheelFavorites.length}</span></strong>${this.replacement ? '<button type="button" data-action="cancel-replace">Annuler</button>' : ''}</div><p role="status" data-favorite-status>${this.replacement ? `Remplacer quel favori par « ${EMOTES.find(e => e.id === this.replacement)!.label} » ?` : '☆ pour personnaliser votre roue'}</p><div class="emote-favorite-strip${this.replacement ? ' is-replacing' : ''}">${this.wheelFavorites.map((id, index) => `<button type="button" class="emote-mini-slot" data-replace="${index}" aria-label="${this.replacement ? 'Remplacer' : 'Retirer'} le favori ${index + 1} : ${EMOTES.find(e => e.id === id)?.label ?? 'Libre'}"><kbd>${index + 1}</kbd><span>${id ? shortLabel[id] : '+'}</span></button>`).join('')}</div></div><footer class="emote-footer">Clic : jouer · <kbd>Tab</kbd> fermer</footer>`;
+    return `<header class="emote-header"><button type="button" data-action="wheel" class="emote-icon-button" aria-label="Revenir à la roue">${icon('back')}</button><h2>Tout <span class="emote-posture">${this.posture === 'ground' ? 'Au sol' : 'Debout'}</span></h2><button type="button" data-action="close" class="emote-icon-button" aria-label="Fermer">${icon('close')}</button></header><div class="emote-card-grid">${this.entries.map(emote => `<div class="emote-card" data-card="${emote.id}"><button type="button" class="emote-card-select" data-emote="${emote.id}" aria-label="Jouer : ${emote.label}" aria-describedby="emote-collection-status">${this.image(emote.id)}<span>${shortLabel[emote.id]}</span></button><button type="button" class="emote-favorite" data-favorite="${emote.id}" title="${this.wheelFavorites.includes(emote.id) ? 'Retirer des favoris' : 'Ajouter aux favoris'}" aria-label="${this.wheelFavorites.includes(emote.id) ? 'Retirer' : 'Ajouter'} ${emote.label} ${this.wheelFavorites.includes(emote.id) ? 'des' : 'aux'} favoris" aria-pressed="${this.wheelFavorites.includes(emote.id)}">${icon('star')}</button></div>`).join('')}</div><div class="emote-favorites"><div class="emote-favorites-heading"><strong>Roue <span>${this.wheelFavorites.filter(Boolean).length}/${this.wheelFavorites.length}</span></strong>${this.replacement ? '<button type="button" data-action="cancel-replace">Annuler</button>' : '<kbd>Tab · fermer</kbd>'}</div><div class="emote-favorite-strip${this.replacement ? ' is-replacing' : ''}">${this.wheelFavorites.map((id, index) => `<button type="button" class="emote-mini-slot" data-replace="${index}" title="${EMOTES.find(e => e.id === id)?.label ?? 'Libre'}" aria-label="${this.replacement ? 'Remplacer' : 'Retirer'} le favori ${index + 1} : ${EMOTES.find(e => e.id === id)?.label ?? 'Libre'}"><kbd>${index + 1}</kbd>${this.image(id)}</button>`).join('')}</div></div><p class="emote-collection-status" id="emote-collection-status" role="status" data-favorite-status>${this.replacement ? 'Choisis le favori à remplacer' : ''}</p>`;
   }
 
   private resetPointer(resetPosition = false): void {
     const wheel = this.element.querySelector<HTMLElement>('.emote-wheel');
     const box = (wheel ?? this.element.querySelector<HTMLElement>('.emote-panel')!).getBoundingClientRect();
     const width = this.view === 'wheel' ? Math.min(window.innerWidth <= 600 ? 320 : 360, window.innerWidth - 24,
-      window.innerHeight <= 440 ? Math.min(280, window.innerHeight * .75) : Infinity) : Math.min(384, window.innerWidth - 24);
+      window.innerHeight <= 440 ? Math.min(280, window.innerHeight * .75) : Infinity) : Math.min(this.view === 'collection' ? 420 : 384, window.innerWidth - 24);
     const height = this.view === 'wheel' ? width : Math.min(640, window.innerHeight * .82);
     this.wheelRect = box.width > 0 ? box : { left: (window.innerWidth - width) / 2, top: (window.innerHeight - height) / 2, width, height };
     if (resetPosition) {
@@ -183,13 +186,18 @@ export class EmoteMenu {
   }
 
   private pairMarkup(): string {
-    return `<header class="emote-header"><button type="button" data-action="wheel" class="emote-icon-button" aria-label="Revenir aux emotes">${icon('back')}</button><h2>À deux</h2><button type="button" data-action="close" class="emote-icon-button" aria-label="Fermer">${icon('close')}</button></header><p class="emote-pair-intro">Regarde une personne proche, puis propose-lui un geste. Elle accepte avec <kbd>Tab</kbd>.</p><div class="emote-pair-list">${PAIR_ACTIONS.map(action => `<button type="button" data-pair="${action.id}"><strong>${action.label}</strong><span>${action.detail}</span><small data-pair-reason></small></button>`).join('')}</div><footer class="emote-footer">Invitation valable 4 s · éloignement : annuler</footer>`;
+    return `<header class="emote-header">${this.contextualPair ? '' : `<button type="button" data-action="wheel" class="emote-icon-button" aria-label="Revenir aux emotes">${icon('back')}</button>`}<h2>À deux</h2><button type="button" data-action="close" class="emote-icon-button" aria-label="Fermer">${icon('close')}</button></header><div class="emote-pair-list">${PAIR_ACTIONS.map((action, index) => `<button type="button" data-pair="${action.id}"><kbd>${index + 1}</kbd><strong>${action.label}</strong><small data-pair-reason></small></button>`).join('')}</div><footer class="emote-footer">L’autre accepte avec <kbd>Tab</kbd> · invitation 4 s</footer>`;
   }
 
   /** Only DOM updates, once per game frame. No preview renderer or skeleton sampling. */
   update(delta = 0): void {
     if (!this.isOpen) return;
     if (this.callbacks.isMoving()) { this.close(); return; }
+    if (this.contextualPair && !this.callbacks.hasPairTarget?.(false)) { this.close(); return; }
+    if (!this.contextualPair && this.callbacks.hasPairTarget?.()) {
+      this.contextualPair = true; this.view = 'pair'; this.selectedIndex = -1;
+      this.replacement = null; this.resetLifetime(); this.render();
+    }
     const posture = this.callbacks.getPosture();
     if (posture !== this.posture) {
       this.posture = posture; this.selectedIndex = -1; this.replacement = null; this.render();
@@ -242,6 +250,16 @@ export class EmoteMenu {
     this.hoveredButton?.classList.remove('is-hovered');
     this.hoveredButton = button;
     button?.classList.add('is-hovered');
+    this.updateCollectionStatus();
+  }
+
+  private updateCollectionStatus(): void {
+    const status = this.element.querySelector<HTMLElement>('[data-favorite-status]');
+    if (!status) return;
+    const id = this.hoveredButton?.dataset.emote as EmoteId | undefined;
+    status.textContent = this.replacement ? 'Choisis le favori à remplacer'
+      : id ? this.unavailable.get(id) ?? EMOTES.find(emote => emote.id === id)!.label : '';
+    status.classList.toggle('is-warning', !!id && this.unavailable.has(id));
   }
 
   private selectSlot(index: number): void {
@@ -269,7 +287,7 @@ export class EmoteMenu {
     this.element.querySelectorAll<HTMLButtonElement>('[data-pair]').forEach(button => {
       const reason = this.callbacks.getPairUnavailableReason?.(button.dataset.pair as PairAction) ?? null;
       button.disabled = !!reason; button.title = reason ?? '';
-      button.querySelector('[data-pair-reason]')!.textContent = reason ?? 'Proposer';
+      button.querySelector('[data-pair-reason]')!.textContent = reason ?? '';
     });
     for (const emote of this.entries) {
       const reason = this.available.has(emote.id) ? this.callbacks.getUnavailableReason(emote.id) : 'Animation indisponible';
@@ -282,14 +300,13 @@ export class EmoteMenu {
       button.title = reason ?? '';
       button.classList.toggle('is-unavailable', !!reason);
       button.closest('[data-card]')?.classList.toggle('is-unavailable', !!reason);
-      const note = button.querySelector('[data-emote-reason]');
-      if (note) note.textContent = reason ?? '';
     });
     this.element.querySelectorAll<SVGElement>('[data-ring-slot]').forEach(sector => {
       const id = this.wheelFavorites[Number(sector.dataset.ringSlot)];
       sector.classList.toggle('is-unavailable', !!id && this.unavailable.has(id));
     });
     this.updateWheelHelp();
+    this.updateCollectionStatus();
   }
 
   private saveFavorites(): void {
@@ -329,6 +346,7 @@ export class EmoteMenu {
     const { action, emote, favorite, replace, pair } = button.dataset;
     if (action === 'close') this.close();
     else if (action === 'wheel' || action === 'collection' || action === 'pair') {
+      if (this.contextualPair && action !== 'pair') return;
       this.view = action; this.selectedIndex = -1; this.replacement = null; this.render();
     } else if (action === 'cancel-replace') { this.replacement = null; this.render(); }
     else if (favorite) this.toggleFavorite(favorite as EmoteId);
@@ -394,7 +412,7 @@ export class EmoteMenu {
       this.resetLifetime();
       const buttons = [...this.element.querySelectorAll<HTMLButtonElement>(this.view === 'wheel' ? '[data-slot], [data-action="pair"]' : this.view === 'pair' ? '[data-pair]' : this.replacement ? '[data-replace]' : '[data-emote]')].filter(button => !button.disabled);
       const index = buttons.indexOf(this.hoveredButton!);
-      const step = event.code === 'ArrowLeft' ? -1 : event.code === 'ArrowRight' ? 1 : this.view === 'collection' ? (event.code === 'ArrowUp' ? -2 : 2) : event.code === 'ArrowUp' ? -1 : 1;
+      const step = event.code === 'ArrowLeft' ? -1 : event.code === 'ArrowRight' ? 1 : this.view === 'collection' ? (event.code === 'ArrowUp' ? -3 : 3) : event.code === 'ArrowUp' ? -1 : 1;
       const button = buttons[(index + step + buttons.length) % buttons.length];
       if (button) { button.focus({ preventScroll: true }); this.hoverButton(button); if (button.dataset.slot !== undefined) this.selectSlot(Number(button.dataset.slot)); }
     }
@@ -414,7 +432,9 @@ export class EmoteMenu {
       this.pointerY = event.clientY;
     }
     this.dirtyPointer = true;
-    // Do not consume mousemove: PointerLockControls and PlayerController still aim normally.
+    // Keep the selected partner in view while choosing a paired gesture.
+    // Solo emotes keep the usual aim controls.
+    if (locked && this.contextualPair) this.consume(event);
   };
 
   private readonly onMouseDown = (event: MouseEvent): void => {
@@ -453,7 +473,7 @@ export class EmoteMenu {
     if (!this.isOpen || this.view !== 'collection' || !this.callbacks.isPointerLocked()) return;
     if (!this.pointerInside) return;
     this.resetLifetime();
-    event.preventDefault(); this.element.querySelector<HTMLElement>('.emote-panel')!.scrollTop += event.deltaY; this.dirtyPointer = true;
+    event.preventDefault(); this.element.querySelector<HTMLElement>('.emote-card-grid')!.scrollTop += event.deltaY; this.dirtyPointer = true;
   };
   private readonly onResize = (): void => { if (this.isOpen) this.resetPointer(); };
   private readonly onBlur = (): void => { this.swallowRelease = false; this.swallowClick = false; this.close(); };

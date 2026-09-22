@@ -2025,6 +2025,7 @@ export class AnimationLab {
       },
       getPosture: () => this.getPlayerEmotePosture(),
       getUnavailableReason: (id) => this.getEmoteUnavailableReason(id),
+      hasPairTarget: requireLook => this.hasPairTarget(requireLook),
       getPairUnavailableReason: id => this.getPairUnavailableReason(id, 'player'),
       onPair: id => this.requestPairInteraction(id, 'player'),
     });
@@ -3508,8 +3509,7 @@ export class AnimationLab {
     return this.pairRaycaster.intersectObjects(this.environmentMeshes, false).length === 0;
   }
 
-  private getPairUnavailableReason(kind: PairAction, from: PairActor, pending = false): string | null {
-    if (!this.ready || !this.player || !this.pairPlayerRig || !this.pairNpcRig) return 'Chargement des personnages';
+  private pairTargetSample(from: PairActor) {
     const target = from === 'player' ? 'npc' : 'player';
     const a = this.pairActorPosition(from), b = this.pairActorPosition(target);
     const direction = b.clone().sub(a);
@@ -3517,15 +3517,28 @@ export class AnimationLab {
     const eye = a.clone().add(new THREE.Vector3(0, this.pairStanding(from) ? 1.5 : .15, 0));
     const aim = b.clone().add(new THREE.Vector3(0, this.pairStanding(target) ? 1.25 : .20, 0)).sub(eye).normalize();
     const look = from === 'player'
-      ? new THREE.Vector3(0, 0, -1).applyQuaternion(this.player.getLookQuaternion())
+      ? new THREE.Vector3(0, 0, -1).applyQuaternion(this.player!.getLookQuaternion())
       : new THREE.Vector3(Math.sin(this.idleNpcAnchor!.rotation.y), 0, Math.cos(this.idleNpcAnchor!.rotation.y));
     if (from === 'npc') { aim.y = 0; aim.normalize(); }
     const down = target === 'npc' ? !!this.npcRagdoll : !!this.ragdoll || !!this.recovery?.isHolding;
     const targetReady = target === 'npc' ? this.npcRagdoll?.isRecoveryReady ?? false
       : this.canStartRecovery();
-    return pairUnavailableReason(kind, { distance, heightDifference: a.y - b.y, lookDot: look.dot(aim),
+    return { distance, heightDifference: a.y - b.y, lookDot: look.dot(aim),
       lineOfSight: this.pairLineOfSight(from), senderStanding: this.pairStanding(from), targetStanding: this.pairStanding(target),
       targetDown: down, targetReady, alive: this.health > 0 && this.npcHealth > 0,
+    };
+  }
+
+  private hasPairTarget(requireLook = true): boolean {
+    if (!this.ready || !this.player || !this.pairPlayerRig || !this.pairNpcRig) return false;
+    const sample = this.pairTargetSample('player');
+    return sample.alive && sample.senderStanding && sample.distance <= PAIR_REACH_METERS && sample.lineOfSight
+      && Number.isFinite(sample.lookDot) && (!requireLook || sample.lookDot >= .78);
+  }
+
+  private getPairUnavailableReason(kind: PairAction, from: PairActor, pending = false): string | null {
+    if (!this.ready || !this.player || !this.pairPlayerRig || !this.pairNpcRig) return 'Chargement des personnages';
+    return pairUnavailableReason(kind, { ...this.pairTargetSample(from),
       busy: !pending && (!!this.pairCoordinator.invitation || !!this.pairCoordinator.session || !!this.pairBotRequest
         || !!this.combatAttack || !!this.npcAttack || !!this.combatHitReaction || !!this.npcHitReaction || !!this.groundKick),
     }, !pending);
