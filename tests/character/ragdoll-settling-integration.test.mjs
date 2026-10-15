@@ -21,7 +21,7 @@ async function fixture({ caseId = 2, stairs = false, height = 1, floor = true } 
     id: `step-${i}`, kind: 'step', center: { x: 0, y: -4 + (i + 1) * .1, z: i * .35 },
     halfExtents: { x: 1.5, y: (i + 1) * .1, z: .175 },
   });
-  const physics = await Physics.create({ colliders, spawn: { x: 10, y: .865, z: 10 } });
+  const physics = await Physics.create({ seed: `RAGDOLL-SETTLE-${caseId}`, colliders, spawn: { x: 10, y: .865, z: 10 } });
   physics.setPlayerColliderEnabled(false);
   const root = new THREE.Group();
   root.position.set(caseId % 3 * .4, height, stairs ? 5 : 0);
