@@ -4,3 +4,8 @@ tmp/
 *.log
 .DS_Store
 /project(2).json
+.character-test-dist/
+public/assets/character/
+public/assets/emotes/
+public/assets/blood/
+public/.character-assets-ready.json

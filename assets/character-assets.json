@@ -1,0 +1,512 @@
+{
+  "version": 1,
+  "sha256": "ab33e42f4f37103ef1df91e7ca6a4aa2c4c570b7c3ac690d91ed541644af205a",
+  "size": 9197861,
+  "parts": [
+    "character-000.brpart",
+    "character-001.brpart",
+    "character-002.brpart",
+    "character-003.brpart",
+    "character-004.brpart",
+    "character-005.brpart",
+    "character-006.brpart",
+    "character-007.brpart",
+    "character-008.brpart",
+    "character-009.brpart",
+    "character-010.brpart",
+    "character-011.brpart",
+    "character-012.brpart",
+    "character-013.brpart",
+    "character-014.brpart",
+    "character-015.brpart",
+    "character-016.brpart",
+    "character-017.brpart"
+  ],
+  "files": [
+    {
+      "path": "assets/character/README.txt",
+      "size": 1104,
+      "sha256": "041ad9d5537fbaa2653e400529435ed858d9ebced2142345a02ebb54be4ef221"
+    },
+    {
+      "path": "assets/character/action-idle-to-fight-idle.fbx",
+      "size": 1340256,
+      "sha256": "02c7ee8e12e70c5b02f67a7fddaa127ed1d44b251804fee961ed85ed26aa2150"
+    },
+    {
+      "path": "assets/character/character.fbx",
+      "size": 1241105,
+      "sha256": "d071473382019ef35accb80f2ccc055bea05a810eeca1101d705e658ae9e86bf"
+    },
+    {
+      "path": "assets/character/combat-punch-1.fbx",
+      "size": 1296112,
+      "sha256": "4953b44df692aadd9a48943e6e2c7fc334cb6d93e6bc49a6664bac93debaa47d"
+    },
+    {
+      "path": "assets/character/combat-punch-2.fbx",
+      "size": 1296112,
+      "sha256": "8624a1321e23120b68691d4104e59b1009278e5fd5d867221282c5146eae89a6"
+    },
+    {
+      "path": "assets/character/combat-punch-3-heavy.fbx",
+      "size": 1309440,
+      "sha256": "9342d14f2c38c4082e59513f8acb47bf4209e91b16919131c1206710a8b3117b"
+    },
+    {
+      "path": "assets/character/combat-punch-4-elbow.fbx",
+      "size": 1361856,
+      "sha256": "1a8dd60ca8d925363a7d9ef071618a3b82aed65477835c12d4db6c20248c09d0"
+    },
+    {
+      "path": "assets/character/crouch-idle.fbx",
+      "size": 1480656,
+      "sha256": "1d8ab8a955dc08b4bcf11b73844ae902696d4ce066c0fa207f973254aa005852"
+    },
+    {
+      "path": "assets/character/crouch-strafe-left.fbx",
+      "size": 1356816,
+      "sha256": "cf318e2468ba28ee59d3f3b46153d6b288c6c7f55563eeb7dfe0dfffb91dbf83"
+    },
+    {
+      "path": "assets/character/crouch-strafe-right.fbx",
+      "size": 1339712,
+      "sha256": "e7a0ba3f74c862973ce2a91fb9d6f9b0bce2177d1f462052b74424fb5bb34142"
+    },
+    {
+      "path": "assets/character/crouch-walking.fbx",
+      "size": 1310544,
+      "sha256": "50ae1b4702877983e09052d08c0b6887b6b0640d578200322dc2e026a59eac70"
+    },
+    {
+      "path": "assets/character/crouched-to-standing.fbx",
+      "size": 1291824,
+      "sha256": "9c9c51efff19fe6ddd2d42b1623af7d2ef64124e38a816fd97a8da1521045aab"
+    },
+    {
+      "path": "assets/character/falling-flat-impact.fbx",
+      "size": 1404512,
+      "sha256": "d9f86ca205e8bcc6e031c579a8a8c65d0918c54b90b1cfccd8c83a5db8830fad"
+    },
+    {
+      "path": "assets/character/falling-idle.fbx",
+      "size": 1298672,
+      "sha256": "9dadedb1263d89142d6e5e6d00a6965d20d735323803859920497d3c2b920a37"
+    },
+    {
+      "path": "assets/character/falling-to-landing.fbx",
+      "size": 1332832,
+      "sha256": "56a5f575434f751a4c2784f718dd8a1185a70927890890b5f0f0f7091ec5e86d"
+    },
+    {
+      "path": "assets/character/fight-idle-to-action-idle.fbx",
+      "size": 1321344,
+      "sha256": "af444ab75d558c067fe97531ca23ceb29d7872f135080f304f9b3862d13b3d81"
+    },
+    {
+      "path": "assets/character/fight-idle-to-standing-idle.fbx",
+      "size": 1347808,
+      "sha256": "28539353cc62a18bf55f9f76aacca9e76f0d34ba1d3d06468de1608cada5f861"
+    },
+    {
+      "path": "assets/character/fight-idle.fbx",
+      "size": 1467152,
+      "sha256": "7e3f54de94a58e8670b5fb9ddb9d41eff04431b5ac9d8511b26aed4a02549701"
+    },
+    {
+      "path": "assets/character/headbutt.fbx",
+      "size": 1905888,
+      "sha256": "c500ddc06da44270b4925f1a51dd191aa46c6c7e767ed711c9b8773cac574c67"
+    },
+    {
+      "path": "assets/character/hit-body.fbx",
+      "size": 1334848,
+      "sha256": "6744e6dde1140b38679f2e738e05bd3f340ece15226e4b96ee585cf5957fd4d3"
+    },
+    {
+      "path": "assets/character/hit-groin-a.fbx",
+      "size": 1582528,
+      "sha256": "9bc70833f78dafb148b8c1d1522a938d58def928b9212657c2001245c8a4ab8f"
+    },
+    {
+      "path": "assets/character/hit-groin-b.fbx",
+      "size": 1597296,
+      "sha256": "7e6f1c6eefab5bca4d30cceff24e80c1675961627ba8a9d24d4c5454642a3b50"
+    },
+    {
+      "path": "assets/character/hit-head-0.fbx",
+      "size": 1318832,
+      "sha256": "145c20ed24ae8cc875230bab9222400b9c922761f59987649beb420ac21ba601"
+    },
+    {
+      "path": "assets/character/hit-head-1.fbx",
+      "size": 1312096,
+      "sha256": "4247d1267a4f60b290ae1e7facd7602edf12c0b9136e1292ddac54c443abf102"
+    },
+    {
+      "path": "assets/character/hit-head-2.fbx",
+      "size": 1349392,
+      "sha256": "3b8b24bfa4fc1ed82260c9839c8dc9a7ce6b22d679edeea4e9575f20267cb883"
+    },
+    {
+      "path": "assets/character/hit-head-3.fbx",
+      "size": 1360048,
+      "sha256": "58377d58c62e8e14dba1c9b14fc1d6d9b1dbd1988a31183d00aa96dc0055d7ba"
+    },
+    {
+      "path": "assets/character/hit-head-4.fbx",
+      "size": 1325424,
+      "sha256": "a434218ddafda7a54ba47ffb2c629557876bcfecb4c88936958de27f0a566e12"
+    },
+    {
+      "path": "assets/character/hit-head-5.fbx",
+      "size": 1349392,
+      "sha256": "7c40bec56600e14fccb71cea517db770bad36ea4c209658f16676e575e5825d9"
+    },
+    {
+      "path": "assets/character/hit-head-6.fbx",
+      "size": 1341408,
+      "sha256": "9021829c406e995144cff7801b80b0212e2e2e57f9a7970cc6616fc4314404e2"
+    },
+    {
+      "path": "assets/character/hit-head-big-a.fbx",
+      "size": 1350368,
+      "sha256": "2a979844fd7f0200887d729d9f3277d2e685646513cc650b01af5fe5971cbf56"
+    },
+    {
+      "path": "assets/character/hit-head-big-b.fbx",
+      "size": 1329344,
+      "sha256": "eab3b71d5a84afb20b7ab13f8f9a10ddeb482cfccc5b35ae945141b724558227"
+    },
+    {
+      "path": "assets/character/hit-head-big-c.fbx",
+      "size": 1359152,
+      "sha256": "0859e04dbee09fdd41a70fe1fe5c9ab45fdfe59edcb6a7b8986ce95bb4e10361"
+    },
+    {
+      "path": "assets/character/hit-head-light.fbx",
+      "size": 1292544,
+      "sha256": "e642bfb38c280b89cb6749eea36d992eac6e4bba19d48295e83df194f986e294"
+    },
+    {
+      "path": "assets/character/hit-head-medium-a.fbx",
+      "size": 1300432,
+      "sha256": "48c6e484bcb9546b2494118867a1d995661849bd21d17b8e2b19ed3daf55a97f"
+    },
+    {
+      "path": "assets/character/hit-head-medium-b.fbx",
+      "size": 1305696,
+      "sha256": "d9a5067cf9cfc17c31324f879d6b81ceab9d775d832205c354f3f483891b006a"
+    },
+    {
+      "path": "assets/character/hook-a.fbx",
+      "size": 1332144,
+      "sha256": "738822280c24db38f7cfae78069b3aee33bbd92f6aa9acf2ef7e3881071ebedb"
+    },
+    {
+      "path": "assets/character/hook-b.fbx",
+      "size": 1442304,
+      "sha256": "28eb9d674ef9f9da3659656e925903252c63cf3e511935a34a29dd48bce9b99a"
+    },
+    {
+      "path": "assets/character/hook-c.fbx",
+      "size": 1534144,
+      "sha256": "a4a1e934309e2db2a65a8b3f05e3aa7e5a03ca6792c0cf4fa86330f7670a27f5"
+    },
+    {
+      "path": "assets/character/idle-action-to-standing-idle.fbx",
+      "size": 1332688,
+      "sha256": "1d82a2514f5b31b41e9f23b6abc216ced256283a8222dd82aa57f4a30ad300b1"
+    },
+    {
+      "path": "assets/character/idle-action-wait-1.fbx",
+      "size": 1558480,
+      "sha256": "836ff2d344f864bbb98fca47688d3ab553482ebe2c0acbc79665361e9a58cba3"
+    },
+    {
+      "path": "assets/character/idle-action-wait-2.fbx",
+      "size": 1637248,
+      "sha256": "81815ec289d410472091e0cb6ba96983e8ff92781723fc022e3cff1b8b997668"
+    },
+    {
+      "path": "assets/character/idle-action.fbx",
+      "size": 1428624,
+      "sha256": "623c28f40bd205b9716ccf7e2f163156863b8c9e04db696aac680d48753048ed"
+    },
+    {
+      "path": "assets/character/idle-big-turn-left.fbx",
+      "size": 1328400,
+      "sha256": "778b5a233e0083070a4d9959a5eb2e51fc5376c099e97a2a61e35dbfd7b75fa0"
+    },
+    {
+      "path": "assets/character/idle-big-turn-right.fbx",
+      "size": 1332864,
+      "sha256": "3c458e49567dff9344a2284278606f6107e8f39096f7d5a167b3440eddb75d8c"
+    },
+    {
+      "path": "assets/character/idle-turn-left.fbx",
+      "size": 1328400,
+      "sha256": "3713a9c3e78281e8815ce8cb4a6378b26628e3bb82831a90bf710c55bed24344"
+    },
+    {
+      "path": "assets/character/idle-turn-right.fbx",
+      "size": 1332864,
+      "sha256": "9c75beaf1d500bb597e77c47bce0ad626038ff8f48f4c8f922376c61e5698f7d"
+    },
+    {
+      "path": "assets/character/idle.fbx",
+      "size": 710625,
+      "sha256": "a5d6a375df9ed8ee837932e4118a46d8d76c4d5452b9b70b6dd5ef40be0dd2e8"
+    },
+    {
+      "path": "assets/character/jump-backward.fbx",
+      "size": 1325136,
+      "sha256": "10a7162dbdb7d37e247f1a3fe8ad505635e3d58f62687023a87063fff8c7dc12"
+    },
+    {
+      "path": "assets/character/jump.fbx",
+      "size": 1332688,
+      "sha256": "a1097c56a14874c0fc688eea2bf081657850cc0910ea6cf6396a27e651db3b2f"
+    },
+    {
+      "path": "assets/character/jumping-up.fbx",
+      "size": 1312352,
+      "sha256": "c6f68b91c7ac491abe282d26e4898ea60a2fea16546ebe7d75781e963fee5bba"
+    },
+    {
+      "path": "assets/character/left-strafe-walking.fbx",
+      "size": 376321,
+      "sha256": "d8a8bd8ab6e75ae2c3802afd8682606de2598a54ff2b70d46b4501220909d7b5"
+    },
+    {
+      "path": "assets/character/left-strafe.fbx",
+      "size": 344241,
+      "sha256": "6bbda8a75440e1108a758957ca72cfca26444789b7f250e6cfc8a06d028a5f05"
+    },
+    {
+      "path": "assets/character/left-turn-90.fbx",
+      "size": 359697,
+      "sha256": "f025d87624bf9328a9656325072bff4f7fb4ffa85b3687a8a2f0af2b7146e6b6"
+    },
+    {
+      "path": "assets/character/left-turn.fbx",
+      "size": 430209,
+      "sha256": "1e5ce041efc8d6fe8a335027530ab6cb8205ade64471d6af84d4ad68a4307eb1"
+    },
+    {
+      "path": "assets/character/looking-behind.fbx",
+      "size": 1601472,
+      "sha256": "a6fa1d112b21c1922df038a7466364b49cafad88931fe3c0114a8401205c37b1"
+    },
+    {
+      "path": "assets/character/looking-down.fbx",
+      "size": 1656512,
+      "sha256": "5db325aaeeafab8bf73e38bdb3cec078b5cbf8411288bab4889461e943991d4a"
+    },
+    {
+      "path": "assets/character/looking.fbx",
+      "size": 1615584,
+      "sha256": "a6941ecf797e85811296290a7e8add5d2a0a44ac1bb844494e6ef9d302ab8a89"
+    },
+    {
+      "path": "assets/character/punching-alt.fbx",
+      "size": 1296112,
+      "sha256": "4953b44df692aadd9a48943e6e2c7fc334cb6d93e6bc49a6664bac93debaa47d"
+    },
+    {
+      "path": "assets/character/punching.fbx",
+      "size": 1296112,
+      "sha256": "4953b44df692aadd9a48943e6e2c7fc334cb6d93e6bc49a6664bac93debaa47d"
+    },
+    {
+      "path": "assets/character/right-strafe-walking.fbx",
+      "size": 378161,
+      "sha256": "5cdd3a999b2dfe721b1418527c79619547f50dfc70628a739b75ccda4abe13fd"
+    },
+    {
+      "path": "assets/character/right-strafe.fbx",
+      "size": 344241,
+      "sha256": "8b96e290857200992e81a54c041acd88390e0c623f323e21f578518b181762f9"
+    },
+    {
+      "path": "assets/character/right-turn-90.fbx",
+      "size": 365201,
+      "sha256": "f798e9ff15cddb312d70c4cc5bb1c3589394e0dd2287007385ead08316ed8020"
+    },
+    {
+      "path": "assets/character/right-turn.fbx",
+      "size": 432049,
+      "sha256": "5e3cb85fde3cb0e9689cf6bc8388ab1c24ec5e6a82b4ec0943cb7c339d6e37d2"
+    },
+    {
+      "path": "assets/character/running-jump.fbx",
+      "size": 1328912,
+      "sha256": "dd3b1b311a092ad31ad96e36b19d707bc8c2695c1013f08c6fee46558fd724a0"
+    },
+    {
+      "path": "assets/character/running-slide.fbx",
+      "size": 1384176,
+      "sha256": "ee19fb6d65e1772fde241117502541746be522bbade3840186cb93525576cbf3"
+    },
+    {
+      "path": "assets/character/running.fbx",
+      "size": 346593,
+      "sha256": "6bdcc0f80c63527266add1f110bf1edee72af17d81d12a2bc8309a6f84f6cf9e"
+    },
+    {
+      "path": "assets/character/stand-up-back.fbx",
+      "size": 1957648,
+      "sha256": "ef7e43891494ba640fb3b09f97e278f46ef77f7531771ade1178b0c81c302398"
+    },
+    {
+      "path": "assets/character/stand-up-belly.fbx",
+      "size": 2186432,
+      "sha256": "792038369d053706febc3839e6571321dd749b28a14bff53080edddfa9ba4c6b"
+    },
+    {
+      "path": "assets/character/standing-idle-to-fight-idle.fbx",
+      "size": 1340256,
+      "sha256": "659b8d3548ff78b741aca2494e2c6923c17d100a40a689bbe994e4ea4f4718f5"
+    },
+    {
+      "path": "assets/character/standing-to-crouched.fbx",
+      "size": 1291824,
+      "sha256": "971546018fb2123ac3e6327b7f1cd95799e88243ae7443fad071177e315ec134"
+    },
+    {
+      "path": "assets/character/walking.fbx",
+      "size": 378161,
+      "sha256": "a3c32e722322d95846088cc122114ffdb599fa602dd7d6441db0e50635450b9f"
+    },
+    {
+      "path": "assets/emotes/clapping.json",
+      "size": 37587,
+      "sha256": "af24d6a5fa87789e05fa5ab879ac79b02d04ac08b5f903db2fe6ae3ff3d9b944"
+    },
+    {
+      "path": "assets/emotes/freeze.json",
+      "size": 402249,
+      "sha256": "57d9881705d66bf12cb477d566bb989c58ad1e5e70acb3b482ae40df77dfef35"
+    },
+    {
+      "path": "assets/emotes/greeting.json",
+      "size": 316565,
+      "sha256": "981097aed4e3b6c29a3df85d6e401aeccc8a2b862eb3aee8ba1439a84d461b87"
+    },
+    {
+      "path": "assets/emotes/hip-hop.json",
+      "size": 885318,
+      "sha256": "bcb171fb75956367f002e7fce247baa00f45486dafc0a55eee18758a33dce8ee"
+    },
+    {
+      "path": "assets/emotes/icons/clapping.png",
+      "size": 6448,
+      "sha256": "c7c96a8bf95d09662f74dd234fd7133fa3462ef4aad2bcb4ae4846b420b6a453"
+    },
+    {
+      "path": "assets/emotes/icons/follow-me.svg",
+      "size": 344,
+      "sha256": "a0dc04e10ee260b030f5d8cac0b25dd083a25a4a640721b03b6128b3e831f204"
+    },
+    {
+      "path": "assets/emotes/icons/freeze.png",
+      "size": 9897,
+      "sha256": "2a073caacd138edb700e104a527b0fb3785685c55163867d2883cf354cbe1ad6"
+    },
+    {
+      "path": "assets/emotes/icons/greeting.png",
+      "size": 7010,
+      "sha256": "15b42d02406f6b29c1f229b2504aecc99653747378bb9d59909fd67aa7100149"
+    },
+    {
+      "path": "assets/emotes/icons/hip-hop.png",
+      "size": 7771,
+      "sha256": "7a5d3e747ec2761a3dbe688b8355cae1dae4d317c89fbb5f604f57dae496209d"
+    },
+    {
+      "path": "assets/emotes/icons/kip-up.png",
+      "size": 11844,
+      "sha256": "3012689ce5d77d72668cb85c049818c9d70beb8352b64218abb3fa8a8510bd53"
+    },
+    {
+      "path": "assets/emotes/icons/laying.png",
+      "size": 6964,
+      "sha256": "2c2c4638411730c70da6d53d4e34c7c49f5a94b17122cf5817f9f9416ff0ef9f"
+    },
+    {
+      "path": "assets/emotes/icons/middle-finger.svg",
+      "size": 331,
+      "sha256": "54f49a347046999efc46dd6ebbde2a5e441aab83b33e56a04519b406bb7bcbc3"
+    },
+    {
+      "path": "assets/emotes/icons/pointing.png",
+      "size": 7633,
+      "sha256": "a96d89bfe506fd0a9077a134163217bfe2def2013f167ea146b11b74778b5700"
+    },
+    {
+      "path": "assets/emotes/icons/salute.png",
+      "size": 7067,
+      "sha256": "47236ef9281720a973ff2ad797d27d472d4abaf1d95dfed240b601d63b10de06"
+    },
+    {
+      "path": "assets/emotes/icons/sweat.png",
+      "size": 6963,
+      "sha256": "733a484dbe672bc741e4e32f029556c0c6ef8e73c9562674d68138d3c1ff6fe6"
+    },
+    {
+      "path": "assets/emotes/icons/wait.svg",
+      "size": 341,
+      "sha256": "b35f9280ef5c3684e8bcd19615d92c9a1efb71c75930d2c8332e21cff6212aa8"
+    },
+    {
+      "path": "assets/emotes/icons/wave.png",
+      "size": 8119,
+      "sha256": "90a0113a762bca4cffb3ee5e1a5ff7edc080cca48378c8e5cf3587d0e76be5c1"
+    },
+    {
+      "path": "assets/emotes/kip-up.json",
+      "size": 143735,
+      "sha256": "8a4c6b0199afd869c3da161f89cffe0adf656576f88923ef0b50d023c6d23964"
+    },
+    {
+      "path": "assets/emotes/laying.json",
+      "size": 6724,
+      "sha256": "e47d5674da72b9bb0f79663afa17b5cf3f95d37cd1203539cff44c7a32d08902"
+    },
+    {
+      "path": "assets/emotes/pointing.json",
+      "size": 167359,
+      "sha256": "a1afc4674917a87c7ab23c668e8e71d8a2adb0d01073a1b273b79a6641ec504b"
+    },
+    {
+      "path": "assets/emotes/salute.json",
+      "size": 193303,
+      "sha256": "707d37fcf28b30c6c28adb30925c9e5be5651a05fc197b31240fa1a09716657a"
+    },
+    {
+      "path": "assets/emotes/sweat.json",
+      "size": 141623,
+      "sha256": "ddc3e587b1036aa8c91408f7ffa7b080d8a940d8d45a8577ae19e67fe3da2834"
+    },
+    {
+      "path": "assets/emotes/wave.json",
+      "size": 71247,
+      "sha256": "93d4fb72a1849b673171dab3986bbc8e0ce3ca86982a359f2d7b0474ba24b355"
+    },
+    {
+      "path": "assets/blood/blood-decal-a.png",
+      "size": 2625982,
+      "sha256": "2f625d3ce46c723c54f3a78a94cd54aef808ef2480b470dd70bf7b6fdbb42c14"
+    },
+    {
+      "path": "assets/blood/blood-decal-b.png",
+      "size": 87928,
+      "sha256": "7b9e4cfdd3c04ba8dca62a499a5a40de6d75983912999cedb6f32415d4e206b0"
+    },
+    {
+      "path": "assets/blood/blood-decal-c.png",
+      "size": 230257,
+      "sha256": "26c8e652cdf086c03c87b7add41c95dfa054be08ec0bf126cb4512349ff1b2bb"
+    }
+  ]
+}
