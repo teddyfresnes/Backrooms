@@ -1117,6 +1117,7 @@ export interface CharacterRuntimeHost {
   playerCamera: THREE.PerspectiveCamera; renderCamera: THREE.PerspectiveCamera;
   physics: PhysicsWorld; player: PlayerController; settings: GameSettings; seed: string;
   isPlaying(): boolean;
+  automaticHelp?: boolean;
   beforePhysicsStep?(delta: number): void;
   getPits?(): readonly CharacterPit[];
   ensurePositionMounted?(position: THREE.Vector3): void;
@@ -1126,6 +1127,7 @@ export interface CharacterRuntimeHost {
 export class CharacterRuntime {
   private readonly random: SeededRandom;
   private partnerEnabled = false;
+  private partnerHelpOffered = false;
   private readonly partnerSpawn = new THREE.Vector3();
   private readonly worldPosition = new THREE.Vector3();
   get hasInteractionPartner(): boolean { return this.partnerEnabled; }
@@ -3159,10 +3161,14 @@ export class CharacterRuntime {
 
   private updatePairInvitations(delta: number): void {
     if (!this.ready || !this.player || !this.partnerEnabled) return;
-    if (!this.pairCoordinator.session && !this.pairCoordinator.invitation && !this.pairBotRequest
+    if (this.host.automaticHelp !== false && !this.partnerHelpOffered
+      && !this.pairCoordinator.session && !this.pairCoordinator.invitation && !this.pairBotRequest
       && this.ragdoll?.isRecoveryReady && this.health > 0 && this.pairStanding('npc')
       && this.pairActorPosition('npc').distanceTo(this.pairActorPosition('player')) < 3.5
-      && this.pairLineOfSight('npc')) this.requestBotInteraction();
+      && this.pairLineOfSight('npc')) {
+      this.partnerHelpOffered = true;
+      this.requestBotInteraction();
+    }
     if (this.pairBotRequest && this.idleNpcAnchor) {
       this.pairBotApproachElapsed += delta;
       const target = this.pairActorPosition('player');
@@ -9726,6 +9732,7 @@ export class CharacterRuntime {
     };
   }): void {
     if (!this.ready || this.ragdoll || this.recovery || this.recoveryCameraBlend >= 0 || !this.physics || !this.player || !this.character) return;
+    this.partnerHelpOffered = false;
     this.emoteMenu.close();
     this.stopEmote();
     this.clearGroundEmotePreparations();
