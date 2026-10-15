@@ -1,3 +1,5 @@
+import { CharacterRuntime } from '../character/CharacterRuntime';
+import { viewmodelCommand, VIEWMODEL_COMPLETION } from '../character/ViewmodelCommand';
 import * as THREE from 'three';
 import { ApartmentLightSwitchInteraction } from '../apartment/ApartmentLightSwitchInteraction';
 import { ApartmentWindowBlindsInteraction } from '../apartment/ApartmentWindowBlindsInteraction';
@@ -57,7 +59,6 @@ export interface RussianStairwellGameCallbacks {
   onEnterBackrooms(): void;
 }
 
-const FIXED_STEP = 1 / 60;
 const AUTOSAVE_INTERVAL_SECONDS = 30;
 
 export class RussianStairwellGame {
@@ -79,6 +80,8 @@ export class RussianStairwellGame {
   private settings: GameSettings;
   private physics?: PhysicsWorld;
   private player?: PlayerController;
+  private character?: CharacterRuntime;
+  private readonly playerCamera = this.camera.clone();
   private materials?: StairwellMaterials;
   private environment?: StairwellEnvironment;
   private apartment?: ImportedApartmentEnvironment;
@@ -146,7 +149,10 @@ export class RussianStairwellGame {
       settingsChanged: (settings) => this.applySettings(settings),
       submitConsole: (value, mode) => this.submitConsole(value, mode),
       completeConsole: (value, mode) => this.completeConsole(value, mode),
-      consoleVisibility: (open) => this.player?.setInputEnabled(!open),
+      consoleVisibility: (open) => {
+        this.player?.setInputEnabled(!open && !!this.player?.isLocked);
+        this.character?.setActive(!open && !!this.player?.isLocked);
+      },
     }, this.settings, 'russian-stairwell');
     this.scene.background = new THREE.Color(0x090d11);
     this.scene.fog = new THREE.Fog(0x10161c, 16, 52);
@@ -231,12 +237,16 @@ export class RussianStairwellGame {
 
     this.camera.fov = this.settings.fieldOfView;
     this.camera.updateProjectionMatrix();
-    this.player = new PlayerController(this.camera, this.renderer.domElement, physics, {
+    this.playerCamera.copy(this.camera);
+    this.player = new PlayerController(this.playerCamera, this.renderer.domElement, physics, {
       onLockChange: (locked) => this.onPlayerLockChange(locked),
       onFootstep: (strength) => this.audio.footstep(this.currentSurface(), strength),
       onMovementAudioState: (state) => this.audio.setMovementState(this.currentSurface(), state),
       onInteract: () => this.tryInteract(),
-      onLand: (impactSpeed) => this.audio.land(this.currentSurface(), impactSpeed),
+      onLand: (impactSpeed, impact) => {
+        this.audio.land(this.currentSurface(), impactSpeed);
+        this.character?.handleLanding(impactSpeed, impact);
+      },
       onSafePosition: () => physics.getStandingPosition(this.lastSafePosition),
       onFallReset: () => {
         this.audio.land(this.currentSurface(), 18);
@@ -320,6 +330,20 @@ export class RussianStairwellGame {
     this.lastSafePosition.copy(this.player.position);
     setVisualProgress(0.8);
 
+    this.character = new CharacterRuntime({
+      container: this.root, canvas: this.renderer.domElement, scene: this.scene,
+      playerCamera: this.playerCamera, renderCamera: this.camera,
+      physics: this.physics!, player: this.player, settings: this.settings, seed: 'apartment',
+      isPlaying: () => !!this.player?.isLocked && !this.ui.isConsoleOpen,
+      beforePhysicsStep: delta => {
+        this.player!.getViewDirection(this.viewDirection);
+        this.door?.update(delta, this.player!.position, this.viewDirection, !this.character?.isBusy);
+      },
+    });
+    await this.character.initialize();
+    if (this.disposed) return;
+    this.character.setActive(false);
+
     this.postFX = new PostFX(
       this.renderer,
       this.scene,
@@ -357,7 +381,7 @@ export class RussianStairwellGame {
   }
 
   private tryInteract(): void {
-    if (!this.player || !this.door) return;
+    if (!this.player || !this.door || this.character?.isBusy) return;
     this.player.getViewDirection(this.viewDirection);
     if (this.lightSwitch?.interact(
       this.player.position,
@@ -374,7 +398,7 @@ export class RussianStairwellGame {
       this.viewDirection,
       this.player.isLocked,
     )) return;
-    this.door.interact(this.player.position, this.viewDirection, this.player.isLocked);
+    this.door.interact(this.player.position, this.viewDirection, this.player.isLocked && !this.character?.isBusy);
   }
 
   private currentSurface(): AudioSurface {
@@ -420,6 +444,7 @@ export class RussianStairwellGame {
   private onPlayerLockChange(locked: boolean): void {
     this.ui.setLocked(locked);
     this.player?.setInputEnabled(locked && !this.ui.isConsoleOpen);
+    this.character?.setActive(locked && !this.ui.isConsoleOpen);
     void this.audio.setSuspended(!locked || document.hidden);
     this.previousTime = performance.now();
     this.accumulator = 0;
@@ -431,6 +456,7 @@ export class RussianStairwellGame {
     this.player?.setFieldOfView(settings.fieldOfView);
     this.player?.setLookSensitivity(settings.lookSensitivity);
     this.player?.setCameraMotionEnabled(settings.cameraMotion);
+    this.character?.setSettings(this.settings);
     this.player?.setControlBindings(settings.controls);
     this.audio.setMasterVolume(settings.masterVolume);
     siteAudio.setMasterVolume(settings.masterVolume);
@@ -494,13 +520,15 @@ export class RussianStairwellGame {
         ? { close: true, feedback: 'MESSAGE LOCAL', messages: [{ kind: 'chat', text: `me: ${trimmed}` }] }
         : { close: false, feedback: 'UTILISE /help', messages: [{ kind: 'error', text: 'UTILISE /help' }] };
     }
+    const [command, ...args] = trimmed.slice(1).split(/\s+/);
+    if (command?.toLowerCase() === 'viewmodel') return viewmodelCommand(this.character, args);
     if (trimmed.toLowerCase() === '/save') {
       const saved = this.saveNow('manual');
       const text = saved ? 'PARTIE SAUVEGARDÉE' : 'ÉCHEC DE LA SAUVEGARDE';
       return { close: true, feedback: text, messages: [{ kind: saved ? 'system' : 'error', text }] };
     }
     const text = trimmed.toLowerCase() === '/help'
-      ? '/save - sauvegarder maintenant'
+      ? '/viewmodel - première / troisième personne · /save - sauvegarder maintenant'
       : 'COMMANDE INCONNUE. UTILISE /help.';
     return { close: false, feedback: text, messages: [{ kind: 'system', text }] };
   }
@@ -510,6 +538,7 @@ export class RussianStairwellGame {
     const options = [
       { value: '/help', label: '/help', detail: 'AFFICHE LES COMMANDES' },
       { value: '/save', label: '/save', detail: 'SAUVEGARDE MAINTENANT' },
+      VIEWMODEL_COMPLETION,
     ].filter((item) => item.value.startsWith(value.trim()));
     return options.length > 0 ? { hint: `${options.length} COMMANDE(S)`, suggestions: options } : null;
   }
@@ -569,20 +598,13 @@ export class RussianStairwellGame {
       this.playableSeconds += delta;
       this.autosaveElapsed += delta;
       if (this.autosaveElapsed >= AUTOSAVE_INTERVAL_SECONDS) this.saveNow('autosave');
-      this.accumulator = Math.min(this.accumulator + delta, FIXED_STEP * 5);
-      while (this.accumulator >= FIXED_STEP) {
-        this.player.getViewDirection(this.viewDirection);
-        this.door.update(FIXED_STEP, this.player.position, this.viewDirection, true);
-        this.player.fixedUpdate(FIXED_STEP);
-        this.accumulator -= FIXED_STEP;
-      }
-      this.player.renderUpdate(delta, this.accumulator / FIXED_STEP);
+      this.character?.update(delta);
       this.environment.update(this.elapsed);
       this.player.getViewDirection(this.viewDirection);
-      this.door.update(0, this.player.position, this.viewDirection, true);
-      this.hallExit?.update(this.player.position, this.viewDirection, true);
-      this.lightSwitch?.update(this.player.position, this.viewDirection, true);
-      this.windowBlinds?.update(delta, this.player.position, this.viewDirection, true);
+      this.door.update(0, this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
+      this.hallExit?.update(this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
+      this.lightSwitch?.update(this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
+      this.windowBlinds?.update(delta, this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
       const surface = this.currentSurface();
       this.audio.updateInteriorGain(this.interiorRainGain(surface));
     } else {
@@ -664,6 +686,7 @@ export class RussianStairwellGame {
     this.lightSwitch?.dispose();
     this.windowBlinds?.dispose();
     this.hallExit?.dispose();
+    this.character?.dispose();
     this.player?.dispose();
     this.apartment?.dispose();
     this.environment?.dispose();

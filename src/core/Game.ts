@@ -1,3 +1,5 @@
+import { CharacterRuntime } from '../character/CharacterRuntime';
+import { viewmodelCommand, VIEWMODEL_COMPLETION } from '../character/ViewmodelCommand';
 import * as THREE from 'three';
 import { AudioSystem } from '../audio/AudioSystem';
 import { siteAudio } from '../audio/SiteAudio';
@@ -105,6 +107,8 @@ export class Game {
   private worldStream?: WorldStream;
   private physics?: PhysicsWorld;
   private player?: PlayerController;
+  private character?: CharacterRuntime;
+  private readonly playerCamera = this.camera.clone();
   private postFX?: PostFX;
   private previousTime = performance.now();
   private accumulator = 0;
@@ -255,12 +259,16 @@ export class Game {
     this.camera.rotation.set(0, -Math.PI * 0.22, 0, 'YXZ');
     this.camera.fov = this.settings.fieldOfView;
     this.camera.updateProjectionMatrix();
-    this.player = new PlayerController(this.camera, this.renderer.domElement, this.physics, {
+    this.playerCamera.copy(this.camera);
+    this.player = new PlayerController(this.playerCamera, this.renderer.domElement, this.physics, {
       onLockChange: (locked) => this.onPlayerLockChange(locked),
       onFootstep: (strength) => this.audio.footstep('backrooms-carpet', strength),
       onMovementAudioState: (state) => this.audio.setMovementState('backrooms-carpet', state),
       onInteract: (mode) => this.tryInteract(mode),
-      onLand: (impactSpeed) => this.audio.land('backrooms-carpet', impactSpeed),
+      onLand: (impactSpeed, impact) => {
+        this.audio.land('backrooms-carpet', impactSpeed);
+        this.character?.handleLanding(impactSpeed, impact);
+      },
       onSafePosition: (position) => {
         this.lastSafePosition.set(position.x, position.y, position.z);
         this.worldStream?.protectRecoveryPosition(position);
@@ -308,6 +316,21 @@ export class Game {
     this.cinematicEuler.setFromQuaternion(this.camera.quaternion, 'YXZ');
     this.audio.setMasterVolume(this.settings.masterVolume);
     siteAudio.setMasterVolume(this.settings.masterVolume);
+
+    if (!this.options.onRequestContinue) {
+      this.character = new CharacterRuntime({
+        container: this.root, canvas: this.renderer.domElement, scene: this.scene,
+        playerCamera: this.playerCamera, renderCamera: this.camera,
+        physics: this.physics, player: this.player, settings: this.settings, seed: this.seed,
+        isPlaying: () => !!this.player?.isLocked && !this.ui.isConsoleOpen,
+        getPits: () => this.worldStream?.getCharacterPits() ?? [],
+        ensurePositionMounted: position => this.worldStream?.ensurePositionMounted(position),
+      });
+      await this.character.initialize();
+      if (this.disposed) return;
+      this.character.spawnNearbyPartner();
+      this.character.setActive(false);
+    } else this.camera.copy(this.playerCamera);
 
     this.postFX = new PostFX(this.renderer, this.scene, this.camera, this.settings.lighting);
     this.resize();
@@ -410,6 +433,7 @@ export class Game {
     this.player?.setFieldOfView(next.fieldOfView);
     this.player?.setLookSensitivity(next.lookSensitivity);
     this.player?.setCameraMotionEnabled(next.cameraMotion);
+    this.character?.setSettings(this.settings);
     this.player?.setControlBindings(next.controls);
     this.audio.setMasterVolume(next.masterVolume);
     siteAudio.setMasterVolume(next.masterVolume);
@@ -445,7 +469,8 @@ export class Game {
 
   private readonly onPlayerLockChange = (locked: boolean): void => {
     this.ui.setLocked(locked);
-    this.player?.setInputEnabled(locked);
+    this.player?.setInputEnabled(locked && !this.ui.isConsoleOpen);
+    this.character?.setActive(locked && !this.ui.isConsoleOpen);
     void this.audio.setSuspended(!locked || document.hidden);
     this.previousTime = performance.now();
     this.accumulator = 0;
@@ -473,7 +498,7 @@ export class Game {
   }
 
   private tryInteract(mode: DoorOpenMode): void {
-    if (!this.player || !this.worldStream || this.player.isTraversing || this.player.isNoclipEnabled) return;
+    if (!this.player || !this.worldStream || this.character?.isBusy || this.player.isTraversing || this.player.isNoclipEnabled) return;
     this.player.getViewDirection(this.lookDirection);
     const interaction = this.worldStream.getInteraction(this.player.position, this.lookDirection);
     if (!interaction) return;
@@ -562,7 +587,8 @@ export class Game {
   }
 
   private setConsoleVisibility(open: boolean): void {
-    this.player?.setInputEnabled(!open);
+    this.player?.setInputEnabled(!open && !!this.player?.isLocked);
+    this.character?.setActive(!open && !!this.player?.isLocked);
     if (open) this.ui.setInteraction(null);
   }
 
@@ -575,6 +601,7 @@ export class Game {
     const commandSuggestions = [
       { value: '/help', label: '/help', detail: 'AFFICHE LES COMMANDES DISPONIBLES' },
       { value: '/save', label: '/save', detail: 'SAUVEGARDE MAINTENANT' },
+      VIEWMODEL_COMPLETION,
       { value: '/logs', label: '/logs', detail: 'AFFICHE OU MASQUE LE PANNEAU TECHNIQUE' },
       { value: '/noclip', label: '/noclip', detail: 'ACTIVE OU DESACTIVE LE VOL LIBRE' },
       { value: '/locate ', label: '/locate <cible>', detail: 'TÉLÉPORTE VERS UNE CIBLE CONNUE' },
@@ -635,12 +662,13 @@ export class Game {
     const [command = '', ...args] = input.slice(1).trim().split(/\s+/);
     const echo = { kind: 'command' as const, text: `> ${input}` };
     const normalizedCommand = command.toLowerCase();
+    if (normalizedCommand === 'viewmodel') return viewmodelCommand(this.character, args);
     if (normalizedCommand === 'help') {
       if (args.length > 0) {
         const feedback = 'SYNTAXE: /help';
         return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
       }
-      const feedback = '/save - sauvegarder · /locate <cible> - teleportation · /noclip [on|off] - vol libre · /logs [on|off] - diagnostic';
+      const feedback = '/viewmodel - première / troisième personne · /save - sauvegarder · /locate <cible> - teleportation · /noclip [on|off] - vol libre · /logs [on|off] - diagnostic';
       return { close: false, feedback, messages: [echo, { kind: 'system', text: feedback }] };
     }
     if (normalizedCommand === 'save') {
@@ -837,14 +865,12 @@ export class Game {
       this.playableSeconds += rawDelta;
       this.autosaveElapsed += rawDelta;
       if (this.autosaveElapsed >= AUTOSAVE_INTERVAL_SECONDS) this.saveNow('autosave');
-      this.accumulator = Math.min(this.accumulator + rawDelta, 0.12);
-      const fixedDelta = 1 / 60;
-      while (this.accumulator >= fixedDelta) {
-        this.player.fixedUpdate(fixedDelta);
-        this.accumulator -= fixedDelta;
+      this.character?.update(rawDelta);
+      const partner = this.character?.getInteractionPartnerPosition();
+      if (partner && (partner.distanceTo(this.player.position) > 45 || Math.abs(partner.y - this.player.position.y) > 8)) {
+        this.character?.setInteractionPartner(null);
       }
-      this.player.renderUpdate(rawDelta, this.accumulator / fixedDelta);
-      this.worldStream.update(this.elapsed, rawDelta, this.player.position);
+      this.worldStream.update(this.elapsed, rawDelta, this.character?.getWorldPosition() ?? this.player.position);
       const nextStory = this.worldStream.getCenterCoord().story;
       if (nextStory !== this.activeStory) {
         this.activeStory = nextStory;
@@ -858,7 +884,7 @@ export class Game {
     }
     this.updateAtmosphere(rawDelta);
     this.player.getViewDirection(this.lookDirection);
-    const interaction = !playing || this.player.isTraversing || this.player.isNoclipEnabled
+    const interaction = !playing || this.character?.isBusy || this.player.isTraversing || this.player.isNoclipEnabled
       ? null
       : this.worldStream.getInteraction(this.player.position, this.lookDirection);
     this.ui.setInteraction(interaction?.label ?? null);
@@ -1077,6 +1103,7 @@ export class Game {
     window.removeEventListener('pagehide', this.onPageHide);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.renderer.domElement.removeEventListener('click', this.onCanvasClick);
+    this.character?.dispose();
     this.player?.dispose();
     this.worldStream?.dispose();
     this.physics?.dispose();
