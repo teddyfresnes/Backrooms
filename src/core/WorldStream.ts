@@ -1,3 +1,4 @@
+import type { CharacterPit } from '../character/CharacterEnvironment';
 import * as THREE from 'three';
 import type {
   LookTargetDiagnostics,
@@ -211,6 +212,7 @@ const approachPointForRect = (
 };
 
 export class WorldStream {
+  private characterPitsCache: CharacterPit[] | null = null;
   private readonly chunks = new Map<ChunkKey, ActiveChunk>();
   private readonly localPlayer = new THREE.Vector3();
   private readonly runtimeOffset = new THREE.Vector3();
@@ -251,6 +253,24 @@ export class WorldStream {
       this.worker.addEventListener('message', this.onWorkerMessage);
       this.worker.addEventListener('error', this.onWorkerError);
     }
+  }
+
+  getCharacterPits(): readonly CharacterPit[] {
+    if (this.characterPitsCache) return this.characterPitsCache;
+    const result: CharacterPit[] = [];
+    for (const runtime of this.chunks.values()) {
+      for (const feature of runtime.plan.features) {
+        if (feature.kind !== 'grid-pit') continue;
+        feature.holes.forEach((hole, index) => result.push({
+          id: `${runtime.key}:${feature.id}:${index}`,
+          minX: hole.minX + runtime.offset.x, maxX: hole.maxX + runtime.offset.x,
+          minZ: hole.minZ + runtime.offset.z, maxZ: hole.maxZ + runtime.offset.z,
+          rimY: runtime.offset.y, bottom: -hole.depth,
+        }));
+      }
+    }
+    this.characterPitsCache = result;
+    return result;
   }
 
   async initialize(): Promise<void> {
@@ -1323,6 +1343,7 @@ export class WorldStream {
     try {
       this.physics.addChunk(key, plan.colliders, offset);
       this.scene.add(view.group);
+      this.characterPitsCache = null;
       this.chunks.set(key, {
         key,
         coord,
@@ -1352,6 +1373,7 @@ export class WorldStream {
     this.physics.removeChunk(key);
     runtime.view.dispose();
     this.chunks.delete(key);
+    this.characterPitsCache = null;
   }
 
   private clearMountedChunks(): void {
@@ -1359,6 +1381,7 @@ export class WorldStream {
       for (const key of [...this.chunks.keys()]) this.unmountChunk(key);
     });
     this.chunks.clear();
+    this.characterPitsCache = null;
   }
 
   private refreshLightSources(): void {

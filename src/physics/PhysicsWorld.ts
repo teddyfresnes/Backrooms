@@ -1,3 +1,4 @@
+import { SeededRandom } from '../world/SeededRandom';
 import RAPIER from '@dimforge/rapier3d';
 import * as THREE from 'three';
 import type { QuaternionData, StaticCollider, Vec3Data, WorldPlan } from '../world/types';
@@ -6,6 +7,11 @@ const PLAYER_RADIUS = 0.32;
 const STANDING_HALF_HEIGHT = 0.52;
 const CROUCHED_HALF_HEIGHT = 0.22;
 const CROUCH_CENTER_DROP = STANDING_HALF_HEIGHT - CROUCHED_HALF_HEIGHT;
+const PLAYER_SKIN_WIDTH = 0.025;
+const PLAYER_COLLISION_GROUP = 0x1000;
+const MELEE_OPPONENT_COLLISION_GROUP = 0x2000;
+const MELEE_OPPONENT_RADIUS = 0.34;
+const MELEE_OPPONENT_HALF_HEIGHT = 0.50;
 const IDENTITY_ROTATION = { x: 0, y: 0, z: 0, w: 1 };
 
 const addStaticCollider = (
@@ -32,12 +38,26 @@ export interface CharacterMotionResult {
 }
 
 export class PhysicsWorld {
+  private readonly gameplayRandom: SeededRandom;
+  private randomSequence = 0;
+  createRandom(label: string): SeededRandom { return this.gameplayRandom.fork(`${label}:${this.randomSequence++}`); }
   readonly world: RAPIER.World;
+  private readonly environmentBodies = new Set<number>();
+  private readonly environmentKinds = new Map<number, StaticCollider['kind']>();
+  isEnvironmentCollider = (collider: RAPIER.Collider): boolean => {
+    const body = collider.parent();
+    return !!body && this.environmentBodies.has(body.handle) && collider.isEnabled() && !collider.isSensor();
+  };
+  getEnvironmentKind(collider: RAPIER.Collider): StaticCollider['kind'] {
+    return this.environmentKinds.get(collider.handle) ?? 'wall';
+  }
   private readonly chunkBodies = new Map<string, RAPIER.RigidBody>();
   private readonly chunkColliders = new Map<string, Map<string, RAPIER.Collider>>();
   private readonly playerBody: RAPIER.RigidBody;
   private readonly playerCollider: RAPIER.Collider;
   private readonly controller: RAPIER.KinematicCharacterController;
+  private meleeOpponentBody?: RAPIER.RigidBody;
+  private meleeOpponentCollider?: RAPIER.Collider;
   private readonly spawn = new THREE.Vector3();
   private readonly position = new THREE.Vector3();
   private readonly movement = new THREE.Vector3();
@@ -46,12 +66,12 @@ export class PhysicsWorld {
   private chunkSynchronizationPending = false;
 
   private constructor(plan: WorldPlan) {
+    this.gameplayRandom = new SeededRandom(plan.seed).fork('physics-gameplay');
     this.world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
     this.world.timestep = 1 / 60;
     this.addChunk('origin', plan.colliders, { x: 0, y: 0, z: 0 });
 
-    // Capsule half-height (0.52 + 0.32) plus the controller offset (0.025).
-    this.spawn.set(plan.spawn.x, 0.865, plan.spawn.z);
+    this.spawn.set(plan.spawn.x, plan.spawn.y, plan.spawn.z);
     this.playerBody = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.kinematicPositionBased()
         .setTranslation(this.spawn.x, this.spawn.y, this.spawn.z)
@@ -61,53 +81,54 @@ export class PhysicsWorld {
       RAPIER.ColliderDesc.capsule(STANDING_HALF_HEIGHT, PLAYER_RADIUS)
         .setFriction(0)
         .setRestitution(0)
-        .setCollisionGroups(0x00010001),
+        // Ragdoll limbs ignore the player. A settled torso exposes one stable,
+        // rounded support surface on a separate collision membership.
+        .setCollisionGroups((PLAYER_COLLISION_GROUP << 16) | 0xffff),
       this.playerBody,
     );
-    this.controller = this.world.createCharacterController(0.025);
+    this.controller = this.world.createCharacterController(PLAYER_SKIN_WIDTH);
     this.controller.setSlideEnabled(true);
-    this.controller.enableAutostep(0.26, 0.14, false);
+    this.controller.enableAutostep(0.38, 0.10, false);
     this.controller.enableSnapToGround(0.32);
     this.controller.setMaxSlopeClimbAngle((48 * Math.PI) / 180);
     this.controller.setMinSlopeSlideAngle((54 * Math.PI) / 180);
-    this.controller.setApplyImpulsesToDynamicBodies(false);
+    this.controller.setApplyImpulsesToDynamicBodies(true);
+    // Deliberately lighter than a real 70-80 kg character: a corpse should move
+    // a little when walked into, not get launched across the room.
+    this.controller.setCharacterMass(18);
     this.syncPosition();
   }
 
-  static async create(plan: WorldPlan): Promise<PhysicsWorld> {
-    return new PhysicsWorld(plan);
-  }
-
-  hasChunk(key: string): boolean {
-    return this.chunkBodies.has(key);
-  }
+  static async create(plan: WorldPlan): Promise<PhysicsWorld> { return new PhysicsWorld(plan); }
+  hasChunk(key: string): boolean { return this.chunkBodies.has(key); }
 
   addChunk(key: string, colliders: readonly StaticCollider[], offset: Vec3Data): void {
     if (!key) throw new Error('Physics chunk keys cannot be empty.');
     if (this.chunkBodies.has(key)) throw new Error(`Physics chunk already exists: ${key}`);
     this.assertFiniteVector(offset, `offset for chunk ${key}`);
-
     const body = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.fixed().setTranslation(offset.x, offset.y, offset.z),
     );
     try {
       const indexedColliders = new Map<string, RAPIER.Collider>();
       for (const collider of colliders) {
-        if (indexedColliders.has(collider.id)) {
-          throw new Error(`Duplicate collider id in chunk ${key}: ${collider.id}`);
-        }
-        indexedColliders.set(collider.id, addStaticCollider(this.world, body, collider));
+        if (indexedColliders.has(collider.id)) throw new Error(`Duplicate collider id in chunk ${key}: ${collider.id}`);
+        const created = addStaticCollider(this.world, body, collider);
+        indexedColliders.set(collider.id, created);
+        this.environmentKinds.set(created.handle, collider.kind);
       }
       this.chunkBodies.set(key, body);
+      this.environmentBodies.add(body.handle);
       this.chunkColliders.set(key, indexedColliders);
       this.requestChunkSynchronization();
     } catch (error) {
+      for (let i = 0; i < body.numColliders(); i++) this.environmentKinds.delete(body.collider(i).handle);
+      this.environmentBodies.delete(body.handle);
       this.world.removeRigidBody(body);
       throw error;
     }
   }
 
-  /** Adds a collider group whose transform can follow an animated prop. */
   addKinematicChunk(key: string, colliders: readonly StaticCollider[]): void {
     if (!key) throw new Error('Physics chunk keys cannot be empty.');
     if (this.chunkBodies.has(key)) throw new Error(`Physics chunk already exists: ${key}`);
@@ -119,12 +140,17 @@ export class PhysicsWorld {
         if (indexedColliders.has(collider.id)) {
           throw new Error(`Duplicate collider id in chunk ${key}: ${collider.id}`);
         }
-        indexedColliders.set(collider.id, addStaticCollider(this.world, body, collider));
+        const created = addStaticCollider(this.world, body, collider);
+        indexedColliders.set(collider.id, created);
+        this.environmentKinds.set(created.handle, collider.kind);
       }
       this.chunkBodies.set(key, body);
+      this.environmentBodies.add(body.handle);
       this.chunkColliders.set(key, indexedColliders);
       this.requestChunkSynchronization();
     } catch (error) {
+      for (let i = 0; i < body.numColliders(); i++) this.environmentKinds.delete(body.collider(i).handle);
+      this.environmentBodies.delete(body.handle);
       this.world.removeRigidBody(body);
       throw error;
     }
@@ -152,15 +178,9 @@ export class PhysicsWorld {
     return true;
   }
 
-  /**
-   * Adds an imported architectural shell as world-space triangle meshes.
-   * Imported apartment geometry is too irregular for a useful set of boxes,
-   * while furniture and doors continue to use the cheaper chunk collider API.
-   */
   addTrimeshChunk(key: string, meshes: readonly THREE.Mesh[]): void {
     if (!key) throw new Error('Physics chunk keys cannot be empty.');
     if (this.chunkBodies.has(key)) throw new Error(`Physics chunk already exists: ${key}`);
-
     const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
     const vertex = new THREE.Vector3();
     try {
@@ -169,7 +189,6 @@ export class PhysicsWorld {
         const geometry = mesh.geometry;
         const position = geometry.getAttribute('position');
         if (!position || position.itemSize < 3 || position.count < 3) continue;
-
         const vertices = new Float32Array(position.count * 3);
         for (let index = 0; index < position.count; index += 1) {
           vertex.fromBufferAttribute(position, index).applyMatrix4(mesh.matrixWorld);
@@ -177,31 +196,25 @@ export class PhysicsWorld {
           vertices[index * 3 + 1] = vertex.y;
           vertices[index * 3 + 2] = vertex.z;
         }
-
         let indices: Uint32Array;
         if (geometry.index) {
           indices = new Uint32Array(geometry.index.count);
-          for (let index = 0; index < geometry.index.count; index += 1) {
-            indices[index] = geometry.index.getX(index);
-          }
+          for (let index = 0; index < geometry.index.count; index += 1) indices[index] = geometry.index.getX(index);
         } else {
           const triangleVertexCount = Math.floor(position.count / 3) * 3;
           indices = new Uint32Array(triangleVertexCount);
           for (let index = 0; index < triangleVertexCount; index += 1) indices[index] = index;
         }
         if (indices.length < 3) continue;
-
-        this.world.createCollider(
-          RAPIER.ColliderDesc.trimesh(vertices, indices)
-            .setFriction(0.58)
-            .setRestitution(0),
-          body,
-        );
+        this.world.createCollider(RAPIER.ColliderDesc.trimesh(vertices, indices).setFriction(0.58).setRestitution(0), body);
       }
       this.chunkBodies.set(key, body);
+      this.environmentBodies.add(body.handle);
       this.chunkColliders.set(key, new Map());
       this.requestChunkSynchronization();
     } catch (error) {
+      for (let i = 0; i < body.numColliders(); i++) this.environmentKinds.delete(body.collider(i).handle);
+      this.environmentBodies.delete(body.handle);
       this.world.removeRigidBody(body);
       throw error;
     }
@@ -210,23 +223,20 @@ export class PhysicsWorld {
   removeChunk(key: string): boolean {
     const body = this.chunkBodies.get(key);
     if (!body) return false;
+    for (let i = 0; i < body.numColliders(); i++) this.environmentKinds.delete(body.collider(i).handle);
+    this.environmentBodies.delete(body.handle);
     this.world.removeRigidBody(body);
     this.chunkBodies.delete(key);
     this.chunkColliders.delete(key);
     this.requestChunkSynchronization();
     return true;
   }
-
   setChunkColliderEnabled(key: string, colliderId: string, enabled: boolean): boolean {
     const collider = this.chunkColliders.get(key)?.get(colliderId);
     if (!collider) return false;
     collider.setEnabled(enabled);
-    // Rapier refreshes its broad phase on the next scheduled fixed tick.
-    // Forcing an extra world.step() here would run a second, unplanned physics
-    // tick from the render/interaction update and can stall a streamed world.
     return true;
   }
-
   setChunkOffset(key: string, offset: Vec3Data): boolean {
     const body = this.chunkBodies.get(key);
     if (!body) return false;
@@ -236,37 +246,19 @@ export class PhysicsWorld {
     this.requestChunkSynchronization();
     return true;
   }
-
-  /**
-   * Adds the supplied translation to every loaded static chunk. The caller is
-   * responsible for applying the same origin shift to the player and visuals.
-   */
   rebaseChunks(delta: Vec3Data): void {
     this.assertFiniteVector(delta, 'chunk rebase delta');
     for (const body of this.chunkBodies.values()) {
       const current = body.translation();
-      body.setTranslation(
-        {
-          x: current.x + delta.x,
-          y: current.y + delta.y,
-          z: current.z + delta.z,
-        },
-        true,
-      );
+      body.setTranslation({ x: current.x + delta.x, y: current.y + delta.y, z: current.z + delta.z }, true);
     }
     this.world.propagateModifiedBodyPositionsToColliders();
     this.requestChunkSynchronization();
   }
-
-  /**
-   * Groups several stream mutations behind one Rapier broad-phase refresh.
-   * This is especially important when all nine chunks change story at once.
-   */
   batchChunkChanges<T>(operation: () => T): T {
     this.chunkMutationDepth += 1;
-    try {
-      return operation();
-    } finally {
+    try { return operation(); }
+    finally {
       this.chunkMutationDepth -= 1;
       if (this.chunkMutationDepth === 0 && this.chunkSynchronizationPending) {
         this.chunkSynchronizationPending = false;
@@ -275,46 +267,131 @@ export class PhysicsWorld {
     }
   }
 
+  /**
+   * Solid kinematic capsule used by the live melee opponent. The collider only
+   * interacts with the player capsule: ragdolls and other dynamics ignore it,
+   * which prevents an invisible standing blocker from fighting the NPC ragdoll.
+   * Updating it with an immediate translation keeps the character controller
+   * from tunnelling through a visually moved opponent between render frames.
+   */
+  setMeleeOpponentBlocker(position: Vec3Data, enabled = true): void {
+    this.assertFiniteVector(position, 'melee opponent blocker position');
+    if (!this.meleeOpponentBody || !this.meleeOpponentCollider) {
+      this.meleeOpponentBody = this.world.createRigidBody(
+        RAPIER.RigidBodyDesc.kinematicPositionBased()
+          .setTranslation(position.x, position.y, position.z)
+          .lockRotations(),
+      );
+      this.meleeOpponentCollider = this.world.createCollider(
+        RAPIER.ColliderDesc.capsule(MELEE_OPPONENT_HALF_HEIGHT, MELEE_OPPONENT_RADIUS)
+          .setFriction(0)
+          .setRestitution(0)
+          .setCollisionGroups((MELEE_OPPONENT_COLLISION_GROUP << 16) | PLAYER_COLLISION_GROUP),
+        this.meleeOpponentBody,
+      );
+    }
+    this.meleeOpponentCollider.setEnabled(enabled);
+    if (!enabled) return;
+    this.meleeOpponentBody.setTranslation(position, true);
+    this.meleeOpponentBody.setNextKinematicTranslation(position);
+    this.world.propagateModifiedBodyPositionsToColliders();
+  }
+
+  setMeleeOpponentBlockerEnabled(enabled: boolean): void {
+    this.meleeOpponentCollider?.setEnabled(enabled);
+  }
+
+  /** Read-only full-animation clearance, including limbs, root path and floor. */
+  hasAnimationSpace(feet: Vec3Data, yaw: number, bounds: THREE.Box3, groundPoints: readonly THREE.Vector3[], ignoredBodies: ReadonlySet<number> = new Set<number>()): boolean {
+    const rotation = new THREE.Quaternion().setFromAxisAngle(THREE.Object3D.DEFAULT_UP, yaw);
+    const center = bounds.getCenter(new THREE.Vector3()).applyQuaternion(rotation).add(feet);
+    const half = bounds.getSize(new THREE.Vector3()).multiplyScalar(.5);
+    const solid = (collider: RAPIER.Collider): boolean => collider.isEnabled()
+      && (collider.parent()?.isEnabled() ?? true) && !ignoredBodies.has(collider.parent()?.handle ?? -1);
+    if (this.world.intersectionWithShape(center, rotation, new RAPIER.Cuboid(half.x, half.y, half.z),
+      RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, this.playerCollider, this.playerBody, solid)) return false;
+    const point = new THREE.Vector3();
+    const supported = (x: number, z: number): boolean => {
+      const hit = this.world.castRayAndGetNormal(new RAPIER.Ray({ x, y: feet.y + .45, z }, { x: 0, y: -1, z: 0 }),
+        .7, true, RAPIER.QueryFilterFlags.ONLY_FIXED | RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+        undefined, this.playerCollider, this.playerBody, solid);
+      return !!hit && hit.normal.y > .92 && Math.abs(.45 - hit.timeOfImpact) < .10;
+    };
+    for (const root of groundPoints) {
+      point.copy(root).applyQuaternion(rotation).add(feet);
+      for (const [dx, dz] of [[0, 0], [.22, 0], [-.22, 0], [0, .22], [0, -.22]]) {
+        if (!supported(point.x + dx!, point.z + dz!)) return false;
+      }
+    }
+    for (const x of [bounds.min.x, bounds.max.x]) for (const z of [bounds.min.z, bounds.max.z]) {
+      point.set(x, 0, z).applyQuaternion(rotation).add(feet);
+      if (!supported(point.x, point.z)) return false;
+    }
+    return true;
+  }
+
+  /** Floor under a prone body; this does not require enough height to stand. */
+  findAnimationGround(pelvis: Vec3Data): THREE.Vector3 | null {
+    const rayY = pelvis.y + .45;
+    const hit = this.world.castRayAndGetNormal(new RAPIER.Ray({ x: pelvis.x, y: rayY, z: pelvis.z }, { x: 0, y: -1, z: 0 }),
+      2.2, true, RAPIER.QueryFilterFlags.ONLY_FIXED | RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
+    if (!hit || hit.normal.y < .92 || hit.timeOfImpact < .3) return null;
+    return new THREE.Vector3(pelvis.x, rayY - hit.timeOfImpact, pelvis.z);
+  }
+
   move(desiredDelta: Vec3Data): CharacterMotionResult {
-    this.controller.computeColliderMovement(this.playerCollider, desiredDelta);
-    const allowed = this.controller.computedMovement();
+    // KCC shape casts do not inherit the capsule's simulation collision groups.
+    // Pass them explicitly or every articulated limb still blocks the player.
+    this.controller.computeColliderMovement(this.playerCollider, desiredDelta,
+      undefined, this.playerCollider.collisionGroups());
+    let allowed = this.controller.computedMovement();
+    let grounded = this.controller.computedGrounded();
+    const requestedHorizontal = Math.hypot(desiredDelta.x, desiredDelta.z);
+    // A capsule already resting within the floor skin can get a zero-time
+    // downward hit and lose all tangential recoil. Retry that horizontal sweep
+    // separately, through the same KCC and collision groups, never by teleport.
+    if (grounded && desiredDelta.y <= 0 && requestedHorizontal > 0.005
+      && Math.hypot(allowed.x, allowed.z) < requestedHorizontal * 0.25
+      && this.controller.numComputedCollisions() > 0) {
+      let floorOnly = true;
+      for (let i = 0; i < this.controller.numComputedCollisions(); i++) {
+        if ((this.controller.computedCollision(i)?.normal1.y ?? 0) < 0.99) { floorOnly = false; break; }
+      }
+      if (floorOnly) {
+        const floorY = allowed.y;
+        this.controller.computeColliderMovement(this.playerCollider,
+          { x: desiredDelta.x, y: 0, z: desiredDelta.z }, undefined, this.playerCollider.collisionGroups());
+        const horizontal = this.controller.computedMovement();
+        allowed = { x: horizontal.x, y: floorY + horizontal.y, z: horizontal.z };
+        grounded ||= this.controller.computedGrounded();
+      }
+    }
     const current = this.playerBody.translation();
-    this.playerBody.setNextKinematicTranslation({
-      x: current.x + allowed.x,
-      y: current.y + allowed.y,
-      z: current.z + allowed.z,
-    });
+    this.playerBody.setNextKinematicTranslation({ x: current.x + allowed.x, y: current.y + allowed.y, z: current.z + allowed.z });
     this.world.step();
     this.syncPosition();
     this.movement.set(allowed.x, allowed.y, allowed.z);
-    return {
-      position: this.position,
-      grounded: this.controller.computedGrounded(),
-      moved: this.movement,
-    };
+    return { position: this.position, grounded, moved: this.movement };
   }
 
-  /**
-   * Changes the physical capsule while keeping the player's feet at the same
-   * height. Standing up is refused until the complete standing capsule fits.
-   */
+  stepDynamics(delta: number): void {
+    const previousTimestep = this.world.timestep;
+    try {
+      this.world.timestep = Math.max(1 / 240, Math.min(1 / 30, delta));
+      this.world.step();
+    } finally {
+      this.world.timestep = previousTimestep;
+    }
+  }
+
   setCrouched(requested: boolean): boolean {
     if (requested === this.crouched) return this.crouched;
     const current = this.playerBody.translation();
     if (!requested) {
-      const standingCenter = {
-        x: current.x,
-        y: current.y + CROUCH_CENTER_DROP,
-        z: current.z,
-      };
+      const standingCenter = { x: current.x, y: current.y + CROUCH_CENTER_DROP, z: current.z };
       const obstruction = this.world.intersectionWithShape(
-        standingCenter,
-        IDENTITY_ROTATION,
-        new RAPIER.Capsule(STANDING_HALF_HEIGHT, PLAYER_RADIUS),
-        undefined,
-        0x00010001,
-        this.playerCollider,
-        this.playerBody,
+        standingCenter, IDENTITY_ROTATION, new RAPIER.Capsule(STANDING_HALF_HEIGHT, PLAYER_RADIUS),
+        undefined, 0x00010001, this.playerCollider, this.playerBody,
       );
       if (obstruction) return true;
       this.playerCollider.setShape(new RAPIER.Capsule(STANDING_HALF_HEIGHT, PLAYER_RADIUS));
@@ -322,11 +399,7 @@ export class PhysicsWorld {
       this.playerBody.setNextKinematicTranslation(standingCenter);
       this.crouched = false;
     } else {
-      const crouchedCenter = {
-        x: current.x,
-        y: current.y - CROUCH_CENTER_DROP,
-        z: current.z,
-      };
+      const crouchedCenter = { x: current.x, y: current.y - CROUCH_CENTER_DROP, z: current.z };
       this.playerCollider.setShape(new RAPIER.Capsule(CROUCHED_HALF_HEIGHT, PLAYER_RADIUS));
       this.playerBody.setTranslation(crouchedCenter, true);
       this.playerBody.setNextKinematicTranslation(crouchedCenter);
@@ -337,64 +410,124 @@ export class PhysicsWorld {
     return this.crouched;
   }
 
-  get isCrouched(): boolean {
-    return this.crouched;
+
+  /**
+   * Finds a nearby supported, unobstructed standing capsule for a recovering
+   * character. It never changes the world or enables the live player collider.
+   */
+  findStandingRecoveryPosition(
+    pelvis: Readonly<Vec3Data>,
+    ignoredBodyHandles: ReadonlySet<number> = new Set<number>(),
+    wideSearch = false,
+  ): THREE.Vector3 | null {
+    const nearOffsets = [
+      [0, 0], [0.24, 0], [-0.24, 0], [0, 0.24], [0, -0.24],
+      [0.40, 0.20], [-0.40, -0.20], [0.40, -0.20], [-0.40, 0.20],
+      [0.58, 0], [-0.58, 0], [0, 0.58], [0, -0.58],
+      [0.50, 0.42], [-0.50, -0.42], [0.50, -0.42], [-0.50, 0.42],
+    ] as const;
+    const wideOffsets = [
+      [0.82, 0], [-0.82, 0], [0, 0.82], [0, -0.82],
+      [0.72, 0.58], [-0.72, -0.58], [0.72, -0.58], [-0.72, 0.58],
+      [1.05, 0], [-1.05, 0], [0, 1.05], [0, -1.05],
+    ] as const;
+    const offsets: ReadonlyArray<readonly [number, number]> = wideSearch
+      ? [...nearOffsets, ...wideOffsets]
+      : nearOffsets;
+    const sampleOffsets = [[0, 0], [0.16, 0], [-0.16, 0], [0, 0.16], [0, -0.16]] as const;
+    const rayOriginY = pelvis.y + 1.15;
+    const rayLength = 3.5;
+    const groundAt = (x: number, z: number): number | null => {
+      const hit = this.world.castRayAndGetNormal(
+        new RAPIER.Ray({ x, y: rayOriginY, z }, { x: 0, y: -1, z: 0 }),
+        rayLength,
+        true,
+        RAPIER.QueryFilterFlags.ONLY_FIXED,
+        0x00010001,
+      );
+      if (!hit || hit.normal.y < 0.70) return null;
+      const y = rayOriginY - hit.timeOfImpact;
+      return y <= pelvis.y + 0.72 && y >= pelvis.y - 1.75 ? y : null;
+    };
+    for (const [dx, dz] of offsets) {
+      const x = pelvis.x + dx;
+      const z = pelvis.z + dz;
+      const ground = groundAt(x, z);
+      if (ground === null) continue;
+      if (sampleOffsets.some(([sx, sz]) => {
+        const sample = groundAt(x + sx, z + sz);
+        return sample === null || Math.abs(sample - ground) > 0.30;
+      })) continue;
+      const center = new THREE.Vector3(x, ground + 0.865, z);
+      const blocked = this.world.intersectionWithShape(
+        center,
+        IDENTITY_ROTATION,
+        new RAPIER.Capsule(STANDING_HALF_HEIGHT, PLAYER_RADIUS),
+        RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+        undefined,
+        this.playerCollider,
+        this.playerBody,
+        (collider) => {
+          const body = collider.parent();
+          // Quarantined ragdolls remain allocated for wasm-safe teardown.
+          // Rapier scene queries can still enumerate these disabled shapes.
+          if (!collider.isEnabled() || (body && !body.isEnabled())) return false;
+          return !body || !ignoredBodyHandles.has(body.handle);
+        },
+      );
+      if (!blocked) return center;
+    }
+    return null;
   }
 
-  /** Returns the equivalent standing capsule center without mutating physics. */
+  get isCrouched(): boolean { return this.crouched; }
+  /** Shape changes move the capsule center, never its supporting feet. */
+  get crouchCenterOffset(): number { return this.crouched ? CROUCH_CENTER_DROP : 0; }
+  get crouchedCenterDrop(): number { return CROUCH_CENTER_DROP; }
+  setPlayerColliderEnabled(enabled: boolean): void { this.playerCollider.setEnabled(enabled); }
   getStandingPosition(target = new THREE.Vector3()): THREE.Vector3 {
     target.copy(this.position);
     if (this.crouched) target.y += CROUCH_CENTER_DROP;
     return target;
   }
-
+  getFeetPosition(target = new THREE.Vector3()): THREE.Vector3 {
+    this.getStandingPosition(target);
+    target.y -= STANDING_HALF_HEIGHT + PLAYER_RADIUS + PLAYER_SKIN_WIDTH;
+    return target;
+  }
   reset(): void {
     this.playerBody.setTranslation(this.spawn, true);
     this.playerBody.setNextKinematicTranslation(this.spawn);
     this.world.step();
     this.syncPosition();
   }
-
   teleport(position: Vec3Data): void {
     this.playerBody.setTranslation(position, true);
     this.playerBody.setNextKinematicTranslation(position);
     this.world.step();
     this.syncPosition();
   }
-
-  getPosition(target = new THREE.Vector3()): THREE.Vector3 {
-    return target.copy(this.position);
-  }
-
+  getPosition(target = new THREE.Vector3()): THREE.Vector3 { return target.copy(this.position); }
   private syncPosition(): void {
     const translation = this.playerBody.translation();
     this.position.set(translation.x, translation.y, translation.z);
   }
-
   private assertFiniteVector(vector: Vec3Data, label: string): void {
     if (!Number.isFinite(vector.x) || !Number.isFinite(vector.y) || !Number.isFinite(vector.z)) {
       throw new Error(`Invalid ${label}: expected finite coordinates.`);
     }
   }
-
-  private synchronizeChunkChanges(): void {
-    // Rapier updates its broad phase only during a simulation step. Without
-    // this synchronization, a character query immediately following a chunk
-    // load or rebase still sees the previous collider positions for one tick.
-    this.world.step();
-  }
-
+  private synchronizeChunkChanges(): void { this.world.step(); }
   private requestChunkSynchronization(): void {
-    if (this.chunkMutationDepth > 0) {
-      this.chunkSynchronizationPending = true;
-      return;
-    }
+    if (this.chunkMutationDepth > 0) { this.chunkSynchronizationPending = true; return; }
     this.synchronizeChunkChanges();
   }
-
   dispose(): void {
     this.controller.free();
     this.chunkBodies.clear();
+    this.chunkColliders.clear();
+    this.environmentBodies.clear();
+    this.environmentKinds.clear();
     this.world.free();
   }
 }

@@ -90,6 +90,7 @@ import * as THREE from 'three';
 import type { CharacterMotionResult, PhysicsWorld } from '../physics/PhysicsWorld';
 import type { Vec3Data } from '../world/types';
 import { PlayerController } from './PlayerController';
+import { MOVEMENT_TUNING } from './MovementConfig';
 
 class FakePhysics {
   readonly position = new THREE.Vector3();
@@ -98,6 +99,8 @@ class FakePhysics {
   readonly moveDeltas: Vec3Data[] = [];
   readonly crouchRequests: boolean[] = [];
   crouched = false;
+  get crouchCenterOffset() { return this.crouched ? 0.3 : 0; }
+  readonly crouchedCenterDrop = 0.3;
   blockStanding = false;
 
   constructor(position: Vec3Data) {
@@ -293,7 +296,7 @@ describe('PlayerController locomotion', () => {
     controller.fixedUpdate(0.02);
 
     expect(callbacks.onLand).toHaveBeenCalledOnce();
-    expect(callbacks.onLand.mock.calls[0]![0]).toBeCloseTo(2.72, 2);
+    expect(callbacks.onLand.mock.calls[0]![0]).toBeCloseTo(0.5 + MOVEMENT_TUNING.locomotion.gravity * 0.12, 2);
     controller.dispose();
   });
 
@@ -384,7 +387,7 @@ describe('PlayerController infinite vertical recovery', () => {
     controller.fixedUpdate(1);
     controller.fixedUpdate(1);
 
-    expect(controller.position.y).toBeCloseTo(-136);
+    expect(controller.position.y).toBeCloseTo(-100 - (0.5 + MOVEMENT_TUNING.locomotion.gravity) - MOVEMENT_TUNING.locomotion.terminalFallSpeed);
     expect(callbacks.onFallReset).not.toHaveBeenCalled();
 
     controller.fixedUpdate(1);

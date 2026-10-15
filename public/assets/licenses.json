@@ -464,5 +464,35 @@
       "files": ["stairwell-furniture/soviet_old_table.glb"],
       "changes": "Original embedded GLB; source, author and license are recorded in the file metadata."
     }
+  ],
+  "character": [
+    {
+      "name": "Character mannequin, locomotion, combat and recovery animations",
+      "source": "User-provided Locomotion Pack and Mixamo FBX files, movement project v144",
+      "license": "User-provided assets; original source terms apply",
+      "files": [
+        "character/*.fbx"
+      ],
+      "changes": "Retargeted to metres in CharacterRuntime; authored/procedural clips share the gameplay rig."
+    },
+    {
+      "name": "Emotes and thumbnails",
+      "source": "User-provided movement project v144",
+      "license": "User-provided assets; original source terms apply",
+      "files": [
+        "emotes/*.json",
+        "emotes/icons/*"
+      ],
+      "changes": "Processed motion tracks and menu icons."
+    },
+    {
+      "name": "Impact blood textures",
+      "source": "https://opengameart.org/",
+      "license": "CC0, as recorded by the source project fetch-blood-assets.mjs",
+      "files": [
+        "blood/*.png"
+      ],
+      "changes": "Copied locally from the movement project for offline gameplay."
+    }
   ]
 }
