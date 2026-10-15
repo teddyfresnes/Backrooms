@@ -39,12 +39,17 @@ blocage.
 | Mode classique / bake | `BakedLighting.test.ts` | `WorldBuilder.test.ts` + build |
 | Streaming/offset/préfetch | `WorldStream.test.ts` | `InfiniteWorld.test.ts` |
 | Contrôleur joueur | `PlayerController.test.ts` | `PhysicsWorld.test.ts` si collision |
+| Personnage, Tab, caméra, ragdoll et relevés | `npm run test:character` | `CharacterEnvironment.test.ts`, puis les deux scènes |
 | Props | `PropPlacement.test.ts` | build + contrôle visuel si nouvel asset |
 | Qualité/post-FX | `AdaptiveQuality.test.ts` | contrôle visuel |
 | UI/audio/styles | test disponible, sinon build | contrôle navigateur |
 | Historique de sauvegarde | `SaveHistory.test.ts` | accueil sans/avec save + rechargement des deux runtimes |
 | Escalier/appartement | tests `src/stairwell` et `src/apartment` | `PhysicsWorld.test.ts` + contrôle visuel |
 | Porte du hall / route Backrooms | `HallExitInteraction.test.ts`, `ExperienceRouting.test.ts` | descente au RDC + interaction E |
+
+`npm run validate` inclut les essais du personnage sur les véritables FBX,
+avec Three.js, Rapier et un DOM hors écran. Seule la surface WebGL est absente ;
+ces essais ne remplacent pas le contrôle visuel en navigateur.
 
 ## Contrôle navigateur
 

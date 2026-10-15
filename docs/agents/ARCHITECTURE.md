@@ -29,7 +29,7 @@ Runtime procédural conservé :
       │   ├─ génère/prépare les chunks avec infinite.worker.ts
       │   ├─ monte un WorldView par chunk
       │   └─ ajoute/retire les colliders du même chunk
-      ├─ pilote PlayerController à pas fixe (60 Hz)
+      ├─ délègue le personnage à CharacterRuntime à pas fixe (60 Hz)
       └─ présente la scène via PostFX à chaque frame
 ```
 
@@ -70,8 +70,18 @@ séparément.
 | `src/render` | géométrie Three.js, matériaux, lumière, post-FX | `WorldView`, `MaterialLibrary`, `ZonalLighting`, `PostFX` |
 | `src/physics` | personnage Rapier et colliders par chunk | `PhysicsWorld` |
 | `src/player` | entrée FPS, déplacement, chute, noclip | `PlayerController` |
+| `src/character` | rig, emotes, combat, interactions, ragdoll et relevés | `CharacterRuntime`, `CharacterEnvironment` |
 | `src/ui` | démarrage, menus, réglages persistants, console et diagnostic | `ExperienceUI` |
 | `src/audio` | ambiance et retours de déplacement | `AudioSystem` |
+
+`CharacterRuntime` partage la scène et le monde Rapier du runtime hôte ; il ne
+crée ni renderer ni boucle autonome. Il choisit le contrôleur cinématique, le
+ragdoll ou le relevé pour chaque tick, puis copie la caméra choisie dans celle du
+post-traitement. `beforePhysicsStep` conserve les poussées de la porte de
+l’appartement avant le mouvement. `CharacterEnvironment` interroge les colliders
+montés, y compris les trimeshes importés. Le streaming suit le bassin pendant une
+chute. Le fond de menu ne charge pas le personnage. Le runtime hôte détruit le
+personnage avant son joueur et sa physique.
 
 ## Deux espaces de coordonnées
 

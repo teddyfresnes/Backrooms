@@ -5,6 +5,7 @@ export default mergeConfig(
   viteConfig,
   defineConfig({
     test: {
+      exclude: ['tests/character/**', '**/node_modules/**'],
       // Multi-seed topology audits intentionally generate hundreds of complete
       // chunks, including the navigation-component classification pass.
       testTimeout: 30_000,

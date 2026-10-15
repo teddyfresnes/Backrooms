@@ -25,6 +25,7 @@ Puis ouvrir `http://127.0.0.1:4173/`.
 
 ```powershell
 npm test        # suite générative, verticale, physique et rendu
+npm run test:character # mouvements, animations, interactions, ragdoll et relevés
 npm run build   # type-check + build production
 npm run validate
 ```
@@ -33,13 +34,19 @@ npm run validate
 
 - `ZQSD` ou `WASD` : marcher
 - `Maj` : accélérer
-- `Ctrl` : s’accroupir
+- `Ctrl` : s’accroupir ; depuis le sprint, glisser
+- `Espace` : sauter
+- `Tab` : emotes ; face à un survivant proche, uniquement les interactions à deux
+- clic droit : garde ; clic gauche en garde : frapper
+- `F` maintenu + clic gauche : esquive / contre
+- `E` au sol : demander le relevé
 - `E` : ouvrir ou fermer la porte de l’appartement
 - `C` : ouvrir le chat local et envoyer un message sous la forme `me: message`
 - `H` : ouvrir la console avec `/` déjà prêt
 - `↑` / `↓` : parcourir l'historique des messages et commandes
 - `/help` : afficher l’aide des commandes
 - `/save` : forcer une sauvegarde immédiate
+- `/viewmodel` : basculer première / troisième personne (dans les deux niveaux)
 - souris : regarder
 - `Échap` : libérer la souris / pause
 
@@ -50,6 +57,18 @@ automatique unique représente toujours la session courante : elle est mise à j
 au chargement, toutes les 30 secondes de jeu, quand l’onglet est masqué et avant
 un retour au menu principal. L’historique local conserve au plus douze entrées.
 Une entrée corrompue ou incompatible est ignorée proprement.
+
+Le personnage utilise les mouvements et animations du projet v144 dans les deux
+scènes : locomotion, accroupissement, glissade, sauts, chutes physiques, dégâts et
+relevés. La caméra démarre à la première personne. Un survivant local apparaît
+sur un sol libre près du point de départ du Level 0 ; il propose son aide si le
+joueur est à terre à proximité. Les interactions sont locales, sans couche réseau.
+Le mannequin du pack est conservé : le branchement du skin sélectionné dans le
+wardrobe reste à faire.
+
+Les 97 fichiers du personnage sont embarqués dans `assets/character/` sous forme
+compressée, avec sommes SHA-256. `npm run dev`, `build` et `test:character` les
+restaurent automatiquement en local ; aucun téléchargement d’animation en jeu.
 
 ## Fondation procédurale conservée
 
@@ -76,6 +95,7 @@ Une entrée corrompue ou incompatible est ignorée proprement.
 src/
   audio/       ambiance Web Audio et pas synthétiques
   core/        initialisation, boucle fixe, qualité adaptative
+  character/   rig animé, combat, emotes, interactions et récupération
   apartment/   appartement importé, colliders et porte interactive
   input/       clavier AZERTY/QWERTY
   physics/     capsule cinématique Rapier et colliders générés

@@ -314,9 +314,10 @@ Un appui bref sur E ouvre vite ; un maintien d’une seconde ouvre en deux secon
 `Game.frame()` :
 
 1. quand le pointeur est verrouillé, borne le delta et exécute
-   `PlayerController.fixedUpdate()` à 60 Hz ;
-2. interpole la caméra avec `renderUpdate()` puis met à jour streaming et
-   interactions ;
+   `CharacterRuntime.update()`, dont l’accumulateur choisit le joueur, le ragdoll
+   ou le relevé à 60 Hz ;
+2. laisse le personnage interpoler la caméra active puis met à jour streaming et
+   interactions ; pendant une chute, le streaming suit le bassin physique ;
 3. quand le jeu est en pause, fige simulation, streaming et caméra ; seul le
    menu principal peut remplacer cette caméra par son panoramique lent ;
 4. adapte progressivement la résolution en mode qualité automatique ;
