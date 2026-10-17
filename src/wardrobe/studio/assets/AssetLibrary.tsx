@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
 import type { AssetDefinition, AssetManifest } from '../core/types'
-import { EXTRA_EYEBROWS, EXTRA_EYELASHES, EXTRA_SKINS } from './extraAppearanceAssets'
+import { findManifestAsset, mergeAssetManifest } from './Manifest'
 
 interface AssetLibraryValue {
   manifest: AssetManifest | null
@@ -30,32 +30,14 @@ export function AssetLibrary({ children }: PropsWithChildren) {
     return () => controller.abort()
   }, [])
 
-  const mergedManifest = useMemo<AssetManifest | null>(() => manifest ? ({
-    ...manifest,
-    skins: [...manifest.skins, ...EXTRA_SKINS],
-    eyebrows: EXTRA_EYEBROWS,
-    eyelashes: EXTRA_EYELASHES,
-  }) : null, [manifest])
+  const mergedManifest = useMemo<AssetManifest | null>(() => manifest ? mergeAssetManifest(manifest) : null, [manifest])
 
   const value = useMemo<AssetLibraryValue>(() => ({
     manifest: mergedManifest,
     loading: !mergedManifest && !error,
     error,
     find: (id: string | null | undefined) => {
-      if (!id || !mergedManifest) return null
-      const all = [
-        ...mergedManifest.baseCharacters,
-        ...mergedManifest.hair,
-        ...mergedManifest.beards,
-        ...(mergedManifest.nails ?? []),
-        ...(mergedManifest.eyebrows ?? []),
-        ...(mergedManifest.eyelashes ?? []),
-        ...mergedManifest.clothes.tops,
-        ...mergedManifest.clothes.bottoms,
-        ...mergedManifest.clothes.shoes,
-        ...mergedManifest.accessories,
-      ]
-      return all.find((asset) => asset.id === id) ?? null
+      return mergedManifest ? findManifestAsset(mergedManifest, id) : null
     },
     bySlot: (slot: 'top' | 'bottom' | 'shoes' | 'hair' | 'beard' | 'nails' | 'eyebrows' | 'eyelashes' | 'accessory') => {
       if (!mergedManifest) return []

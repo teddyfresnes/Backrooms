@@ -18,12 +18,13 @@ globalThis.requestAnimationFrame=()=>0;globalThis.cancelAnimationFrame=()=>{};
 window.HTMLCanvasElement.prototype.getContext=function(){return new Proxy({canvas:this,getImageData:()=>({data:new Uint8ClampedArray(this.width*this.height*4)}),createImageData:()=>({data:new Uint8ClampedArray(this.width*this.height*4)}),createLinearGradient:()=>({addColorStop(){}}),createRadialGradient:()=>({addColorStop(){}}),createPattern:()=>({setTransform(){}})}, {get:(t,k)=>t[k]??(()=>{}),set:(t,k,v)=>(t[k]=v,true)});};
 THREE.TextureLoader.prototype.load=function(url,onLoad){const texture=new THREE.Texture();queueMicrotask(()=>onLoad?.(texture));return texture;};
 THREE.FileLoader.prototype.load=function(url,onLoad,_progress,onError){try{const data=readFileSync(path.join(root,'public',url));const result=this.responseType==='json'?JSON.parse(data.toString('utf8')):this.responseType==='text'?data.toString('utf8'):data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength);queueMicrotask(()=>onLoad(result));}catch(e){queueMicrotask(()=>onError?.(e));}};
+globalThis.fetch=async url=>{try{const pathname=new URL(String(url),'http://localhost').pathname;return new Response(readFileSync(path.join(root,'public',decodeURIComponent(pathname))));}catch{return new Response(null,{status:404});}};
 export const {CharacterRuntime}=await import(out);
 const { PhysicsWorld } = await import(path.join(root,'.character-test-dist/physics/PhysicsWorld.js'));
 const { PlayerController } = await import(path.join(root,'.character-test-dist/player/PlayerController.js'));
 const { loadGameSettings } = await import(path.join(root,'.character-test-dist/ui/settings.js'));
 const { createMovementLabPlan, MOVEMENT_LAB_PITS, MOVEMENT_LAB_IDLE_NPC } = await import(path.join(root,'.character-test-dist/fixture-world.js'));
-export async function createLab(){
+export async function createLab(options={}){
  const app=document.createElement('div'),canvas=document.createElement('canvas'); app.append(canvas);document.body.append(app);
  const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(72,1,.01,140),renderCamera=camera.clone();
  const plan=createMovementLabPlan(), physics=await PhysicsWorld.create(plan); let runtime;
@@ -33,7 +34,7 @@ export async function createLab(){
  });
  camera.position.set(plan.spawn.x,1.6,plan.spawn.z);camera.lookAt(-8,1.35,-7);
  runtime=new CharacterRuntime({container:app,canvas,scene,playerCamera:camera,renderCamera,physics,player,
-  settings:loadGameSettings(),seed:plan.seed,automaticHelp:false,isPlaying:()=>player.isLocked,getPits:()=>MOVEMENT_LAB_PITS});
+  settings:loadGameSettings(),seed:plan.seed,automaticHelp:false,createAvatar:options.useWardrobe?undefined:options.createAvatar??(async reference=>reference),isPlaying:()=>player.isLocked,getPits:()=>MOVEMENT_LAB_PITS});
  await runtime.initialize();
  runtime.setInteractionPartner(new THREE.Vector3(MOVEMENT_LAB_IDLE_NPC.x,MOVEMENT_LAB_IDLE_NPC.y,MOVEMENT_LAB_IDLE_NPC.z));
  // Legacy test obstacles now go through real Rapier mesh colliders.

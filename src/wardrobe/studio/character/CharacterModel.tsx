@@ -1,6 +1,5 @@
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTexture } from '@react-three/drei'
-import { SRGBColorSpace } from 'three'
 import type { CharacterConfig } from '../core/types'
 import type { FacialExpressionId } from '../core/expressions'
 import { useAssetLibrary } from '../assets/AssetLibrary'
@@ -10,6 +9,8 @@ import { captureAnimatedPose, IdleAnimation, recalibrateAfterMorph, type Charact
 import { createMakeHumanInstance, disposeMakeHumanMouth, morphMakeHuman, type MakeHumanInstance } from '../makehuman/MakeHumanRuntime'
 import { loadMhmat } from '../makehuman/MhmatRuntime'
 import { loadMakeHumanBase } from '../makehuman/TargetLoader'
+
+import { applySkinSurface } from './SkinSurface'
 
 const NO_MHMAT = Promise.resolve(null)
 
@@ -21,47 +22,7 @@ function SkinSurface({ instance, config }: { instance: MakeHumanInstance; config
   const skin = use(selected?.materialUrl ? loadMhmat(selected.materialUrl) : NO_MHMAT)
 
   useEffect(() => {
-    const material = instance.skinMaterial
-    skinDetail.flipY = false
-    skinDetail.colorSpace = SRGBColorSpace
-    skinDetail.anisotropy = 4
-
-    material.roughness = 0.88
-    material.metalness = 0
-    material.clearcoat = 0.015
-    material.clearcoatRoughness = 0.65
-    material.sheen = 0.08
-    material.sheenRoughness = 0.86
-
-    if (skin?.textures.diffuseTexture) {
-      material.map = skin.textures.diffuseTexture
-      material.normalMap = skin.textures.normalmapTexture ?? null
-      material.bumpMap = skin.textures.bumpmapTexture ?? (skin.textures.normalmapTexture ? null : skinDetail)
-      material.roughnessMap = skin.textures.roughnessmapTexture ?? null
-      material.metalnessMap = skin.textures.metallicmapTexture ?? null
-      material.aoMap = skin.textures.aomapTexture ?? null
-      material.specularIntensityMap = skin.textures.specularmapTexture ?? null
-      material.bumpScale = skin.textures.bumpmapTexture ? 0.0012 : 0.00045
-      material.normalScale.setScalar(skin.textures.normalmapTexture ? (skin.definition.normalmapIntensity ?? 1) : 1)
-      const diffuse = skin.definition.diffuseColor ?? [1, 1, 1]
-      material.color.setRGB(diffuse[0], diffuse[1], diffuse[2])
-    } else {
-      material.map = skinDetail
-      material.normalMap = null
-      material.roughnessMap = null
-      material.metalnessMap = null
-      material.aoMap = null
-      material.specularIntensityMap = null
-      material.bumpMap = skinDetail
-      material.bumpScale = 0.00045
-      material.color.set(appearance.skinColor)
-    }
-
-    material.transparent = false
-    material.opacity = 1
-    material.alphaTest = 0
-    material.depthWrite = true
-    material.needsUpdate = true
+    applySkinSurface(instance, config, skinDetail, skin)
   }, [appearance.skinColor, instance.skinMaterial, skin, skinDetail])
 
   return null

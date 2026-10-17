@@ -79,6 +79,11 @@ function endpointPosition(data: MakeHumanBaseData, full: Float32Array, endpoint:
   return result
 }
 
+/** Root-local end of a fitted bone, including the selected body/face morphs. */
+export function getMakeHumanBoneTail(instance: MakeHumanInstance, name: string): Vector3 {
+  return endpointPosition(instance.data, instance.currentPositions, instance.data.rig.bones[name]!.tail)
+}
+
 function boneWorldMatrix(head: Vector3, tail: Vector3, roll: number) {
   const direction = tail.clone().sub(head)
   if (direction.lengthSq() < 1e-10) direction.set(0, 0.01, 0)

@@ -8,7 +8,7 @@ const loadNodeFs = async () => {
 describe('wardrobe runtime regressions', () => {
   it('keeps every MakeHuman mesh in root-local bind space during a side-view edit', async () => {
     const { readFile } = await loadNodeFs()
-    const animation = await readFile(new URL('./IdleAnimation.tsx', import.meta.url), 'utf8')
+    const animation = await readFile(new URL('./MakeHumanRig.ts', import.meta.url), 'utf8')
 
     expect(animation).toContain('mesh.skeleton !== instance.skeleton')
     expect(animation).toContain('mesh.bindMatrix.identity()')

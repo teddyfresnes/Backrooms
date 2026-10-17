@@ -47,7 +47,7 @@ npm run validate
 - `/help` : afficher l’aide des commandes
 - `/save` : forcer une sauvegarde immédiate
 - `/viewmodel` : basculer première / troisième personne (dans les deux niveaux)
-- souris : regarder
+- souris : regarder ; sans capture du curseur, aucun bouton n’est à maintenir
 - `Échap` : libérer la souris / pause
 
 La sauvegarde conserve le niveau, la dernière position sûre, l’orientation et la
@@ -63,8 +63,11 @@ scènes : locomotion, accroupissement, glissade, sauts, chutes physiques, dégâ
 relevés. La caméra démarre à la première personne. Un survivant local apparaît
 sur un sol libre près du point de départ du Level 0 ; il propose son aide si le
 joueur est à terre à proximité. Les interactions sont locales, sans couche réseau.
-Le mannequin du pack est conservé : le branchement du skin sélectionné dans le
-wardrobe reste à faire.
+Le personnage reprend le profil actif du garde-robe, y compris Custom : corps,
+visage, peau, cheveux, yeux et vêtements. Les mêmes ressources d’apparence et le
+même fitting servent à l’éditeur et au jeu. Le squelette est recalibré pour les
+animations, avec des vues 1P/3P distinctes et une apparence conservée en ragdoll.
+Le profil est relu à chaque nouvelle session jouable.
 
 Les 97 fichiers du personnage sont embarqués dans `assets/character/` sous forme
 compressée, avec sommes SHA-256. `npm run dev`, `build` et `test:character` les

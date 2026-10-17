@@ -15,6 +15,8 @@ import {
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
 import { refitMakeHumanEyes, type MakeHumanInstance } from '../makehuman/MakeHumanRuntime'
 
+import { calibrateMakeHumanRig } from './MakeHumanRig'
+
 const MOTIONS = [
   { id: 'offensive', url: '/assets/characters/animations/OffensiveIdle.fbx', label: 'Offensive Idle' },
   { id: 'breathing-a', url: '/assets/characters/animations/BreathingIdle.fbx', label: 'Breathing Idle' },
@@ -32,10 +34,7 @@ type LoadedMotion = {
   bonesByKey: Map<string, Bone>
 }
 
-type TargetRest = {
-  bone: Bone
-  worldPosition: Vector3
-}
+
 
 export type CharacterAnimationMode = 'sequence' | 'breathing-pose' | 'breathing-loop'
 export type AnimatedPoseSnapshot = Map<Bone, Quaternion>
@@ -88,14 +87,6 @@ function loadMotions() {
   return motionsPromise
 }
 
-function targetBonesInHierarchy(instance: MakeHumanInstance) {
-  const result: Bone[] = []
-  instance.root.traverse((object) => {
-    const bone = object as Bone
-    if (bone.isBone) result.push(bone)
-  })
-  return result
-}
 
 /**
  * The MPFB "mixamo" rig and the actual Mixamo auto-rigger share bone names and
@@ -109,60 +100,6 @@ function targetBonesInHierarchy(instance: MakeHumanInstance) {
  * afterward keeps the current mesh shape intact while making future Mixamo
  * quaternion tracks live in the correct local coordinate system.
  */
-function calibrateTargetRig(instance: MakeHumanInstance, reference: LoadedMotion) {
-  instance.root.updateMatrixWorld(true)
-
-  const targetBones = targetBonesInHierarchy(instance)
-  const rest: TargetRest[] = targetBones.map((bone) => ({
-    bone,
-    worldPosition: bone.getWorldPosition(new Vector3()),
-  }))
-
-  // Parents appear before children in Object3D.traverse(), which is important:
-  // each child's local position is recomputed against the already-calibrated
-  // parent transform so its world-space joint pivot stays exactly where the
-  // MakeHuman morph system placed it.
-  for (const { bone, worldPosition } of rest) {
-    const sourceBone = reference.bonesByKey.get(boneKey(bone.name))
-    if (!sourceBone) continue
-
-    const parent = bone.parent
-    if (parent) {
-      parent.updateWorldMatrix(true, false)
-      bone.position.copy(parent.worldToLocal(worldPosition.clone()))
-    } else {
-      bone.position.copy(worldPosition)
-    }
-
-    bone.quaternion.copy(sourceBone.quaternion)
-    bone.scale.set(1, 1, 1)
-    bone.updateMatrix()
-    bone.updateWorldMatrix(false, false)
-
-    // Keep the MakeHuman rest metadata coherent with the new calibrated bind
-    // pose. morphMakeHuman() will overwrite these again whenever proportions
-    // change, then this calibration is run again for the new body shape.
-    bone.userData.mhRestPosition = bone.position.toArray()
-    bone.userData.mhRestQuaternion = bone.quaternion.toArray()
-    bone.userData.mhRestScale = bone.scale.toArray()
-  }
-
-  instance.root.updateMatrixWorld(true)
-  instance.skeleton.calculateInverses()
-
-  // The body and every MHCLO asset are authored in CharacterRoot-local space.
-  // Never capture matrixWorld here: it also contains the interactive turntable
-  // yaw, so recalibrating while viewed from the side made the body and newly
-  // mounted clothes use different bind spaces. Keep every mesh sharing this
-  // skeleton on the same root-local identity bind.
-  instance.root.traverse((object) => {
-    const mesh = object as SkinnedMesh
-    if (!mesh.isSkinnedMesh || mesh.skeleton !== instance.skeleton) return
-    mesh.bindMatrix.identity()
-    mesh.bindMatrixInverse.identity()
-  })
-  instance.root.updateMatrixWorld(true)
-}
 
 export function captureAnimatedPose(instance: MakeHumanInstance): AnimatedPoseSnapshot {
   return new Map(instance.bones.map((bone) => [bone, bone.quaternion.clone()]))
@@ -177,7 +114,7 @@ export async function recalibrateAfterMorph(instance: MakeHumanInstance, pose?: 
   const motions = await loadMotions()
   const reference = motions[0]
   if (!reference) return
-  calibrateTargetRig(instance, reference)
+  calibrateMakeHumanRig(instance, reference.root)
   refitMakeHumanEyes(instance)
   if (pose) {
     for (const [bone, quaternion] of pose) bone.quaternion.copy(quaternion)

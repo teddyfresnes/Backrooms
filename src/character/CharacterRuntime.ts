@@ -9,6 +9,7 @@ import { ClinchAttackVariation, createCombatHeadbuttClip, headbuttContactDamage 
 import { sweepCombatContact, combatChainReady, CombatBalance, stepCombatSpring } from './CombatContact';
 import { solveCombatTwoBone, limitKneeLateralBend, easeCombat, CombatPoseHandoff, CombatMotionHistory, CombatProceduralPose } from './CombatRig';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { disposeAvatarResources } from './AvatarResources';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { equivalentKeyCodes, formatKeyLabel } from '../input/ControlBindings';
 import { EMOTES, getEmotePosture, type EmoteId } from './EmoteCatalog';
@@ -1118,6 +1119,8 @@ export interface CharacterRuntimeHost {
   physics: PhysicsWorld; player: PlayerController; settings: GameSettings; seed: string;
   isPlaying(): boolean;
   automaticHelp?: boolean;
+  /** Optional avatar provider for hosts with a different identity or offline fixtures. */
+  createAvatar?(reference: THREE.Group): Promise<THREE.Group>;
   beforePhysicsStep?(delta: number): void;
   getPits?(): readonly CharacterPit[];
   ensurePositionMounted?(position: THREE.Vector3): void;
@@ -1175,7 +1178,8 @@ export class CharacterRuntime {
     this.thirdPersonCamera.aspect = this.host.renderCamera.aspect;
     this.thirdPersonCamera.far = this.host.renderCamera.far;
     this.thirdPersonCamera.updateProjectionMatrix();
-    this.frame(this.previousTime + Math.max(0, delta) * 1000);
+    const elapsed = Math.max(0, delta);
+    this.frame(this.previousTime + elapsed * 1000, elapsed);
     this.presentCamera();
   }
   private presentCamera(): void {
@@ -1814,11 +1818,17 @@ export class CharacterRuntime {
   }
 
   private async loadCharacterAndAnimations(): Promise<void> {
-    const character = await this.loader.loadAsync(`${ASSET_ROOT}/character.fbx`);
-    const firstPersonCharacter = await this.loader.loadAsync(`${ASSET_ROOT}/character.fbx`);
-    const idleNpcCharacter = await this.loader.loadAsync(`${ASSET_ROOT}/character.fbx`);
+    const reference = await this.loader.loadAsync(`${ASSET_ROOT}/character.fbx`);
+    let character: THREE.Group;
+    try {
+      const createAvatar = this.host.createAvatar ?? (await import('../wardrobe/GameWardrobeAvatar')).loadWardrobeAvatar;
+      character = await createAvatar(reference);
+    } catch (error) { disposeAvatarResources([reference]); throw error; }
+    if (character !== reference) disposeAvatarResources([reference]);
+    const firstPersonCharacter = cloneSkeleton(character) as THREE.Group;
+    const idleNpcCharacter = cloneSkeleton(character) as THREE.Group;
     if (this.disposed) {
-      for (const root of [character, firstPersonCharacter, idleNpcCharacter]) this.disposeTransientCorpse(root);
+      disposeAvatarResources([character, firstPersonCharacter, idleNpcCharacter]);
       return;
     }
     character.name = 'CharacterCharacter';
@@ -1911,7 +1921,7 @@ export class CharacterRuntime {
       // outright. Skinned geometry gets a per-vertex view-model mask instead
       // of moving vertices.
       const skinnedMesh = mesh as THREE.SkinnedMesh;
-      if (!skinnedMesh.isSkinnedMesh) {
+      if (!skinnedMesh.isSkinnedMesh || ['hair', 'beard', 'eyebrows', 'eyelashes'].includes(mesh.userData.wardrobeSlot)) {
         mesh.visible = false;
         return;
       }
@@ -10308,13 +10318,15 @@ export class CharacterRuntime {
     }
   }
 
-  private readonly frame = (now: number): void => {
+  private readonly frame = (now: number, suppliedDelta?: number): void => {
     this.pairPlayerRig?.restore(); this.pairNpcRig?.restore(); this.pairDownRig?.restore();
     this.playerProceduralPose.restore(!this.ragdoll && !this.recovery);
     this.firstPersonProceduralPose.restore(!this.ragdoll && !this.recovery);
     this.npcProceduralPose.restore(!this.npcRagdoll && !this.npcRecovery);
     if (this.disposed || !this.player) return;
-    const measuredDelta = Math.max(0, (now - this.previousTime) / 1000);
+    // Preserve the host's seconds exactly; a milliseconds round-trip can turn
+    // one 1/60 tick into slightly less than the fixed physics interval.
+    const measuredDelta = Math.max(0, suppliedDelta ?? (now - this.previousTime) / 1000);
     this.emoteMenu.update(measuredDelta);
     const rawDelta = Math.min(0.05, measuredDelta);
     this.previousTime = now;
@@ -10563,16 +10575,7 @@ export class CharacterRuntime {
     this.idleNpcMixer?.stopAllAction();
     this.bloodDecals.dispose();
     const roots = [this.avatarAnchor, this.firstPersonAvatarAnchor, this.idleNpcAnchor, this.activeCorpseRoot, ...this.corpses.map(c => c.root)].filter((root): root is THREE.Group => !!root);
-    const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
-    for (const root of roots) { root.removeFromParent(); root.traverse(object => {
-      const mesh = object as THREE.Mesh;
-      if (mesh.geometry) geometries.add(mesh.geometry);
-      for (const material of Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : []) {
-        materials.add(material);
-        for (const value of Object.values(material)) if (value instanceof THREE.Texture) textures.add(value);
-      }
-    }); }
-    geometries.forEach(geometry => geometry.dispose()); materials.forEach(material => material.dispose()); textures.forEach(texture => texture.dispose());
+    disposeAvatarResources(roots);
     this.physics?.setMeleeOpponentBlockerEnabled(false);
     this.host.canvas.style.filter = '';
     this.root.remove();
