@@ -1,5 +1,6 @@
 import type { RoomKind } from '../world/types';
 import { audioGainFromSetting } from './volume';
+import { connectAudioOutput } from './output';
 
 export type AudioSurface = 'backrooms-carpet' | 'apartment-wood' | 'stairwell-concrete';
 export type LandingKind = 'light' | 'medium' | 'heavy' | 'traumatic';
@@ -160,7 +161,7 @@ export class AudioSystem {
     const context = this.context;
     this.master = context.createGain();
     this.master.gain.value = audioGainFromSetting(this.masterVolume);
-    this.master.connect(context.destination);
+    connectAudioOutput(context, this.master);
 
     if (this.ambience === 'backrooms') {
       this.lowpass = context.createBiquadFilter();

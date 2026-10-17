@@ -1,8 +1,13 @@
-import { siteAudio } from '../audio/SiteAudio'
+import { siteAudio, type IntroCue } from '../audio/SiteAudio'
 
-const INTRO_MINIMUM_MS = 5900
 const INTRO_REDUCED_MOTION_MS = 900
 const INTRO_EXIT_MS = 900
+const PHASES: readonly { cue: IntroCue; selector: string; duration: number }[] = [
+  { cue: 'warning', selector: '.opening-warning', duration: 1300 },
+  { cue: 'headphones', selector: '.opening-audio', duration: 1900 },
+  { cue: 'credit', selector: '.opening-credit', duration: 1500 },
+  { cue: 'title', selector: '.opening-brand', duration: 1200 },
+]
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
@@ -37,12 +42,13 @@ function headphoneIcon(): string {
 export class OpeningIntro {
   readonly minimumDuration: Promise<void>
   private readonly root: HTMLElement
-  private readonly timers = new Set<number>()
+  private frame?: number
   private resolveMinimum = (): void => undefined
   private minimumResolved = false
   private disposed = false
+  private starting = false
 
-  constructor() {
+  constructor(environmentReady: Promise<void> = Promise.resolve()) {
     this.root = document.createElement('section')
     this.root.className = 'opening-intro'
     this.root.setAttribute('aria-label', 'Introduction de Backrooms Random Story')
@@ -96,27 +102,40 @@ export class OpeningIntro {
         resolve()
       }
     })
-    const start = (): void => {
-      if (this.disposed || this.root.classList.contains('is-running')) return
-      this.root.classList.add('is-running')
-      void siteAudio.unlock()
-      if (reducedMotion) {
-        void siteAudio.playIntroCue('warning')
-      } else {
-        this.scheduleCue('warning', 80)
-        this.scheduleCue('headphones', 1370)
-        this.scheduleCue('credit', 3260)
-        this.scheduleCue('title', 4780)
+    const preparation = Promise.all([environmentReady, siteAudio.prepare(), document.fonts?.ready])
+    // The launch gesture resumes audio immediately, but no label/cue starts
+    // until loading, decoding and fonts are ready. CSS no longer has a second,
+    // independent wall-clock timeline that can skip the readable label frames.
+    void preparation.catch(() => undefined)
+    const start = async (): Promise<void> => {
+      if (this.disposed || this.starting) return
+      this.starting = true
+      const button = this.root.querySelector<HTMLButtonElement>('.opening-start')!
+      button.disabled = true
+      button.textContent = 'CHARGEMENT…'
+      this.root.setAttribute('aria-busy', 'true')
+      try {
+        const [unlocked] = await Promise.all([siteAudio.unlock(), preparation])
+        if (this.disposed) return
+        if (!unlocked) {
+          this.starting = false
+          button.disabled = false
+          button.textContent = 'ACTIVER LE SON'
+          this.root.removeAttribute('aria-busy')
+          return
+        }
+        this.root.removeAttribute('aria-busy')
+        this.root.classList.add('is-running')
+        this.runTimeline(reducedMotion)
+      } catch {
+        if (this.disposed) return
+        this.starting = false
+        button.disabled = false
+        button.textContent = 'RÉESSAYER'
+        this.root.removeAttribute('aria-busy')
       }
-      const timer = window.setTimeout(
-        this.resolveMinimum,
-        reducedMotion ? INTRO_REDUCED_MOTION_MS : INTRO_MINIMUM_MS,
-      )
-      this.timers.add(timer)
     }
-    this.root.querySelector<HTMLButtonElement>('.opening-start')?.addEventListener('click', start, {
-      once: true,
-    })
+    this.root.querySelector<HTMLButtonElement>('.opening-start')?.addEventListener('click', () => { void start() })
   }
 
   async finish(): Promise<void> {
@@ -138,18 +157,54 @@ export class OpeningIntro {
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
-    this.timers.forEach((timer) => window.clearTimeout(timer))
-    this.timers.clear()
+    if (this.frame !== undefined) cancelAnimationFrame(this.frame)
+    siteAudio.stopIntroCue()
     this.resolveMinimum()
     this.root.remove()
     document.documentElement.classList.remove('opening-intro-active')
   }
 
-  private scheduleCue(cue: 'warning' | 'headphones' | 'credit' | 'title', delay: number): void {
-    const timer = window.setTimeout(() => {
-      this.timers.delete(timer)
-      if (!this.disposed) void siteAudio.playIntroCue(cue)
-    }, delay)
-    this.timers.add(timer)
+  private runTimeline(reducedMotion: boolean): void {
+    const phases = reducedMotion ? [{ ...PHASES[3], duration: INTRO_REDUCED_MOTION_MS }] : PHASES
+    let index = 0
+    let elapsed = 0
+    let previous: number | undefined
+    let active: HTMLElement | null = null
+    let wasHidden = false
+    const tick = (now: number): void => {
+      if (this.disposed) return
+      if (document.hidden) {
+        if (!wasHidden) siteAudio.stopIntroCue()
+        wasHidden = true
+        previous = now
+      } else {
+        // A blocked frame or a hidden tab must never consume a whole card.
+        const delta = previous === undefined || wasHidden ? 0 : Math.min(50, Math.max(0, now - previous))
+        previous = now
+        if (!active || wasHidden) {
+          active = this.root.querySelector<HTMLElement>(phases[index].selector)!
+          active.classList.add('is-current')
+          active.setAttribute('aria-hidden', 'false')
+          siteAudio.playIntroCue(phases[index].cue)
+          elapsed = 0
+          wasHidden = false
+        }
+        elapsed += delta
+        if (elapsed >= phases[index].duration) {
+          if (index === phases.length - 1) {
+            this.frame = undefined
+            this.resolveMinimum()
+            return
+          }
+          active.classList.remove('is-current')
+          active.setAttribute('aria-hidden', 'true')
+          active = null
+          index++
+          elapsed = 0
+        }
+      }
+      this.frame = requestAnimationFrame(tick)
+    }
+    this.frame = requestAnimationFrame(tick)
   }
 }

@@ -42,7 +42,7 @@ describe('experience routing', () => {
     expect(wardrobeManager).toContain("from 'three/addons/utils/SkeletonUtils.js'");
   });
 
-  it('plays the opening sequence once while the menu runtime loads behind it', async () => {
+  it('prepares the menu before playing the opening sequence once', async () => {
     const { readFile } = await loadNodeFs();
     const [main, intro, styles] = await Promise.all([
       readFile(new URL('../main.ts', import.meta.url), 'utf8'),
@@ -50,8 +50,8 @@ describe('experience routing', () => {
       readFile(new URL('../styles.css', import.meta.url), 'utf8'),
     ]);
 
-    expect(main).toContain('const openingIntro = new OpeningIntro()');
-    expect(main).toContain('Promise.all([startInitialExperience(), openingIntro.minimumDuration])');
+    expect(main).toContain('const openingIntro = new OpeningIntro(menuReady)');
+    expect(main).toContain('Promise.all([menuReady, openingIntro.minimumDuration])');
     expect(intro).toContain('PHOTOSENSIBILITÉ');
     expect(intro).toContain('UTILISEZ UN CASQUE');
     expect(intro).toContain('Made by');
@@ -68,8 +68,9 @@ describe('experience routing', () => {
     expect(styles).toContain('@keyframes opening-audio-meter');
     expect(styles).toContain('@keyframes opening-brand-static');
     expect(styles).toContain('@keyframes opening-mark-interference');
-    expect(styles).toContain('.opening-intro.is-running .opening-warning::after');
-    expect(styles).toContain('animation: opening-brand-arrive .52s 4.84s steps(1, end) both;');
+    expect(styles).toContain('.opening-card.is-current::after');
+    expect(styles).toContain('animation: opening-brand-arrive .4s steps(1, end) both;');
+    expect(styles).not.toContain('opening-card-window');
     expect(styles).not.toContain('.opening-credit .opening-card-copy > strong { animation:');
     expect(styles).toContain('animation: opening-brand-out .18s ease-out both;');
     expect(styles).not.toContain('15% { opacity: .12; transform: translate3d(13px, 0, 0); }');

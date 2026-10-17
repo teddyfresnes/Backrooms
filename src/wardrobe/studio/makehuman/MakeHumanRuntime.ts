@@ -46,6 +46,23 @@ export interface MakeHumanInstance {
   data: MakeHumanBaseData
 }
 
+/** Geometry and all inverse bind poses share CharacterRoot-local coordinates. */
+export function rebindMakeHumanSkeleton(instance: MakeHumanInstance): void {
+  instance.root.updateWorldMatrix(true, true)
+  instance.skeleton.calculateInverses()
+  // Three calculates WORLD inverses. Remove the current placement/turntable
+  // transform from each inverse; identity mesh binds alone cannot do this.
+  for (const inverse of instance.skeleton.boneInverses) inverse.multiply(instance.root.matrixWorld)
+  instance.root.traverse(object => {
+    const mesh = object as SkinnedMesh
+    if (!mesh.isSkinnedMesh || mesh.skeleton !== instance.skeleton) return
+    mesh.bindMatrix.identity()
+  })
+  // SkinnedMesh refreshes bindMatrixInverse in updateMatrixWorld, not in
+  // updateWorldMatrix. Use the renderer's traversal once the ancestors are fresh.
+  instance.root.updateMatrixWorld(true)
+}
+
 function groundPositions(values: Float32Array, bodyVertexCount: number) {
   let minY = Number.POSITIVE_INFINITY
   for (let i = 0; i < bodyVertexCount; i++) minY = Math.min(minY, values[i * 3 + 1])
@@ -119,8 +136,8 @@ function applyBoneMatrices(instance: MakeHumanInstance, full: Float32Array, init
     bone.userData.mhRestQuaternion = bone.quaternion.toArray()
     bone.userData.mhRestScale = bone.scale.toArray()
   }
-  instance.root.updateMatrixWorld(true)
-  if (!initial) instance.skeleton.calculateInverses()
+  instance.root.updateWorldMatrix(true, true)
+  if (!initial) rebindMakeHumanSkeleton(instance)
   refitEyes(instance, full)
   refitMouthInterior(instance, full)
 }
@@ -255,7 +272,7 @@ function updateMouthInterior(instance: MakeHumanInstance, expression: FacialExpr
 }
 
 export function refitMakeHumanEyes(instance: MakeHumanInstance) {
-  instance.root.updateMatrixWorld(true)
+  instance.root.updateWorldMatrix(true, true)
   refitEyes(instance, instance.currentPositions)
   refitMouthInterior(instance, instance.currentPositions)
   instance.root.updateMatrixWorld(true)

@@ -312,7 +312,9 @@ input:focus-visible {
   gap: 30px;
   text-align: center;
   opacity: 0;
-  will-change: opacity, transform, filter;
+  visibility: hidden;
+  filter: none;
+  will-change: opacity, transform;
 }
 
 .opening-card::after,
@@ -490,33 +492,29 @@ input:focus-visible {
   text-transform: uppercase;
 }
 
-.opening-intro.is-running .opening-warning {
-  animation: opening-card-window 1.15s .12s cubic-bezier(.2,.75,.2,1) both;
+.opening-intro .opening-card.is-current,
+.opening-intro .opening-brand.is-current {
+  visibility: visible;
+  opacity: 1;
+  filter: none;
 }
 
-.opening-intro.is-running .opening-audio {
-  animation: opening-card-window 1.85s 1.42s cubic-bezier(.2,.75,.2,1) both;
+.opening-intro .opening-card.is-current {
+  animation: opening-card-arrive .16s ease-out both;
 }
 
-.opening-intro.is-running .opening-credit {
-  animation: opening-card-window 1.5s 3.32s cubic-bezier(.2,.75,.2,1) both;
+.opening-intro .opening-brand.is-current {
+  animation: opening-brand-arrive .4s steps(1, end) both;
 }
 
-.opening-intro.is-running .opening-brand {
-  animation: opening-brand-arrive .52s 4.84s steps(1, end) both;
-}
-
-.opening-intro.is-running .opening-warning::after { animation: opening-signal-flash .34s .28s steps(2) both; }
-.opening-intro.is-running .opening-audio::after { animation: opening-signal-flash .32s 1.42s steps(2) both; }
-.opening-intro.is-running .opening-credit::after { animation: opening-signal-flash .24s 3.32s steps(2) both; }
-.opening-intro.is-running .opening-brand::before { animation: opening-brand-static .34s 4.82s steps(1, end) both; }
-.opening-intro.is-running .opening-brand::after { animation: opening-brand-signal .3s 4.82s steps(1, end) both; }
-
-.opening-intro.is-running .opening-warning .opening-card-copy > strong { animation: opening-text-glitch .22s .12s steps(1, end) both; }
-.opening-intro.is-running .opening-audio .opening-card-copy > strong { animation: opening-text-glitch .22s 1.42s steps(1, end) both; }
-.opening-intro.is-running .opening-brand-mark { animation: opening-mark-interference .38s 4.82s steps(1, end) both; }
-.opening-intro.is-running .opening-brand-copy > strong::before { animation: opening-brand-ghost-left .28s 4.86s steps(1, end) both; }
-.opening-intro.is-running .opening-brand-copy > strong::after { animation: opening-brand-ghost-right .28s 4.86s steps(1, end) both; }
+.opening-card.is-current::after { animation: opening-signal-flash .24s steps(2) both; }
+.opening-brand.is-current::before { animation: opening-brand-static .28s steps(1, end) both; }
+.opening-brand.is-current::after { animation: opening-brand-signal .25s steps(1, end) both; }
+.opening-warning.is-current .opening-card-copy > strong,
+.opening-audio.is-current .opening-card-copy > strong { animation: opening-text-glitch .18s steps(1, end) both; }
+.opening-brand.is-current .opening-brand-mark { animation: opening-mark-interference .3s steps(1, end) both; }
+.opening-brand.is-current .opening-brand-copy > strong::before { animation: opening-brand-ghost-left .24s steps(1, end) both; }
+.opening-brand.is-current .opening-brand-copy > strong::after { animation: opening-brand-ghost-right .24s steps(1, end) both; }
 
 .opening-intro.is-leaving .opening-curtain,
 .opening-intro.is-leaving .opening-scan { opacity: 0; }
@@ -537,15 +535,14 @@ html.opening-intro-active .experience-ui .home-stage {
   transition: opacity .55s ease;
 }
 
-@keyframes opening-card-window {
-  0% { opacity: 0; transform: translate3d(0, 18px, 0) scale(.985); filter: blur(8px); }
-  14%, 70% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); }
-  100% { opacity: 0; transform: translate3d(0, -12px, 0) scale(1.01); filter: blur(5px); }
+@keyframes opening-card-arrive {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 
 @keyframes opening-brand-arrive {
-  0%, 8% { opacity: 0; filter: blur(10px) contrast(2); }
-  9% { opacity: 1; transform: translate3d(-9px, 0, 0); filter: blur(1px) contrast(2.4); clip-path: inset(0 0 68% 0); }
+  0%, 8% { opacity: 0; filter: contrast(2); }
+  9% { opacity: 1; transform: translate3d(-9px, 0, 0); filter: contrast(2.4); clip-path: inset(0 0 68% 0); }
   24% { opacity: 1; transform: translate3d(10px, 0, 0); filter: contrast(1.8); clip-path: inset(39% 0 28% 0); }
   42% { opacity: 1; transform: translate3d(-4px, 0, 0); filter: contrast(1.35); clip-path: inset(71% 0 0 0); }
   62%, 100% { opacity: 1; transform: translate3d(0, 0, 0); clip-path: inset(0); filter: none; }
@@ -603,8 +600,8 @@ html.opening-intro-active .experience-ui .home-stage {
 }
 
 @keyframes opening-text-glitch {
-  0% { opacity: 0; transform: translate3d(-18px, 0, 0) skewX(-8deg); clip-path: inset(0 0 72% 0); filter: blur(5px) contrast(1.8); }
-  18% { opacity: 1; transform: translate3d(11px, 0, 0) skewX(4deg); clip-path: inset(47% 0 17% 0); filter: blur(0) contrast(1.6); }
+  0% { opacity: 0; transform: translate3d(-18px, 0, 0) skewX(-8deg); clip-path: inset(0 0 72% 0); filter: contrast(1.8); }
+  18% { opacity: 1; transform: translate3d(11px, 0, 0) skewX(4deg); clip-path: inset(47% 0 17% 0); filter: contrast(1.6); }
   46% { opacity: 1; transform: translate3d(-5px, 0, 0); clip-path: inset(12% 0 51% 0); }
   72% { opacity: 1; transform: translate3d(2px, 0, 0); clip-path: inset(0); filter: contrast(1.2); }
   100% { opacity: 1; transform: translate3d(0, 0, 0); clip-path: inset(0); filter: none; }
@@ -632,12 +629,12 @@ html.opening-intro-active .experience-ui .home-stage {
   .opening-intro.is-running .opening-warning,
   .opening-intro.is-running .opening-audio,
   .opening-intro.is-running .opening-credit { display: none; }
-  .opening-intro.is-running .opening-brand { animation: opening-brand-arrive .35s .05s ease-out both; }
-  .opening-intro.is-running .opening-brand::before,
-  .opening-intro.is-running .opening-brand::after,
-  .opening-intro.is-running .opening-brand-mark,
-  .opening-intro.is-running .opening-brand-copy > strong::before,
-  .opening-intro.is-running .opening-brand-copy > strong::after { animation: none; }
+  .opening-intro .opening-brand.is-current { animation: none; }
+  .opening-intro .opening-brand.is-current::before,
+  .opening-intro .opening-brand.is-current::after,
+  .opening-intro .opening-brand.is-current .opening-brand-mark,
+  .opening-intro .opening-brand.is-current .opening-brand-copy > strong::before,
+  .opening-intro .opening-brand.is-current .opening-brand-copy > strong::after { animation: none; }
 }
 
 .world-canvas {

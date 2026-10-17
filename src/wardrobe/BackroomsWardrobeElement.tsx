@@ -1,6 +1,7 @@
 import { createRoot, type Root } from 'react-dom/client'
 import { CharacterEditor, type WardrobeNavigationBridge } from './studio/editor/CharacterEditor'
 import wardrobeCss from './studio/wardrobe.css?inline'
+import { bindButtonSounds } from '../audio/ButtonSounds'
 
 const TAG_NAME = 'backrooms-wardrobe'
 
@@ -8,6 +9,7 @@ class BackroomsWardrobeElement extends HTMLElement {
   private reactRoot: Root | null = null
   private mountPoint: HTMLDivElement | null = null
   private styleElement: HTMLStyleElement | null = null
+  private disposeButtonSounds?: () => void
   private readonly navigationBridge: WardrobeNavigationBridge = {}
 
   static get observedAttributes() { return ['active'] }
@@ -47,6 +49,7 @@ class BackroomsWardrobeElement extends HTMLElement {
       this.mountPoint = mountPoint
     }
 
+    this.disposeButtonSounds = bindButtonSounds(this.mountPoint)
     this.reactRoot = createRoot(this.mountPoint)
     this.reactRoot.render(<CharacterEditor navigationBridge={this.navigationBridge} />)
     this.dispatchEvent(new CustomEvent('wardrobe-mounted', { bubbles: true, composed: true }))
@@ -62,6 +65,8 @@ class BackroomsWardrobeElement extends HTMLElement {
   }
 
   private unmountEditor() {
+    this.disposeButtonSounds?.()
+    this.disposeButtonSounds = undefined
     if (!this.reactRoot) return
     this.reactRoot.unmount()
     this.reactRoot = null

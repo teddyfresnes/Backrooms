@@ -327,9 +327,10 @@ async function startInitialExperience(): Promise<void> {
   await startBackrooms({ kind: 'new' }, false, true);
 }
 
-const openingIntro = new OpeningIntro();
+const menuReady = startInitialExperience();
+const openingIntro = new OpeningIntro(menuReady);
 requestAnimationFrame(() => {
-  void Promise.all([startInitialExperience(), openingIntro.minimumDuration])
+  void Promise.all([menuReady, openingIntro.minimumDuration])
     .then(async () => {
       await openingIntro.finish();
       openingFinished = true;

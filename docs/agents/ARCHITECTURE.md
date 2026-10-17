@@ -43,10 +43,20 @@ coordonnées de chunks et d’étages appartiennent au monde procédural. `src/m
 détruit ce runtime avant d’instancier `Game` lorsque la porte-portail du hall est
 activée.
 
-Au premier chargement de la page, `OpeningIntro` joue au-dessus de `#app`
-pendant que le fond Level 0 s'initialise. Sa durée minimale et le chargement du
-runtime se rejoignent avant que le logo animé converge vers le menu. Les retours
-ultérieurs au menu principal ne rejouent pas cette introduction.
+Au premier chargement de la page, `OpeningIntro` attend le fond Level 0, les
+polices et le décodage audio au-dessus de `#app`. Le clic de lancement débloque
+le son immédiatement ; une seule horloge par images affiche ensuite chaque
+carte avec son son. Elle conserve le temps de lecture en cas d'image bloquée ou
+d'onglet masqué. Les retours au menu principal ne rejouent pas l'introduction.
+`public/assets/audio/music/playlist.json` référence les morceaux disponibles ;
+un morceau est tiré au hasard par démarrage et conservé aux retours au menu.
+
+Dans le garde-robe, la géométrie et les poses inverses du squelette restent dans
+les coordonnées locales de `CharacterRoot`. Après un morph ou une calibration,
+`rebindMakeHumanSkeleton` retire la transformation monde de la racine des poses
+inverses : la rotation de prévisualisation ne doit jamais entrer dans la liaison
+du corps ou des vêtements. Les yeux se refitent dans cet espace avant de
+restaurer la pose animée.
 
 Une session jouable masque l’overlay avant de demander le verrouillage de souris :
 le refus asynchrone du navigateur ne doit jamais rouvrir le menu de pause. Le

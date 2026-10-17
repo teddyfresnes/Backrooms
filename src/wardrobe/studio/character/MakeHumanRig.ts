@@ -1,5 +1,5 @@
-import { Bone, Vector3, type Object3D, type SkinnedMesh } from 'three'
-import { getMakeHumanBoneTail, type MakeHumanInstance } from '../makehuman/MakeHumanRuntime'
+import { Bone, Vector3, type Object3D } from 'three'
+import { getMakeHumanBoneTail, rebindMakeHumanSkeleton, type MakeHumanInstance } from '../makehuman/MakeHumanRuntime'
 type TargetRest = { bone: Bone; worldPosition: Vector3 }
 
 function boneKey(name: string) {
@@ -52,7 +52,7 @@ export function completeMakeHumanRig(instance: MakeHumanInstance, referenceRoot:
 
 export function calibrateMakeHumanRig(instance: MakeHumanInstance, referenceRoot: Object3D) {
   const reference = { bonesByKey: collectBones(referenceRoot) }
-  instance.root.updateMatrixWorld(true)
+  instance.root.updateWorldMatrix(true, true)
 
   const targetBones = targetBonesInHierarchy(instance)
   const rest: TargetRest[] = targetBones.map((bone) => ({
@@ -89,20 +89,6 @@ export function calibrateMakeHumanRig(instance: MakeHumanInstance, referenceRoot
     bone.userData.mhRestScale = bone.scale.toArray()
   }
 
-  instance.root.updateMatrixWorld(true)
-  instance.skeleton.calculateInverses()
-
-  // The body and every MHCLO asset are authored in CharacterRoot-local space.
-  // Never capture matrixWorld here: it also contains the interactive turntable
-  // yaw, so recalibrating while viewed from the side made the body and newly
-  // mounted clothes use different bind spaces. Keep every mesh sharing this
-  // skeleton on the same root-local identity bind.
-  instance.root.traverse((object) => {
-    const mesh = object as SkinnedMesh
-    if (!mesh.isSkinnedMesh || mesh.skeleton !== instance.skeleton) return
-    mesh.bindMatrix.identity()
-    mesh.bindMatrixInverse.identity()
-  })
-  instance.root.updateMatrixWorld(true)
+  rebindMakeHumanSkeleton(instance)
 }
 
