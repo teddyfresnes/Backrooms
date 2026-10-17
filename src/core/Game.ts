@@ -334,6 +334,7 @@ export class Game {
 
     this.postFX = new PostFX(this.renderer, this.scene, this.camera, this.settings.lighting);
     this.resize();
+    await this.postFX.waitUntilReady();
     await this.renderer.compileAsync(this.scene, this.camera);
     if (this.disposed) return;
     setVisualProgress(0.92);

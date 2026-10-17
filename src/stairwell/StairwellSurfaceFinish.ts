@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { SeededRandom } from '../world/SeededRandom';
-import { floorY, STAIRWELL_BOUNDS, STAIRWELL_LEVEL_COUNT, STAIRWELL_ROOF_Y } from './layout';
+import { STAIRWELL_BOUNDS, STAIRWELL_ROOF_Y } from './layout';
+import { containsPaint, stairwellPaintPatches } from './StairwellPaintLayout';
 
 export type StairwellWall = 'west' | 'east' | 'south' | 'north';
 const WALLS: readonly StairwellWall[] = ['west', 'east', 'south', 'north'];
@@ -8,21 +9,13 @@ const TILE_WIDTH = 1024;
 const TILE_HEIGHT = 512;
 const GUTTER = 4;
 
-/** Height of the painted dado above the nearest landing/flight at this wall. */
-export function stairwellPaintBase(wall: StairwellWall, along: number): number {
-  if (wall === 'north') return 1.44;
-  if (wall === 'south') return 0;
-  const t = THREE.MathUtils.clamp((along + 1.2) / 2.4, 0, 1);
-  if (wall === 'west') return t * 1.44;
-  return along < -1.2 ? 0 : 1.44 + (1 - t) * 1.44;
-}
-
 /** Opaque finish baked once: no layered wall faces, transparency or shader noise. */
 export function createStairwellWallAtlas(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = TILE_WIDTH * 2; canvas.height = TILE_HEIGHT * 2;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Impossible de préparer les surfaces du hall.');
+  const patches = stairwellPaintPatches();
   for (const [index, wall] of WALLS.entries()) {
     const random = new SeededRandom(`stairwell-wall-wear:${wall}`);
     const min = wall === 'west' || wall === 'east' ? STAIRWELL_BOUNDS.minZ : STAIRWELL_BOUNDS.minX;
@@ -48,33 +41,28 @@ export function createStairwellWallAtlas(): THREE.CanvasTexture {
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 28, y - 2); ctx.lineTo(x + 38, y + 22);
       ctx.lineTo(x + 9, y + 28); ctx.lineTo(x - 4, y + 9); ctx.fill();
     }
-    for (let level = -1; level < STAIRWELL_LEVEL_COUNT; level++) {
-      const coordinates = wall === 'west' || wall === 'east' ? [min, -1.2, 1.2, max] : [min, max];
-      const baseAt = (along: number) => floorY(level) + stairwellPaintBase(wall, along);
-      ctx.fillStyle = level % 2 ? '#707e71' : '#758273';
-      const sections = wall === 'east' ? [[min, -1.2], [-1.2, 1.2, max]] : [coordinates];
-      for (const section of sections) {
-        const sectionBase = (along: number) => wall === 'east' && section.length === 2 ? floorY(level) : baseAt(along);
-        ctx.beginPath();
-        section.forEach((along, i) => {
-          if (i === 0) ctx.moveTo(px(along), py(sectionBase(along) + .98)); else ctx.lineTo(px(along), py(sectionBase(along) + .98));
-        });
-        for (const along of [...section].reverse()) ctx.lineTo(px(along), py(sectionBase(along) - .05));
-        ctx.closePath(); ctx.fill();
-      }
-      // A dry dirty foot, chair-height scuffs and small broken paint edges.
-      for (let mark = 0; mark < 80; mark++) {
-        const along = random.float(min, max), height = baseAt(along) + random.float(.04, .92);
+    for (const patch of patches.filter(patch => patch.wall === wall)) {
+      ctx.fillStyle = '#707e71'; ctx.beginPath();
+      patch.points.forEach((point, i) => {
+        if (i === 0) ctx.moveTo(px(point.along), py(point.height));
+        else ctx.lineTo(px(point.along), py(point.height));
+      });
+      ctx.closePath(); ctx.fill();
+      const left = Math.min(...patch.points.map(p => p.along)), right = Math.max(...patch.points.map(p => p.along));
+      const bottom = Math.min(...patch.points.map(p => p.height)), top = Math.max(...patch.points.map(p => p.height));
+      for (let mark = 0; mark < 50; mark++) {
+        const along = random.float(left, right), height = random.float(bottom, top);
+        if (!containsPaint(patch, along, height)) continue;
         const x = px(along), y = py(height);
         ctx.fillStyle = random.chance(.32) ? 'rgba(186,177,151,.55)' : 'rgba(41,46,36,.12)';
-        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + random.float(1, 8), y - 1);
-        ctx.lineTo(x + random.float(0, 5), y + random.float(1, 3)); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + random.float(1, 6), y - 1);
+        ctx.lineTo(x + random.float(0, 4), y + random.float(1, 2)); ctx.closePath(); ctx.fill();
       }
-      for (let streak = 0; streak < 15; streak++) {
-        const along = random.float(min, max), x = px(along), y = py(baseAt(along) + random.float(.65, 2.3));
-        ctx.strokeStyle = 'rgba(71,63,43,.11)'; ctx.lineWidth = random.float(.5, 2);
-        ctx.beginPath(); ctx.moveTo(x, y); ctx.bezierCurveTo(x - 1, y + 7, x + 2, y + 12, x + 1, y + random.float(12, 32)); ctx.stroke();
-      }
+    }
+    for (let streak = 0; streak < 50; streak++) {
+      const x = random.float(GUTTER, TILE_WIDTH - GUTTER), y = random.float(12, TILE_HEIGHT - 40);
+      ctx.strokeStyle = 'rgba(71,63,43,.1)'; ctx.lineWidth = random.float(.5, 1.6);
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.bezierCurveTo(x - 1, y + 7, x + 2, y + 12, x + 1, y + random.float(12, 32)); ctx.stroke();
     }
     // Hairline settling cracks, never missing pixels in the wall.
     for (let crack = 0; crack < 6; crack++) {

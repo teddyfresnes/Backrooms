@@ -16,7 +16,8 @@ describe('experience routing', () => {
 
     expect(stairwell).toContain('HallExitInteraction');
     expect(stairwell).toContain('this.callbacks.onEnterBackrooms()');
-    expect(stairwell).toContain("this.renderer.setAnimationLoop(this.frame);\n    this.saveNow('autosave');\n    this.enter(true);");
+    expect(stairwell.indexOf("this.saveNow('autosave');", stairwell.indexOf('this.initialized = true')))
+      .toBeLessThan(stairwell.indexOf('this.renderer.setAnimationLoop(this.frame)'));
     expect(main).toContain("await import('./core/Game')");
     expect(main).toContain("import { OpeningIntro } from './ui/OpeningIntro'");
     expect(main).toContain('onEnterBackrooms: () => queueMicrotask');
@@ -185,7 +186,7 @@ describe('experience routing', () => {
 
     expect(backrooms).toContain('BACKROOMS_ATMOSPHERE as ATMOSPHERE');
     expect(stairwell).toContain('new PostFX(');
-    expect(stairwell).toContain('{ bloom: false }');
+    expect(stairwell).toContain("{ bloom: false, antialias: 'fxaa' }");
     expect(stairwell).toContain('this.postFX?.setLightingMode(settings.lighting)');
     expect(stairwell).toContain('this.postFX?.render(delta)');
     expect(stairwell).toContain('this.postFX?.dispose()');

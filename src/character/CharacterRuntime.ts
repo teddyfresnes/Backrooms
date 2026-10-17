@@ -1140,6 +1140,9 @@ export class CharacterRuntime {
     this.setInteractionPartner(this.environment.findPartnerSpawn(this.player!.position, facing));
   }
   get cameraMode(): ViewMode { return this.viewMode; }
+  get renderWarmupRoots(): readonly THREE.Object3D[] {
+    return [this.avatarAnchor, this.firstPersonAvatarAnchor, ...(this.idleNpcAnchor ? [this.idleNpcAnchor] : [])];
+  }
   get isDown(): boolean { return !!this.ragdoll || !!this.recovery; }
   get isBusy(): boolean { return this.isDown || !!this.pairCoordinator.session; }
   toggleView(): ViewMode { this.setViewMode(this.viewMode === 'first-person' ? 'third-person' : 'first-person'); this.presentCamera(); return this.viewMode; }
@@ -1434,6 +1437,9 @@ export class CharacterRuntime {
   private leftFootBone?: THREE.Bone;
   private rightFootBone?: THREE.Bone;
   private readonly ragdollMotionBones: THREE.Bone[] = [];
+  private readonly ragdollBoneNames = new WeakMap<THREE.Bone, string>();
+  private readonly ragdollMotionFrames = [new Map<string, RagdollBonePoseSample>(), new Map<string, RagdollBonePoseSample>()];
+  private readonly ragdollSampleScale = new THREE.Vector3();
   private ragdollMotionPrevious?: Map<string, RagdollBonePoseSample>;
   private ragdollMotionCurrent?: Map<string, RagdollBonePoseSample>;
   private ragdollMotionDelta = 0;
@@ -1846,7 +1852,7 @@ export class CharacterRuntime {
     character.traverse((object) => {
       const normalizedName = object.name.toLowerCase().replace(/[^a-z0-9]/g, '');
       const bone = object as THREE.Bone;
-      if (bone.isBone) this.ragdollMotionBones.push(bone);
+      if (bone.isBone) { this.ragdollMotionBones.push(bone); this.ragdollBoneNames.set(bone, normalizedName); }
       if (bone.isBone && normalizedName.endsWith('spine') && !normalizedName.endsWith('spine1') && !normalizedName.endsWith('spine2')) this.combatSpineBone = bone;
       if (bone.isBone && normalizedName.endsWith('spine1')) this.combatSpine1Bone = bone;
       if (bone.isBone && normalizedName.endsWith('spine2')) this.combatSpine2Bone = bone;
@@ -6604,7 +6610,7 @@ export class CharacterRuntime {
   }
 
   private evaluateCombatMixers(delta: number, player = true): void {
-    if (!this.npcRagdoll && !this.npcRecovery) {
+    if (this.partnerEnabled && !this.npcRagdoll && !this.npcRecovery) {
       this.idleNpcMixer?.update(delta);
       const attack = this.npcAttack;
       if (attack) {
@@ -8985,15 +8991,16 @@ export class CharacterRuntime {
   private captureRagdollMotionFrame(delta: number): void {
     if (!this.character || this.ragdollMotionBones.length === 0) return;
     this.avatarAnchor.updateMatrixWorld(true);
-    this.character.updateMatrixWorld(true);
-
-    const next = new Map<string, RagdollBonePoseSample>();
+    const next = this.ragdollMotionCurrent === this.ragdollMotionFrames[0]
+      ? this.ragdollMotionFrames[1]! : this.ragdollMotionFrames[0]!;
     for (const bone of this.ragdollMotionBones) {
-      const name = bone.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-      next.set(name, {
-        position: bone.getWorldPosition(new THREE.Vector3()),
-        rotation: bone.getWorldQuaternion(new THREE.Quaternion()).normalize(),
-      });
+      const name = this.ragdollBoneNames.get(bone)!;
+      let sample = next.get(name);
+      if (!sample) { sample = { position: new THREE.Vector3(), rotation: new THREE.Quaternion() }; next.set(name, sample); }
+      // Matrices were updated once for the whole rig above. World getters would
+      // walk the same ancestors again for every bone, twice per sample.
+      bone.matrixWorld.decompose(sample.position, sample.rotation, this.ragdollSampleScale);
+      sample.rotation.normalize();
     }
 
     if (this.ragdollMotionCurrent) {
@@ -10322,7 +10329,7 @@ export class CharacterRuntime {
     this.pairPlayerRig?.restore(); this.pairNpcRig?.restore(); this.pairDownRig?.restore();
     this.playerProceduralPose.restore(!this.ragdoll && !this.recovery);
     this.firstPersonProceduralPose.restore(!this.ragdoll && !this.recovery);
-    this.npcProceduralPose.restore(!this.npcRagdoll && !this.npcRecovery);
+    this.npcProceduralPose.restore(this.partnerEnabled && !this.npcRagdoll && !this.npcRecovery);
     if (this.disposed || !this.player) return;
     // Preserve the host's seconds exactly; a milliseconds round-trip can turn
     // one 1/60 tick into slightly less than the fixed physics interval.
@@ -10464,7 +10471,7 @@ export class CharacterRuntime {
     // Sample the final evaluated fists after additive strike + procedural aim.
     // Damage now follows the actual swept hand path instead of an animation timer.
     this.captureRagdollMotionFrame(rawDelta);
-    if (this.idleNpcCharacter && !this.npcRagdoll && !this.npcRecovery) this.npcMotionHistory.capture(this.idleNpcCharacter, rawDelta);
+    if (this.partnerEnabled && this.idleNpcCharacter && !this.npcRagdoll && !this.npcRecovery) this.npcMotionHistory.capture(this.idleNpcCharacter, rawDelta);
     this.resolveCombatContacts(rawDelta);
     this.applyCombatImpactResponse(rawDelta);
     this.copyCombatPoseToFirstPerson();

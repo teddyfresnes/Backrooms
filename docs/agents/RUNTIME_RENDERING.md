@@ -197,11 +197,23 @@ repositionnées entre les étages sans changer le nombre de lumières du shader.
 Le profil moderne a des sources plus concentrées ; le classique reste plus
 chaud et plus large. Les deux shadow maps extérieures sont calculées une fois,
 puis invalidées uniquement lors d'une réactivation des ombres. En qualité
-Performance, elles sont désactivées avec SMAA, bloom et le normal pass/SSAO du
+Performance, elles sont désactivées avec l’anticrénelage, bloom et le normal pass/SSAO du
 mode classique. Auto adopte ce repli après un ralentissement durable et ne
 rétablit les effets qu'après vingt secondes stables. Sa résolution peut descendre
 vers 850 000 pixels sur grand écran. La pause et une page masquée ne redessinent
-pas continuellement la scène.
+pas continuellement la scène. La cage utilise FXAA, sans passes auxiliaires ni
+textures de recherche SMAA. Le pipeline Backrooms attend explicitement les tables
+SMAA avant son warmup.
+
+`SceneWarmup` envoie toutes les textures à la carte graphique, prépare les limites
+et textures d'os des trois vues du personnage et dessine les géométries hors champ
+sous le chargement. Visibilité et culling sont restaurés avant présentation ; les
+ombres statiques sont invalidées après ces vues temporaires. Une fence GPU
+asynchrone attend la fin des transferts, sans `gl.finish()` ni readback. La première
+sauvegarde et sa miniature précèdent le démarrage de la boucle de jeu. Auto et
+Performance limitent les cartes secondaires à 512 pixels ; albédo, affiches et
+textures partagées avec le garde-robe restent intacts. Une Source propre au jeu
+évite de modifier l’éditeur ; Qualité restaure les cartes d’origine.
 
 `StairwellDetails` reste statique : cinq matériaux et un atlas opaque de 1024²,
 sans lumière ni travail par image. Les volumes solides rejoignent
@@ -210,7 +222,10 @@ le module libère ses matériaux et son atlas. Les radiateurs ont de vraies colo
 arrondies et les plafonniers des tubes et douilles. `StairwellSurfaceFinish` bake
 la peinture, fissures, coulures et reprises d'enduit dans un atlas opaque de
 2048×1024 propre aux murs. Les pièces de maçonnerie contiguës partagent les mêmes
-coordonnées de texture ; aucune bande de peinture rapportée ou incrustation de
+coordonnées de texture. `StairwellPaintLayout` conserve exactement les 42
+empreintes de peinture approuvées avant l'atlas : trois demi-paliers, aucune
+répétition au-dessus de la dernière volée, et les retours du RDC. Ne pas les
+remplacer par un motif périodique. Aucune bande de peinture rapportée ou incrustation de
 sol coplanaire n'est ajoutée. Les tests sondent les murs, les sept paliers,
 les budgets géométriques et les parcours Rapier sur les quatre niveaux.
 

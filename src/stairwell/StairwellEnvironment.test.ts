@@ -113,6 +113,6 @@ describe('Russian stairwell render integration', () => {
     expect(modern.mainColor).not.toBe(legacy.mainColor);
     expect(runtime).toContain('environment.setLightingMode(this.settings.lighting)');
     expect(runtime).toContain('this.environment?.setLightingMode(settings.lighting)');
-    expect(runtime).toContain('{ bloom: false }');
+    expect(runtime).toContain("{ bloom: false, antialias: 'fxaa' }");
   });
 });

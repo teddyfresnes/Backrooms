@@ -27,6 +27,7 @@ import {
   BACKROOMS_LEGACY_ATMOSPHERE,
 } from '../render/BackroomsAtmosphere';
 import { PostFX } from '../render/PostFX';
+import { compactSceneDataMaps, restoreSceneDataMaps, warmSceneForPlay } from '../render/SceneWarmup';
 import { HallExitInteraction } from '../stairwell/HallExitInteraction';
 import { StairwellEnvironment } from '../stairwell/StairwellEnvironment';
 import { StairwellMaterials } from '../stairwell/StairwellMaterials';
@@ -360,14 +361,21 @@ export class RussianStairwellGame {
       this.scene,
       this.camera,
       this.settings.lighting,
-      { bloom: false },
+      { bloom: false, antialias: 'fxaa' },
     );
     this.applyRenderFeatures(0);
     this.resize();
-    await this.renderer.compileAsync(this.scene, this.camera);
+    if (this.settings.renderQuality !== 'quality') compactSceneDataMaps(this.scene);
+    await this.postFX.waitUntilReady();
     if (this.disposed) return;
     setVisualProgress(0.92);
-    await this.warmupPostFX();
+    await warmSceneForPlay({
+      renderer: this.renderer, scene: this.scene, camera: this.camera,
+      roots: this.character.renderWarmupRoots,
+      cancelled: () => this.disposed,
+      render: () => this.postFX?.render(1 / 60),
+      onProgress: progress => setVisualProgress(.92 + progress * .06),
+    });
     if (this.disposed) return;
     setVisualProgress(0.98);
     await audioReady;
@@ -376,10 +384,11 @@ export class RussianStairwellGame {
     this.initialized = true;
     this.syncSaveHistory();
     this.ui.setSessionStarted(true);
+    this.previousTime = performance.now();
+    this.saveNow('autosave');
     this.ui.setReady();
     this.previousTime = performance.now();
     this.renderer.setAnimationLoop(this.frame);
-    this.saveNow('autosave');
     this.enter(true);
   }
 
@@ -463,6 +472,7 @@ export class RussianStairwellGame {
   private applySettings(settings: GameSettings): void {
     this.renderRequested = true;
     const previousLighting = this.settings.lighting;
+    const previousQuality = this.settings.renderQuality;
     this.settings = { ...settings };
     this.player?.setFieldOfView(settings.fieldOfView);
     this.player?.setLookSensitivity(settings.lookSensitivity);
@@ -471,6 +481,10 @@ export class RussianStairwellGame {
     this.player?.setControlBindings(settings.controls);
     this.audio.setMasterVolume(settings.masterVolume);
     siteAudio.setMasterVolume(settings.masterVolume);
+    if (previousQuality !== settings.renderQuality) {
+      if (settings.renderQuality === 'quality') restoreSceneDataMaps(this.scene);
+      else compactSceneDataMaps(this.scene);
+    }
     this.applyRenderFeatures(0);
     const ratio = this.pixelRatioForQuality(settings.renderQuality);
     if (ratio !== this.pixelRatio) {
@@ -507,16 +521,6 @@ export class RussianStairwellGame {
     this.ambientFill.intensity = legacy ? 0.004 : 0.016;
     this.directionalKey.intensity = legacy ? 0.025 : 0.09;
     this.directionalKey.position.set(legacy ? 3.5 : 4.5, legacy ? 8 : 7.5, legacy ? 2.5 : 3.2);
-  }
-
-  private async warmupPostFX(): Promise<void> {
-    if (!this.postFX) return;
-    for (let frame = 0; frame < 3; frame += 1) {
-      if (this.disposed || !this.postFX) return;
-      this.postFX.render(1 / 60);
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    }
-    this.previousTime = performance.now();
   }
 
   private pixelRatioForQuality(quality: GameSettings['renderQuality']): number {

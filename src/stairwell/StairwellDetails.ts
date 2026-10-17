@@ -4,6 +4,7 @@ import type { StaticCollider } from '../world/types';
 import { SeededRandom } from '../world/SeededRandom';
 import type { StairwellMaterialSet } from './StairwellMaterials';
 import { makeBox, makeCylinder, makeCylinderBetween } from './geometry';
+import { createCastIronSection, roundedFixtureOutline } from './StairwellFixtures';
 import { floorY, midLandingY, STAIRWELL_BOUNDS, STAIRWELL_FLIGHT_COUNT, STAIRWELL_LEVEL_COUNT,
   STAIRWELL_STEPS_PER_FLIGHT, STAIRWELL_STEP_DEPTH, STAIRWELL_STEP_RISE } from './layout';
 
@@ -103,7 +104,7 @@ export class StairwellDetails {
     this.group.name = 'stairwell-residential-details';
     this.wood = this.material('stairwell-worn-wood', 0x645340);
     this.iron = this.material('stairwell-aged-enamel', 0xa5a28c, .08);
-    this.iron.map = base.pipe.map;
+    this.iron.map = base.fixtureBody.map;
     this.clay = this.material('stairwell-terracotta', 0x695244);
     this.leaf = this.material('stairwell-foliage', 0x414e3d);
     this.leaf.side = THREE.DoubleSide;
@@ -112,9 +113,21 @@ export class StairwellDetails {
     this.landings(); this.stairs(); this.entrance(); this.residentialCorners();
     this.group.updateMatrixWorld(true);
     this.group.traverse(object => {
-      if (object instanceof THREE.Mesh) object.receiveShadow = false;
+      if (object instanceof THREE.Mesh) {
+        object.receiveShadow = false;
+        if (object.material === this.iron) {
+          const random = new SeededRandom(`enamel-wear:${object.name}`);
+          const p = object.geometry.getAttribute('position'), colors = new Float32Array(p.count * 3);
+          for (let i = 0; i < p.count; i++) {
+            const rust = p.getY(i) < -.13 && random.chance(.12);
+            colors.set(rust ? [.49, .35, .22] : [.94, .91, .84], i * 3);
+          }
+          object.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        }
+      }
       object.matrixAutoUpdate = false;
     });
+    this.iron.vertexColors = true;
   }
 
   private material(name: string, color: number, metalness = 0): THREE.MeshStandardMaterial {
@@ -147,28 +160,63 @@ export class StairwellDetails {
 
   private radiator(name: string, x: number, y: number, z: number): void {
     const pieces: THREE.Mesh[] = [];
-    for (let fin = 0; fin < 10; fin++) {
-      for (const bank of [-1, 1]) {
-        // Rounded cast-iron columns leave real air channels between sections.
-        const column = new THREE.Mesh(new THREE.CapsuleGeometry(.027, .32, 2, 6), this.iron);
-        column.name = `${name}-cast-section-${fin}-${bank}`;
-        column.position.set(x - .4275 + fin * .095, y + .41, z + bank * .047);
-        column.scale.z = 1.45;
-        this.group.add(column); pieces.push(column);
-      }
+    const wallSide = z > 0 ? 1 : -1;
+    for (let fin = 0; fin < 8; fin++) {
+      const section = new THREE.Mesh(createCastIronSection(fin === 0 || fin === 7), this.iron);
+      section.name = `${name}-cast-section-${fin}`;
+      section.position.set(x - .35 + fin * .10, y + .41, z);
+      this.group.add(section); pieces.push(section);
     }
     for (const h of [.23, .59]) {
-      const manifold = makeCylinder(`${name}-manifold-${h}`, .034, 1.06, [x, y + h, z], this.iron, 8);
+      const manifold = makeCylinder(`${name}-manifold-${h}`, .032, .91, [x, y + h, z], this.iron, 8);
       manifold.rotation.z = Math.PI / 2; this.group.add(manifold); pieces.push(manifold);
     }
     for (const side of [-1, 1]) {
-      pieces.push(this.box(`${name}-bracket-${side}`, [.08, .15, .13], [x + side * .36, y + .22, z - .07], this.base.pipe));
-      const valve = makeCylinder(`${name}-valve-${side}`, .035, .09, [x + side * .565, y + .59, z], this.base.galvanized, 6);
+      pieces.push(this.box(`${name}-bracket-${side}`, [.055, .12, .11], [x + side * .29, y + .24, z + wallSide * .105], this.base.pipe));
+      const valve = makeCylinder(`${name}-valve-${side}`, .028, .08, [x + side * .49, y + (side < 0 ? .23 : .59), z], this.base.galvanized, 6);
       valve.rotation.z = Math.PI / 2; this.group.add(valve); pieces.push(valve);
+      const pipeY = y + (side < 0 ? .23 : .59);
+      const elbow = new THREE.Vector3(x + side * .54, pipeY, z);
+      const wallZ = wallSide > 0 ? 3.89 : -6.14;
+      const wallEnd = new THREE.Vector3(elbow.x, pipeY, wallZ - wallSide * .009);
+      const pipe = makeCylinderBetween(`${name}-wall-connection-${side}`, elbow, wallEnd, .014, this.base.pipe, 6);
+      this.group.add(pipe); pieces.push(pipe);
+      const rose = makeCylinder(`${name}-wall-rose-${side}`, .025, .018, [elbow.x, pipeY, wallEnd.z], this.iron, 6);
+      rose.rotation.x = Math.PI / 2; this.group.add(rose); pieces.push(rose);
     }
-    const wheel = makeCylinder(`${name}-valve-wheel`, .048, .018, [x + .57, y + .655, z], this.base.pipe, 8);
-    this.group.add(wheel); pieces.push(wheel);
+    const stem = makeCylinder(`${name}-valve-stem`, .009, .046, [x + .49, y + .626, z], this.base.galvanized, 6);
+    const wheel = new THREE.Mesh(new THREE.TorusGeometry(.029, .005, 4, 10), this.clay);
+    wheel.name = `${name}-valve-wheel`; wheel.rotation.x = Math.PI / 2; wheel.position.set(x + .49, y + .65, z);
+    this.group.add(stem, wheel); pieces.push(stem, wheel);
+    for (const angle of [0, Math.PI / 3, Math.PI * 2 / 3]) {
+      const spoke = makeCylinderBetween(`${name}-valve-spoke-${angle}`,
+        new THREE.Vector3(x + .49 - Math.cos(angle) * .029, y + .65, z - Math.sin(angle) * .029),
+        new THREE.Vector3(x + .49 + Math.cos(angle) * .029, y + .65, z + Math.sin(angle) * .029), .003, this.clay, 4);
+      this.group.add(spoke);
+    }
     this.solid(name, pieces);
+  }
+
+  private doorbell(name: string, side: number, y: number, z: number): void {
+    const housing = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedFixtureOutline(.052, .088, .013), {
+      depth: .009, bevelEnabled: true, bevelSize: .0015, bevelThickness: .0015, bevelSegments: 1, curveSegments: 3,
+    }), this.iron);
+    housing.geometry.clearGroups(); housing.name = `${name}-housing`;
+    housing.position.set(side * 1.938, y, z); housing.rotation.y = -side * Math.PI / 2;
+    this.group.add(housing);
+    for (const [part, radius, depth, x, material] of [
+      ['recess', .016, .003, 1.925, this.base.rubber],
+      ['bezel', .014, .004, 1.923, this.base.galvanized],
+      ['button', .011, .004, 1.920, this.base.fixtureBody],
+    ] as const) {
+      const disc = makeCylinder(`${name}-${part}`, radius, depth, [side * x, y, z], material, 8);
+      disc.rotation.z = Math.PI / 2; this.group.add(disc);
+    }
+    for (const end of [-1, 1]) {
+      const screw = makeCylinder(`${name}-screw-${end}`, .0025, .0015, [side * 1.926, y + end * .031, z], this.base.galvanized, 6);
+      screw.rotation.z = Math.PI / 2; this.group.add(screw);
+      this.box(`${name}-screw-slot-${end}`, [.0008, .0007, .003], [side * 1.9245, y + end * .031, z], this.base.rubber);
+    }
   }
 
   private landings(): void {
@@ -185,9 +233,9 @@ export class StairwellDetails {
         for (let rib = 0; rib < 5; rib++) this.box(`mat-rib-${level}-${side}-${rib}`, [.39, .003, .012], [side * 1.67, y + .0225, APARTMENT_ENTRY_DOOR.centerZ - .25 + rib * .125], this.base.rubber);
         const plateZ = APARTMENT_ENTRY_DOOR.centerZ - .71;
         this.sign(`apartment-number-${level}-${side}`, 8 + level * 2 + (side > 0 ? 1 : 0), .16, .23,
-          [side * 1.899, y + 1.63, plateZ], side < 0 ? Math.PI / 2 : -Math.PI / 2);
-        this.box(`doorbell-base-${level}-${side}`, [.047, .09, .065], [side * 1.888, y + 1.22, plateZ], this.base.fixtureBody);
-        this.box(`doorbell-button-${level}-${side}`, [.012, .035, .035], [side * 1.858, y + 1.22, plateZ], this.base.rubber);
+          [side * 1.930, y + 1.63, plateZ], side < 0 ? Math.PI / 2 : -Math.PI / 2);
+        this.box(`number-plate-backing-${level}-${side}`, [.008, .24, .17], [side * 1.936, y + 1.63, plateZ], this.iron);
+        this.doorbell(`doorbell-${level}-${side}`, side, y + 1.22, plateZ);
       }
       if (level === 1 || level === 3) this.radiator(`window-radiator-${level}`, 0, y, -5.98);
     }
@@ -226,7 +274,7 @@ export class StairwellDetails {
         for (const t of [.08, .5, .92]) {
           const point = a.clone().lerp(b, t);
           this.group.add(makeCylinderBetween(`handrail-bracket-${level}-${side}-${t}`, point,
-            new THREE.Vector3(side * 1.925, point.y - .07, point.z), .014, this.base.galvanized, 6));
+            new THREE.Vector3(side * 1.937, point.y - .07, point.z), .014, this.base.galvanized, 6));
         }
       }
     }

@@ -5,6 +5,7 @@ import {
   BrightnessContrastEffect,
   EffectComposer,
   EffectPass,
+  FXAAEffect,
   type Effect,
   HueSaturationEffect,
   NoiseEffect,
@@ -20,6 +21,7 @@ import type { LightingMode } from './LightingMode';
 
 export interface PostFXOptions {
   readonly bloom?: boolean;
+  readonly antialias?: 'smaa' | 'fxaa';
 }
 
 export class PostFX {
@@ -30,6 +32,10 @@ export class PostFX {
   private width = 1;
   private height = 1;
   private performanceMode = false;
+  private antialias?: SMAAEffect;
+  private antialiasUnavailable = false;
+  private disposed = false;
+  private cancelAssetWait?: () => void;
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -63,7 +69,35 @@ export class PostFX {
     previous.dispose();
   }
 
+  async waitUntilReady(): Promise<void> {
+    const effect = this.antialias;
+    if (!effect || (effect.weightsMaterial.searchTexture && effect.weightsMaterial.areaTexture)) return;
+    const loaded = await new Promise<boolean>(resolve => {
+      // The library dispatches "load", missing from its published event map.
+      const events = effect as unknown as THREE.EventDispatcher<{ load: object }>;
+      const done = (ready: boolean) => {
+        clearTimeout(timer); events.removeEventListener('load', onLoad); this.cancelAssetWait = undefined; resolve(ready);
+      };
+      const onLoad = () => done(true);
+      const timer = setTimeout(() => done(false), 4000);
+      this.cancelAssetWait = () => done(false);
+      events.addEventListener('load', onLoad);
+    });
+    if (!loaded && !this.disposed) {
+      this.antialiasUnavailable = true;
+      const previous = this.composer;
+      this.composer = this.createComposer(this.lightingMode);
+      this.composer.setSize(this.width, this.height); previous.dispose();
+    }
+  }
+
+  private antialiasEffect(): Effect {
+    if (this.options.antialias === 'fxaa') return new FXAAEffect();
+    return this.antialias = new SMAAEffect();
+  }
+
   private createComposer(mode: LightingMode): EffectComposer {
+    this.antialias = undefined;
     this.vignette = undefined;
     this.noise = undefined;
     this.grading = undefined;
@@ -118,7 +152,7 @@ export class PostFX {
         }));
       }
       effects.push(toneMapping, grading, contrast, vignette);
-      if (!coarsePointer && !this.performanceMode) effects.push(new SMAAEffect());
+      if (!coarsePointer && !this.performanceMode && !this.antialiasUnavailable) effects.push(this.antialiasEffect());
       composer.addPass(new EffectPass(this.camera, ...effects));
       return composer;
     }
@@ -150,7 +184,7 @@ export class PostFX {
       }));
     }
     effects.push(toneMapping, this.grading, contrast, this.noise, this.vignette);
-    if (!coarsePointer && !this.performanceMode) effects.push(new SMAAEffect());
+    if (!coarsePointer && !this.performanceMode && !this.antialiasUnavailable) effects.push(this.antialiasEffect());
     composer.addPass(new EffectPass(this.camera, ...effects));
     return composer;
   }
@@ -175,6 +209,7 @@ export class PostFX {
   }
 
   dispose(): void {
+    this.disposed = true; this.cancelAssetWait?.();
     this.composer.dispose();
   }
 }
