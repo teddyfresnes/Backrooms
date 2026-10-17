@@ -113,10 +113,13 @@ async function boot() {
   for (let i = 0; i < 6; i++) box('step-'+i, -8, (i+1)*.1, -3.65-i*.5, 2, (i+1)*.2, .51, floorMaterial, 'step');
   const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(24, 23), ceilingMaterial);
   ceiling.rotation.x = Math.PI / 2; ceiling.position.set(0,3.3,-2.5); scene.add(ceiling);
+  colliders.push({id:'ceiling',center:{x:0,y:3.45,z:-2.5},halfExtents:{x:12,y:.15,z:11.5},kind:'wall'});
   scene.add(new THREE.HemisphereLight('#fff2c3', '#5d5135', 1.8));
   const lightMaterial = new THREE.MeshBasicMaterial({color:'#fff9d8'});
+  const fixtureGeometries: THREE.BufferGeometry[] = [];
   for (const [x,z] of [[-4,3],[4,3],[-4,-4],[4,-4],[-4,-11],[4,-11]]) {
     const fixture = new THREE.Mesh(new THREE.BoxGeometry(1.35,.045,.38),lightMaterial);
+    fixtureGeometries.push(fixture.geometry);
     fixture.position.set(x,3.255,z); scene.add(fixture);
     const light = new THREE.PointLight('#fff4c7', 7, 11, 1.4); light.position.set(x,3.02,z); scene.add(light);
   }
@@ -166,7 +169,7 @@ async function boot() {
   frame=requestAnimationFrame(loop);
   listen(canvas,'pointerdown', () => { if (!consoleOpen) player!.lock(); });
   const openConsole = () => {
-    consoleOpen=true; player!.setInputEnabled(false); command.hidden=false;
+    consoleOpen=true; character!.setActive(false); command.hidden=false;
     commandInput.value='/'; commandInput.focus();
   };
   const closeConsole = () => {
@@ -191,6 +194,7 @@ async function boot() {
   const originalDispose = () => {
     cancelAnimationFrame(frame); character?.dispose(); player?.dispose(); physics?.dispose();
     for (const mesh of staticMeshes) mesh.geometry.dispose(); ceiling.geometry.dispose();
+    for (const geometry of fixtureGeometries) geometry.dispose();
     for (const material of [floorMaterial,wallMaterial,ceilingMaterial,trimMaterial,lightMaterial]) material.dispose();
     carpet.dispose(); key.shadow.dispose(); renderer?.dispose();
   };
