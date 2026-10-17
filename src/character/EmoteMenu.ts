@@ -434,7 +434,7 @@ export class EmoteMenu {
     this.dirtyPointer = true;
     // Keep the selected partner in view while choosing a paired gesture.
     // Solo emotes keep the usual aim controls.
-    if (locked && this.contextualPair) this.consume(event);
+    if (this.contextualPair) this.consume(event);
   };
 
   private readonly onMouseDown = (event: MouseEvent): void => {

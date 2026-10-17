@@ -29,6 +29,13 @@ test('Tab keeps solo emotes when the nearby person is behind the player',()=>{
   assert.equal(lab.emoteMenu.element.querySelectorAll('[data-pair]').length,0);
   assert.equal(lab.emoteMenu.element.querySelectorAll('[data-slot]').length,8);
 });
+test('the paired picker keeps aim fixed with the ordinary cursor when pointer lock is denied',()=>{
+  ready();lab.player.controls.isLocked=false;lab.player.fallbackPlaying=true;key('Tab');
+  const before=lab.player.getLookQuaternion().clone();
+  for(const [x,y] of [[200,120],[350,180]])lab.host.canvas.dispatchEvent(new MouseEvent('mousemove',{clientX:x,clientY:y,bubbles:true,cancelable:true}));
+  assert.ok(before.angleTo(lab.player.getLookQuaternion())<1e-8);
+  assert.equal(lab.emoteMenu.isOpen,true);lab.player.controls.isLocked=true;lab.player.fallbackPlaying=false;
+});
 test('Tab keeps solo emotes when the person is out of reach',()=>{
   ready('third-person',2.4);key('Tab');
   assert.equal(lab.emoteMenu.element.querySelectorAll('[data-pair]').length,0);

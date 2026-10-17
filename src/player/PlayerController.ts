@@ -171,9 +171,16 @@ export class PlayerController {
   private cameraClock = 0;
   private cameraMotionEnabled = true;
   private fallbackPlaying = false;
+  private fallbackPoint?: { x: number; y: number; time: number };
+  private pointerRequestPending = false;
+  private readonly originalCursor: string;
+  private readonly originalTabIndex: number;
+  private readonly resetFallbackPoint = (): void => { this.fallbackPoint = undefined; };
   private readonly onFallbackPause = (): void => {
     if (!this.fallbackPlaying) return;
     this.fallbackPlaying = false;
+    this.resetFallbackPoint();
+    this.pointerElement.style.cursor = this.originalCursor;
     this.callbacks.onLockChange(false);
   };
   private readonly onFallbackKey = (event: KeyboardEvent): void => {
@@ -181,9 +188,23 @@ export class PlayerController {
   };
   private readonly onPointerLock = (): void => {
     this.fallbackPlaying = false;
+    this.resetFallbackPoint();
+    this.pointerElement.style.cursor = this.originalCursor;
     this.callbacks.onLockChange(true);
   };
-  private readonly onPointerUnlock = (): void => this.callbacks.onLockChange(false);
+  private readonly onPointerUnlock = (): void => {
+    this.resetFallbackPoint();
+    this.pointerElement.style.cursor = this.originalCursor;
+    this.callbacks.onLockChange(false);
+  };
+  private readonly onCanvasMouseDown = (event: MouseEvent): void => {
+    if (!this.isLocked || event.target !== this.pointerElement || this.controls.isLocked) return;
+    this.pointerElement.focus({ preventScroll: true });
+    this.fallbackPoint = { x: event.clientX, y: event.clientY, time: event.timeStamp };
+    // A game's asynchronous startup loses user activation. Retry capture on
+    // the next real canvas click even though fallback gameplay is already active.
+    this.requestPointerCapture();
+  };
 
   constructor(
     private readonly camera: THREE.PerspectiveCamera,
@@ -199,6 +220,9 @@ export class PlayerController {
     this.baseFov = camera.fov;
     this.pointerDocument = domElement.ownerDocument;
     this.pointerElement = domElement;
+    this.originalCursor = domElement.style.cursor;
+    this.originalTabIndex = domElement.tabIndex;
+    if (domElement.tabIndex < 0) domElement.tabIndex = 0;
     this.physics.getPosition(this.position);
     this.previousPosition.copy(this.position);
     this.renderedPosition.copy(this.position);
@@ -208,6 +232,8 @@ export class PlayerController {
     this.controls.addEventListener('lock', this.onPointerLock);
     this.controls.addEventListener('unlock', this.onPointerUnlock);
     this.pointerDocument.addEventListener('mousemove', this.onMouseMove);
+    this.pointerDocument.addEventListener('mousedown', this.onCanvasMouseDown);
+    this.pointerElement.addEventListener('mouseleave', this.resetFallbackPoint);
     this.pointerDocument.addEventListener('keydown', this.onFallbackKey);
     this.pointerDocument.defaultView?.addEventListener('blur', this.onFallbackPause);
   }
@@ -220,16 +246,28 @@ export class PlayerController {
   lock(): void {
     // Starting gameplay must not depend on optional browser pointer capture.
     this.fallbackPlaying = true;
+    this.resetFallbackPoint();
+    this.pointerElement.style.cursor = 'crosshair';
+    this.pointerElement.focus({ preventScroll: true });
     this.callbacks.onLockChange(true);
+    this.requestPointerCapture();
+  }
+
+  private requestPointerCapture(): void {
+    if (this.pointerRequestPending || this.controls.isLocked) return;
+    this.pointerRequestPending = true;
     try {
       const request = this.pointerElement.requestPointerLock?.();
-      void Promise.resolve(request).catch(() => { /* Keep ordinary mouse controls. */ });
-    } catch { /* Embedded browsers may deny pointer capture synchronously. */ }
+      void Promise.resolve(request).catch(() => { /* Keep ordinary mouse controls. */ })
+        .finally(() => { this.pointerRequestPending = false; });
+    } catch { this.pointerRequestPending = false; }
   }
 
   unlock(): void {
     const playing = this.isLocked;
     this.fallbackPlaying = false;
+    this.resetFallbackPoint();
+    this.pointerElement.style.cursor = this.originalCursor;
     try { if (this.controls.isLocked) this.controls.unlock(); } catch { /* Pointer capture is optional in embedded browsers. */ }
     if (playing) this.callbacks.onLockChange(false);
   }
@@ -1889,19 +1927,27 @@ export class PlayerController {
 
   private readonly onMouseMove = (event: MouseEvent): void => {
     if (!this.isLocked || this.traversal) return;
+    let rawHorizontal = Number.isFinite(event.movementX) ? event.movementX : 0;
+    let rawVertical = Number.isFinite(event.movementY) ? event.movementY : 0;
     if (!this.controls.isLocked) {
-      // Right-drag looks around without locking the cursor; left click attacks.
-      if (event.target !== this.pointerElement || !(event.buttons & 2)) return;
+      // Embedded previews may deny pointer lock or report zero movementX/Y.
+      // Ordinary mouse motion must still aim without holding a combat button.
+      if (event.target !== this.pointerElement) { this.resetFallbackPoint(); return; }
+      const previous = this.fallbackPoint;
+      this.fallbackPoint = { x: event.clientX, y: event.clientY, time: event.timeStamp };
+      if (previous && event.timeStamp - previous.time < 500) {
+        const dx = event.clientX - previous.x, dy = event.clientY - previous.y;
+        if (Number.isFinite(dx) && (dx !== 0 || rawHorizontal === 0)) rawHorizontal = dx;
+        if (Number.isFinite(dy) && (dy !== 0 || rawVertical === 0)) rawVertical = dy;
+      }
       this.lookEuler.setFromQuaternion(this.lookCamera.quaternion, 'YXZ');
-      this.lookEuler.y -= event.movementX * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed;
+      this.lookEuler.y -= rawHorizontal * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed;
       this.lookEuler.x = THREE.MathUtils.clamp(
-        this.lookEuler.x - event.movementY * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed,
+        this.lookEuler.x - rawVertical * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed,
         -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01,
       );
       this.lookCamera.quaternion.setFromEuler(this.lookEuler);
     }
-    const rawHorizontal = Number.isFinite(event.movementX) ? event.movementX : 0;
-    const rawVertical = Number.isFinite(event.movementY) ? event.movementY : 0;
     if (rawHorizontal !== 0 || rawVertical !== 0) this.lookActivitySerial += 1;
     const horizontal = THREE.MathUtils.clamp(rawHorizontal, -140, 140);
     const vertical = THREE.MathUtils.clamp(rawVertical, -140, 140);
@@ -1940,6 +1986,10 @@ export class PlayerController {
 
   dispose(): void {
     this.pointerDocument.removeEventListener('mousemove', this.onMouseMove);
+    this.pointerDocument.removeEventListener('mousedown', this.onCanvasMouseDown);
+    this.pointerElement.removeEventListener('mouseleave', this.resetFallbackPoint);
+    this.pointerElement.style.cursor = this.originalCursor;
+    this.pointerElement.tabIndex = this.originalTabIndex;
     this.pointerDocument.removeEventListener('keydown', this.onFallbackKey);
     this.pointerDocument.defaultView?.removeEventListener('blur', this.onFallbackPause);
     this.controls.removeEventListener('lock', this.onPointerLock);

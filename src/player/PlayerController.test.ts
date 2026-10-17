@@ -23,6 +23,7 @@ vi.mock('three/addons/controls/PointerLockControls.js', async () => {
   class PointerLockControls extends THREE.EventDispatcher {
     readonly object: THREE.Camera;
     isLocked = true;
+    pointerSpeed = 1;
 
     constructor(camera: THREE.Camera) {
       super();
@@ -153,7 +154,7 @@ class FakePhysics {
 
 const createController = (physics: FakePhysics) => {
   const pointerDocument = new EventTarget() as unknown as Document;
-  const element = { ownerDocument: pointerDocument } as HTMLElement;
+  const element = Object.assign(new EventTarget(), { ownerDocument: pointerDocument, style: { cursor: '' }, tabIndex: -1, focus: vi.fn() }) as unknown as HTMLElement;
   const callbacks = {
     onLockChange: vi.fn(),
     onFootstep: vi.fn(),
@@ -169,7 +170,7 @@ const createController = (physics: FakePhysics) => {
     physics as unknown as PhysicsWorld,
     callbacks,
   );
-  return { callbacks, camera, controller };
+  return { callbacks, camera, controller, element, pointerDocument };
 };
 
 beforeEach(() => {
@@ -256,6 +257,66 @@ describe('PlayerController interaction timing', () => {
     controller.fixedUpdate(1 / 60);
     expect(callbacks.onInteract).toHaveBeenCalledOnce();
     controller.dispose();
+  });
+});
+
+describe('embedded mouse controls', () => {
+  function mouse(document: Document, target: HTMLElement, type: string, x: number, y: number, extra: Record<string, unknown> = {}) {
+    const event = new Event(type);
+    for (const [key, value] of Object.entries({ target, clientX: x, clientY: y, movementX: 0, movementY: 0, buttons: 0, ...extra })) {
+      Object.defineProperty(event, key, { value });
+    }
+    document.dispatchEvent(event);
+  }
+
+  it('looks with an ordinary mouse move when capture is denied and movementX/Y are zero', async () => {
+    const { controller, element, pointerDocument, callbacks } = createController(new FakePhysics({ x: 0, y: .865, z: 0 }));
+    controller.controls.isLocked = false;
+    element.requestPointerLock = vi.fn(() => Promise.reject(new Error('sandbox')));
+    controller.lock();
+    await Promise.resolve();
+    mouse(pointerDocument, element, 'mousemove', 200, 100);
+    mouse(pointerDocument, element, 'mousemove', 250, 125);
+    const euler = new THREE.Euler().setFromQuaternion(controller.getLookQuaternion(), 'YXZ');
+    expect(euler.y).toBeCloseTo(-0.1);
+    expect(euler.x).toBeCloseTo(-0.05);
+    expect(controller.getContinuousAimYawRadians()).toBeCloseTo(-0.1);
+    expect(controller.isLocked).toBe(true);
+    expect(element.style.cursor).toBe('crosshair');
+    expect(callbacks.onLockChange).toHaveBeenLastCalledWith(true);
+    controller.dispose();
+  });
+
+  it('retries capture on a real canvas click after asynchronous startup', async () => {
+    const { controller, element, pointerDocument } = createController(new FakePhysics({ x: 0, y: .865, z: 0 }));
+    controller.controls.isLocked = false;
+    const request = vi.fn(() => Promise.reject(new Error('no activation')));
+    element.requestPointerLock = request;
+    controller.lock();
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    mouse(pointerDocument, element, 'mousedown', 40, 60);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(element.focus).toHaveBeenCalled();
+    controller.dispose();
+  });
+
+  it('does not aim through menus, resets after leaving the canvas, and restores the cursor on pause', () => {
+    const { controller, element, pointerDocument } = createController(new FakePhysics({ x: 0, y: .865, z: 0 }));
+    controller.controls.isLocked = false;
+    controller.lock();
+    mouse(pointerDocument, element, 'mousemove', 100, 100);
+    mouse(pointerDocument, {} as HTMLElement, 'mousemove', 900, 600);
+    mouse(pointerDocument, element, 'mousemove', 900, 600);
+    expect(controller.getContinuousAimYawRadians()).toBe(0);
+    mouse(pointerDocument, element, 'mousemove', 920, 600);
+    expect(controller.getContinuousAimYawRadians()).toBeCloseTo(-0.04);
+    controller.unlock();
+    mouse(pointerDocument, element, 'mousemove', 1100, 600);
+    expect(controller.getContinuousAimYawRadians()).toBeCloseTo(-0.04);
+    expect(element.style.cursor).toBe('');
+    expect(controller.isLocked).toBe(false);
+    controller.dispose();
+    expect(element.tabIndex).toBe(-1);
   });
 });
 
