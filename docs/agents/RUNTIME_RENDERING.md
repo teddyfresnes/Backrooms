@@ -202,6 +202,14 @@ clé lunaire et le lampadaire principal projettent les seules ombres dynamiques
 de cette scène statique. Le réglage moderne/classique reconfigure ces sources
 et reconstruit son composer sans recréer la scène.
 
+`StairwellDetails` ajoute les finitions et accessoires résidentiels dans les lots
+statiques existants. Cinq matériaux et un atlas de 1024² suffisent ; aucun
+chargement externe, lumière, ombre dynamique ou travail par image n'est ajouté.
+Les volumes solides rejoignent `environment.furnitureColliders`. Le parent
+détruit les géométries après fusion ; le module libère ses matériaux et son atlas.
+Les tests bornent les triangles et appels de rendu, puis parcourent les quatre
+niveaux avec les collisions réelles.
+
 L’appartement démarre avec son plafonnier principal éteint. Une unique source
 à longue portée est alignée sur son diffuseur afin d’éclairer aussi l’entrée
 sans créer plusieurs halos au plafond. Un interrupteur raycasté sur la face
@@ -252,8 +260,11 @@ l'atterrissage, sans rejouer son silence initial. `PlayerController` transmet la
 verticale brute à l’impact ; les seuils audio distinguent petite, moyenne, forte
 et très haute chute, cette dernière ajoutant seule le craquement. Le profil intérieur ne crée
 pas le bourdonnement des Backrooms : il joue une pluie discrète dont le niveau
-augmente progressivement près des deux fenêtres de l'appartement, de toutes les
-fenêtres du hall et de sa porte extérieure. Il fournit aussi les sons de porte,
+augmente progressivement près des fenêtres de l'appartement, du hall et de sa
+porte extérieure. La distance se mesure à toute la surface de l'ouverture, sans
+rayon de visée ni coupure de portée. Les ouvertures de l'appartement sont figées
+avant de restaurer les stores : leur animation ne déplace jamais la source. Une
+composante diffuse et un fondu doux gardent la pluie audible quand on se décale. Il fournit aussi les sons de porte,
 verrou, stores et interrupteur. La fermeture d'un store atténue progressivement
 puis presque entièrement la contribution de sa propre fenêtre, sans modifier les
 ouvertures du hall. Tant qu'un store reste ouvert, un lit de pluie faible reste

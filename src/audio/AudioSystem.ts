@@ -77,8 +77,12 @@ export const interiorRainGainForDistance = (
   distanceToWindow: number,
   exposure = 1,
 ): number => {
-  const proximity = Math.min(1, Math.max(0, (5.5 - distanceToWindow) / 4.8));
-  return 0.014 + proximity ** 1.35 * 0.48 * Math.min(1, Math.max(0, exposure));
+  const distance = Number.isNaN(distanceToWindow) ? Infinity : Math.max(0, distanceToWindow);
+  // Direct sound rolls off softly around the whole pane; a quieter diffuse
+  // component reaches the side of the room instead of cutting out at 5.5 m.
+  const direct = 0.2 / (1 + (distance / 2.2) ** 2);
+  const diffuse = 0.04 / (1 + (distance / 7) ** 2);
+  return 0.012 + (direct + diffuse) * Math.min(1, Math.max(0, exposure));
 };
 
 export const rainExposureForBlindClosure = (closureProgress: number): number => {
@@ -551,7 +555,7 @@ export class AudioSystem {
   updateInteriorGain(targetGain: number): void {
     if (!this.context || !this.rainGain) return;
     const target = Math.min(1, Math.max(0, targetGain));
-    this.rainGain.gain.setTargetAtTime(target, this.context.currentTime, 0.055);
+    this.rainGain.gain.setTargetAtTime(target, this.context.currentTime, 0.18);
   }
 
   async setSuspended(suspended: boolean): Promise<void> {

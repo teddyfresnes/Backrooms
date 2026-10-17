@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { StairwellMaterialSet } from './StairwellMaterials';
+import { StairwellDetails } from './StairwellDetails';
 import { APARTMENT_ENTRY_DOOR } from '../apartment/layout';
 import type { LightingMode } from '../render/LightingMode';
 import { SeededRandom } from '../world/SeededRandom';
 import type { StaticCollider } from '../world/types';
+import { rainOpeningAt, type RainOpening } from '../audio/RainAcoustics';
 import {
   batchStaticMeshes,
   disposeObject3D,
@@ -169,7 +171,7 @@ export const STAIRWELL_LIGHTING_PROFILES: Record<LightingMode, StairwellLighting
 export class StairwellEnvironment {
   readonly group = new THREE.Group();
   readonly furnitureColliders: StaticCollider[] = [];
-  readonly rainAudioOpenings: THREE.Vector3[] = [];
+  readonly rainAudioOpenings: RainOpening[] = [];
   hallEntranceDoor?: THREE.Object3D;
   private readonly importedWindowTemplate?: THREE.Object3D;
   private readonly importedEntranceDoorTemplate?: THREE.Object3D;
@@ -178,6 +180,7 @@ export class StairwellEnvironment {
   private readonly windowRainNormalTexture?: THREE.Texture;
   private readonly extraMaterials: THREE.Material[] = [];
   private readonly extraTextures: THREE.Texture[] = [];
+  private readonly residentialDetails: StairwellDetails;
   private rainGeometry?: THREE.BufferGeometry;
   private rain?: THREE.LineSegments;
   private readonly rainDrops: RainDrop[] = [];
@@ -208,7 +211,7 @@ export class StairwellEnvironment {
     this.importedSecondFloorTableTemplate = importedSecondFloorTableTemplate;
     this.windowRainNormalTexture = windowRainNormalTexture;
     if (windowRainNormalTexture) this.extraTextures.push(windowRainNormalTexture);
-    this.group.name = 'russian-residential-stairwell-v15';
+    this.group.name = 'russian-residential-stairwell-v16';
     this.buildLandingsAndStairs();
     this.buildShell();
     this.buildRailings();
@@ -216,6 +219,9 @@ export class StairwellEnvironment {
     // Neighbor apartment doors are cloned from the real imported Sketchfab
     // front door after that asset loads; do not build the old procedural doors.
     this.buildUtilities();
+    this.residentialDetails = new StairwellDetails(materials);
+    this.group.add(this.residentialDetails.group);
+    this.furnitureColliders.push(...this.residentialDetails.colliders);
     this.buildExteriorDoomer();
     this.buildLighting();
     batchStaticMeshes(this.group);
@@ -911,7 +917,7 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     });
 
     this.group.add(window);
-    this.rainAudioOpenings.push(new THREE.Vector3(centerX, centerY, targetZ));
+    this.rainAudioOpenings.push(rainOpeningAt({ x: centerX, y: centerY, z: targetZ }, width, height));
   }
 
   static async loadImportedWindowTemplate(): Promise<THREE.Object3D | undefined> {
@@ -1090,7 +1096,9 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
 
     this.hallEntranceDoor = hallDoor;
     this.group.add(hallDoor);
-    this.rainAudioOpenings.push(new THREE.Vector3(0, targetCenterY, targetCenterZ));
+    this.rainAudioOpenings.push(rainOpeningAt(
+      { x: 0, y: targetCenterY, z: targetCenterZ }, STAIRWELL_ENTRANCE_WIDTH, STAIRWELL_ENTRANCE_HEIGHT,
+    ));
     this.addEntranceMailbox(wallFaceZ);
   }
 
@@ -2079,6 +2087,7 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
       template.clear();
     }
     disposeObject3D(this.group);
+    this.residentialDetails.dispose();
     this.extraMaterials.forEach((material) => material.dispose());
     importedMaterials.forEach((material) => material.dispose());
     this.extraTextures.forEach((texture) => texture.dispose());

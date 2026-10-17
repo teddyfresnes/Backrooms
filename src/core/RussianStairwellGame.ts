@@ -14,6 +14,7 @@ import {
   type AudioSurface,
 } from '../audio/AudioSystem';
 import { siteAudio } from '../audio/SiteAudio';
+import { distanceToRainOpening, rainOpeningFromBlind, type RainOpening } from '../audio/RainAcoustics';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { PlayerController } from '../player/PlayerController';
 import {
@@ -76,7 +77,7 @@ export class RussianStairwellGame {
   private readonly hemisphere = new THREE.HemisphereLight();
   private readonly ambientFill = new THREE.AmbientLight();
   private readonly directionalKey = new THREE.DirectionalLight();
-  private readonly windowAudioPosition = new THREE.Vector3();
+  private readonly apartmentRainOpenings: RainOpening[] = [];
   private settings: GameSettings;
   private physics?: PhysicsWorld;
   private player?: PlayerController;
@@ -299,6 +300,14 @@ export class RussianStairwellGame {
       2.8,
       (opening) => this.audio.blinds(opening),
     );
+    // Cache the full fixed window extents while both imported blinds are open,
+    // before restoring a save. Never measure the moving blind during playback.
+    for (const blind of apartment.windowBlinds) {
+      blind.blind.updateWorldMatrix(true, true);
+      this.apartmentRainOpenings.push(rainOpeningFromBlind(
+        new THREE.Box3().setFromObject(blind.blind), blind.closedScaleY,
+      ));
+    }
     if (!environment.hallEntranceDoor) {
       throw new Error('La porte du hall d’escalier est absente.');
     }
@@ -422,11 +431,8 @@ export class RussianStairwellGame {
       const closure = this.windowBlinds?.getClosureProgress() ?? [0, 0];
       const exposures = closure.map((progress) => rainExposureForBlindClosure(progress));
       strongestGain = Math.max(strongestGain, interiorRainRoomBleedGain(Math.max(...exposures)));
-      for (let index = 0; index < this.apartment.windowBlinds.length; index += 1) {
-        const blind = this.apartment.windowBlinds[index]!;
-        blind.pivot.getWorldPosition(this.windowAudioPosition);
-        this.windowAudioPosition.y = this.player.position.y;
-        const distance = this.player.position.distanceTo(this.windowAudioPosition);
+      for (let index = 0; index < this.apartmentRainOpenings.length; index += 1) {
+        const distance = distanceToRainOpening(this.player.position, this.apartmentRainOpenings[index]!);
         const exposure = exposures[index]!;
         const gain = interiorRainGainForDistance(surface, distance, exposure);
         strongestGain = Math.max(strongestGain, gain);
@@ -434,7 +440,7 @@ export class RussianStairwellGame {
       return strongestGain;
     }
     for (const opening of this.environment.rainAudioOpenings) {
-      const distance = this.player.position.distanceTo(opening);
+      const distance = distanceToRainOpening(this.player.position, opening);
       const gain = interiorRainGainForDistance(surface, distance);
       strongestGain = Math.max(strongestGain, gain);
     }
