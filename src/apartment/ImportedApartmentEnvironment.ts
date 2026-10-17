@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { isApartmentInteriorVisible } from './ApartmentVisibility';
+import { optimizeApartmentSmallProps } from './SmallPropGeometry';
+import { batchStaticMeshes } from '../stairwell/geometry';
 import type { StaticCollider } from '../world/types';
 import { floorY, midLandingY, STAIRWELL_BOUNDS, STAIRWELL_LEVEL_COUNT } from '../stairwell/layout';
 import { APARTMENT_ENTRY_DOOR } from './layout';
@@ -752,6 +755,8 @@ export class ImportedApartmentEnvironment {
     }
     this.shellColliderMeshes.forEach((mesh) => {
       mesh.castShadow = true;
+      // Physics consumes these original hierarchies after visual preparation.
+      mesh.userData.noBatch = true;
     });
 
     const furniture: StaticCollider[] = [];
@@ -927,6 +932,15 @@ export class ImportedApartmentEnvironment {
     this.group.add(mainLight);
     this.group.add(this.lightSwitch, this.doorLock);
     this.setInteriorLightsEnabled(false);
+    optimizeApartmentSmallProps(this.model);
+    batchStaticMeshes(this.model, 3.5);
+    // Only the static model is frozen. Door, blind and rocker pivots remain dynamic.
+    this.model.updateMatrixWorld(true);
+    this.model.traverse(object => { object.updateMatrix(); object.matrixAutoUpdate = false; });
+  }
+
+  updateVisibility(viewer: THREE.Vector3): void {
+    this.model.visible = isApartmentInteriorVisible(viewer, this.entryDoor.pivot.rotation.y, this.floorY);
   }
 
   get areInteriorLightsEnabled(): boolean {

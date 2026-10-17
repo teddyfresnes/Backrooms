@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { StairwellMaterialSet } from './StairwellMaterials';
 import { StairwellDetails } from './StairwellDetails';
+import { StairwellLightPool } from './StairwellLightPool';
+import { createStairwellWallAtlas, mapStairwellWallUV, type StairwellWall } from './StairwellSurfaceFinish';
 import { APARTMENT_ENTRY_DOOR } from '../apartment/layout';
 import type { LightingMode } from '../render/LightingMode';
 import { SeededRandom } from '../world/SeededRandom';
@@ -129,12 +131,10 @@ export interface StairwellLightingProfile {
   readonly streetLampColor: number;
   readonly mainIntensity: number;
   readonly mainColor: number;
-  readonly corridorFillIntensity: number;
-  readonly corridorFillColor: number;
+  readonly mainDistance: number;
   readonly wallIntensity: number;
   readonly wallColor: number;
-  readonly stairWashIntensity: number;
-  readonly stairWashColor: number;
+  readonly wallDistance: number;
 }
 
 export const STAIRWELL_LIGHTING_PROFILES: Record<LightingMode, StairwellLightingProfile> = {
@@ -145,12 +145,10 @@ export const STAIRWELL_LIGHTING_PROFILES: Record<LightingMode, StairwellLighting
     streetLampColor: 0xffc77d,
     mainIntensity: 2.65,
     mainColor: 0xfff0d6,
-    corridorFillIntensity: 0.26,
-    corridorFillColor: 0xb8ccd8,
+    mainDistance: 5.8,
     wallIntensity: 1.45,
     wallColor: 0xffefd5,
-    stairWashIntensity: 0.24,
-    stairWashColor: 0xadc2cf,
+    wallDistance: 4.8,
   },
   legacy: {
     moonIntensity: 0.035,
@@ -159,12 +157,10 @@ export const STAIRWELL_LIGHTING_PROFILES: Record<LightingMode, StairwellLighting
     streetLampColor: 0xffa34f,
     mainIntensity: 2.1,
     mainColor: 0xffd9a3,
-    corridorFillIntensity: 0.72,
-    corridorFillColor: 0xffd8a0,
+    mainDistance: 6.6,
     wallIntensity: 1.05,
     wallColor: 0xffce91,
-    stairWashIntensity: 0.62,
-    stairWashColor: 0xffd7a2,
+    wallDistance: 5.8,
   },
 };
 
@@ -181,17 +177,16 @@ export class StairwellEnvironment {
   private readonly extraMaterials: THREE.Material[] = [];
   private readonly extraTextures: THREE.Texture[] = [];
   private readonly residentialDetails: StairwellDetails;
+  private readonly shellMaterial: THREE.MeshStandardMaterial;
   private rainGeometry?: THREE.BufferGeometry;
   private rain?: THREE.LineSegments;
+  private previousRainTime = 0;
   private readonly rainDrops: RainDrop[] = [];
   private readonly rainZones: RainZone[] = [];
   private readonly windowRainShaders: WindowRainShaderState[] = [];
   private moonLight?: THREE.DirectionalLight;
   private streetLampLight?: THREE.SpotLight;
-  private readonly mainLights: THREE.PointLight[] = [];
-  private readonly corridorFillLights: THREE.PointLight[] = [];
-  private readonly wallLights: THREE.PointLight[] = [];
-  private readonly stairWashLights: THREE.PointLight[] = [];
+  private readonly localLighting = new StairwellLightPool(STAIRWELL_LIGHTING_PROFILES.modern);
   private readonly cloudGroups: Array<{ group: THREE.Group; baseX: number; drift: number; phase: number }> = [];
   private readonly skyRandom = new SeededRandom(STAIRWELL_RANDOM_SEED).fork('sky');
   private readonly cloudRandom = new SeededRandom(STAIRWELL_RANDOM_SEED).fork('cloud');
@@ -211,7 +206,17 @@ export class StairwellEnvironment {
     this.importedSecondFloorTableTemplate = importedSecondFloorTableTemplate;
     this.windowRainNormalTexture = windowRainNormalTexture;
     if (windowRainNormalTexture) this.extraTextures.push(windowRainNormalTexture);
-    this.group.name = 'russian-residential-stairwell-v16';
+    this.group.name = 'russian-residential-stairwell-v17';
+    const wallAtlas = createStairwellWallAtlas();
+    this.extraTextures.push(wallAtlas);
+    this.shellMaterial = materials.upperPlaster.clone();
+    this.shellMaterial.name = 'stairwell-worn-masonry';
+    this.shellMaterial.map = wallAtlas;
+    this.shellMaterial.normalMap = null;
+    this.shellMaterial.roughnessMap = null;
+    this.shellMaterial.color.setHex(0xffffff);
+    this.shellMaterial.roughness = .94;
+    this.extraMaterials.push(this.shellMaterial);
     this.buildLandingsAndStairs();
     this.buildShell();
     this.buildRailings();
@@ -226,6 +231,11 @@ export class StairwellEnvironment {
     this.buildLighting();
     batchStaticMeshes(this.group);
     this.configureExteriorShadowCasters();
+    this.group.updateMatrixWorld(true);
+    this.group.traverse(object => {
+      // Moving clouds, LOD branches and the entrance retain their transforms.
+      if (object instanceof THREE.Mesh && !object.userData.noBatch) object.matrixAutoUpdate = false;
+    });
   }
 
   private cloneStandardMaterial(
@@ -452,8 +462,7 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
       makeBox(
         'ground-floor-finish',
         [groundWidth, STAIRWELL_FLOOR_FINISH_THICKNESS, groundDepth],
-        // Raise the visible finish slightly to avoid z-fighting on the extended entry area.
-        [0, -STAIRWELL_FLOOR_FINISH_THICKNESS * 0.5 + 0.003, groundCenterZ],
+        [0, -STAIRWELL_FLOOR_FINISH_THICKNESS * 0.5, groundCenterZ],
         this.materials.landingTerrazzo,
       ),
     );
@@ -558,6 +567,13 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     const width = STAIRWELL_BOUNDS.maxX - STAIRWELL_BOUNDS.minX;
     const depth = STAIRWELL_BOUNDS.maxZ - STAIRWELL_BOUNDS.minZ;
     const wall = STAIRWELL_WALL_THICKNESS;
+    const wallBox = (...args: Parameters<typeof makeBox>): THREE.Mesh => {
+      const mesh = makeBox(...args);
+      mesh.material = this.shellMaterial;
+      const side: StairwellWall = args[0].startsWith('west') ? 'west'
+        : args[0].startsWith('east') ? 'east' : args[0].startsWith('north') ? 'north' : 'south';
+      return mapStairwellWallUV(mesh, side);
+    };
 
     const openingMinZ = APARTMENT_ENTRY_DOOR.centerZ - APARTMENT_ENTRY_DOOR.width * 0.5;
     const openingMaxZ = APARTMENT_ENTRY_DOOR.centerZ + APARTMENT_ENTRY_DOOR.width * 0.5;
@@ -577,12 +593,12 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
       const prefix = `${side}-wall-shell-${level}`;
 
       this.group.add(
-        makeBox(`${prefix}-south`, [wall, levelHeight, southDepth], [x, baseY + levelHeight * 0.5, STAIRWELL_BOUNDS.minZ + southDepth * 0.5], this.materials.upperPlaster),
-        makeBox(`${prefix}-north`, [wall, levelHeight, northDepth], [x, baseY + levelHeight * 0.5, openingMaxZ + northDepth * 0.5], this.materials.upperPlaster),
+        wallBox(`${prefix}-south`, [wall, levelHeight, southDepth], [x, baseY + levelHeight * 0.5, STAIRWELL_BOUNDS.minZ + southDepth * 0.5], this.materials.upperPlaster),
+        wallBox(`${prefix}-north`, [wall, levelHeight, northDepth], [x, baseY + levelHeight * 0.5, openingMaxZ + northDepth * 0.5], this.materials.upperPlaster),
       );
 
       if (openingBottom > 0.001) {
-        this.group.add(makeBox(
+        this.group.add(wallBox(
           `${prefix}-threshold-wall`,
           [wall, openingBottom, APARTMENT_ENTRY_DOOR.width],
           [x, baseY + openingBottom * 0.5, APARTMENT_ENTRY_DOOR.centerZ],
@@ -596,7 +612,7 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
       // front-sided material, so the wall no longer needs to be deleted as a
       // workaround for the blinking upper trim.
       if (headerHeight > 0.001) {
-        this.group.add(makeBox(
+        this.group.add(wallBox(
           `${prefix}-header`,
           [wall, headerHeight, APARTMENT_ENTRY_DOOR.width],
           [x, baseY + openingTop + headerHeight * 0.5, APARTMENT_ENTRY_DOOR.centerZ],
@@ -611,16 +627,16 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     }
 
     this.group.add(
-      makeBox('north-wall-shell', [width, STAIRWELL_ROOF_Y, wall], [0, STAIRWELL_ROOF_Y * 0.5, STAIRWELL_BOUNDS.maxZ], this.materials.upperPlaster),
+      wallBox('north-wall-shell', [width, STAIRWELL_ROOF_Y, wall], [0, STAIRWELL_ROOF_Y * 0.5, STAIRWELL_BOUNDS.maxZ], this.materials.upperPlaster),
       // Keep the roof aligned with the now deeper south/window side shell.
       makeBox('roof-slab', [width, 0.22, depth], [0, STAIRWELL_ROOF_Y + 0.11, center(STAIRWELL_BOUNDS.minZ, STAIRWELL_BOUNDS.maxZ)], this.materials.ceiling),
     );
 
     const groundSideWidth = (width - STAIRWELL_ENTRANCE_WIDTH) * 0.5;
     this.group.add(
-      makeBox('south-ground-left', [groundSideWidth, 2.88, wall], [STAIRWELL_BOUNDS.minX + groundSideWidth * 0.5, 1.44, STAIRWELL_BOUNDS.minZ], this.materials.upperPlaster),
-      makeBox('south-ground-right', [groundSideWidth, 2.88, wall], [STAIRWELL_BOUNDS.maxX - groundSideWidth * 0.5, 1.44, STAIRWELL_BOUNDS.minZ], this.materials.upperPlaster),
-      makeBox('south-ground-above-entry', [STAIRWELL_ENTRANCE_WIDTH, 2.88 - STAIRWELL_ENTRANCE_HEIGHT, wall], [0, STAIRWELL_ENTRANCE_HEIGHT + (2.88 - STAIRWELL_ENTRANCE_HEIGHT) * 0.5, STAIRWELL_BOUNDS.minZ], this.materials.upperPlaster),
+      wallBox('south-ground-left', [groundSideWidth, 2.88, wall], [STAIRWELL_BOUNDS.minX + groundSideWidth * 0.5, 1.44, STAIRWELL_BOUNDS.minZ], this.materials.upperPlaster),
+      wallBox('south-ground-right', [groundSideWidth, 2.88, wall], [STAIRWELL_BOUNDS.maxX - groundSideWidth * 0.5, 1.44, STAIRWELL_BOUNDS.minZ], this.materials.upperPlaster),
+      wallBox('south-ground-above-entry', [STAIRWELL_ENTRANCE_WIDTH, 2.88 - STAIRWELL_ENTRANCE_HEIGHT, wall], [0, STAIRWELL_ENTRANCE_HEIGHT + (2.88 - STAIRWELL_ENTRANCE_HEIGHT) * 0.5, STAIRWELL_BOUNDS.minZ], this.materials.upperPlaster),
     );
 
     const windowSideWidth = (width - STAIRWELL_WINDOW_WIDTH) * 0.5;
@@ -629,148 +645,13 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
       const bottom = base + STAIRWELL_WINDOW_SILL;
       const top = bottom + STAIRWELL_WINDOW_HEIGHT;
       this.group.add(
-        makeBox(`south-window-left-${level}`, [windowSideWidth, 2.88, wall], [STAIRWELL_BOUNDS.minX + windowSideWidth * 0.5, base + 1.44, STAIRWELL_BOUNDS.minZ], this.materials.upperPlaster),
-        makeBox(`south-window-right-${level}`, [windowSideWidth, 2.88, wall], [STAIRWELL_BOUNDS.maxX - windowSideWidth * 0.5, base + 1.44, STAIRWELL_BOUNDS.minZ], this.materials.upperPlaster),
-        makeBox(`south-window-below-${level}`, [STAIRWELL_WINDOW_WIDTH, bottom - base, wall], [0, base + (bottom - base) * 0.5, STAIRWELL_BOUNDS.minZ], this.materials.upperPlaster),
-        makeBox(`south-window-above-${level}`, [STAIRWELL_WINDOW_WIDTH, base + 2.88 - top, wall], [0, top + (base + 2.88 - top) * 0.5, STAIRWELL_BOUNDS.minZ], this.materials.upperPlaster),
+        wallBox(`south-window-left-${level}`, [windowSideWidth, 2.88, wall], [STAIRWELL_BOUNDS.minX + windowSideWidth * 0.5, base + 1.44, STAIRWELL_BOUNDS.minZ], this.materials.upperPlaster),
+        wallBox(`south-window-right-${level}`, [windowSideWidth, 2.88, wall], [STAIRWELL_BOUNDS.maxX - windowSideWidth * 0.5, base + 1.44, STAIRWELL_BOUNDS.minZ], this.materials.upperPlaster),
+        wallBox(`south-window-below-${level}`, [STAIRWELL_WINDOW_WIDTH, bottom - base, wall], [0, base + (bottom - base) * 0.5, STAIRWELL_BOUNDS.minZ], this.materials.upperPlaster),
+        wallBox(`south-window-above-${level}`, [STAIRWELL_WINDOW_WIDTH, base + 2.88 - top, wall], [0, top + (base + 2.88 - top) * 0.5, STAIRWELL_BOUNDS.minZ], this.materials.upperPlaster),
       );
     }
 
-    this.buildPaintBand();
-  }
-
-  private buildPaintBand(): void {
-    const wall = STAIRWELL_WALL_THICKNESS;
-    const paintHeight = 1.16;
-    const horizontalPaintHeight = 0.98;
-    const horizontalUpOverlap = 0.18;
-    const diagonalPaintHeight = 0.86;
-    const thin = 0.024;
-    const sideInset = 0.02;
-    const westX = STAIRWELL_BOUNDS.minX + wall * 0.5 + thin * 0.5;
-    const eastX = STAIRWELL_BOUNDS.maxX - wall * 0.5 - thin * 0.5;
-    const southZ = STAIRWELL_BOUNDS.minZ + wall * 0.5 + thin * 0.5;
-    const northZ = STAIRWELL_BOUNDS.maxZ - wall * 0.5 - thin * 0.5;
-    const shortWallInset = 0.02;
-
-    // Bordures latérales sur les longs côtés : cette partie était déjà correcte.
-    for (let level = 0; level < STAIRWELL_LEVEL_COUNT; level += 1) {
-      const mainMinZ = STAIRWELL_MAIN_LANDING.minZ + sideInset;
-      const mainMaxZ = STAIRWELL_MAIN_LANDING.maxZ - sideInset;
-      const mainY = floorY(level) + horizontalPaintHeight * 0.5;
-      // The green lower-wall paint is a thin mesh sitting on top of the plaster.
-      // Cut it around *every* apartment frame too; otherwise it overlays the
-      // recessed door/frame and creates the same pasted-on / flickering look.
-      const paintOpeningMinZ = APARTMENT_ENTRY_DOOR.centerZ - APARTMENT_ENTRY_DOOR.width * 0.5 - 0.06;
-      const paintOpeningMaxZ = APARTMENT_ENTRY_DOOR.centerZ + APARTMENT_ENTRY_DOOR.width * 0.5 + 0.06;
-      const southStart = mainMinZ;
-      const southEnd = Math.min(mainMaxZ, paintOpeningMinZ);
-      const northStart = Math.max(mainMinZ, paintOpeningMaxZ);
-      const northEnd = mainMaxZ;
-      const horizontalStairOverlap = 0.28;
-      const longSidePaint: THREE.Mesh[] = [];
-      for (const [side, x] of [['west', westX], ['east', eastX]] as const) {
-        if (southEnd > southStart) longSidePaint.push(makeBox(
-          `${side}-paint-main-${level}-south`,
-          [thin, horizontalPaintHeight, southEnd - southStart],
-          [x, mainY, center(southStart, southEnd)],
-          this.materials.lowerPaint,
-        ));
-
-        // Extend the flat green band horizontally beyond the landing toward the
-        // stair so it overlaps the diagonal stair band. The west side is the
-        // player-apartment side and gets this on every level; at level 0 the
-        // opposite side gets it too to cover the bottom-of-stairs condition.
-        const extendTowardStairs = (side === 'west' && level < STAIRWELL_LEVEL_COUNT - 1) || level === 0;
-        const sideNorthEnd = northEnd + (extendTowardStairs ? horizontalStairOverlap : 0);
-        if (sideNorthEnd > northStart) longSidePaint.push(makeBox(
-          `${side}-paint-main-${level}-north`,
-          [thin, horizontalPaintHeight, sideNorthEnd - northStart],
-          [x, mainY, center(northStart, sideNorthEnd)],
-          this.materials.lowerPaint,
-        ));
-      }
-      this.group.add(...longSidePaint);
-
-      // Sur la façade sud, la bordure ne doit jamais passer devant les vitrages.
-      // On la découpe donc en deux segments latéraux de part et d'autre de l'ouverture.
-      const southOpeningWidth = level === 0 ? STAIRWELL_ENTRANCE_WIDTH : STAIRWELL_WINDOW_WIDTH;
-      const mainWidth = (STAIRWELL_MAIN_LANDING.maxX - shortWallInset) - (STAIRWELL_MAIN_LANDING.minX + shortWallInset);
-      const southSideSegmentWidth = Math.max(0.08, (mainWidth - southOpeningWidth) * 0.5);
-      const southSegmentOffset = southOpeningWidth * 0.5 + southSideSegmentWidth * 0.5;
-      const southPaintMeshes = [
-        makeBox(`south-paint-main-left-${level}`, [southSideSegmentWidth, horizontalPaintHeight, thin], [-southSegmentOffset, mainY, southZ], this.materials.lowerPaint),
-        makeBox(`south-paint-main-right-${level}`, [southSideSegmentWidth, horizontalPaintHeight, thin], [southSegmentOffset, mainY, southZ], this.materials.lowerPaint),
-      ];
-      if (level > 0) {
-        const windowBottomPaintHeight = Math.min(horizontalPaintHeight, STAIRWELL_WINDOW_SILL + 0.06);
-        southPaintMeshes.push(
-          makeBox(`south-paint-below-window-${level}`, [southOpeningWidth + 0.06, windowBottomPaintHeight, thin], [0, floorY(level) + windowBottomPaintHeight * 0.5, southZ], this.materials.lowerPaint),
-        );
-      }
-      this.group.add(...southPaintMeshes);
-
-      if (level < STAIRWELL_FLIGHT_COUNT) {
-        const midMinZ = STAIRWELL_MID_LANDING.minZ + sideInset;
-        const midMaxZ = STAIRWELL_MID_LANDING.maxZ - sideInset;
-        const midCenterZ = center(midMinZ, midMaxZ);
-        const midDepth = midMaxZ - midMinZ;
-        const midY = midLandingY(level) + horizontalPaintHeight * 0.5;
-        this.group.add(
-          makeBox(`west-paint-mid-${level}`, [thin, horizontalPaintHeight, midDepth], [westX, midY, midCenterZ], this.materials.lowerPaint),
-          makeBox(
-            `east-paint-mid-${level}`,
-            [thin, horizontalPaintHeight, midDepth + horizontalUpOverlap],
-            [eastX, midY, midCenterZ - horizontalUpOverlap * 0.5],
-            this.materials.lowerPaint,
-          ),
-        );
-
-        // Sur le petit côté concerné du demi-palier : on garde la bordure côté mur opposé.
-        const midWidth = (STAIRWELL_MID_LANDING.maxX - shortWallInset) - (STAIRWELL_MID_LANDING.minX + shortWallInset);
-        this.group.add(
-          makeBox(`north-paint-mid-${level}`, [midWidth, horizontalPaintHeight, thin], [0, midY, northZ], this.materials.lowerPaint),
-        );
-      }
-    }
-
-    // On conserve la bordure en diagonale le long des volées d'escalier.
-    const flightRun = STAIRWELL_STEP_DEPTH * STAIRWELL_STEPS_PER_FLIGHT;
-    const flightRise = STAIRWELL_STEP_RISE * STAIRWELL_STEPS_PER_FLIGHT;
-    const slabLength = Math.hypot(flightRun, flightRise);
-    const slabAngle = Math.atan2(flightRise, flightRun);
-    const topOnlyExtension = 0.34;
-    const diagonalReduction = paintHeight - diagonalPaintHeight;
-    const diagonalCenterLift = diagonalReduction * 0.5;
-    const diagonalLiftY = Math.cos(slabAngle) * diagonalCenterLift;
-    const diagonalLiftZ = Math.sin(slabAngle) * diagonalCenterLift;
-    for (let level = 0; level < STAIRWELL_FLIGHT_COUNT; level += 1) {
-      const base = floorY(level);
-      const mid = midLandingY(level);
-      const leftPanel = makeBox(
-        `west-slope-paint-${level}`,
-        [thin, diagonalPaintHeight, slabLength + topOnlyExtension],
-        [
-          westX,
-          base + flightRise * 0.5 + paintHeight * 0.34 + diagonalLiftY,
-          topOnlyExtension * 0.5 - diagonalLiftZ,
-        ],
-        this.materials.lowerPaint,
-      );
-      leftPanel.rotation.x = -slabAngle;
-      const rightPanel = makeBox(
-        `east-slope-paint-${level}`,
-        [thin, diagonalPaintHeight, slabLength + topOnlyExtension],
-        [
-          eastX,
-          mid + flightRise * 0.5 + paintHeight * 0.34 + diagonalLiftY,
-          -topOnlyExtension * 0.5 + diagonalLiftZ,
-        ],
-        this.materials.lowerPaint,
-      );
-      rightPanel.rotation.x = slabAngle;
-      this.group.add(leftPanel, rightPanel);
-    }
   }
 
   private buildRailings(): void {
@@ -1822,6 +1703,8 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     moon.position.set(-18, 28, 4);
     moon.target = moonTarget;
     moon.castShadow = true;
+    moon.shadow.autoUpdate = false;
+    moon.shadow.needsUpdate = true;
     moon.shadow.mapSize.set(1024, 1024);
     moon.shadow.camera.near = 1;
     moon.shadow.camera.far = 100;
@@ -1849,6 +1732,8 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     streetLamp.position.set(5.07, 4.72, -8.1);
     streetLamp.target = streetLampTarget;
     streetLamp.castShadow = true;
+    streetLamp.shadow.autoUpdate = false;
+    streetLamp.shadow.needsUpdate = true;
     streetLamp.shadow.mapSize.set(512, 512);
     streetLamp.shadow.camera.near = 0.4;
     streetLamp.shadow.camera.far = 18;
@@ -1862,50 +1747,13 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
         ? floorY(level + 1) - STAIRWELL_FLOOR_FINISH_THICKNESS - 0.16
         : STAIRWELL_ROOF_Y;
       this.addCeilingFixture(`main-fixture-${level}`, ceilingBottom - 0.024, -2.35);
-
-      const mainLight = new THREE.PointLight(profile.mainColor, profile.mainIntensity, 9.4, 2);
-      mainLight.position.set(0, ceilingBottom - 0.17, -2.35);
-      mainLight.name = `main-fixture-light-${level}`;
-      mainLight.castShadow = false;
-      this.mainLights.push(mainLight);
-      this.group.add(mainLight);
-
-      const corridorFill = new THREE.PointLight(
-        profile.corridorFillColor,
-        profile.corridorFillIntensity,
-        10.5,
-        2,
-      );
-      corridorFill.position.set(0, ceilingBottom - 0.12, 0.7);
-      corridorFill.name = `main-fixture-fill-${level}`;
-      corridorFill.castShadow = false;
-      this.corridorFillLights.push(corridorFill);
-      this.group.add(corridorFill);
     }
 
     for (let level = 0; level < STAIRWELL_FLIGHT_COUNT; level += 1) {
       const y = midLandingY(level) + 2.02;
       this.addNorthWallFixture(`mid-fixture-${level}`, y);
-
-      const wallLight = new THREE.PointLight(profile.wallColor, profile.wallIntensity, 6.8, 2);
-      wallLight.position.set(0, y - 0.02, STAIRWELL_BOUNDS.maxZ - 0.64);
-      wallLight.name = `mid-fixture-light-${level}`;
-      wallLight.castShadow = false;
-      this.wallLights.push(wallLight);
-      this.group.add(wallLight);
-
-      const stairWash = new THREE.PointLight(
-        profile.stairWashColor,
-        profile.stairWashIntensity,
-        7.6,
-        2,
-      );
-      stairWash.position.set(0, y - 0.28, 1.1);
-      stairWash.name = `mid-fixture-stair-wash-${level}`;
-      stairWash.castShadow = false;
-      this.stairWashLights.push(stairWash);
-      this.group.add(stairWash);
     }
+    this.group.add(...this.localLighting.lights);
   }
 
   setLightingMode(mode: LightingMode): void {
@@ -1924,14 +1772,7 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     if (this.streetLampLight) {
       apply([this.streetLampLight], profile.streetLampIntensity, profile.streetLampColor);
     }
-    apply(this.mainLights, profile.mainIntensity, profile.mainColor);
-    apply(
-      this.corridorFillLights,
-      profile.corridorFillIntensity,
-      profile.corridorFillColor,
-    );
-    apply(this.wallLights, profile.wallIntensity, profile.wallColor);
-    apply(this.stairWashLights, profile.stairWashIntensity, profile.stairWashColor);
+    this.localLighting.setProfile(profile);
   }
 
   private configureExteriorShadowCasters(): void {
@@ -1958,12 +1799,20 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     this.group.add(
       makeBox(`${name}-base`, [1.08, 0.05, 0.28], [0, y, z], this.materials.fixtureBody),
       makeBox(`${name}-tray`, [0.94, 0.03, 0.2], [0, y - 0.026, z], this.materials.fixtureBody),
-      makeBox(`${name}-diffuser`, [0.88, 0.03, 0.16], [0, y - 0.046, z], this.materials.fixtureGlow, false, false),
       makeBox(`${name}-end-left`, [0.09, 0.07, 0.28], [-0.495, y - 0.008, z], this.materials.fixtureBody),
       makeBox(`${name}-end-right`, [0.09, 0.07, 0.28], [0.495, y - 0.008, z], this.materials.fixtureBody),
       makeBox(`${name}-rib-left`, [0.018, 0.026, 0.17], [-0.18, y - 0.043, z], this.materials.frameMetal),
       makeBox(`${name}-rib-right`, [0.018, 0.026, 0.17], [0.18, y - 0.043, z], this.materials.frameMetal),
     );
+    for (const side of [-1, 1]) {
+      const tube = new THREE.Mesh(new THREE.CapsuleGeometry(.019, .8, 2, 8), this.materials.fixtureGlow);
+      tube.name = `${name}-fluorescent-tube-${side}`;
+      tube.rotation.z = Math.PI / 2;
+      tube.position.set(0, y - .052, z + side * .055);
+      this.group.add(tube);
+      for (const end of [-1, 1]) this.group.add(makeBox(`${name}-tube-socket-${side}-${end}`,
+        [.035, .044, .045], [end * .423, y - .039, z + side * .055], this.materials.fixtureBody));
+    }
   }
 
   private addNorthWallFixture(name: string, y: number): void {
@@ -1987,7 +1836,10 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     );
   }
 
-  update(elapsed: number): void {
+  update(elapsed: number, viewerHeight?: number): void {
+    const delta = Math.min(.05, Math.max(0, elapsed - this.previousRainTime));
+    this.previousRainTime = elapsed;
+    if (viewerHeight !== undefined) this.localLighting.update(viewerHeight);
     for (const cloud of this.cloudGroups) {
       cloud.group.position.x = cloud.baseX + Math.sin(elapsed * cloud.drift + cloud.phase) * 2.2;
     }
@@ -2002,9 +1854,9 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     for (let index = 0; index < this.rainDrops.length; index += 1) {
       const drop = this.rainDrops[index]!;
       const zone = this.rainZones[drop.zoneIndex] ?? this.rainZones[0];
-      drop.y -= drop.speed * 0.0165;
-      drop.x += Math.sin(elapsed * 0.34 + index * 0.17) * 0.00045;
-      drop.z += Math.cos(elapsed * 0.12 + index * 0.09) * 0.0002;
+      drop.y -= drop.speed * delta;
+      drop.x += Math.sin(elapsed * 0.34 + index * 0.17) * .027 * delta;
+      drop.z += Math.cos(elapsed * 0.12 + index * 0.09) * .012 * delta;
       if (drop.y < zone.minY - 0.4 || drop.z > zone.maxZ + 0.05) {
         const refreshed = this.randomRainDrop(drop.zoneIndex, zone);
         drop.x = refreshed.x;
@@ -2087,6 +1939,8 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
       template.clear();
     }
     disposeObject3D(this.group);
+    this.moonLight?.shadow.dispose();
+    this.streetLampLight?.shadow.dispose();
     this.residentialDetails.dispose();
     this.extraMaterials.forEach((material) => material.dispose());
     importedMaterials.forEach((material) => material.dispose());

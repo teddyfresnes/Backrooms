@@ -191,24 +191,39 @@ Les contacts sol/mur/plafond restent renforcés pour éviter un rendu uniformém
 éclairé. Le mode classique recrée le normal pass, le SSAO et les réglages de
 bloom historiques ; le composer est reconstruit lors de la bascule.
 
-`RussianStairwellGame` réutilise ce même `PostFX`, la même palette et le même
-type de rig global (hémisphère, rebond ambiant et clé directionnelle) que le
-niveau Backrooms. Ses intensités restent volontairement nocturnes : les néons
-de la cage, l’éclairage commutable de l’appartement et les éclairages extérieurs
-sont les sources locales lisibles. Le profil moderne concentre la lumière sous
-les plafonniers et appliques, avec des remplissages froids plus faibles ; le
-profil classique garde des remplissages chauds plus larges et plus plats. Une
-clé lunaire et le lampadaire principal projettent les seules ombres dynamiques
-de cette scène statique. Le réglage moderne/classique reconfigure ces sources
-et reconstruit son composer sans recréer la scène.
+`RussianStairwellGame` conserve le rig global et le `PostFX` nocturnes. Les
+plafonniers et appliques pilotent un pool constant de quatre lumières locales,
+repositionnées entre les étages sans changer le nombre de lumières du shader.
+Le profil moderne a des sources plus concentrées ; le classique reste plus
+chaud et plus large. Les deux shadow maps extérieures sont calculées une fois,
+puis invalidées uniquement lors d'une réactivation des ombres. En qualité
+Performance, elles sont désactivées avec SMAA, bloom et le normal pass/SSAO du
+mode classique. Auto adopte ce repli après un ralentissement durable et ne
+rétablit les effets qu'après vingt secondes stables. Sa résolution peut descendre
+vers 850 000 pixels sur grand écran. La pause et une page masquée ne redessinent
+pas continuellement la scène.
 
-`StairwellDetails` ajoute les finitions et accessoires résidentiels dans les lots
-statiques existants. Cinq matériaux et un atlas de 1024² suffisent ; aucun
-chargement externe, lumière, ombre dynamique ou travail par image n'est ajouté.
-Les volumes solides rejoignent `environment.furnitureColliders`. Le parent
-détruit les géométries après fusion ; le module libère ses matériaux et son atlas.
-Les tests bornent les triangles et appels de rendu, puis parcourent les quatre
-niveaux avec les collisions réelles.
+`StairwellDetails` reste statique : cinq matériaux et un atlas opaque de 1024²,
+sans lumière ni travail par image. Les volumes solides rejoignent
+`environment.furnitureColliders`. Le parent détruit les géométries après fusion ;
+le module libère ses matériaux et son atlas. Les radiateurs ont de vraies colonnes
+arrondies et les plafonniers des tubes et douilles. `StairwellSurfaceFinish` bake
+la peinture, fissures, coulures et reprises d'enduit dans un atlas opaque de
+2048×1024 propre aux murs. Les pièces de maçonnerie contiguës partagent les mêmes
+coordonnées de texture ; aucune bande de peinture rapportée ou incrustation de
+sol coplanaire n'est ajoutée. Les tests sondent les murs, les sept paliers,
+les budgets géométriques et les parcours Rapier sur les quatre niveaux.
+
+Le modèle intérieur de l'appartement est masqué au rendu quand la dalle ou la
+porte fermée le cache. Ses copies de portes voisines, la porte interactive et
+ses colliders restent montés. Les matrices du modèle statique sont figées ; les
+pivots interactifs gardent leur mise à jour. `SmallPropGeometry` regroupe une
+seule fois les sommets trop denses des accessoires de moins de 50 cm, en gardant
+les coutures UV et normales. Chaque regroupement est refusé si son écart monde
+dépasse 1,4 mm ; architecture, personnages et éléments multi-matériaux sont
+exclus. Les accessoires opaques sont ensuite fusionnés par matériau et cellule
+de 3,5 m afin de garder le culling spatial ; les meshes de collision gardent
+leur hiérarchie d'origine. Il n'y a aucun calcul de simplification par image.
 
 L’appartement démarre avec son plafonnier principal éteint. Une unique source
 à longue portée est alignée sur son diffuseur afin d’éclairer aussi l’entrée

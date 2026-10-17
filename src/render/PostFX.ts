@@ -29,6 +29,7 @@ export class PostFX {
   private grading?: HueSaturationEffect;
   private width = 1;
   private height = 1;
+  private performanceMode = false;
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -53,6 +54,15 @@ export class PostFX {
     previous.dispose();
   }
 
+  setPerformanceMode(enabled: boolean): void {
+    if (enabled === this.performanceMode) return;
+    this.performanceMode = enabled;
+    const previous = this.composer;
+    this.composer = this.createComposer(this.lightingMode);
+    this.composer.setSize(this.width, this.height);
+    previous.dispose();
+  }
+
   private createComposer(mode: LightingMode): EffectComposer {
     this.vignette = undefined;
     this.noise = undefined;
@@ -68,7 +78,7 @@ export class PostFX {
 
     if (mode === 'legacy') {
       let normalPass: NormalPass | undefined;
-      if (!coarsePointer) {
+      if (!coarsePointer && !this.performanceMode) {
         normalPass = new NormalPass(this.scene, this.camera, { resolutionScale: 0.5 });
         composer.addPass(normalPass);
       }
@@ -96,7 +106,7 @@ export class PostFX {
           resolutionScale: 0.58,
         }));
       }
-      if (this.options.bloom !== false && supportsHdrTargets && !coarsePointer) {
+      if (this.options.bloom !== false && supportsHdrTargets && !coarsePointer && !this.performanceMode) {
         effects.push(new BloomEffect({
           blendFunction: BlendFunction.SCREEN,
           intensity: 0.18,
@@ -108,7 +118,7 @@ export class PostFX {
         }));
       }
       effects.push(toneMapping, grading, contrast, vignette);
-      if (!coarsePointer) effects.push(new SMAAEffect());
+      if (!coarsePointer && !this.performanceMode) effects.push(new SMAAEffect());
       composer.addPass(new EffectPass(this.camera, ...effects));
       return composer;
     }
@@ -128,7 +138,7 @@ export class PostFX {
     const contrast = new BrightnessContrastEffect({ brightness: -0.01, contrast: 0.075 });
     const toneMapping = new ToneMappingEffect({ mode: ToneMappingMode.AGX });
     const effects: Effect[] = [];
-    if (this.options.bloom !== false && supportsHdrTargets && !coarsePointer) {
+    if (this.options.bloom !== false && supportsHdrTargets && !coarsePointer && !this.performanceMode) {
       effects.push(new BloomEffect({
         blendFunction: BlendFunction.SCREEN,
         intensity: 0.14,
@@ -140,7 +150,7 @@ export class PostFX {
       }));
     }
     effects.push(toneMapping, this.grading, contrast, this.noise, this.vignette);
-    if (!coarsePointer) effects.push(new SMAAEffect());
+    if (!coarsePointer && !this.performanceMode) effects.push(new SMAAEffect());
     composer.addPass(new EffectPass(this.camera, ...effects));
     return composer;
   }

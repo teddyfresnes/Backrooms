@@ -19,9 +19,9 @@ import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { PlayerController } from '../player/PlayerController';
 import {
   AdaptiveRenderScale,
-  renderScaleLimits,
   type RenderScaleLimits,
 } from '../render/AdaptiveQuality';
+import { StairwellQuality, stairwellRenderScaleLimits } from '../render/StairwellQuality';
 import {
   BACKROOMS_ATMOSPHERE,
   BACKROOMS_LEGACY_ATMOSPHERE,
@@ -74,6 +74,8 @@ export class RussianStairwellGame {
   private readonly lastSafePosition = new THREE.Vector3();
   private readonly renderScale: RenderScaleLimits;
   private readonly adaptiveScale: AdaptiveRenderScale;
+  private readonly adaptiveFeatures = new StairwellQuality();
+  private renderRequested = true;
   private readonly hemisphere = new THREE.HemisphereLight();
   private readonly ambientFill = new THREE.AmbientLight();
   private readonly directionalKey = new THREE.DirectionalLight();
@@ -113,7 +115,7 @@ export class RussianStairwellGame {
     } catch {
       this.storage = null;
     }
-    this.renderScale = renderScaleLimits(
+    this.renderScale = stairwellRenderScaleLimits(
       window.innerWidth,
       window.innerHeight,
       window.devicePixelRatio,
@@ -360,6 +362,7 @@ export class RussianStairwellGame {
       this.settings.lighting,
       { bloom: false },
     );
+    this.applyRenderFeatures(0);
     this.resize();
     await this.renderer.compileAsync(this.scene, this.camera);
     if (this.disposed) return;
@@ -448,6 +451,7 @@ export class RussianStairwellGame {
   }
 
   private onPlayerLockChange(locked: boolean): void {
+    this.renderRequested = true;
     this.ui.setLocked(locked);
     this.player?.setInputEnabled(locked && !this.ui.isConsoleOpen);
     this.character?.setActive(locked && !this.ui.isConsoleOpen);
@@ -457,6 +461,7 @@ export class RussianStairwellGame {
   }
 
   private applySettings(settings: GameSettings): void {
+    this.renderRequested = true;
     const previousLighting = this.settings.lighting;
     this.settings = { ...settings };
     this.player?.setFieldOfView(settings.fieldOfView);
@@ -466,6 +471,7 @@ export class RussianStairwellGame {
     this.player?.setControlBindings(settings.controls);
     this.audio.setMasterVolume(settings.masterVolume);
     siteAudio.setMasterVolume(settings.masterVolume);
+    this.applyRenderFeatures(0);
     const ratio = this.pixelRatioForQuality(settings.renderQuality);
     if (ratio !== this.pixelRatio) {
       this.pixelRatio = ratio;
@@ -599,13 +605,15 @@ export class RussianStairwellGame {
     const measuredDelta = Math.max(0, (now - this.previousTime) / 1000);
     const delta = Math.min(0.05, measuredDelta);
     this.previousTime = now;
+    if (document.hidden || (!this.player.isLocked && !this.renderRequested)) return;
     this.elapsed += delta;
     if (this.player.isLocked) {
       this.playableSeconds += delta;
       this.autosaveElapsed += delta;
       if (this.autosaveElapsed >= AUTOSAVE_INTERVAL_SECONDS) this.saveNow('autosave');
       this.character?.update(delta);
-      this.environment.update(this.elapsed);
+      this.environment.update(this.elapsed, this.camera.position.y);
+      this.apartment?.updateVisibility(this.camera.position);
       this.player.getViewDirection(this.viewDirection);
       this.door.update(0, this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
       this.hallExit?.update(this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
@@ -619,6 +627,7 @@ export class RussianStairwellGame {
     }
     const instantaneousFps = measuredDelta > 0 ? 1 / measuredDelta : 60;
     this.fps = THREE.MathUtils.lerp(this.fps, instantaneousFps, 0.045);
+    if (this.player.isLocked) this.applyRenderFeatures(measuredDelta);
     if (this.settings.renderQuality === 'auto') {
       const nextRatio = this.adaptiveScale.update(this.fps, measuredDelta);
       if (nextRatio !== null && nextRatio !== this.pixelRatio) {
@@ -627,10 +636,24 @@ export class RussianStairwellGame {
       }
     }
     this.renderer.info.reset();
+    this.renderRequested = false;
     this.postFX?.render(delta);
   };
 
+  private applyRenderFeatures(delta: number): void {
+    const compact = this.adaptiveFeatures.update(this.settings.renderQuality, this.fps, delta);
+    this.postFX?.setPerformanceMode(compact);
+    if (this.renderer.shadowMap.enabled === compact) {
+      this.renderer.shadowMap.enabled = !compact;
+      this.scene.traverse(object => {
+        const light = object as THREE.Light & { shadow?: THREE.LightShadow };
+        if (light.shadow) light.shadow.needsUpdate = true;
+      });
+    }
+  }
+
   private readonly resize = (): void => {
+    this.renderRequested = true;
     const width = Math.max(1, this.container.clientWidth || window.innerWidth);
     const height = Math.max(1, this.container.clientHeight || window.innerHeight);
     this.renderer.setPixelRatio(this.pixelRatio);

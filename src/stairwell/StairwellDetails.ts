@@ -53,7 +53,29 @@ export function createStairwellDetailAtlas(): THREE.CanvasTexture {
       ctx.font = 'bold 100px sans-serif'; ctx.fillText(String(tile - 7).padStart(2, '0'), 128, 178);
       ctx.fillStyle = '#7b8070'; ctx.fillRect(40, 212, 176, 3);
     }
-    // Fine print/paint wear is baked once instead of layers of transparent decals.
+    // Tea-stained paper, rubbed enamel and tape are baked into the opaque tile.
+    const dirt = ctx.createRadialGradient(142, 124, 45, 142, 124, 175);
+    dirt.addColorStop(0, 'rgba(75,57,29,0)'); dirt.addColorStop(.68, 'rgba(75,57,29,.06)'); dirt.addColorStop(1, 'rgba(63,44,20,.42)');
+    ctx.fillStyle = dirt; ctx.fillRect(0, 0, 256, 256);
+    for (let stain = 0; stain < 9; stain++) {
+      ctx.fillStyle = 'rgba(77,60,31,.08)'; ctx.beginPath();
+      ctx.ellipse(random.int(7, 249), random.int(7, 249), random.int(3, 17), random.int(7, 32), random.float(-.5, .5), 0, Math.PI * 2); ctx.fill();
+    }
+    if (tile === 4) {
+      for (let paper = 0; paper < 6; paper++) {
+        const x = 23 + paper % 3 * 76, y = 58 + Math.floor(paper / 3) * 92;
+        ctx.fillStyle = 'rgba(143,119,63,.32)'; ctx.fillRect(x + 15, y - 3, 31, 9);
+        ctx.strokeStyle = 'rgba(85,73,48,.22)'; ctx.lineWidth = .7;
+        ctx.beginPath(); ctx.moveTo(x + 4, y + 25); ctx.lineTo(x + 39, y + 29); ctx.lineTo(x + 58, y + 24); ctx.stroke();
+        ctx.fillStyle = '#625747'; ctx.beginPath(); ctx.moveTo(x + 64, y + 65); ctx.lineTo(x + 54, y + 77); ctx.lineTo(x + 66, y + 79); ctx.fill();
+      }
+    } else {
+      ctx.strokeStyle = 'rgba(204,197,166,.5)'; ctx.lineWidth = 1;
+      for (let scratch = 0; scratch < 10; scratch++) {
+        const x = random.int(14, 220), y = random.int(12, 241);
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + random.int(3, 21), y - random.int(0, 3)); ctx.stroke();
+      }
+    }
     for (let speck = 0; speck < 95; speck++) {
       ctx.fillStyle = random.chance(.5) ? 'rgba(47,47,34,.12)' : 'rgba(236,229,201,.16)';
       ctx.fillRect(random.int(10, 244), random.int(10, 244), random.int(1, 3), random.int(1, 3));
@@ -80,7 +102,8 @@ export class StairwellDetails {
   constructor(private readonly base: StairwellMaterialSet, private readonly atlas: THREE.Texture = createStairwellDetailAtlas()) {
     this.group.name = 'stairwell-residential-details';
     this.wood = this.material('stairwell-worn-wood', 0x645340);
-    this.iron = this.material('stairwell-aged-enamel', 0xa4a696, .16);
+    this.iron = this.material('stairwell-aged-enamel', 0xa5a28c, .08);
+    this.iron.map = base.pipe.map;
     this.clay = this.material('stairwell-terracotta', 0x695244);
     this.leaf = this.material('stairwell-foliage', 0x414e3d);
     this.leaf.side = THREE.DoubleSide;
@@ -88,7 +111,10 @@ export class StairwellDetails {
     this.owned.push(this.labels);
     this.landings(); this.stairs(); this.entrance(); this.residentialCorners();
     this.group.updateMatrixWorld(true);
-    this.group.traverse(object => { object.matrixAutoUpdate = false; });
+    this.group.traverse(object => {
+      if (object instanceof THREE.Mesh) object.receiveShadow = false;
+      object.matrixAutoUpdate = false;
+    });
   }
 
   private material(name: string, color: number, metalness = 0): THREE.MeshStandardMaterial {
@@ -121,15 +147,27 @@ export class StairwellDetails {
 
   private radiator(name: string, x: number, y: number, z: number): void {
     const pieces: THREE.Mesh[] = [];
-    for (let fin = 0; fin < 12; fin++) {
-      pieces.push(this.box(`${name}-section-${fin}`, [.068, .44, .16], [x - .495 + fin * .09, y + .41, z], this.iron));
-      this.box(`${name}-fin-shadow-${fin}`, [.018, .32, .007], [x - .495 + fin * .09, y + .41, z + .083], this.base.pipe);
+    for (let fin = 0; fin < 10; fin++) {
+      for (const bank of [-1, 1]) {
+        // Rounded cast-iron columns leave real air channels between sections.
+        const column = new THREE.Mesh(new THREE.CapsuleGeometry(.027, .32, 2, 6), this.iron);
+        column.name = `${name}-cast-section-${fin}-${bank}`;
+        column.position.set(x - .4275 + fin * .095, y + .41, z + bank * .047);
+        column.scale.z = 1.45;
+        this.group.add(column); pieces.push(column);
+      }
     }
-    for (const h of [.23, .58]) pieces.push(this.box(`${name}-manifold-${h}`, [1.14, .055, .11], [x, y + h, z], this.iron));
+    for (const h of [.23, .59]) {
+      const manifold = makeCylinder(`${name}-manifold-${h}`, .034, 1.06, [x, y + h, z], this.iron, 8);
+      manifold.rotation.z = Math.PI / 2; this.group.add(manifold); pieces.push(manifold);
+    }
     for (const side of [-1, 1]) {
       pieces.push(this.box(`${name}-bracket-${side}`, [.08, .15, .13], [x + side * .36, y + .22, z - .07], this.base.pipe));
-      pieces.push(this.box(`${name}-valve-${side}`, [.1, .065, .065], [x + side * .61, y + .58, z], this.base.galvanized));
+      const valve = makeCylinder(`${name}-valve-${side}`, .035, .09, [x + side * .565, y + .59, z], this.base.galvanized, 6);
+      valve.rotation.z = Math.PI / 2; this.group.add(valve); pieces.push(valve);
     }
+    const wheel = makeCylinder(`${name}-valve-wheel`, .048, .018, [x + .57, y + .655, z], this.base.pipe, 8);
+    this.group.add(wheel); pieces.push(wheel);
     this.solid(name, pieces);
   }
 
@@ -151,8 +189,6 @@ export class StairwellDetails {
         this.box(`doorbell-base-${level}-${side}`, [.047, .09, .065], [side * 1.888, y + 1.22, plateZ], this.base.fixtureBody);
         this.box(`doorbell-button-${level}-${side}`, [.012, .035, .035], [side * 1.858, y + 1.22, plateZ], this.base.rubber);
       }
-      // Small contrasting floor inlays give the large landings scale and depth.
-      for (const x of [-1.32, 1.32]) this.box(`landing-inlay-${level}-${x}`, [.018, .003, 1.4], [x, y + .0045, -4.32], this.base.railing);
       if (level === 1 || level === 3) this.radiator(`window-radiator-${level}`, 0, y, -5.98);
     }
     for (let level = 0; level < STAIRWELL_FLIGHT_COUNT; level++) {
@@ -168,7 +204,6 @@ export class StairwellDetails {
         new THREE.Vector3(-1.22, y + 2.28, northZ + .045), .018, this.base.pipe, 6));
       this.box(`conduit-box-${level}`, [.12, .1, .065], [-1.22, y + 2.27, northZ + .035], this.iron);
     }
-    this.paintWear();
   }
 
   private stairs(): void {
@@ -182,7 +217,6 @@ export class StairwellDetails {
           // A real projecting nosing: neither its upper face nor its leading
           // face is coplanar with the underlying concrete tread/riser.
           this.box(`stair-nosing-${level}-${side}-${step}`, [1.64, .02, .022], [side * 1.05, top - .007, front], this.base.galvanized);
-          this.box(`tread-wear-${level}-${side}-${step}`, [.65, .002, .045], [side * 1.05, top + .0012, front - side * .055], this.iron);
         }
         const startZ = side < 0 ? -1.04 : 1.04, endZ = -startZ;
         const a = new THREE.Vector3(side * 1.86, base + STAIRWELL_STEP_RISE + .94, startZ);
@@ -226,23 +260,6 @@ export class StairwellDetails {
     const box = this.box('resident-parcel', [.42, .29, .36], [1.59, floorY(3) + .145, -5.67], this.wood);
     this.box('parcel-tape', [.065, .006, .35], [1.59, floorY(3) + .293, -5.67], this.iron);
     this.solid('resident-parcel', [box]);
-  }
-
-  private paintWear(): void {
-    const random = new SeededRandom('stairwell-details:paint-chips');
-    for (let level = 0; level < STAIRWELL_LEVEL_COUNT; level++) {
-      for (let chip = 0; chip < 14; chip++) {
-        const side = chip % 2 ? -1 : 1, size = random.float(.015, .075);
-        const shape = new THREE.Shape(); shape.moveTo(0, 0);
-        shape.lineTo(size, size * .24); shape.lineTo(size * .6, size * .73);
-        shape.lineTo(-size * .3, size); shape.lineTo(-size * .43, size * .4); shape.closePath();
-        const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), this.base.upperPlaster);
-        mesh.name = `paint-chip-${level}-${chip}`;
-        mesh.position.set(side * 1.914, floorY(level) + random.float(.16, .88), random.float(-5.8, -3.45));
-        mesh.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
-        this.group.add(mesh);
-      }
-    }
   }
 
   /** Geometry is owned/disposed by the environment after its static batching. */

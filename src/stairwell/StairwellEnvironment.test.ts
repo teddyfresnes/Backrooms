@@ -21,7 +21,6 @@ describe('Russian stairwell render integration', () => {
     expect(stairwell).toContain("addApartmentDoorWall('east', level)");
     expect(stairwell).toContain('this.hallEntranceDoor = hallDoor');
     expect(stairwell).toContain('this.markHierarchyNoBatch(hallDoor)');
-    expect(stairwell).toContain('paintOpeningMinZ');
     expect(apartment).toContain("const entryFrame = requireObject(this.model, 'Doorframe')");
     expect(apartment).toContain('this.addNeighborApartmentDoors(entryLeaf, entryFrame)');
     expect(apartment).toContain('const sourceAbsX = Math.abs(sourceCenter.x)');
@@ -109,8 +108,8 @@ describe('Russian stairwell render integration', () => {
 
     expect(modern.mainIntensity).toBeGreaterThan(legacy.mainIntensity);
     expect(modern.wallIntensity).toBeGreaterThan(legacy.wallIntensity);
-    expect(modern.corridorFillIntensity).toBeLessThan(legacy.corridorFillIntensity);
-    expect(modern.stairWashIntensity).toBeLessThan(legacy.stairWashIntensity);
+    expect(modern.mainDistance).toBeLessThan(legacy.mainDistance);
+    expect(modern.wallDistance).toBeLessThan(legacy.wallDistance);
     expect(modern.mainColor).not.toBe(legacy.mainColor);
     expect(runtime).toContain('environment.setLightingMode(this.settings.lighting)');
     expect(runtime).toContain('this.environment?.setLightingMode(settings.lighting)');

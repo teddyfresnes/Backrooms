@@ -114,20 +114,38 @@ export const makeTorus = (
 };
 
 /**
- * Fusionne les éléments statiques qui partagent exactement le même matériau.
+ * Fusionne les éléments statiques qui partagent matériau et propriétés d'ombre.
  * Les vitrages et matériaux transparents restent séparés pour conserver un tri
  * correct. Les petits tuyaux, portes et garde-corps texturés sont fusionnés eux
- * aussi : la scène reste sous une vingtaine de draw calls sur la plupart des GPU.
+ * aussi. Les branches cachées/animées ne sont jamais absorbées dans un lot.
  */
-export const batchStaticMeshes = (root: THREE.Group): void => {
+export const batchStaticMeshes = (root: THREE.Object3D, cellSize?: number): void => {
   root.updateMatrixWorld(true);
+  const rootInverse = root.matrixWorld.clone().invert();
   const buckets = new Map<string, { material: THREE.Material; meshes: THREE.Mesh[] }>();
 
   root.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) return;
+    if (object instanceof THREE.SkinnedMesh || object instanceof THREE.InstancedMesh) return;
     if (Array.isArray(object.material)) return;
     if (object.material.transparent || object.userData.noBatch) return;
-    const key = object.material.uuid;
+    let ancestor: THREE.Object3D | null = object;
+    while (ancestor && ancestor !== root) {
+      if (!ancestor.visible || ancestor.userData.noBatch || ancestor instanceof THREE.LOD) return;
+      ancestor = ancestor.parent;
+    }
+    const layout = Object.keys(object.geometry.attributes).sort().map(name => {
+      const attribute = object.geometry.getAttribute(name) as THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+      const array = attribute instanceof THREE.InterleavedBufferAttribute ? attribute.data.array : attribute.array;
+      return `${name}/${attribute.itemSize}/${array.constructor.name}/${attribute.normalized}`;
+    }).join(',');
+    let cell = '';
+    if (cellSize) {
+      object.geometry.computeBoundingBox();
+      const center = object.geometry.boundingBox!.getCenter(new THREE.Vector3()).applyMatrix4(object.matrixWorld);
+      cell = `${Math.floor(center.x / cellSize)},${Math.floor(center.y / cellSize)},${Math.floor(center.z / cellSize)}`;
+    }
+    const key = `${object.material.uuid}:${object.castShadow}:${object.receiveShadow}:${layout}:${!!object.geometry.index}:${cell}`;
     const bucket: { material: THREE.Material; meshes: THREE.Mesh[] } =
       buckets.get(key) ?? { material: object.material, meshes: [] };
     bucket.meshes.push(object);
@@ -136,15 +154,28 @@ export const batchStaticMeshes = (root: THREE.Group): void => {
 
   for (const { material, meshes } of buckets.values()) {
     if (meshes.length < 2) continue;
-    const geometries = meshes.map((mesh) => mesh.geometry.clone().applyMatrix4(mesh.matrixWorld));
+    const geometries = meshes.map((mesh) => {
+      const transform = new THREE.Matrix4().multiplyMatrices(rootInverse, mesh.matrixWorld);
+      const geometry = mesh.geometry.clone();
+      // WebGL flips front faces for mirrored objects. A baked batch must bake
+      // that winding too, or one side of an imported object disappears.
+      if (transform.determinant() < 0) {
+        if (!geometry.index) geometry.setIndex(Array.from({ length: geometry.getAttribute('position').count }, (_, i) => i));
+        const index = geometry.index!;
+        for (let i = 0; i < index.count; i += 3) {
+          const a = index.getX(i); index.setX(i, index.getX(i + 2)); index.setX(i + 2, a);
+        }
+      }
+      return geometry.applyMatrix4(transform);
+    });
     const merged = BufferGeometryUtils.mergeGeometries(geometries, false);
     geometries.forEach((geometry) => geometry.dispose());
     if (!merged) continue;
 
     const batch = new THREE.Mesh(merged, material);
     batch.name = `static-batch-${material.name || material.uuid.slice(0, 8)}`;
-    batch.receiveShadow = meshes.some((mesh) => mesh.receiveShadow);
-    batch.castShadow = meshes.some((mesh) => mesh.castShadow);
+    batch.receiveShadow = meshes[0]!.receiveShadow;
+    batch.castShadow = meshes[0]!.castShadow;
     meshes.forEach((mesh) => {
       mesh.removeFromParent();
       mesh.geometry.dispose();

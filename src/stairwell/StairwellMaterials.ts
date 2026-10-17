@@ -122,8 +122,8 @@ export class StairwellMaterials {
       normalMap: terrazzo.normal,
       roughnessMap: terrazzo.roughness,
       color: 0xa8a59d,
-      normalScale: new THREE.Vector2(0.24, 0.24),
-      roughness: 0.8,
+      normalScale: new THREE.Vector2(0.085, 0.085),
+      roughness: 0.86,
       metalness: 0,
     } satisfies THREE.MeshStandardMaterialParameters;
 
@@ -223,9 +223,9 @@ export class StairwellMaterials {
       }),
       fixtureBody: new THREE.MeshStandardMaterial({
         ...metalParameters,
-        color: 0xcac8c0,
-        roughness: 0.76,
-        metalness: 0.14,
+        color: 0xb9b09a,
+        roughness: 0.9,
+        metalness: 0.08,
       }),
       fixtureGlow: new THREE.MeshStandardMaterial({
         color: 0xe7dfc8,
