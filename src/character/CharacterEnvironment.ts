@@ -18,9 +18,16 @@ export interface EnvironmentHit {
   face: { normal: THREE.Vector3 };
 }
 
+export interface EnvironmentSphereHit {
+  readonly center: THREE.Vector3;
+  readonly normal: THREE.Vector3;
+}
+
 /** The host's real collision world, including chunks, doors and apartment meshes. */
 export class CharacterEnvironment {
   private readonly queryShape = new RAPIER.Cuboid(3, 3, 3);
+  private readonly sphere = new RAPIER.Ball(.1);
+  private readonly sweepVelocity = new THREE.Vector3();
   constructor(private readonly physics: PhysicsWorld) {}
   raycast(raycaster: THREE.Raycaster): EnvironmentHit[] {
     const near = Math.max(0, raycaster.near);
@@ -33,6 +40,19 @@ export class CharacterEnvironment {
     const distance = near + hit.timeOfImpact;
     return [{ distance, point: raycaster.ray.at(distance, new THREE.Vector3()),
       face: { normal: new THREE.Vector3(hit.normal.x, hit.normal.y, hit.normal.z) } }];
+  }
+  /** Sweep an actual hand/arm volume through the host's mounted collision world.
+   * The result is the sphere centre, not a surface point. Reuse caller storage.
+   */
+  sweepSphere(from: Readonly<THREE.Vector3>, to: Readonly<THREE.Vector3>, radius: number, out: EnvironmentSphereHit): boolean {
+    this.sphere.radius = Math.max(.001, radius);
+    this.sweepVelocity.copy(to).sub(from);
+    const hit = this.physics.world.castShape(from, { x: 0, y: 0, z: 0, w: 1 }, this.sweepVelocity,
+      this.sphere, 0, 1, true, undefined, undefined, undefined, undefined, this.physics.isEnvironmentCollider);
+    if (!hit) return false;
+    out.center.copy(from).addScaledVector(this.sweepVelocity, hit.time_of_impact);
+    out.normal.set(hit.normal1.x, hit.normal1.y, hit.normal1.z).normalize();
+    return true;
   }
   /** Find a supported place on this floor, with a clear path from the player. */
   findPartnerSpawn(origin: THREE.Vector3, facing: THREE.Vector3): THREE.Vector3 | null {

@@ -36,4 +36,21 @@ describe('character queries in the host collision world', () => {
     expect(position?.y).toBeCloseTo(-10);expect(position!.distanceTo(physics.getPosition())).toBeGreaterThan(2);
     physics.removeChunk('origin');expect(environment.findPartnerSpawn(physics.getPosition(),new THREE.Vector3(0,0,-1))).toBeNull();
   });
+  it('sweeps hand-sized volumes against thin imported walls, with world-space normals and no actor self-hit', async () => {
+    const { physics, environment } = await create();
+    const out = { center: new THREE.Vector3(), normal: new THREE.Vector3() };
+    const from = new THREE.Vector3(0, -8.8, 0), to = new THREE.Vector3(0, -8.8, -3);
+    physics.setMeleeOpponentBlocker({ x: 0, y: -9.16, z: -1 });
+    expect(environment.sweepSphere(from, to, .09, out)).toBe(false);
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(3, 3, .015));
+    wall.position.set(0, -9, -1); wall.rotation.y = Math.PI / 5;
+    physics.addTrimeshChunk('thin-wall', [wall]);
+    expect(environment.sweepSphere(from, to, .09, out)).toBe(true);
+    const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(wall.quaternion);
+    expect(out.normal.dot(normal)).toBeGreaterThan(.999);
+    expect(out.center.clone().sub(wall.position).dot(normal)).toBeCloseTo(.0975, 3);
+    physics.removeChunk('thin-wall');
+    expect(environment.sweepSphere(from, to, .09, out)).toBe(false);
+    wall.geometry.dispose(); (wall.material as THREE.Material).dispose();
+  });
 });

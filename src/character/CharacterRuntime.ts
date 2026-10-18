@@ -4,6 +4,7 @@ import { createCrouchLocomotionClips, CROUCH_LOCOMOTION_IDS, CROUCH_GAIT_REFEREN
 import { advanceStrikeClock, CombatImpactAudio } from './CombatFeel';
 import { createCombatPushClip, applyCombatPushPose, combatPushEnvelope, sampleCombatPalm, transferCombatStance } from './CombatPushMotion';
 import { FirstPersonCombatPose, offsetFirstPersonUpperBody } from './FirstPersonCombatPose';
+import { FirstPersonObstaclePose } from './FirstPersonObstaclePose';
 import { capFirstPersonMask } from './FirstPersonMeshCaps';
 import { ClinchAttackVariation, createCombatHeadbuttClip, headbuttContactDamage } from './CombatHeadbutt';
 import { sweepCombatContact, combatChainReady, CombatBalance, stepCombatSpring } from './CombatContact';
@@ -1361,6 +1362,7 @@ export class CharacterRuntime {
   private combatTransition: AnimationId | null = null;
   private readonly firstPersonClipUniforms: Array<{ clipY: { value: number }; combatIsolation: { value: number }; groundKick: { value: number } }> = [];
   private readonly firstPersonCombatPresentation = new FirstPersonCombatPose();
+  private readonly firstPersonObstaclePose = new FirstPersonObstaclePose();
   private readonly firstPersonHipWorld = new THREE.Vector3();
   private readonly firstPersonHipTarget = new THREE.Vector3();
   private readonly firstPersonForward = new THREE.Vector3();
@@ -1793,6 +1795,7 @@ export class CharacterRuntime {
   }
 
   private applyViewMode(snap: boolean): void {
+    this.firstPersonObstaclePose.reset();
     const firstPerson = this.viewMode === 'first-person';
     for (const [mode, button] of this.viewButtons) button.classList.toggle('is-active', mode === this.viewMode);
 
@@ -3459,6 +3462,7 @@ export class CharacterRuntime {
       if (this.viewMode === 'first-person' && session.kind === 'help-up' && session.from === 'player') {
         this.firstPersonCamera.position.add(this.pairHelperEyeOffset);
       }
+      this.applyFirstPersonObstaclePose(delta);
     }
     this.captureRagdollMotionFrame(delta);
     if (this.recovery || this.ragdoll) {
@@ -8815,6 +8819,16 @@ export class CharacterRuntime {
     this.firstPersonCombatPresentation.applyGuard(this.firstPersonCamera, chains, weights, delta);
   }
 
+  private applyFirstPersonObstaclePose(delta: number): void {
+    if (this.viewMode !== 'first-person' || !this.firstPersonCharacter || this.player?.isIncapacitated) {
+      this.firstPersonObstaclePose.reset(); return;
+    }
+    this.firstPersonObstaclePose.apply(this.firstPersonCamera, [
+      [this.firstPersonLeftUpperArmBone, this.firstPersonLeftForearmBone, this.firstPersonLeftHandBone],
+      [this.firstPersonRightUpperArmBone, this.firstPersonRightForearmBone, this.firstPersonRightHandBone],
+    ], this.environment, delta);
+  }
+
   private applyFallMotion(delta: number): void {
     if (!this.player) return;
     const state = this.player.getDebugState();
@@ -10504,6 +10518,7 @@ export class CharacterRuntime {
           .multiplyScalar(-0.075 * this.firstPersonCombatPoseBlend));
       this.applyFirstPersonGuardPose(rawDelta);
       this.applyFirstPersonArmCameraSafety(rawDelta);
+      this.applyFirstPersonObstaclePose(rawDelta);
     }
     this.updateRecoveryCameraBlend(rawDelta);
     this.applyFirstPersonMeleeHitCameraFeedback(rawDelta);

@@ -93,6 +93,14 @@ montés, y compris les trimeshes importés. Le streaming suit le bassin pendant 
 chute. Le fond de menu ne charge pas le personnage. Le runtime hôte détruit le
 personnage avant son joueur et sa physique.
 
+`FirstPersonObstaclePose` corrige uniquement les bras du rig de présentation,
+après la garde et la sécurité caméra. Ses balayages sphériques Rapier couvrent
+les doigts, les avant-bras et les coudes contre les colliders réels, dont les
+portes et trimeshes. Les articulations se replient sans étirer les membres ni
+vriller les poignets ; le corps monde, les pieds et la caméra restent intacts.
+La pose est restaurée avant le mixer suivant ; le relâchement du contact est amorti. Ne pas
+appliquer cette correction au ragdoll ni au rig de troisième personne.
+
 ## Deux espaces de coordonnées
 
 - Le contenu d’un `WorldPlan` est local à son chunk.
