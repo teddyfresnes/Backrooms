@@ -546,13 +546,13 @@ describe('Level 0 procedural generator', () => {
           const cornerX = orientation === 'x' ? point : fixed;
           const cornerZ = orientation === 'x' ? fixed : point;
           const coveredByWall = world.walls.some((wall) => {
-            if (wall.orientation !== orientation) return false;
-            const wallFixed = orientation === 'x' ? wall.z : wall.x;
-            const along = orientation === 'x' ? wall.x : wall.z;
+            // A flush butt joint can be closed by the perpendicular wall.
+            // Require a real full-height solid at the sample, rather than a
+            // centre-line of one particular orientation or a decorative post.
             return (
-              Math.abs(wallFixed - fixed) < 0.06 &&
-              point >= along - wall.length * 0.5 &&
-              point <= along + wall.length * 0.5
+              wall.collision && wall.bottom <= 0.01 && wall.bottom + wall.height >= world.wallHeight - 0.01 &&
+              Math.abs(cornerX - wall.x) <= (wall.orientation === 'x' ? wall.length : wall.thickness) * 0.5 + 1e-6 &&
+              Math.abs(cornerZ - wall.z) <= (wall.orientation === 'z' ? wall.length : wall.thickness) * 0.5 + 1e-6
             );
           });
           const coveredByPost = world.columns.some((column) =>

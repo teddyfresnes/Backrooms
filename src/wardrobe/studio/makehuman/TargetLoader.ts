@@ -1,4 +1,5 @@
 import type { MakeHumanBaseData, SparseTarget } from './types'
+import { runWork, textLines } from '../core/CooperativeWork'
 
 const BASE_URL = '/assets/mpfb/base.runtime.json.gz'
 const TARGET_ROOT = '/assets/mpfb/targets'
@@ -50,7 +51,7 @@ export function loadSparseTarget(path: string) {
   }
   pending = fetch(`${TARGET_ROOT}/${normalized}.target.gz`)
     .then(responseTextMaybeGzip)
-    .then(parseTarget)
+    .then(text => runWork(parseTarget(text)))
   touchCache(normalized, pending)
   void pending.catch(() => {
     if (targetCache.get(normalized) === pending) targetCache.delete(normalized)
@@ -58,10 +59,12 @@ export function loadSparseTarget(path: string) {
   return pending
 }
 
-function parseTarget(text: string): SparseTarget {
+function* parseTarget(text: string): Generator<void, SparseTarget> {
   const indices: number[] = []
   const delta: number[] = []
-  for (const raw of text.split(/\r?\n/)) {
+  let lines = 0
+  for (const raw of textLines(text)) {
+    if (++lines % 512 === 0) yield
     const line = raw.trim()
     if (!line || line.startsWith('#') || line.startsWith('"')) continue
     const parts = line.split(/\s+/)

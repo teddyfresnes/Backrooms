@@ -58,6 +58,13 @@ inverses : la rotation de prévisualisation ne doit jamais entrer dans la liaiso
 du corps ou des vêtements. Les yeux se refitent dans cet espace avant de
 restaurer la pose animée.
 
+Les sélections du garde-robe réutilisent ce corps, ses buffers et son squelette.
+Un nouvel epoch invalide le calcul précédent et ses callbacks de disponibilité ;
+les boutons restent actifs. Les morphs préparent positions et normales par petits
+lots, puis les appliquent ensemble après une dernière vérification. La pose est
+capturée à cet instant. Les fichiers MHCLO/OBJ et targets se lisent aussi par lots ;
+leurs poids de squelette immuables sont mis en cache, sans recalcul à chaque preset.
+
 Une session jouable masque l’overlay avant de demander le verrouillage de souris :
 le refus asynchrone du navigateur ne doit jamais rouvrir le menu de pause. Le
 canvas permet ensuite de redemander le verrouillage sur un clic utilisateur.

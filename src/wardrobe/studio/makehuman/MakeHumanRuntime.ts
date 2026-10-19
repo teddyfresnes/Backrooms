@@ -18,6 +18,7 @@ import {
   Vector3,
 } from 'three'
 import type { CharacterConfig } from '../core/types'
+import { CooperativeWork, finishWork, runWork } from '../core/CooperativeWork'
 import { expressionMouthOpening, expressionTargets, type FacialExpressionId } from '../core/expressions'
 import { calculateDetailTargets } from './DetailTargets'
 import { calculateMacroTargets, macroInfoFromBody } from './MacroTargets'
@@ -165,13 +166,13 @@ export function setMakeHumanBodyDeleteMask(instance: MakeHumanInstance, key: str
   instance.geometry.setIndex(visible)
 }
 
-function updateRenderGeometry(instance: MakeHumanInstance, full: Float32Array) {
-  const attr = instance.geometry.getAttribute('position') as Float32BufferAttribute
+function* prepareRenderGeometry(instance: MakeHumanInstance, full: Float32Array) {
+  const positions = new Float32Array(instance.renderSource.length * 3)
   for (let i = 0; i < instance.renderSource.length; i++) {
-    const source = instance.renderSource[i] * 3
-    attr.setXYZ(i, full[source], full[source + 1], full[source + 2])
+    const source = instance.renderSource[i] * 3, out = i * 3
+    positions[out] = full[source]; positions[out + 1] = full[source + 1]; positions[out + 2] = full[source + 2]
+    if (i % 2048 === 2047) yield
   }
-  attr.needsUpdate = true
 
   // Smooth shading must be accumulated on the ORIGINAL MakeHuman vertices,
   // not on UV-split render vertices. Otherwise every UV seam gets its own
@@ -192,11 +193,13 @@ function updateRenderGeometry(instance: MakeHumanInstance, full: Float32Array) {
     const ny = abz * acx - abx * acz
     const nz = abx * acy - aby * acx
     for (const o of [ao, bo, co]) { sourceNormals[o] += nx; sourceNormals[o + 1] += ny; sourceNormals[o + 2] += nz }
+    if (i % 6144 === 6141) yield
   }
   for (let i = 0; i < sourceNormals.length; i += 3) {
     const x = sourceNormals[i]; const y = sourceNormals[i + 1]; const z = sourceNormals[i + 2]
     const length = Math.hypot(x, y, z) || 1
     sourceNormals[i] = x / length; sourceNormals[i + 1] = y / length; sourceNormals[i + 2] = z / length
+    if (i % 6144 === 6141) yield
   }
   const renderNormals = new Float32Array(instance.renderSource.length * 3)
   for (let i = 0; i < instance.renderSource.length; i++) {
@@ -204,10 +207,24 @@ function updateRenderGeometry(instance: MakeHumanInstance, full: Float32Array) {
     renderNormals[i * 3] = sourceNormals[source]
     renderNormals[i * 3 + 1] = sourceNormals[source + 1]
     renderNormals[i * 3 + 2] = sourceNormals[source + 2]
+    if (i % 2048 === 2047) yield
   }
-  instance.geometry.setAttribute('normal', new Float32BufferAttribute(renderNormals, 3))
+  return { positions, normals: renderNormals }
+}
+
+function commitRenderGeometry(instance: MakeHumanInstance, prepared: { positions: Float32Array; normals: Float32Array }) {
+  const position = instance.geometry.getAttribute('position') as Float32BufferAttribute
+  position.array.set(prepared.positions); position.needsUpdate = true
+  const normal = instance.geometry.getAttribute('normal') as Float32BufferAttribute | undefined
+  if (normal && normal.array.length === prepared.normals.length) {
+    normal.array.set(prepared.normals); normal.needsUpdate = true
+  } else instance.geometry.setAttribute('normal', new Float32BufferAttribute(prepared.normals, 3))
   instance.geometry.computeBoundingSphere()
   instance.geometry.computeBoundingBox()
+}
+
+function updateRenderGeometry(instance: MakeHumanInstance, full: Float32Array) {
+  commitRenderGeometry(instance, finishWork(prepareRenderGeometry(instance, full)))
 }
 
 function eyeCenter(instance: MakeHumanInstance, side: 'l' | 'r') {
@@ -425,9 +442,11 @@ async function resolveTargets(config: CharacterConfig, expression: FacialExpress
   return [...merged].map(([path, weight]) => ({ path, weight }))
 }
 
-async function applyTargetStack(base: Float32Array, stack: WeightedTarget[]) {
+async function applyTargetStack(base: Float32Array, stack: WeightedTarget[], work: CooperativeWork) {
+  work.assertCurrent()
   const result = base.slice()
   const loaded = await Promise.all(stack.map(async (entry) => ({ ...entry, target: await loadSparseTarget(entry.path) })))
+  work.assertCurrent()
   for (const { weight, target } of loaded) {
     for (let i = 0; i < target.indices.length; i++) {
       const vertex = target.indices[i] * 3
@@ -436,18 +455,22 @@ async function applyTargetStack(base: Float32Array, stack: WeightedTarget[]) {
       result[vertex] += target.delta[d] * weight
       result[vertex + 1] += target.delta[d + 1] * weight
       result[vertex + 2] += target.delta[d + 2] * weight
+      if (i % 2048 === 2047) { const pause = work.checkpoint(); if (pause) await pause }
     }
   }
   return result
 }
 
-export async function morphMakeHuman(instance: MakeHumanInstance, config: CharacterConfig, isCurrent: () => boolean = () => true, expression: FacialExpressionId = 'neutral') {
+export async function morphMakeHuman(instance: MakeHumanInstance, config: CharacterConfig, isCurrent: () => boolean = () => true, expression: FacialExpressionId = 'neutral', beforeCommit?: () => void) {
+  const work = new CooperativeWork(isCurrent)
   const stack = await resolveTargets(config, expression)
-  const full = await applyTargetStack(instance.basePositions, stack)
-  if (!isCurrent()) return stack.length
+  const full = await applyTargetStack(instance.basePositions, stack, work)
   groundPositions(full, instance.data.bodyVertexCount)
+  const prepared = await runWork(prepareRenderGeometry(instance, full), work)
+  work.assertCurrent()
+  beforeCommit?.()
   instance.currentPositions = full
-  updateRenderGeometry(instance, full)
+  commitRenderGeometry(instance, prepared)
   applyBoneMatrices(instance, full)
   updateMouthInterior(instance, expression)
   if (!config.appearance.skinMaterialId) instance.skinMaterial.color.set(config.appearance.skinColor)

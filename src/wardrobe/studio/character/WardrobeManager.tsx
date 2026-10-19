@@ -1,4 +1,4 @@
-import { Component, use, useEffect, useMemo, type ErrorInfo, type PropsWithChildren } from 'react'
+import { Component, use, useEffect, useMemo, useRef, type ErrorInfo, type PropsWithChildren } from 'react'
 import { useGLTF } from '@react-three/drei'
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js'
 import { SkinnedMesh, Vector3, type Object3D } from 'three'
@@ -31,8 +31,15 @@ function hasSkinnedMesh(root: Object3D) {
 function MhcloSlotAsset({ asset, instance, color, materialUrl, morphRevision, clearance = 0, lowerRadialClearance = 0, upperRadialClearance = 0, waistPriority = 'normal' }: { asset: AssetDefinition; instance: MakeHumanInstance; color?: string; materialUrl?: string; morphRevision: number; clearance?: number; lowerRadialClearance?: number; upperRadialClearance?: number; waistPriority?: 'outer' | 'inner' | 'normal' }) {
   if (!asset.mhcloUrl || !asset.objUrl) throw new Error(`Asset MHCLO incomplet: ${asset.id}`)
   const source = use(loadMhcloAsset(asset.mhcloUrl, asset.objUrl))
-  const geometry = useMemo(() => createMhcloGeometry(source, instance, clearance, lowerRadialClearance, upperRadialClearance), [source, instance, clearance, lowerRadialClearance, upperRadialClearance])
   const mhmat = use(materialUrl ? loadMhmat(materialUrl) : source.materialUrl ? loadMhmat(source.materialUrl) : NO_MHMAT)
+  // Resolve all suspended resources first: React can retry this render while a
+  // material loads, and fitting a throwaway mesh on each retry stalls the menu.
+  const fitted = useRef<{ geometry: ReturnType<typeof createMhcloGeometry>; revision: number } | null>(null)
+  const geometry = useMemo(() => {
+    const geometry = createMhcloGeometry(source, instance, clearance, lowerRadialClearance, upperRadialClearance)
+    fitted.current = { geometry, revision: morphRevision }
+    return geometry
+  }, [source, instance, clearance, lowerRadialClearance, upperRadialClearance])
   const material = useMemo(() => {
     return createWardrobeMaterial(asset, mhmat, color, waistPriority)
   }, [asset.slot, mhmat, color, materialUrl, waistPriority])
@@ -40,7 +47,11 @@ function MhcloSlotAsset({ asset, instance, color, materialUrl, morphRevision, cl
     return createWardrobeMesh(asset, instance, geometry, material, source, waistPriority)
   }, [asset.id, asset.label, asset.slot, geometry, instance.skeleton, material, source.definition.uuid, waistPriority])
 
-  useEffect(() => { updateMhcloGeometry(geometry, source, instance, clearance, lowerRadialClearance, upperRadialClearance) }, [geometry, source, instance, morphRevision, clearance, lowerRadialClearance, upperRadialClearance])
+  useEffect(() => {
+    if (fitted.current?.geometry === geometry && fitted.current.revision === morphRevision) return
+    updateMhcloGeometry(geometry, source, instance, clearance, lowerRadialClearance, upperRadialClearance)
+    fitted.current = { geometry, revision: morphRevision }
+  }, [geometry, source, instance, morphRevision, clearance, lowerRadialClearance, upperRadialClearance])
   useEffect(() => {
     // Community top/bottom delete masks are not reliable enough to enable
     // globally (some erase visible cleavage/waist skin). Surface-normal

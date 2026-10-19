@@ -484,6 +484,7 @@ function EditorSurface({ navigationBridge }: { navigationBridge?: WardrobeNaviga
   const [advanced, setAdvanced] = useState(false)
   const [switchingPreset, setSwitchingPreset] = useState<string | null>(null)
   const [runtimeEpoch, setRuntimeEpoch] = useState(0)
+  const requestedEpoch = useRef(0)
   const [expression, setExpression] = useState<FacialExpressionId>('neutral')
   const [activeExpression, setActiveExpression] = useState<FacialExpressionId>('neutral')
   const [customPreviewBakeReady, setCustomPreviewBakeReady] = useState(false)
@@ -636,22 +637,19 @@ function EditorSurface({ navigationBridge }: { navigationBridge?: WardrobeNaviga
   }
 
   const chooseBuiltIn = (option: CharacterOption) => {
-    if (switchingPreset) return
     setSelectedOption(option.id)
     setSwitchingPreset(option.id)
-    // Preset switches get a fresh MakeHuman runtime. This guarantees that
-    // skeleton bind matrices, fitted MHCLO clothes and hair all belong to the
-    // same character. Slider edits do NOT change runtimeEpoch, so animation
-    // stays continuous while customizing.
-    setRuntimeEpoch((current) => current + 1)
+    // Refit the existing runtime. A newer epoch invalidates pending work and
+    // readiness callbacks immediately, while the selection controls stay live.
+    setRuntimeEpoch(++requestedEpoch.current)
     replaceConfig(option.config)
   }
 
   const chooseCustom = () => {
-    if (!customCharacter || switchingPreset) return
+    if (!customCharacter) return
     setSelectedOption('custom')
     setSwitchingPreset('custom')
-    setRuntimeEpoch((current) => current + 1)
+    setRuntimeEpoch(++requestedEpoch.current)
     replaceConfig(customCharacter.config)
   }
 
@@ -670,19 +668,19 @@ function EditorSurface({ navigationBridge }: { navigationBridge?: WardrobeNaviga
     <div className="wardrobe-editor-main">
       <div className="wardrobe-preview-area">
         <ExpressionRail value={expression} onChange={setExpression} />
-        <EditorViewport expression={activeExpression} modelKey={runtimeEpoch} focus={screen === 'edit' ? category : 'overview'} externalLoading={switchingPreset !== null} onCharacterReady={() => setSwitchingPreset(null)} />
+        <EditorViewport expression={activeExpression} modelKey={runtimeEpoch} focus={screen === 'edit' ? category : 'overview'} externalLoading={switchingPreset !== null} onCharacterReady={(epoch) => { if (epoch === requestedEpoch.current) setSwitchingPreset(null) }} />
       </div>
       <aside className="wardrobe-controls">
         {screen === 'select' ? <>
           <div className="character-choice-grid">
-            {customOption ? <button type="button" className={`custom-character-card${selectedOption === 'custom' ? ' selected' : ''}`} aria-label={`Choisir ${customOption.label}`} disabled={switchingPreset !== null} onClick={chooseCustom}>
+            {customOption ? <button type="button" className={`custom-character-card${selectedOption === 'custom' ? ' selected' : ''}`} aria-label={`Choisir ${customOption.label}`} onClick={chooseCustom}>
               <span className="choice-thumb ready custom-choice-thumb">
                 {customPreview ? <img src={customPreview} alt="" decoding="async" draggable={false} /> : <span className="custom-thumb-placeholder"><i /><small>Création de l’aperçu…</small></span>}
                 {customPreviewDirty ? <span className="custom-thumb-refresh">Mise à jour…</span> : null}
               </span>
               <small>{customOption.label}</small>
             </button> : null}
-            {CHARACTER_OPTIONS.map((option) => <button key={option.id} type="button" className={selectedOption === option.id ? 'selected' : ''} aria-label={`Choisir ${option.label}`} disabled={switchingPreset !== null} onClick={() => chooseBuiltIn(option)}>
+            {CHARACTER_OPTIONS.map((option) => <button key={option.id} type="button" className={selectedOption === option.id ? 'selected' : ''} aria-label={`Choisir ${option.label}`} onClick={() => chooseBuiltIn(option)}>
               <ChoiceThumb option={option} /><small>{option.label}</small>
             </button>)}
           </div>

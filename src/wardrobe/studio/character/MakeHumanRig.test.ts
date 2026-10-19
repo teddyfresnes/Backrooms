@@ -64,6 +64,45 @@ function expectSameShape(a: MakeHumanInstance, b: MakeHumanInstance, meshA = a.b
 }
 
 describe('wardrobe editing under the interactive turntable', () => {
+  it('cancels an obsolete preset without touching the live body and refits the same runtime for the latest choice', async () => {
+    const { instance } = stage(Math.PI / 2)
+    const initial = makeDefaultCharacter()
+    await morphMakeHuman(instance, initial)
+    const geometry = instance.geometry, skeleton = instance.skeleton, bones = [...instance.bones]
+    const positionBuffer = geometry.getAttribute('position').array
+    const before = positionBuffer.slice()
+    const obsolete = structuredClone(initial)
+    obsolete.body.shoulders = .9
+    obsolete.face.eyeSize = .1
+    let current = true, committed = false, clock = 0
+    const now = vi.spyOn(performance, 'now').mockImplementation(() => clock += 2)
+    const input = new Promise<void>(resolve => setTimeout(() => { current = false; resolve() }, 0))
+    await expect(morphMakeHuman(instance, obsolete, () => current, 'neutral', () => { committed = true }))
+      .rejects.toMatchObject({ name: 'AbortError' })
+    await input
+    now.mockRestore()
+    expect(committed).toBe(false)
+    expect(positionBuffer).toEqual(before)
+
+    const latest = structuredClone(initial)
+    latest.body.gender = 0
+    latest.body.shoulders = .3
+    latest.face.eyeSize = .8
+    const { instance: fresh } = stage(0)
+    for (const target of [instance, fresh]) {
+      await morphMakeHuman(target, latest)
+      calibrateMakeHumanRig(target, reference)
+      refitMakeHumanEyes(target)
+    }
+    expect(instance.geometry).toBe(geometry)
+    expect(instance.geometry.getAttribute('position').array).toBe(positionBuffer)
+    expect(instance.skeleton).toBe(skeleton)
+    instance.bones.forEach((bone, i) => expect(bone).toBe(bones[i]))
+    expectSameShape(instance, fresh)
+    expect(createMhcloGeometry(garment, instance).getAttribute('position').array)
+      .toEqual(createMhcloGeometry(garment, fresh).getAttribute('position').array)
+  })
+
   it.each([Math.PI / 2, -1.25])('keeps body, eyes and garments aligned when edited at yaw %s, then returned to front', async yaw => {
     const { instance: front } = stage(0)
     const { instance: turned, parent } = stage(0)

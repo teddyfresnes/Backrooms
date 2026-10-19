@@ -110,8 +110,9 @@ export function captureAnimatedPose(instance: MakeHumanInstance): AnimatedPoseSn
  * the currently visible animation pose. This prevents the one-frame T-pose
  * flash that used to happen on every slider movement.
  */
-export async function recalibrateAfterMorph(instance: MakeHumanInstance, pose?: AnimatedPoseSnapshot | null) {
+export async function recalibrateAfterMorph(instance: MakeHumanInstance, pose?: AnimatedPoseSnapshot | null, isCurrent: () => boolean = () => true) {
   const motions = await loadMotions()
+  if (!isCurrent()) return
   const reference = motions[0]
   if (!reference) return
   calibrateMakeHumanRig(instance, reference.root)

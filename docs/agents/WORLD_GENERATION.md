@@ -64,6 +64,11 @@ néons jaunes : seul son profil d’éclairage moderne est plus faible.
 ### Cohérence physique
 
 - Un mur avec collision doit avoir un collider correspondant.
+- `cleanWallJunctions` précède les coques hautes/basses : raccords en L fermés,
+  faces alignées lorsque l'écart ne fait que quelques centimètres, suppression
+  des fragments et pilastres presque enfouis. Leurs colliders suivent exactement
+  les nouvelles dimensions. Les petites irrégularités restent rares et déterministes
+  (2,5 %), sans toucher aux monuments, limites de chunks, portes ou détails dédiés.
 - Une ouverture de sol ne doit conserver aucun collider de sol en dessous.
 - `floorRects` décrit le sol effectivement rendu et praticable.
 - Les rampes et marches ont une géométrie visuelle et des formes Rapier issues

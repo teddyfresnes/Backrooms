@@ -15,6 +15,7 @@ import {
 } from './EpicStructures';
 import { populateRareProps } from './PropPlacement';
 import { SeededRandom } from './SeededRandom';
+import { cleanWallJunctions } from './WallJunctions';
 import type {
   GridPitFeature,
   InteractiveDoorFeature,
@@ -2263,6 +2264,7 @@ export const generateInfiniteChunk = (
     .map((feature) => cloneRect(feature.bounds));
   enforceUnlitZones(plan);
   pruneInvalidInteractiveDoors(plan);
+  if (epicIndex === null) cleanWallJunctions(plan);
   // Biome and vertical-opening passes may remove or replace walls after the
   // finite plan was generated. Re-derive the sunken continuations from the
   // surviving final architecture so none of those walls can float at y=0.

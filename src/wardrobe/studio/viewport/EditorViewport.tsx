@@ -68,10 +68,13 @@ const EYE_FOCUSES = new Set<WardrobeCameraFocus>(['eyes', 'eyebrows', 'eyelashes
 const HEAD_FOCUSES = new Set<WardrobeCameraFocus>(['skin', 'hair', 'head', 'nose', 'mouth', 'jaw', 'cheeks', 'chin', 'forehead', 'ears', 'neck', ...EYE_FOCUSES])
 const INSPECTION_FOCUSES = new Set<WardrobeCameraFocus>([...HEAD_FOCUSES, 'hands', 'nails'])
 
-class ViewportErrorBoundary extends Component<PropsWithChildren, { error: boolean }> {
+class ViewportErrorBoundary extends Component<PropsWithChildren<{ resetKey: number }>, { error: boolean }> {
   state = { error: false }
   static getDerivedStateFromError() { return { error: true } }
   componentDidCatch(error: Error, info: ErrorInfo) { console.error(error, info.componentStack) }
+  componentDidUpdate(previous: Readonly<PropsWithChildren<{ resetKey: number }>>) {
+    if (this.state.error && previous.resetKey !== this.props.resetKey) this.setState({ error: false })
+  }
   render() { return this.state.error ? <Html center><div className="viewport-message">Personnage indisponible</div></Html> : this.props.children }
 }
 
@@ -123,7 +126,7 @@ function CameraRig({ focus }: { focus: WardrobeCameraFocus }) {
   return null
 }
 
-function CharacterTurntable({ visible = true, onReady, animationMode = 'sequence', expression = 'neutral' }: { visible?: boolean; onReady?: () => void; animationMode?: 'sequence' | 'breathing-loop'; expression?: FacialExpressionId }) {
+function CharacterTurntable({ visible = true, onReady, animationMode = 'sequence', expression = 'neutral', revision }: { visible?: boolean; onReady?: () => void; animationMode?: 'sequence' | 'breathing-loop'; expression?: FacialExpressionId; revision: number }) {
   const group = useRef<Group>(null)
   const dragging = useRef(false)
   const pointerX = useRef(0)
@@ -175,7 +178,7 @@ function CharacterTurntable({ visible = true, onReady, animationMode = 'sequence
   }, [gl])
 
   return <group ref={group} visible={visible}>
-    <CharacterModel onReady={onReady} animationMode={animationMode} expression={expression} />
+    <CharacterModel onReady={onReady} animationMode={animationMode} expression={expression} revision={revision} />
   </group>
 }
 
@@ -194,28 +197,23 @@ function Scene({ focus, ready, onReady, animationMode, modelKey, expression }: {
   return <>
     <StudioEnvironment />
     <Suspense fallback={<Html center><div className="viewport-message">Chargement…</div></Html>}>
-      <ViewportErrorBoundary><CharacterTurntable key={modelKey} visible={ready} onReady={onReady} animationMode={animationMode} expression={expression} /></ViewportErrorBoundary>
+      <ViewportErrorBoundary resetKey={modelKey}><CharacterTurntable revision={modelKey} visible={ready} onReady={onReady} animationMode={animationMode} expression={expression} /></ViewportErrorBoundary>
     </Suspense>
     <ContactShadows position={[0, 0.005, 0]} opacity={0.42} scale={4} blur={2.2} far={3} />
     <CameraRig focus={focus} />
   </>
 }
 
-export function EditorViewport({ focus = 'overview', externalLoading = false, onCharacterReady, modelKey = 0, expression = 'neutral' }: { focus?: WardrobeCameraFocus; externalLoading?: boolean; onCharacterReady?: () => void; modelKey?: number; expression?: FacialExpressionId }) {
-  const [ready, setReady] = useState(false)
+export function EditorViewport({ focus = 'overview', externalLoading = false, onCharacterReady, modelKey = 0, expression = 'neutral' }: { focus?: WardrobeCameraFocus; externalLoading?: boolean; onCharacterReady?: (revision: number) => void; modelKey?: number; expression?: FacialExpressionId }) {
+  const [readyKey, setReadyKey] = useState<number | null>(null)
   const activeModelKey = useRef(modelKey)
-
-  useEffect(() => {
-    activeModelKey.current = modelKey
-    setReady(false)
-  }, [modelKey])
-
-  useEffect(() => { if (externalLoading) setReady(false) }, [externalLoading])
+  activeModelKey.current = modelKey
+  const ready = readyKey === modelKey
 
   const handleReady = () => {
     if (activeModelKey.current !== modelKey) return
-    setReady(true)
-    onCharacterReady?.()
+    setReadyKey(modelKey)
+    onCharacterReady?.(modelKey)
   }
 
   const showLoading = externalLoading || !ready

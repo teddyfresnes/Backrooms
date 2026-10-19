@@ -4,6 +4,9 @@ import {
   Uint16BufferAttribute,
 } from 'three'
 import type { MakeHumanInstance } from './MakeHumanRuntime'
+import type { MakeHumanBaseData } from './types'
+import { loadMakeHumanBase } from './TargetLoader'
+import { CooperativeWork, finishWork, runWork, textLines } from '../core/CooperativeWork'
 
 export interface MhcloVertexMatch {
   verts: [number, number, number]
@@ -67,16 +70,18 @@ export function loadMhcloAsset(mhcloUrl: string, objUrl: string) {
   const key = `${mhcloUrl}|${objUrl}`
   let pending = assetCache.get(key)
   if (!pending) {
-    pending = Promise.all([fetchText(mhcloUrl), fetchText(objUrl)])
-      .then(([mhclo, obj]) => {
-        const definition = parseMhclo(mhclo)
+    pending = Promise.all([fetchText(mhcloUrl), fetchText(objUrl), loadMakeHumanBase()])
+      .then(async ([mhclo, obj, base]) => {
+        const work = new CooperativeWork()
+        const definition = await runWork(parseMhcloSteps(mhclo), work)
         const materialUrl = definition.material ? new URL(definition.material, new URL(mhcloUrl, window.location.href)).toString() : undefined
-        return { definition, topology: parseObjTopology(obj), materialUrl }
-      })
-      .then((asset) => {
+        const asset = { definition, topology: await runWork(parseObjTopologySteps(obj), work), materialUrl }
         if (asset.definition.matches.length !== asset.topology.vertexCount) {
           throw new Error(`MHCLO/OBJ incompatibles : ${asset.definition.matches.length} mappings pour ${asset.topology.vertexCount} sommets`)
         }
+        // Bone weights depend on the base topology, never on the selected body.
+        // Prepare them once off the render path, yielding to input along the way.
+        cacheSkin(asset, base, await runWork(sourceSkinSteps(asset, base), work))
         return asset
       })
     assetCache.set(key, pending)
@@ -90,11 +95,17 @@ export function loadMhcloAsset(mhcloUrl: string, objUrl: string) {
 }
 
 export function parseMhclo(text: string): MhcloDefinition {
+  return finishWork(parseMhcloSteps(text))
+}
+
+function* parseMhcloSteps(text: string): Generator<void, MhcloDefinition> {
   const definition: MhcloDefinition = { name: 'MakeHuman clothing', matches: [], deleteVertices: [] }
   let readingVerts = false
   let readingDelete = false
 
-  for (const raw of text.split(/\r?\n/)) {
+  let lines = 0
+  for (const raw of textLines(text)) {
+    if (++lines % 512 === 0) yield
     const line = raw.trim()
     if (!line) { readingVerts = false; readingDelete = false; continue }
     if (line.startsWith('#') || line.startsWith('//')) continue
@@ -123,7 +134,10 @@ export function parseMhclo(text: string): MhcloDefinition {
         if (!/^\d+$/.test(token)) continue
         const current = Number(token)
         if (range && previous !== undefined) {
-          for (let vertex = previous; vertex <= current; vertex++) definition.deleteVertices.push(vertex)
+          for (let vertex = previous; vertex <= current; vertex++) {
+            definition.deleteVertices.push(vertex)
+            if (vertex % 2048 === 2047) yield
+          }
         } else definition.deleteVertices.push(current)
         previous = current
         range = false
@@ -148,11 +162,20 @@ export function parseMhclo(text: string): MhcloDefinition {
 }
 
 export function parseObjTopology(text: string): MhcloTopology {
-  const uvs: Array<[number, number]> = []
-  const triangles: Array<Array<[number, number]>> = []
-  let vertexCount = 0
+  return finishWork(parseObjTopologySteps(text))
+}
 
-  for (const raw of text.split(/\r?\n/)) {
+function* parseObjTopologySteps(text: string): Generator<void, MhcloTopology> {
+  const uvs: Array<[number, number]> = []
+  let vertexCount = 0
+  const renderSource: number[] = []
+  const renderUv: number[] = []
+  const indices: number[] = []
+  const byPair = new Map<string, number>()
+
+  let lines = 0
+  for (const raw of textLines(text)) {
+    if (++lines % 512 === 0) yield
     const line = raw.trim()
     if (line.startsWith('v ')) { vertexCount++; continue }
     if (line.startsWith('vt ')) {
@@ -169,24 +192,18 @@ export function parseObjTopology(text: string): MhcloTopology {
       ti = ti > 0 ? ti - 1 : (ti < 0 ? uvs.length + ti : -1)
       return [vi, ti] as [number, number]
     })
-    for (let i = 1; i < face.length - 1; i++) triangles.push([face[0], face[i], face[i + 1]])
-  }
-
-  const renderSource: number[] = []
-  const renderUv: number[] = []
-  const indices: number[] = []
-  const byPair = new Map<string, number>()
-  for (const triangle of triangles) for (const [source, uvIndex] of triangle) {
-    const key = `${source}/${uvIndex}`
-    let render = byPair.get(key)
-    if (render === undefined) {
-      render = renderSource.length
-      byPair.set(key, render)
-      renderSource.push(source)
-      const uv = uvIndex >= 0 ? uvs[uvIndex] : undefined
-      renderUv.push(uv?.[0] ?? 0, uv?.[1] ?? 0)
+    for (let i = 1; i < face.length - 1; i++) for (const [source, uvIndex] of [face[0], face[i], face[i + 1]]) {
+      const key = `${source}/${uvIndex}`
+      let render = byPair.get(key)
+      if (render === undefined) {
+        render = renderSource.length
+        byPair.set(key, render)
+        renderSource.push(source)
+        const uv = uvIndex >= 0 ? uvs[uvIndex] : undefined
+        renderUv.push(uv?.[0] ?? 0, uv?.[1] ?? 0)
+      }
+      indices.push(render)
     }
-    indices.push(render)
   }
 
   return {
@@ -346,13 +363,31 @@ export function fitMhcloSourcePositions(
   return addSurfaceClearance(asset, out, clearance, lowerRadialClearance, upperRadialClearance)
 }
 
+type SourceSkin = { indices: Uint16Array; weights: Float32Array }
+const skinCache = new WeakMap<MakeHumanBaseData, Map<MhcloAssetData, SourceSkin>>()
+function cacheSkin(asset: MhcloAssetData, base: MakeHumanBaseData, skin: SourceSkin) {
+  let cache = skinCache.get(base)
+  if (!cache) { cache = new Map(); skinCache.set(base, cache) }
+  cache.delete(asset)
+  cache.set(asset, skin)
+  while (cache.size > 24) cache.delete(cache.keys().next().value!)
+  return skin
+}
+
 function sourceSkinForMhclo(asset: MhcloAssetData, instance: MakeHumanInstance) {
+  const cached = skinCache.get(instance.data)?.get(asset)
+  return cacheSkin(asset, instance.data, cached ?? finishWork(sourceSkinSteps(asset, instance.data)))
+}
+
+function* sourceSkinSteps(asset: MhcloAssetData, base: MakeHumanBaseData): Generator<void, SourceSkin> {
   const indices = new Uint16Array(asset.definition.matches.length * 4)
   const weights = new Float32Array(asset.definition.matches.length * 4)
-  const sourceIndices = instance.data.sourceSkinIndex
-  const sourceWeights = instance.data.sourceSkinWeight
+  const sourceIndices = base.sourceSkinIndex
+  const sourceWeights = base.sourceSkinWeight
 
-  asset.definition.matches.forEach((match, i) => {
+  for (let i = 0; i < asset.definition.matches.length; i++) {
+    if (i % 512 === 511) yield
+    const match = asset.definition.matches[i]
     const merged = new Map<number, number>()
     const matchWeightSum = match.weights.reduce((sum, value) => sum + value, 0) || 1
     for (let k = 0; k < 3; k++) {
@@ -373,7 +408,7 @@ function sourceSkinForMhclo(asset: MhcloAssetData, instance: MakeHumanInstance) 
       indices[i * 4 + influence] = entry?.[0] ?? 0
       weights[i * 4 + influence] = (entry?.[1] ?? 0) / total
     }
-  })
+  }
   return { indices, weights }
 }
 

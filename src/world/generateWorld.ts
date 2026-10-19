@@ -6,6 +6,7 @@ import {
   PASSAGE_HOLE_LOWER_FLOOR_Y,
 } from './PassageHoleLayout';
 import { SeededRandom } from './SeededRandom';
+import { cleanWallJunctions } from './WallJunctions';
 import { getStairCageWalls, getStairCollisionShapes } from './StairLayout';
 import type {
   CeilingZone,
@@ -5286,6 +5287,9 @@ export const generateWorld = (seed: string): WorldPlan => {
   sealRestrictedRooms(mutable, world, rootRng);
   const interactiveDoors = addInteractiveDoors(mutable, world, rootRng);
   addWallBreaches(mutable, world, rootRng);
+  world.walls = mutable.walls; world.colliders = mutable.colliders;
+  cleanWallJunctions(world);
+  mutable.walls = world.walls; mutable.colliders = world.colliders;
   synchronizeUpperCeilingShells(mutable, world, rootRng);
   world.walls = mutable.walls;
   world.colliders = mutable.colliders;
