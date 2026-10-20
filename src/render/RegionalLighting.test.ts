@@ -34,6 +34,6 @@ it('constructs both render modes and releases their layered exposure textures', 
       expect(floor.geometry.getAttribute('position').count).toBeGreaterThan(0);
       view.dispose();
     }
-    expect(dispose.mock.contexts.filter(t => t.name === 'regional-layer-exposure')).toHaveLength(2);
+    expect(dispose.mock.contexts.filter(t => (t as THREE.Texture).name === 'regional-layer-exposure')).toHaveLength(2);
   } finally { dispose.mockRestore(); Object.values(source).forEach(m => m.dispose()); }
 });

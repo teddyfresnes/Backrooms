@@ -68,11 +68,11 @@ export const applyRegionalLighting = (material: THREE.Material, field: RegionalL
         float regionalBest = 1000000.0;
         for (int layer = 0; layer < 3; layer++) {
           vec4 volume = texture2D(regionalLightField, vec2(regionalUv.x, (regionalUv.y + float(layer)) / 3.0));
-          float distance = abs(vRegionalPosition.y - clamp(vRegionalPosition.y, volume.x, volume.y));
-          if (volume.x <= volume.y && distance < regionalBest) {
-            regionalBest = distance;
+          float volumeDistance = abs(vRegionalPosition.y - clamp(vRegionalPosition.y, volume.x, volume.y));
+          if (volume.x <= volume.y && volumeDistance < regionalBest) {
+            regionalBest = volumeDistance;
             float verticalEnergy = pow(clamp(1.0 - abs(vRegionalPosition.y - volume.w) / 13.0, 0.0, 1.0), 2.0);
-            regionalExposure = 0.18 + (volume.z - 0.18) * verticalEnergy;
+            regionalExposure = volume.z < 0.18 ? volume.z : 0.18 + (volume.z - 0.18) * verticalEnergy;
           }
         }
         outgoingLight *= mix(0.35, 1.14, clamp(regionalExposure, 0.0, 1.0));

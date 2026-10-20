@@ -765,8 +765,8 @@ export class WorldStream {
 
     for (const runtime of this.chunks.values()) {
       for (const l of runtime.plan.spatial?.landmarks ?? []) {
-        const command = l.kind.startsWith('escalier-') ? 'escalier' : l.kind.startsWith('galerie-') ? l.kind : l.kind;
-        addTarget(runtime, command, l.kind.replaceAll('-', ' '), [l.kind], l.position);
+        const aliases = l.kind.startsWith('escalier-') ? ['escalier', l.kind] : [l.kind];
+        addTarget(runtime, l.kind, l.kind.replaceAll('-', ' '), aliases, l.position);
       }
       for (const c of runtime.plan.spatial?.cells.filter(c => c.mode === 'rooms') ?? []) {
         const p = rectCenter(c.bounds); addTarget(runtime, 'grand-plateau', 'grande zone régionale', ['plateau', 'zone'], { ...p, y: c.floorY + .865 });

@@ -5,6 +5,10 @@ import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { generateWorld } from '../world/generateWorld';
 import { surfaceCollider, type WalkableSurface } from '../world/WalkableTopology';
 import { WorldStream } from './WorldStream';
+import { generateInfiniteChunk, getChunkWorldOffset, createChunkKey } from '../world/InfiniteWorld';
+import type { BiomeMaterialSets, MaterialSet } from '../render/MaterialLibrary';
+import type { ChunkCoord } from '../world/InfiniteWorld';
+import type { WorldPlan } from '../world/types';
 
 it('keeps raised support in its owner story, restores both layers and releases an unsupported fall', async () => {
   const plan = generateWorld('VERTICAL-STREAM-SAVE');
@@ -29,4 +33,49 @@ it('keeps raised support in its owner story, restores both layers and releases a
     physics.addChunk('obstructed-save', [{ id: 'obstacle', kind: 'barrier', center: { x: 0, y: 3, z: 0 }, halfExtents: { x: 1, y: .5, z: 1 } }], { x: 0, y: 0, z: 0 });
     expect(stream.restoreSurfacePosition(above, highAnchor)).toEqual(plan.spawn);
   } finally { chunks.clear(); physics.dispose(); }
+});
+
+it('prepares real visible owners, restores an irreversible landing and releases repeated mounted layers', async () => {
+  let origin: WorldPlan | undefined;
+  for (let i = 0; i < 32; i++) {
+    const w = generateInfiniteChunk(`REGIONAL-AUDIT-${i}`, { x: 0, z: 0, story: 0 });
+    if (w.spatial?.landmarks.some(l => l.kind === 'ouverture-haute')) { origin = w; break; }
+  }
+  expect(origin).toBeDefined();
+  const plan = origin!, drop = plan.topology!.connections.find(c => c.kind === 'drop')!;
+  const position = { ...drop.arrival!, y: drop.arrival!.y + .865 };
+  const source = Object.fromEntries(['wall', 'plaster', 'floor', 'ceiling', 'baseboard', 'pitWall', 'pitBottom', 'metal', 'fixtureFrame', 'fixtureGlow', 'void']
+    .map(name => [name, name === 'fixtureGlow' || name === 'void' ? new THREE.MeshBasicMaterial() : new THREE.MeshStandardMaterial()])) as unknown as MaterialSet;
+  const sets = Object.fromEntries(['yellow', 'red', 'white', 'dim'].map(k => [k, source])) as BiomeMaterialSets;
+  const physics = await PhysicsWorld.create({ ...plan, colliders: [] });
+  const scene = new THREE.Scene(), retainedColliders = physics.world.colliders.len();
+  type Probe = { initialized: boolean; mountChunk(plan: WorldPlan, coord: ChunkCoord): void; clearMountedChunks(): void;
+    spatialVisibleCoords(sources: { coord: ChunkCoord; plan: WorldPlan }[], position: typeof plan.spawn): ChunkCoord[] };
+  const stream = new WorldStream(plan.seed, plan, scene, sets, physics), probe = stream as unknown as Probe;
+  probe.initialized = true;
+  try {
+    const opening = plan.spatial!.landmarks.find(l => l.kind === 'ouverture-haute')!;
+    const visible = probe.spatialVisibleCoords([{ coord: plan.spatial!.owner, plan }], opening.position);
+    expect(visible).toContainEqual(drop.toOwner); expect(visible.length).toBeLessThanOrEqual(12);
+    for (let cycle = 0; cycle < 3; cycle++) {
+      probe.mountChunk(plan, plan.spatial!.owner);
+      expect(await stream.prepareSavedChunk(plan.spatial!.owner)).toBe(true);
+      await stream.waitForVisualAssets();
+      const low = generateInfiniteChunk(plan.seed, drop.toOwner!), offset = getChunkWorldOffset(drop.toOwner!);
+      expect(stream.getDebugCounts().chunks).toBeGreaterThanOrEqual(3);
+      expect(stream.supportedCoordAt(position)).toEqual(drop.toOwner);
+      const anchor = stream.surfaceAnchorAt(position); expect(anchor?.id).toBe(drop.to);
+      expect(stream.restoreSurfacePosition(position, anchor, drop.toOwner)).toEqual(position);
+      const migrated = stream.restoreSurfacePosition({ ...position, y: position.y + 8 }, { version: 1, id: 'obsolete', layer: 'obsolete' }, drop.toOwner);
+      expect(migrated).toEqual(position);
+      expect(physics.canStandAt(migrated)).toBe(true);
+      expect(low.topology!.surfaces.some(s => s.id === anchor!.id)).toBe(true);
+      expect(stream.getCharacterPits().every(p => p.bottom < 0)).toBe(true);
+      expect(offset.y).toBe(drop.toOwner!.story * 5.4);
+      expect(createChunkKey(stream.supportedCoordAt(position))).toBe(createChunkKey(drop.toOwner!));
+      probe.clearMountedChunks();
+      expect(physics.world.colliders.len()).toBe(retainedColliders);
+      expect(scene.children).toHaveLength(0);
+    }
+  } finally { stream.dispose(); physics.dispose(); Object.values(source).forEach(m => m.dispose()); }
 });

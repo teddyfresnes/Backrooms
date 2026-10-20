@@ -6,10 +6,11 @@ import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { MOVEMENT_TUNING } from '../player/MovementConfig';
 import { generateInfiniteChunk, getChunkWorldOffset } from './InfiniteWorld';
 import { atriumCirculation } from './SpatialConnectors';
-import { regionalAtrium, spatialCellAt } from './RegionalPlan';
+import { regionalAtrium, regionalDatum, spatialCellAt } from './RegionalPlan';
 import { rectCenter } from './types';
 import type { WorldPlan, Vec3Data } from './types';
 import { createSpatialPrismGeometry } from '../render/SpatialGeometry';
+import { createWalkableGeometry } from '../render/WalkableGeometry';
 import { surfaceY } from './WalkableTopology';
 
 const dt = 1 / 60, tuning = MOVEMENT_TUNING.locomotion;
@@ -28,7 +29,7 @@ const mount = async (world: WorldPlan) => {
   for (const [key, w] of worlds) physics.addChunk(key, w.colliders, getChunkWorldOffset(w.spatial!.owner));
   return physics;
 };
-const walkTo = (physics: PhysicsWorld, start: Vec3Data, target: { x: number; z: number }, speed = tuning.walkSpeed): Vec3Data => {
+const walkTo = (physics: PhysicsWorld, start: Vec3Data, target: { x: number; z: number }, speed: number = tuning.walkSpeed): Vec3Data => {
   let p = { ...start };
   for (let i = 0; i < 1500; i++) {
     const x = target.x - p.x, z = target.z - p.z, distance = Math.hypot(x, z);
@@ -121,6 +122,78 @@ it('uses the same wall faces in Three and Rapier, including sheared floor-to-sta
         expect(physical?.timeOfImpact, p.id).toBeCloseTo(.2, 3);
       }
       geometry.dispose(); (mesh.material as THREE.Material).dispose();
+    }
+  } finally { physics.dispose(); }
+});
+
+it('walks below an unconnected upper bridge and exposes its real underside without a middle floor', async () => {
+  const { world } = sample('galerie-bridge'), bridge = world.topology!.surfaces.find(s => s.role === 'bridge' && s.id.endsWith('/bridge'))!;
+  const p = rectCenter(bridge.bounds), h = surfaceY(bridge, p.x, p.z), physics = await mount(world);
+  const material = new THREE.MeshBasicMaterial(), geometry = createWalkableGeometry(bridge, 'underside');
+  const mesh = new THREE.Mesh(geometry, material); mesh.updateMatrixWorld();
+  try {
+    let at = { x: p.x, y: h - 10.8 + .865, z: p.z - 5 }; physics.teleport(at);
+    at = walkTo(physics, at, { x: p.x, z: p.z + 5 });
+    expect(at.y).toBeCloseTo(h - 10.8 + .865, 1);
+    const origin = new THREE.Vector3(p.x, h - 2, p.z), up = new THREE.Vector3(0, 1, 0);
+    const rendered = new THREE.Raycaster(origin, up, 0, 3).intersectObject(mesh)[0];
+    const physical = physics.world.castRay(new RAPIER.Ray(origin, up), 3, true, undefined, undefined, undefined, undefined, physics.isEnvironmentCollider);
+    expect(rendered?.point.y).toBeCloseTo(h - .16, 4);
+    expect(physical?.timeOfImpact).toBeCloseTo(1.84, 4);
+    const down = physics.world.castRay(new RAPIER.Ray(origin, { x: 0, y: -1, z: 0 }), 12, true, undefined, undefined, undefined, undefined, physics.isEnvironmentCollider);
+    expect(down?.timeOfImpact).toBeCloseTo(8.8, 4);
+  } finally { geometry.dispose(); material.dispose(); physics.dispose(); }
+});
+
+it('walks and runs a real nonzero regional ramp, stops on it and reverses without changing the controller', async () => {
+  const { world } = sample('rampe-regionale'), ramp = world.topology!.surfaces.find(s => s.profile.kind === 'linear' && s.profile.startY !== 0 && s.profile.endY !== 0)!;
+  expect(ramp).toBeDefined();
+  const p = ramp.profile; if (p.kind !== 'linear') throw new Error('Expected a sloping generated surface');
+  const physics = await mount(world), center = rectCenter(ramp.bounds), axis = p.axis;
+  const a = { ...center, [axis]: (axis === 'x' ? ramp.bounds.minX : ramp.bounds.minZ) - .5, y: p.startY + .865 };
+  const b = { ...center, [axis]: (axis === 'x' ? ramp.bounds.maxX : ramp.bounds.maxZ) + .5 };
+  try {
+    physics.teleport(a); let at = { ...a };
+    for (let i = 0; i < 20; i++) at = { ...physics.move({ x: 0, y: -.035, z: 0 }).position };
+    at = walkTo(physics, at, center);
+    const stoppedY = at.y;
+    for (let i = 0; i < 60; i++) at = { ...physics.move({ x: 0, y: -.035, z: 0 }).position };
+    expect(at.y).toBeCloseTo(stoppedY, 1);
+    at = walkTo(physics, at, a); expect(at.y).toBeCloseTo(a.y, 1);
+    at = walkTo(physics, at, b, tuning.sprintSpeed); expect(at.y).toBeCloseTo(p.endY + .865, 1);
+    at = walkTo(physics, at, a, tuning.sprintSpeed); expect(at.y).toBeCloseTo(a.y, 1);
+  } finally { physics.dispose(); }
+});
+
+it('physically completes a multi-chunk loop through several regional datums in both directions', async () => {
+  let sample: { seed: string; cells: { x: number; z: number }[] } | undefined;
+  for (let i = 0; i < 8 && !sample; i++) for (let z = -6; z <= 0 && !sample; z++) for (let x = -6; x <= 0 && !sample; x++) {
+    const seed = `REGIONAL-AUDIT-${i}`, cells = [];
+    for (let dx = 0; dx <= 4; dx++) cells.push({ x: x + dx, z });
+    for (let dz = 1; dz <= 3; dz++) cells.push({ x: x + 4, z: z + dz });
+    for (let dx = 3; dx >= 0; dx--) cells.push({ x: x + dx, z: z + 3 });
+    for (let dz = 2; dz > 0; dz--) cells.push({ x, z: z + dz });
+    const datums = cells.map(c => regionalDatum(seed, c.x, c.z));
+    if (new Set(datums.map(d => d.id)).size < 3 || Math.max(...datums.map(d => d.y)) - Math.min(...datums.map(d => d.y)) < 8 ||
+      cells.some(c => regionalAtrium(seed, c.x, c.z, 0)) || datums.some(d => d.id === 'monument-interface')) continue;
+    sample = { seed, cells };
+  }
+  expect(sample).toBeDefined();
+  const { seed, cells } = sample!, coords = [...new Map(cells.map(c => {
+    const owner = { x: Math.floor(c.x / 4), z: Math.floor(c.z / 4), story: 0 }; return [`${owner.x}:${owner.z}`, owner] as const;
+  })).values()];
+  const worlds = coords.map(c => generateInfiniteChunk(seed, c)), physics = await PhysicsWorld.create({ ...worlds[0]!, colliders: [] });
+  for (let i = 0; i < coords.length; i++) physics.addChunk(String(i), worlds[i]!.colliders, getChunkWorldOffset(coords[i]!));
+  const points = cells.map(c => ({ x: c.x * 28 - 42, z: c.z * 28 - 42, y: regionalDatum(seed, c.x, c.z).y + .865 }));
+  console.info('REGIONAL_MACRO_ROUTE', JSON.stringify({ seed, coords, points, length: cells.length * 28 }));
+  try {
+    let at = points[0]!; physics.teleport(at);
+    for (const route of [[...points.slice(1), points[0]!], [...points.slice(1).reverse(), points[0]!]]) for (const target of route) {
+      at = walkTo(physics, at, target, tuning.sprintSpeed);
+      const support = Math.abs(at.y - target.y) > .05 ? worlds.flatMap((w, i) => w.topology!.surfaces.filter(s => {
+        const o = getChunkWorldOffset(coords[i]!); return at.x - o.x >= s.bounds.minX && at.x - o.x <= s.bounds.maxX && at.z - o.z >= s.bounds.minZ && at.z - o.z <= s.bounds.maxZ;
+      }).map(s => ({ id: s.id, bounds: s.bounds, profile: s.profile }))) : [];
+      expect(at.y, JSON.stringify({ target, actual: at, support })).toBeCloseTo(target.y, 1);
     }
   } finally { physics.dispose(); }
 });

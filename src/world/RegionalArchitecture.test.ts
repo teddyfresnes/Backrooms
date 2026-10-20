@@ -7,6 +7,7 @@ import { generateInfiniteChunk, getCanonicalEdgeGates } from './InfiniteWorld';
 import { clearRegionalPlanCache, regionalDatum } from './RegionalPlan';
 import { findSurface, surfaceY, validateTopology } from './WalkableTopology';
 import { rectCenter } from './types';
+import { getEpicStructureSlotsForMacro } from './EpicStructures';
 
 it('plans ordinary regional plateaus across chunk boundaries without a privileged zero floor', () => {
   const cells = Array.from({ length: 40 }, (_, x) => Array.from({ length: 40 }, (_, z) => regionalDatum('REGIONAL-AUDIT-0', x - 20, z - 20))).flat();
@@ -88,6 +89,27 @@ it('keeps every canonical opening body-free across its full useful width after t
         const along = gate.offset + (2 * t - 1) * (gate.width / 2 - .35), x = edge === 'west' ? -55.6 : edge === 'east' ? 55.6 : along, z = edge === 'north' ? -55.6 : edge === 'south' ? 55.6 : along;
         const blocker = physics.world.intersectionWithShape({ x, y: gate.floorY + .91, z }, { x: 0, y: 0, z: 0, w: 1 }, new RAPIER.Capsule(.52, .32), undefined, undefined, undefined, undefined, physics.isEnvironmentCollider);
         expect(blocker, `${w.seed} ${edge} ${gate.offset} t=${t}`).toBeNull();
+      }
+    } finally { physics.dispose(); }
+  }
+});
+
+it('preserves the real approach widths of all five legacy monument interfaces', async () => {
+  const seed = 'REGIONAL-EPIC-INTERFACES', slots = getEpicStructureSlotsForMacro(seed, 0, 0);
+  for (const slot of slots) for (const [edge, dx, dz, opposite] of [
+    ['north', 0, -1, 'south'], ['east', 1, 0, 'west'], ['south', 0, 1, 'north'], ['west', -1, 0, 'east'],
+  ] as const) {
+    const epic = { x: slot.x, z: slot.z, story: 0 }, neighbor = { ...epic, x: epic.x + dx, z: epic.z + dz };
+    const w = generateInfiniteChunk(seed, neighbor), gates = getCanonicalEdgeGates(seed, epic, edge);
+    expect(w.spatial, `epic${slot.index} ${edge}`).toBeDefined();
+    expect(w.edgeGates![opposite]).toEqual(gates);
+    const physics = await PhysicsWorld.create(w);
+    try {
+      for (const gate of gates) for (const depth of [.4, 2.4, 3.8]) for (const t of [0, .5, 1]) {
+        const along = gate.offset + (2 * t - 1) * (gate.width / 2 - .35);
+        const x = opposite === 'west' ? -56 + depth : opposite === 'east' ? 56 - depth : along;
+        const z = opposite === 'north' ? -56 + depth : opposite === 'south' ? 56 - depth : along;
+        expect(physics.canStandAt({ x, y: gate.floorY + .865, z }), `epic${slot.index} ${edge} ${gate.offset} d=${depth} t=${t}`).toBe(true);
       }
     } finally { physics.dispose(); }
   }

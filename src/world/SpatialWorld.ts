@@ -5,7 +5,7 @@ import { ADDRESS_PITCH, regionalAtrium, regionalCellId, regionalDatum, regionalS
 import type { SpatialAddress, SpatialPrism } from './SpatialTypes';
 import type { InfiniteEdgeGates } from './InfiniteWorld';
 import { atriumCirculation, atriumGround, atriumGroundId, atriumTreads } from './SpatialConnectors';
-import { endpointStairRun, offsetProfile, prismCollider, profilePrism } from './SpatialGeometry';
+import { endpointStairRun, offsetProfile, prismCollider, profilePrism, slabMeshCollider } from './SpatialGeometry';
 import { classifySurfaceAccess, cutRects, findSurface, overlapRect, surfaceCollider, surfaceRange, surfaceY, TOPOLOGY_VERSION,
   type HeightProfile, type SurfaceConnection, type WalkableSurface } from './WalkableTopology';
 
@@ -33,10 +33,12 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     if (roof) spatial.ceilings.push({ ...s, id: `${id}/ceiling`, profile: offsetProfile(ceilingProfile, .03), thickness: .03 });
     return s;
   };
+  // A five-metre vestibule lets a standing body turn past a thick partition
+  // when a monument's inherited doorway is offset from the regional cell grid.
   const boundaryClearances = boundaryGates ? sides.flatMap(side => boundaryGates[side].map(g => ({
     bounds: side === 'east' || side === 'west'
-      ? { minX: side === 'west' ? -56 : 52, maxX: side === 'west' ? -52 : 56, minZ: g.offset - g.width / 2, maxZ: g.offset + g.width / 2 }
-      : { minZ: side === 'north' ? -56 : 52, maxZ: side === 'north' ? -52 : 56, minX: g.offset - g.width / 2, maxX: g.offset + g.width / 2 },
+      ? { minX: side === 'west' ? -56 : 51, maxX: side === 'west' ? -51 : 56, minZ: g.offset - g.width / 2, maxZ: g.offset + g.width / 2 }
+      : { minZ: side === 'north' ? -56 : 51, maxZ: side === 'north' ? -51 : 56, minX: g.offset - g.width / 2, maxX: g.offset + g.width / 2 },
     bottom: g.floorY - .16, top: g.floorY + SPATIAL_CLEARANCE,
   }))) : [];
   const addPrism = (p: SpatialPrism) => { spatial.prisms.push(p); if (p.collision) world.colliders.push(prismCollider(p)); };
@@ -293,7 +295,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
       targetKind: 'portal', toOwner: neighbor, arrival: { x: position.x + dx * .1, y: position.y, z: position.z + dz * .1 } });
   }
   connectSpatialSurfaces(world);
-  world.colliders.push(...topology.surfaces.map(surfaceCollider), ...spatial.ceilings.map(s => ({ ...surfaceCollider(s), id: s.id, kind: 'barrier' as const })));
+  world.colliders.push(...topology.surfaces.map(s => s.role === 'floor' ? slabMeshCollider(s) : surfaceCollider(s)), ...spatial.ceilings.map(s => ({ ...surfaceCollider(s), id: s.id, kind: 'barrier' as const })));
   topology.volumes = topology.surfaces.flatMap(s => [{ id: `${s.id}/clearance`, surfaceId: s.id, bounds: s.bounds, bottom: surfaceRange(s)[0], top: s.ceilingY, purpose: 'clearance' as const, ownerStory: owner.story },
     { id: `${s.id}/structure`, surfaceId: s.id, bounds: s.bounds, bottom: surfaceRange(s)[0] - .16, top: surfaceRange(s)[1], purpose: 'structure' as const, ownerStory: owner.story }]);
   world.floorRects = topology.surfaces.map(s => s.bounds);
@@ -335,7 +337,10 @@ export const connectSpatialSurfaces = (world: WorldPlan): void => {
     }
     for (const [k, g] of gaps.entries()) {
       const at = a.axis === 'x' ? { x: (g.min + g.max) / 2, z: a.fixed } : { z: (g.min + g.max) / 2, x: a.fixed };
-      links.push({ id: `join/${a.s.id}/${b.s.id}/${k}`, from: a.s.id, to: b.s.id, at, width: g.max - g.min + .68, kind: delta > .002 ? 'stairs' : 'walk', direction: 'both', access: 'open' });
+      const kind = delta > .002 || a.s.role === 'stair' || b.s.role === 'stair' ? 'stairs'
+        : a.s.locomotion === 'crouch' || b.s.locomotion === 'crouch' ? 'crouch'
+        : a.s.profile.kind === 'linear' || b.s.profile.kind === 'linear' ? 'ramp' : 'walk';
+      links.push({ id: `join/${a.s.id}/${b.s.id}/${k}`, from: a.s.id, to: b.s.id, at, width: g.max - g.min + .68, kind, direction: 'both', access: 'open' });
     }
   }
   t.connections.push(...links);

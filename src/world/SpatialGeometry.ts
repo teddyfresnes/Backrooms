@@ -1,5 +1,5 @@
 import type { Rect, StaticCollider } from './types';
-import { SLAB_INDICES, surfaceY, type HeightProfile, type WalkableSurface } from './WalkableTopology';
+import { SLAB_INDICES, slabVertices, surfaceCollider, surfaceY, type HeightProfile, type WalkableSurface } from './WalkableTopology';
 import type { SpatialPrism } from './SpatialTypes';
 
 export const profileY = (bounds: Rect, profile: HeightProfile, x: number, z: number): number =>
@@ -19,6 +19,14 @@ export const prismCollider = (p: SpatialPrism, kind: StaticCollider['kind'] = 'w
   const center = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2, z: (Math.min(...zs) + Math.max(...zs)) / 2 };
   return { id: p.id, kind, center, halfExtents: { x: (Math.max(...xs) - Math.min(...xs)) / 2, y: (Math.max(...ys) - Math.min(...ys)) / 2, z: (Math.max(...zs) - Math.min(...zs)) / 2 },
     vertices: v.map((n, i) => n - (i % 3 === 0 ? center.x : i % 3 === 1 ? center.y : center.z)), indices: [...SLAB_INDICES] };
+};
+
+/** Use the oriented slab faces for broad floors. Capsule snaps against very
+ * thin cuboids can otherwise select their underside at symmetric coordinates.
+ */
+export const slabMeshCollider = (surface: WalkableSurface): StaticCollider => {
+  const c = surfaceCollider(surface), points = slabVertices(surface);
+  return { ...c, vertices: points.map((v, i) => v - (i % 3 === 0 ? c.center.x : i % 3 === 1 ? c.center.y : c.center.z)), indices: [...SLAB_INDICES] };
 };
 
 /** Treads share their exact solids with Rapier; no invisible inclined proxy. */
