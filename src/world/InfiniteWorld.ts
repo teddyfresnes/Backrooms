@@ -2256,10 +2256,11 @@ export const generateInfiniteChunk = (
     }) : []);
   if (!cachedRegion) { regionalCache.set(regionKey, regionalClaims); trimStringCache(regionalCache, 64); }
   const reservations = epicIndex === null ? [
-    ...regionalClaims.filter(c => c.story < coord.story).map(c => c.bounds), ...protectedStructuralRects(seed, coord), ...ceilingOpeningsForChunk(seed, coord),
+    ...regionalClaims.filter(c => c.story < coord.story && c.top - coord.story * INFINITE_STORY_PITCH > -.158).map(c => c.bounds), ...protectedStructuralRects(seed, coord), ...ceilingOpeningsForChunk(seed, coord),
     ...(['north', 'south', 'east', 'west'] as const).flatMap(edge => edgeGates[edge].map(g => getVerticalGateApproach(INFINITE_CHUNK_SIZE, edge, g))),
   ] : [];
-  const plan = generateWorld(derivedChunkSeed(seed, normalizedKey), false, reservations);
+  const subfloor = regionalClaims.filter(c => c.story < coord.story && c.top - coord.story * INFINITE_STORY_PITCH <= -.158).map(c => ({ bounds: c.bounds, top: c.top - coord.story * INFINITE_STORY_PITCH }));
+  const plan = generateWorld(derivedChunkSeed(seed, normalizedKey), false, reservations, subfloor);
   // Topology may vary from story to story, but a vertical connection must not
   // swap wallpaper/carpet scale or tint while both floors are visible. Derive
   // the repeated surface treatment from the horizontal column only.

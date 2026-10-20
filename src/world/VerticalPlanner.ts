@@ -60,7 +60,7 @@ const rampForEdge = (edge: VerticalPortal, a: number, b: number, index: number):
 };
 
 /** Bounded room potential solve: all edges are validated before a sector commits. */
-export const planVerticalTopology = (world: WorldPlan, edges: readonly VerticalPortal[], reserved: Set<string>, root: SeededRandom, reservations: readonly Rect[] = []): void => {
+export const planVerticalTopology = (world: WorldPlan, edges: readonly VerticalPortal[], reserved: Set<string>, root: SeededRandom, reservations: readonly Rect[] = [], subfloor: readonly { bounds: Rect; top: number }[] = []): void => {
   for (const r of world.rooms) { r.structuralCeilingY ??= r.ceilingHeight; r.ceilingHeight = r.structuralCeilingY; r.floorY = 0; }
   const rng = root.fork('vertical-topology:v1'), diagnostics: { id: string; reason: string }[] = [];
   const heights = new Map(world.rooms.map(r => [r.id, 0])), half = world.size / 2;
@@ -73,6 +73,10 @@ export const planVerticalTopology = (world: WorldPlan, edges: readonly VerticalP
   let ramps: WalkableSurface[] = [];
   const layout = (values: Map<string, number>): WalkableSurface[] | undefined => {
     const result: WalkableSurface[] = [];
+    for (const room of world.rooms) {
+      const floor = values.get(room.id) ?? 0;
+      if (floor < 0 && subfloor.some(v => overlapRect(v.bounds, room.bounds) && floor - SLAB_THICKNESS < v.top + .002)) return;
+    }
     for (const [index, edge] of edges.entries()) {
       const a = values.get(edge.firstRoom.id) ?? 0, b = values.get(edge.secondRoom.id) ?? 0; if (a === b) continue;
       const ramp = rampForEdge(edge, a, b, index);
@@ -80,6 +84,7 @@ export const planVerticalTopology = (world: WorldPlan, edges: readonly VerticalP
       const hall = world.rooms.find(r => r.id === 'room-grand-hall');
       if (hall && world.columns.some(c => pointInRect(c.x, c.z, hall.bounds, .6) && overlapRect(routeBounds(ramp),
         { minX: c.x - c.width / 2, maxX: c.x + c.width / 2, minZ: c.z - c.depth / 2, maxZ: c.z + c.depth / 2 }, .12))) return;
+      if (subfloor.some(v => overlapRect(v.bounds, ramp.bounds) && (ramp.supportBottom ?? surfaceRange(ramp)[0] - .16) < v.top + .002)) return;
       if (world.walls.some(w => w.bottom < Math.max(a, b) + 2 && overlapRect(routeBounds(ramp, .7), wallBounds(w), .04))) return;
       result.push(ramp);
     }
@@ -100,20 +105,22 @@ export const planVerticalTopology = (world: WorldPlan, edges: readonly VerticalP
     ramps = next; accepted++;
   }
   for (const r of world.rooms) { r.floorY = heights.get(r.id) ?? 0; r.ceilingHeight = Math.max(r.ceilingHeight, quantize(r.floorY + 2.65)); if (r.floorY !== 0) reserved.add(r.id); }
-  const galleryRoom = rng.fork('gallery-room').shuffle(world.rooms.filter(r => !reserved.has(r.id) && (r.access ?? 'open') === 'open' && r.level === 0 && r.id !== 'room-grand-hall' &&
+  const galleryCandidates = rng.fork('gallery-room').shuffle(world.rooms.filter(r => !reserved.has(r.id) && (r.access ?? 'open') === 'open' && r.level === 0 && r.id !== 'room-grand-hall' &&
     heights.get(r.id) === 0 && r.ceilingHeight <= 4.3 && rectWidth(r.bounds) >= 17.5 && rectDepth(r.bounds) >= 13.5 &&
     r.bounds.minX > -half + 1.2 && r.bounds.maxX < half - 1.2 && r.bounds.minZ > -half + 1.2 && r.bounds.maxZ < half - 1.2 &&
     !world.solidMasses.some(m => overlapRect(m.bounds, r.bounds)) && !(world.symmetryZones ?? []).some(z => overlapRect(z, r.bounds)) &&
     !world.features.some(f => f.kind !== 'impossible-vista' && f.kind !== 'interactive-door' && overlapRect(f.bounds, r.bounds)) &&
-    !ramps.some(s => overlapRect(s.bounds, r.bounds))))[0];
+    !ramps.some(s => overlapRect(s.bounds, r.bounds))));
   const galleries: WalkableSurface[] = [];
-  if (galleryRoom) {
-    reserved.add(galleryRoom.id); galleryRoom.ceilingHeight = 4.3;
+  for (const galleryRoom of galleryCandidates.slice(0, 4)) {
+    const originalCeiling = galleryRoom.ceilingHeight; galleryRoom.ceilingHeight = 4.3;
+    const proposal: WalkableSurface[] = [];
     const b = galleryRoom.bounds, width = rectWidth(b), depth = rectDepth(b), w = 2.2, run = 3;
-    const family = rng.fork('gallery-family').pick(['L', 'U', 'bridge'] as const);
+    const galleryRng = root.fork(`vertical-gallery:v1:${galleryRoom.id}`);
+    const family = galleryRng.fork('family').pick(['L', 'U', 'bridge'] as const);
     const add = (name: string, bounds: Rect, profile: WalkableSurface['profile'], role: WalkableSurface['role'], solid: boolean, ground = false) => {
       const underpass = ground && name === 'underpass';
-      galleries.push({ id: `vertical/gallery/${galleryRoom.id}/${name}`, roomId: galleryRoom.id, ownerStory: 0, layer: ground ? 'ground' : `gallery/${galleryRoom.id}`,
+      proposal.push({ id: `vertical/gallery/${galleryRoom.id}/${name}`, roomId: galleryRoom.id, ownerStory: 0, layer: ground ? 'ground' : `gallery/${galleryRoom.id}`,
         role, bounds: { ...bounds }, profile: { ...profile }, ceilingY: underpass ? 1.64 : 4.3, thickness: .16, support: solid ? 'solid' : 'slab',
         ...(solid ? { supportBottom: ground ? -1.06 : -.16 } : {}), access: 'open', edges: ground || role === 'ramp' ? 'drop' : 'guarded' });
     };
@@ -141,8 +148,8 @@ export const planVerticalTopology = (world: WorldPlan, edges: readonly VerticalP
         { kind: 'linear', axis: family === 'bridge' ? 'z' : 'x', startY: family === 'bridge' ? 0 : -.9, endY: family === 'bridge' ? -.9 : 0 }, 'ramp', true, true);
     }
     // Reflect the layout without a new bounding-box occupation, and anchor it to an existing wall.
-    const mirrorX = rng.fork('gallery-mirror-x').chance(.5), mirrorZ = rng.fork('gallery-mirror-z').chance(.5);
-    for (const s of galleries) {
+    const mirrorX = galleryRng.fork('mirror-x').chance(.5), mirrorZ = galleryRng.fork('mirror-z').chance(.5);
+    for (const s of proposal) {
       const r = s.bounds;
       if (mirrorX) { const min = width - r.maxX; r.maxX = width - r.minX; r.minX = min; if (s.profile.kind === 'linear' && s.profile.axis === 'x') [s.profile.startY, s.profile.endY] = [s.profile.endY, s.profile.startY]; }
       if (mirrorZ) { const min = depth - r.maxZ; r.maxZ = depth - r.minZ; r.minZ = min; if (s.profile.kind === 'linear' && s.profile.axis === 'z') [s.profile.startY, s.profile.endY] = [s.profile.endY, s.profile.startY]; }
@@ -152,13 +159,18 @@ export const planVerticalTopology = (world: WorldPlan, edges: readonly VerticalP
       const dx = b.minX + (mirrorX ? -shiftX : shiftX), dz = b.minZ + (mirrorZ ? -shiftZ : shiftZ);
       s.bounds = { minX: r.minX + dx, maxX: r.maxX + dx, minZ: r.minZ + dz, maxZ: r.maxZ + dz };
     }
-    if (family === 'bridge') for (const s of galleries.filter(s => s.role === 'bridge' || s.id.endsWith('/underpass'))) {
+    if (family === 'bridge') for (const s of proposal.filter(s => s.role === 'bridge' || s.id.endsWith('/underpass'))) {
       if (mirrorX) s.bounds.minX = b.minX + .12; else s.bounds.maxX = b.maxX - .12;
     }
     // Reject, rather than clip, an approach that cannot fit inside the room.
-    if (galleries.some(s => s.bounds.minX < b.minX + .1 || s.bounds.maxX > b.maxX - .1 || s.bounds.minZ < b.minZ + .1 || s.bounds.maxZ > b.maxZ - .1)) {
-      diagnostics.push({ id: galleryRoom.id, reason: 'gallery approach exceeds room footprint' }); galleries.length = 0;
+    if (proposal.some(s => s.bounds.minX < b.minX + .1 || s.bounds.maxX > b.maxX - .1 || s.bounds.minZ < b.minZ + .1 || s.bounds.maxZ > b.maxZ - .1)) {
+      diagnostics.push({ id: galleryRoom.id, reason: 'gallery approach exceeds room footprint' }); proposal.length = 0;
     }
+    if (proposal.some(s => subfloor.some(v => overlapRect(v.bounds, s.bounds, .12) && (s.supportBottom ?? surfaceRange(s)[0] - s.thickness) < v.top + .002))) {
+      diagnostics.push({ id: galleryRoom.id, reason: 'gallery structure conflicts with a lower owner envelope' }); proposal.length = 0;
+    }
+    if (proposal.length) { galleries.push(...proposal); reserved.add(galleryRoom.id); break; }
+    galleryRoom.ceilingHeight = originalCeiling;
   }
   for (const ramp of ramps) for (const r of world.rooms.filter(r => overlapRect(r.bounds, routeBounds(ramp)))) {
     reserved.add(r.id); r.ceilingHeight = Math.max(r.ceilingHeight, quantize(surfaceRange(ramp)[1] + 2.65));

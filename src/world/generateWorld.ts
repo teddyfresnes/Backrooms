@@ -5176,7 +5176,7 @@ export const generateSurfaceStyle = (seed: string): SurfaceStyle => {
   };
 };
 
-export const generateWorld = (seed: string, structuralOnly = false, verticalReservations: readonly Rect[] = []): WorldPlan => {
+export const generateWorld = (seed: string, structuralOnly = false, verticalReservations: readonly Rect[] = [], subfloorReservations: readonly { bounds: Rect; top: number }[] = []): WorldPlan => {
   const rootRng = new SeededRandom(`${seed}:v${GENERATOR_VERSION}`);
   const surfaceStyle = generateSurfaceStyle(seed);
   const half = WORLD_SIZE * 0.5;
@@ -5344,7 +5344,7 @@ export const generateWorld = (seed: string, structuralOnly = false, verticalRese
     portals: verticalEdges.map(e => ({ ...e.portal, firstRoomId: e.firstRoom.id, secondRoomId: e.secondRoom.id })) };
   finalizeVerticalTopology(world);
   for (const r of world.rooms) if (!world.topology.surfaces.some(surface => surface.roomId === r.id && surface.reachable)) verticalReserved.add(r.id);
-  planVerticalTopology(world, verticalEdges, verticalReserved, rootRng, verticalReservations);
+  planVerticalTopology(world, verticalEdges, verticalReserved, rootRng, verticalReservations, subfloorReservations);
   fitVerticalArchitecture(world);
   rebuildVerticalCeilingShells(world);
   fitVerticalArchitecture(world);

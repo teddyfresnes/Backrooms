@@ -10,7 +10,7 @@ export const planRegionalVolumes = (story: number, rawAt: (owner: number) => Wor
   const candidates: RegionalClaim[] = [];
   for (let owner = story - MAX_REACH * 2; owner <= story; owner++) {
     const raw = rawAt(owner);
-    for (const room of raw.rooms.filter(r => r.level === 0 && r.ceilingHeight > 4.3)) candidates.push({
+    for (const room of raw.rooms.filter(r => r.level === 0 && r.ceilingHeight > 4.4)) candidates.push({
       id: `regional/${owner}/${room.id}`, roomId: room.id, story: owner, bounds: { ...room.bounds }, bottom: owner * PITCH - .16,
       top: owner * PITCH + Math.min(room.ceilingHeight, MAX_REACH * PITCH - CEILING_TILE_THICKNESS) + CEILING_TILE_THICKNESS });
   }

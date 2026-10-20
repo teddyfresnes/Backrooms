@@ -86,7 +86,7 @@ modifier temporairement le code.
 
 Pour les changements de hauteur, `npm run test:vertical` vérifie la géométrie
 Three/Rapier, les largeurs de capsule, le propriétaire, les sauvegardes et les
-cycles de streaming. `npm run audit:vertical` contrôle 64 adresses infinies et
+cycles de streaming. `npm run audit:vertical` contrôle 128 adresses infinies et
 échoue en cas de dégagement invalide, de parcours vertical inaccessible ou de
 famille absente. `npm run benchmark:vertical` mesure 24 seeds identiques :
 médiane/P95, clonage, JSON, architecture Three, montage Rapier et mémoire JS.

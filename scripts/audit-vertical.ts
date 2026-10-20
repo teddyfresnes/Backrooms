@@ -68,7 +68,7 @@ const diversity = () => {
   const families: Record<string, number> = {}, unreachableKinds: Record<string, number> = {}, examples: any[] = [], errors: any[] = [];
   let ordinarySurfaces = 0, crouchSurfaces = 0, ordinaryLowSurfaces = 0, ordinaryArea = 0, crouchArea = 0, monumentChunks = 0;
   const unreachableVertical: any[] = [];
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < 128; i++) {
     const seed = `VERTICAL-PROMPT-AUDIT-${i}`, world = generateInfiniteChunk(seed, { x: -1, z: 1, story: 0 }), produced = new Set<string>();
     if (!world.topology) { monumentChunks++; continue; }
     const issues = validateWorldPlan(world); if (issues.length) errors.push({ seed, issues });
@@ -96,7 +96,7 @@ const diversity = () => {
     }
     for (const family of produced) families[family] = (families[family] ?? 0) + 1;
   }
-  return { seeds: 64, ordinaryChunks: 64 - monumentChunks, monumentChunks, chunk: { x: -1, z: 1, story: 0 }, familyWorldCounts: families, ordinarySurfaces, crouchSurfaces, crouchAreaFraction: crouchArea / (ordinaryArea + crouchArea), ordinaryLowSurfaces, unreachableKinds, unreachableVertical, topologyErrors: errors, landmarks: examples };
+  return { seeds: 128, ordinaryChunks: 128 - monumentChunks, monumentChunks, chunk: { x: -1, z: 1, story: 0 }, familyWorldCounts: families, ordinarySurfaces, crouchSurfaces, crouchAreaFraction: crouchArea / (ordinaryArea + crouchArea), ordinaryLowSurfaces, unreachableKinds, unreachableVertical, topologyErrors: errors, landmarks: examples };
 };
 const result = process.argv.includes('--diversity') ? diversity() : { node: process.version, seeds,
   limitations: 'Headless architecture without prop meshes, graffiti, textures or GPU. Physics includes the generated colliders. Material batches are not measured draw calls. JS heap excludes WASM/GPU memory.',

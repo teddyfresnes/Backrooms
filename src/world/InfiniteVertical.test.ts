@@ -74,9 +74,20 @@ it('keeps negative corner plans independent of generation order and cache temper
 }, 30000);
 
 it('sweeps actual infinite slope bodies across their complete useful width', async () => {
-  for (const i of [2, 3, 55]) {
+  for (const [i, family] of [[2, '/return'], [19, '/ascending'], [41, '/bridge']] as const) {
     const w = generateInfiniteChunk(`VERTICAL-PROMPT-AUDIT-${i}`, { x: -1, z: 1, story: 0 }), physics = await PhysicsWorld.create(w);
+    expect(w.topology!.surfaces.some(s => s.id.endsWith(family)), `${w.seed} ${family}`).toBe(true);
     try {
+      for (const platform of w.topology!.surfaces.filter(s => s.role === 'balcony' || s.role === 'bridge')) {
+        const b = platform.bounds;
+        for (const x of [b.minX + .4, (b.minX + b.maxX) / 2, b.maxX - .4]) for (const z of [b.minZ + .4, (b.minZ + b.maxZ) / 2, b.maxZ - .4]) {
+          for (const floor of [1.8, -.9]) {
+            const blocked = physics.world.intersectionWithShape({ x, y: floor + .91, z }, { x: 0, y: 0, z: 0, w: 1 },
+              new RAPIER.Capsule(.52, .32), undefined, undefined, undefined, undefined, physics.isEnvironmentCollider);
+            expect(blocked, `${w.seed} ${platform.id} floor=${floor} ${x},${z}`).toBeNull();
+          }
+        }
+      }
       for (const s of w.topology!.surfaces) {
         const p = s.profile; if (p.kind !== 'linear') continue;
         const b = s.bounds, width = p.axis === 'x' ? rectDepth(b) : rectWidth(b);
