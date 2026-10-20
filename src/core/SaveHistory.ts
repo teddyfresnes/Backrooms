@@ -37,6 +37,7 @@ export interface BackroomsSavePayload {
   };
   readonly localPosition: Readonly<GameSaveVec3>;
   readonly quaternion: Readonly<GameSaveQuaternion>;
+  readonly surface?: { readonly version: number; readonly id: string; readonly layer: string };
 }
 
 interface GameSaveInputBase {
@@ -292,7 +293,8 @@ const sanitizeChunk = (value: unknown): BackroomsSavePayload['chunk'] | null => 
 };
 
 const sanitizeBackroomsPayload = (value: unknown): BackroomsSavePayload | null => {
-  if (!isRecord(value) || !hasExactKeys(value, ['seed', 'chunk', 'localPosition', 'quaternion'])) {
+  if (!isRecord(value) || (!hasExactKeys(value, ['seed', 'chunk', 'localPosition', 'quaternion']) &&
+    !hasExactKeys(value, ['seed', 'chunk', 'localPosition', 'quaternion', 'surface']))) {
     return null;
   }
   if (
@@ -306,7 +308,14 @@ const sanitizeBackroomsPayload = (value: unknown): BackroomsSavePayload | null =
   const localPosition = sanitizePosition(value.localPosition);
   const quaternion = sanitizeQuaternion(value.quaternion);
   if (!chunk || !localPosition || !quaternion) return null;
-  return Object.freeze({ seed: value.seed, chunk, localPosition, quaternion });
+  let surface: BackroomsSavePayload['surface'];
+  if (value.surface !== undefined) {
+    const s = value.surface;
+    if (!isRecord(s) || !hasExactKeys(s, ['version', 'id', 'layer']) || !Number.isSafeInteger(s.version) || (s.version as number) < 1 ||
+      typeof s.id !== 'string' || !s.id || s.id.length > 512 || typeof s.layer !== 'string' || !s.layer || s.layer.length > 256) return null;
+    surface = { version: s.version as number, id: s.id, layer: s.layer };
+  }
+  return Object.freeze({ seed: value.seed, chunk, localPosition, quaternion, ...(surface ? { surface } : {}) });
 };
 
 const sanitizeEntry = (value: unknown): GameSaveEntry | null => {

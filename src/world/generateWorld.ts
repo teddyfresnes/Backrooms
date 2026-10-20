@@ -1,3 +1,5 @@
+import { discoverVerticalPortals, planVerticalTopology, fitVerticalArchitecture, finalizeVerticalTopology } from './VerticalPlanner';
+import { validateTopology } from './WalkableTopology';
 import { createDefaultFeatureRegistry } from './FeatureRegistry';
 import {
   getPassageHoleAbyssBottom,
@@ -1378,6 +1380,11 @@ const addCeilingVariations = (
     });
   }
 
+  buildUpperCeilingShells(plan, world, rootRng);
+};
+
+const buildUpperCeilingShells = (plan: MutablePlan, world: WorldPlan, rootRng: SeededRandom): void => {
+  const rng = rootRng.fork('ceiling-variations');
   interface UpperShellClaim {
     orientation: 'x' | 'z';
     fixed: number;
@@ -1439,7 +1446,7 @@ const addCeilingVariations = (
     const baseWalls = plan.walls.filter((wall) => {
       if (
         wall.orientation !== orientation ||
-        Math.abs(wall.bottom) > 0.02 ||
+        (wall.bottom > 0.02 || wall.bottom < -1.5) ||
         wall.bottom + wall.height < world.wallHeight - 0.08
       ) return false;
       const wallFixed = wall.orientation === 'x' ? wall.z : wall.x;
@@ -1510,6 +1517,16 @@ const addCeilingVariations = (
       shellIndex += 1;
     }
   }
+};
+
+export const rebuildVerticalCeilingShells = (world: WorldPlan): void => {
+  const removed = new Set(world.walls.filter(w => w.detail === 'upper-shell' || w.detail === 'upper-portal-lintel').map(w => w.id));
+  world.walls = world.walls.filter(w => !removed.has(w.id));
+  world.colliders = world.colliders.filter(c => !removed.has(c.id.replace(/^collider-/, '')));
+  const mutable: MutablePlan = { walls: world.walls, rooms: world.rooms, colliders: world.colliders, portals: [], wallIndex: 100000 };
+  buildUpperCeilingShells(mutable, world, new SeededRandom(`${world.seed}:v${world.version}`));
+  synchronizeUpperCeilingShells(mutable, world, new SeededRandom(`${world.seed}:v${world.version}`));
+  world.walls = mutable.walls; world.colliders = mutable.colliders;
 };
 
 const addRaisedZones = (
@@ -5150,7 +5167,7 @@ export const generateSurfaceStyle = (seed: string): SurfaceStyle => {
   };
 };
 
-export const generateWorld = (seed: string): WorldPlan => {
+export const generateWorld = (seed: string, structuralOnly = false, verticalReservations: readonly Rect[] = []): WorldPlan => {
   const rootRng = new SeededRandom(`${seed}:v${GENERATOR_VERSION}`);
   const surfaceStyle = generateSurfaceStyle(seed);
   const half = WORLD_SIZE * 0.5;
@@ -5294,6 +5311,26 @@ export const generateWorld = (seed: string): WorldPlan => {
   world.walls = mutable.walls;
   world.colliders = mutable.colliders;
   addSolidMasses(world, reservedRoomIds, rootRng);
+  world.floorOpenings = world.features.flatMap(f => f.kind === 'grid-pit' || f.kind === 'squeeze-view' ? (f.holes ?? []).map(h => ({ minX: h.minX, maxX: h.maxX, minZ: h.minZ, maxZ: h.maxZ })) : []);
+  if (structuralOnly) return world;
+  // Preserve proposal RNG/reservations above, then migrate away from the old
+  // additive islands before solving the authoritative floor graph.
+  const legacyIds = world.features.filter(f => f.kind === 'raised-zone').map(f => f.id);
+  const sealIds = new Set(world.walls.filter(w => w.detail === 'elevation-seal').map(w => w.id));
+  world.features = world.features.filter(f => f.kind !== 'raised-zone');
+  world.walls = world.walls.filter(w => !sealIds.has(w.id));
+  world.colliders = world.colliders.filter(c => !legacyIds.some(id => c.id.startsWith(`${id}-`)) && !sealIds.has(c.id.replace(/^collider-/, '')));
+  const verticalReserved = new Set<string>([spawnRoom.id]);
+  for (const f of world.features) {
+    if (f.kind === 'interactive-door') { verticalReserved.add(f.sourceRoomId); verticalReserved.add(f.targetRoomId); }
+    else if (f.kind !== 'impossible-vista') verticalReserved.add(f.roomId);
+  }
+  for (const r of world.rooms) if (verticalReservations.some(b => r.bounds.minX < b.maxX + .6 && r.bounds.maxX > b.minX - .6 && r.bounds.minZ < b.maxZ + .6 && r.bounds.maxZ > b.minZ - .6)) verticalReserved.add(r.id);
+  planVerticalTopology(world, discoverVerticalPortals(world), verticalReserved, rootRng, verticalReservations);
+  fitVerticalArchitecture(world);
+  rebuildVerticalCeilingShells(world);
+  fitVerticalArchitecture(world);
+  mutable.walls = world.walls; mutable.colliders = world.colliders;
   classifyInaccessibleRooms(mutable, world);
   addInteractiveDoorColliders(world, interactiveDoors);
   rebuildSunkenArchitectureExtensions(world);
@@ -5337,14 +5374,18 @@ export const generateWorld = (seed: string): WorldPlan => {
     });
   });
   if (pit) addLowerLevel(world, pit, rootRng);
+  finalizeVerticalTopology(world);
 
   return world;
 };
+
+export const generateStructuralPlan = (seed: string): WorldPlan => generateWorld(seed, true);
 
 export const fingerprintWorld = (world: WorldPlan): string => {
   const payload = [
     world.version,
     world.seed,
+    JSON.stringify(world.topology ?? null),
     world.rooms
       .map((room) => `${room.id}:${room.kind}:${room.access ?? 'open'}:${rectArea(room.bounds).toFixed(2)}`)
       .join('|'),
@@ -5389,7 +5430,7 @@ export const fingerprintWorld = (world: WorldPlan): string => {
 };
 
 export const validateWorldPlan = (world: WorldPlan): string[] => {
-  const issues: string[] = [];
+  const issues: string[] = validateTopology(world);
   if (world.rooms.length < 5) issues.push('The topology contains too few rooms.');
   if (world.lights.length < 8) issues.push('The light field is too sparse.');
   if (!world.floorRects.some((rect) => pointInRect(world.spawn.x, world.spawn.z, rect))) {

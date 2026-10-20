@@ -281,7 +281,7 @@ export class Game {
       },
     });
     if (this.options.launch?.kind === 'load') {
-      const { chunk, localPosition, quaternion } = this.options.launch.save.payload;
+      const { chunk, localPosition, quaternion, surface } = this.options.launch.save.payload;
       const offset = getChunkWorldOffset(chunk);
       const restoredPosition = {
         x: offset.x + localPosition.x,
@@ -291,7 +291,7 @@ export class Game {
       const destinationReady = await this.worldStream.prepareSavedChunk(chunk);
       if (this.disposed) return;
       if (!destinationReady) throw new Error('Impossible de préparer la sauvegarde sélectionnée.');
-      this.player.teleport(restoredPosition);
+      this.player.teleport(this.worldStream.restoreSurfacePosition(restoredPosition, surface));
       this.player.setLookQuaternion(quaternion);
       this.playableSeconds = this.options.launch.save.playTimeSeconds;
     }
@@ -530,7 +530,7 @@ export class Game {
 
   private saveNow(kind: GameSaveKind): boolean {
     if (!this.storage || !this.player || !this.worldStream) return false;
-    const chunk = this.worldStream.getCenterCoord();
+    const chunk = this.worldStream.supportedCoordAt(this.lastSafePosition);
     const offset = getChunkWorldOffset(chunk);
     const look = this.player.getLookQuaternion();
     this.postFX?.render(0);
@@ -545,6 +545,7 @@ export class Game {
       payload: {
         seed: this.seed,
         chunk,
+        ...(this.worldStream.surfaceAnchorAt(this.lastSafePosition) ? { surface: this.worldStream.surfaceAnchorAt(this.lastSafePosition) } : {}),
         localPosition: {
           x: this.lastSafePosition.x - offset.x,
           y: this.lastSafePosition.y - offset.y,
@@ -571,7 +572,7 @@ export class Game {
     const pendingStory = this.pendingAutosaveStory;
     if (pendingStory === undefined || !this.worldStream) return;
     const center = this.worldStream.getCenterCoord();
-    const safeCoord = streamChunkCoordAt(this.lastSafePosition);
+    const safeCoord = this.worldStream?.supportedCoordAt(this.lastSafePosition) ?? streamChunkCoordAt(this.lastSafePosition);
     if (
       center.story !== pendingStory
       || safeCoord.story !== pendingStory

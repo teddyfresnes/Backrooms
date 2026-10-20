@@ -1,3 +1,4 @@
+import { findSurface, surfaceY, TOPOLOGY_VERSION } from '../world/WalkableTopology';
 import type { CharacterPit } from '../character/CharacterEnvironment';
 import * as THREE from 'three';
 import type {
@@ -349,7 +350,7 @@ export class WorldStream {
   ): void {
     if (!this.initialized || this.disposed) return;
 
-    const observedCenter = streamChunkCoordAt(playerPosition);
+    const observedCenter = this.supportedCoordAt(playerPosition);
     const epicPinnedCoord = this.getEpicPinnedCoord(playerPosition);
     const epicStoryPinned = epicPinnedCoord !== undefined;
     let nextCenter = observedCenter;
@@ -656,7 +657,7 @@ export class WorldStream {
   protectRecoveryPosition(position: Pick<THREE.Vector3, 'x' | 'y' | 'z'>): void {
     if (!this.initialized || this.disposed) return;
     this.runtimeOffset.set(position.x, position.y, position.z);
-    const owner = this.getEpicPinnedCoord(this.runtimeOffset) ?? streamChunkCoordAt(position);
+    const owner = this.getEpicPinnedCoord(this.runtimeOffset) ?? this.supportedCoordAt(position);
     const key = createChunkKey(owner);
     if (key === this.recoveryChunkKey) return;
     this.recoveryChunkKey = key;
@@ -667,7 +668,7 @@ export class WorldStream {
   ensurePositionMounted(position: Pick<THREE.Vector3, 'x' | 'y' | 'z'>): void {
     if (!this.initialized || this.disposed) return;
     this.runtimeOffset.set(position.x, position.y, position.z);
-    const coord = this.getEpicPinnedCoord(this.runtimeOffset) ?? streamChunkCoordAt(position);
+    const coord = this.getEpicPinnedCoord(this.runtimeOffset) ?? this.supportedCoordAt(position);
     const key = createChunkKey(coord);
     if (this.chunks.has(key)) return;
     if (this.recoveryChunk?.key === key) {
@@ -736,6 +737,14 @@ export class WorldStream {
     );
 
     for (const runtime of this.chunks.values()) {
+      for (const s of runtime.plan.topology?.surfaces ?? []) {
+        const p = rectCenter(s.bounds), y = surfaceY(s, p.x, p.z);
+        if (s.role === 'ramp' && s.locomotion !== 'crouch') addTarget(runtime, 'rampe', 'rampe praticable', ['pente', 'slope'], { ...p, y: y + .9 });
+        if (s.role === 'balcony') addTarget(runtime, 'balcon', 'balcon et mezzanine', ['mezzanine', 'galerie'], { ...p, y: y + .9 });
+        if (s.role === 'bridge') addTarget(runtime, 'passerelle', 'passerelle', ['bridge'], { ...p, y: y + .9 });
+        if (s.layer.endsWith('ground') && s.profile.kind === 'flat' && y < -.3 && rectWidth(s.bounds) > 1.6 && rectDepth(s.bounds) > 1.6)
+          addTarget(runtime, 'secteur-encaisse', 'secteur encaissé', ['contrebas', 'sunken'], { ...p, y: y + .9 });
+      }
       const propGroups = new Map<string, Rect>();
       for (const placement of runtime.plan.propPlacements ?? []) {
         const key = placement.sceneId ?? placement.id;
@@ -960,7 +969,8 @@ export class WorldStream {
         );
         const safePosition = {
           x: safeCenter.x,
-          y: 0.865 + (raisedZone?.elevation ?? 0),
+          y: .865 + (() => { const s = findSurface(runtime.plan, { ...safeCenter, referenceY: room.floorY ?? 0 });
+            return s ? surfaceY(s, safeCenter.x, safeCenter.z) : raisedZone?.elevation ?? 0; })(),
           z: safeCenter.z,
         };
         const roomLights = runtime.plan.lights.filter(
@@ -1392,10 +1402,48 @@ export class WorldStream {
     this.sourceCount = count;
   }
 
+  supportedCoordAt(position: Pick<THREE.Vector3, 'x' | 'y' | 'z'>): ChunkCoord {
+    const monumental = this.getEpicPinnedCoord(position); if (monumental) return { ...monumental };
+    const fallback = streamChunkCoordAt(position);
+    const candidates = [...this.chunks.values()].filter(r => r.coord.x === fallback.x && r.coord.z === fallback.z)
+      .sort((a, b) => Number(b.coord.story === this.centerCoord.story) - Number(a.coord.story === this.centerCoord.story));
+    for (const runtime of candidates) {
+      if (findSurface(runtime.plan, { x: position.x - runtime.offset.x, z: position.z - runtime.offset.z,
+        referenceY: position.y - runtime.offset.y - .865, maxAbove: .2, maxBelow: .5 })) return { ...runtime.coord };
+    }
+    const current = candidates.find(r => r.coord.story === this.centerCoord.story);
+    if (current?.plan.topology?.volumes.some(v => v.purpose === 'clearance' &&
+      pointInRect(position.x - current.offset.x, position.z - current.offset.z, v.bounds) && position.y - current.offset.y >= v.bottom && position.y - current.offset.y <= v.top)) return { ...current.coord };
+    if (this.recoveryChunk) {
+      const coord = parseChunkKey(this.recoveryChunk.key), offset = getChunkWorldOffset(coord);
+      if (coord.x === fallback.x && coord.z === fallback.z && findSurface(this.recoveryChunk.prepared.plan,
+        { x: position.x - offset.x, z: position.z - offset.z, referenceY: position.y - offset.y - .865 })) return coord;
+    }
+    return fallback;
+  }
+
+  surfaceAnchorAt(position: Pick<THREE.Vector3, 'x' | 'y' | 'z'>): { version: number; id: string; layer: string } | undefined {
+    const coord = this.supportedCoordAt(position), key = createChunkKey(coord), runtime = this.chunks.get(key);
+    const plan = runtime?.plan ?? (this.recoveryChunk?.key === key ? this.recoveryChunk.prepared.plan : undefined); if (!plan) return;
+    const offset = runtime?.offset ?? getChunkWorldOffset(coord);
+    const s = findSurface(plan, { x: position.x - offset.x, z: position.z - offset.z, referenceY: position.y - offset.y - .865 });
+    return s ? { version: TOPOLOGY_VERSION, id: s.id, layer: s.layer } : undefined;
+  }
+
+  restoreSurfacePosition(position: Vec3Data, anchor?: { version: number; id: string; layer: string }): Vec3Data {
+    const runtime = this.runtimeAt(new THREE.Vector3(position.x, position.y, position.z)); if (!runtime?.plan.topology) return position;
+    const x = position.x - runtime.offset.x, z = position.z - runtime.offset.z;
+    const exact = anchor?.version === TOPOLOGY_VERSION ? runtime.plan.topology.surfaces.find(s => s.id === anchor.id && pointInRect(x, z, s.bounds)) : undefined;
+    const s = exact ?? findSurface(runtime.plan, { x, z, referenceY: position.y - runtime.offset.y - .865,
+      layer: anchor?.version === TOPOLOGY_VERSION ? anchor.layer : undefined, maxAbove: 4, maxBelow: 4 });
+    const candidate = s ? { x: position.x, y: runtime.offset.y + surfaceY(s, x, z) + .865, z: position.z } : undefined;
+    return candidate && this.physics.canStandAt(candidate) ? candidate : worldPoint(runtime.plan.spawn, runtime.offset);
+  }
+
   private runtimeAt(position: THREE.Vector3): ActiveChunk | undefined {
     const epicOwner = this.epicRuntimeAt(position);
     if (epicOwner) return epicOwner;
-    const observed = streamChunkCoordAt(position);
+    const observed = this.supportedCoordAt(position);
     const exact = this.chunks.get(createChunkKey(observed));
     if (exact) return exact;
     // During a deferred story hand-off the player is physically inside the
@@ -1403,11 +1451,11 @@ export class WorldStream {
     return this.chunks.get(createChunkKey({ ...observed, story: this.centerCoord.story }));
   }
 
-  private getEpicPinnedCoord(playerPosition: THREE.Vector3): Readonly<ChunkCoord> | undefined {
+  private getEpicPinnedCoord(playerPosition: Pick<THREE.Vector3, 'x' | 'y' | 'z'>): Readonly<ChunkCoord> | undefined {
     return this.epicRuntimeAt(playerPosition)?.coord;
   }
 
-  private epicRuntimeAt(playerPosition: THREE.Vector3): ActiveChunk | undefined {
+  private epicRuntimeAt(playerPosition: Pick<THREE.Vector3, 'x' | 'y' | 'z'>): ActiveChunk | undefined {
     for (const runtime of this.chunks.values()) {
       this.localPlayer.copy(playerPosition).sub(runtime.offset);
       if (runtime.plan.features.some(

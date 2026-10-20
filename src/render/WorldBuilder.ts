@@ -1,3 +1,5 @@
+import { createWalkableGeometry } from './WalkableGeometry';
+import { applySurfaceLighting } from './SurfaceLighting';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { MaterialSet } from './MaterialLibrary';
@@ -1438,6 +1440,7 @@ export class WorldView {
       this.ownedMaterials = zonal.ownedMaterials;
     }
     this.surfaceStyle = plan.surfaceStyle ?? DEFAULT_SURFACE_STYLE;
+    for (const material of [this.materials.floor, this.materials.wall, this.materials.plaster, this.materials.ceiling, this.materials.baseboard]) applySurfaceLighting(material, plan);
     this.materials.wall.color.multiplyScalar(this.surfaceStyle.wallTint);
     this.materials.plaster.color.multiplyScalar(this.surfaceStyle.wallTint);
     this.materials.floor.color.multiplyScalar(this.surfaceStyle.floorTint);
@@ -1614,7 +1617,7 @@ export class WorldView {
     }
     const portalLintelHasHighCeilingOnBothSides = (wall: WallSegment): boolean =>
       wall.detail === 'upper-portal-lintel' && lintelGroups.get(wall.id) === true;
-    const districtFloorElevations = elevationFeatures.map((feature) => feature.elevation);
+    const districtFloorElevations = [...elevationFeatures.map((feature) => feature.elevation), ...(this.plan.topology?.surfaces.filter(s => s.profile.kind === 'flat').map(s => s.profile.kind === 'flat' ? s.profile.y : 0) ?? [])];
     const isInsideBaseboardlessZone = (x: number, z: number): boolean =>
       baseboardlessZones.some((zone) => pointInRect(x, z, zone, 0.02));
     const baseboardlessClaimsForWall = (
@@ -1661,13 +1664,23 @@ export class WorldView {
     const elevationClaimsForWall = (
       wall: WallSegment,
     ): Array<{ min: number; max: number; elevation: number; side: -1 | 1 }> => {
-      if (Math.abs(wall.bottom) > 0.12) return [];
+      if (Math.abs(wall.bottom) > 1.2) return [];
       const alongCenter = wall.orientation === 'x' ? wall.x : wall.z;
       const fixed = wall.orientation === 'x' ? wall.z : wall.x;
       const wallMin = alongCenter - wall.length * 0.5;
       const wallMax = alongCenter + wall.length * 0.5;
       const sampleOffset = wall.thickness * 0.5 + 0.04;
-      const claims = elevationFeatures.flatMap((feature) =>
+      const floorClaims = this.plan.topology?.surfaces.filter(s => s.profile.kind === 'flat' && s.layer.endsWith('ground')).flatMap(s => {
+        const p = s.bounds, min = Math.max(wallMin, wall.orientation === 'x' ? p.minX : p.minZ), max = Math.min(wallMax, wall.orientation === 'x' ? p.maxX : p.maxZ);
+        if (max - min <= .02 || s.profile.kind !== 'flat') return [];
+        const elevation = s.profile.y;
+        return ([-1, 1] as const).flatMap(side => {
+          const x = wall.orientation === 'x' ? (min + max) / 2 : fixed + side * sampleOffset;
+          const z = wall.orientation === 'z' ? (min + max) / 2 : fixed + side * sampleOffset;
+          return pointInRect(x, z, p, -.02) ? [{ min, max, elevation, side }] : [];
+        });
+      }) ?? [];
+      const claims = [...floorClaims, ...elevationFeatures.flatMap((feature) =>
         (feature.platformRects ?? [feature.platformBounds]).flatMap((platform) => {
           const crossMin = wall.orientation === 'x' ? platform.minZ : platform.minX;
           const crossMax = wall.orientation === 'x' ? platform.maxZ : platform.maxX;
@@ -1686,7 +1699,7 @@ export class WorldView {
             return [{ min, max, elevation: feature.elevation, side }];
           });
         })
-      ).sort((left, right) => left.side - right.side || left.min - right.min);
+      )].sort((left, right) => left.side - right.side || left.min - right.min);
       const merged: Array<{
         min: number;
         max: number;
@@ -1938,7 +1951,7 @@ export class WorldView {
       this.group,
     );
 
-    const floorGeometry = createFloorGeometry(
+    const floorGeometry = this.plan.topology ? (mergeOrSingle(this.plan.topology.surfaces.map(s => createWalkableGeometry(s, 'top', this.surfaceStyle.floorPatternScale, this.surfaceStyle.floorQuarterTurn))) ?? new THREE.BufferGeometry()) : createFloorGeometry(
       this.plan.floorRects,
       0,
       this.surfaceStyle.floorPatternScale,
@@ -1950,7 +1963,11 @@ export class WorldView {
     floor.matrixAutoUpdate = false;
     floor.updateMatrix();
     this.group.add(floor);
-    if ((this.plan.floorOpenings?.length ?? 0) > 0) {
+    if (this.plan.topology) {
+      makeMesh(mergeOrSingle(this.plan.topology.surfaces.map(s => createWalkableGeometry(s, 'underside', this.surfaceStyle.ceilingPatternScale))), this.materials.ceiling, 'walkable-slab-undersides', this.group);
+      makeMesh(mergeOrSingle(this.plan.topology.surfaces.map(s => createWalkableGeometry(s, 'sides', this.surfaceStyle.wallPatternScale))), this.materials.wall, 'walkable-slab-sides', this.group);
+    }
+    if (!this.plan.topology && (this.plan.floorOpenings?.length ?? 0) > 0) {
       makeMesh(
         mergeOrSingle(this.plan.floorRects.map((rect) =>
           createCeilingGeometry(rect, -0.12, this.surfaceStyle.ceilingPatternScale)
@@ -1978,7 +1995,7 @@ export class WorldView {
         room.ceilingHeight > this.plan.wallHeight + 0.1 &&
         !endlessAbyssRoomIds.has(room.id),
     );
-    const inheritedCeilingOpenings = [...getInfiniteChunkCeilingOpenings(this.plan)];
+    const inheritedCeilingOpenings = [...getInfiniteChunkCeilingOpenings(this.plan), ...(this.plan.topology?.reservations?.filter(v => v.top > this.plan.wallHeight - .1).map(v => v.bounds) ?? [])];
     const stairCeilingOpenings = this.plan.stairCeilingOpenings ?? [];
     // A portal adjoining a normal-height room continues that room's ceiling.
     // Between two high rooms, the lintel keeps its wallpaper bottom cap instead,
@@ -2184,7 +2201,7 @@ export class WorldView {
         this.group,
       );
     }
-    if (this.bakedLightMaps) {
+    if (this.bakedLightMaps && !this.plan.topology) {
       const floorJunctionRepair = createHorizontalJunctionRepairGeometry(
         this.plan.walls,
         this.plan.floorRects,
@@ -3245,7 +3262,7 @@ export class WorldView {
           )
         ));
       }
-      if (feature.hump) {
+      if (feature.hump && !this.plan.topology) {
         floorGeometries.push(
           createFloorGeometry(
             [feature.hump.platformBounds],

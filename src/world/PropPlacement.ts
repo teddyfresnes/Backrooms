@@ -1,3 +1,4 @@
+import { findSurface, surfaceY } from './WalkableTopology';
 import {
   getPropAsset,
   PROP_ASSETS,
@@ -289,7 +290,11 @@ const placementIsSafe = (
   propPadding = 0.28,
 ): boolean => {
   if (!rectContains(room.bounds, bounds, roomMargin)) return false;
-  if (!plan.floorRects.some((floor) => rectContains(floor, bounds, 0.04))) return false;
+  if (plan.topology) {
+    const p = rectCenter(bounds), surface = findSurface(plan, { ...p, referenceY: room.floorY ?? 0 });
+    if (!surface || surface.profile.kind !== 'flat' || !rectContains(surface.bounds, bounds, .04)) return false;
+  } else if (!plan.floorRects.some((floor) => rectContains(floor, bounds, 0.04))) return false;
+  if (plan.topology?.surfaces.some(s => s.role === 'ramp' || s.role === 'balcony' || s.role === 'bridge' ? rectsOverlap(bounds, s.bounds, .62) : false)) return false;
   if (structuralRects(plan).some((rect) => rectsOverlap(bounds, rect, 0.62))) return false;
   if (plan.solidMasses.some((mass) => rectsOverlap(bounds, mass.bounds, 0.48))) return false;
   if (plan.columns.some((column) => rectsOverlap(bounds, {
@@ -299,8 +304,8 @@ const placementIsSafe = (
     maxZ: column.z + column.depth * 0.5,
   }, 0.42))) return false;
   if (plan.walls.some((wall) =>
-    wall.bottom < 1.2 &&
-    wall.bottom + wall.height > 0.1 &&
+    wall.bottom < (room.floorY ?? 0) + 1.2 &&
+    wall.bottom + wall.height > (room.floorY ?? 0) + 0.1 &&
     rectsOverlap(bounds, wallBounds(wall), 0.08)
   )) return false;
   if (!allowPropOverlap && placed.some((placement) => rectsOverlap(bounds, placement.bounds, propPadding))) {
@@ -314,8 +319,9 @@ const placementIsSafe = (
 const propCollider = (
   placement: PropPlacement,
   definition: PropAssetDefinition,
+  floorY = 0,
 ): StaticCollider | null => {
-  if (!definition.collidable || placement.position.y > 0.12) return null;
+  if (!definition.collidable || placement.position.y > floorY + 0.12) return null;
   const height = definition.size.y * placement.scale;
   const colliderScale = definition.colliderScale;
   return {
@@ -347,7 +353,7 @@ const appendPlacements = (
   plan.propPlacements ??= [];
   for (const placement of placements) {
     plan.propPlacements.push(placement);
-    const collider = propCollider(placement, getPropAsset(placement.assetId));
+    const collider = propCollider(placement, getPropAsset(placement.assetId), plan.rooms.find(r => r.id === placement.roomId)?.floorY ?? 0);
     if (collider) plan.colliders.push(collider);
   }
 };
@@ -434,7 +440,7 @@ const tryWallPlacement = (
       id: `rare-prop-${index}`,
       assetId: definition.id,
       roomId: room.id,
-      position: { x, y: 0, z },
+      position: { x, y: (() => { const surface = findSurface(plan, { x, z, referenceY: room.floorY ?? 0 }); return surface ? surfaceY(surface, x, z) : room.floorY ?? 0; })(), z },
       rotationY,
       scale,
       bounds,
@@ -569,9 +575,9 @@ const tryScenePlacement = (
         const z = (support?.placement.position.z ?? anchor.z) + offset.z;
         const y = support
           ? support.placement.position.y + support.definition.size.y * support.placement.scale
-          : slot.y ?? 0;
+          : (room.floorY ?? 0) + (slot.y ?? 0);
         const bounds = placementBounds(definition, x, z, rotationY, scale);
-        const raised = y > 0.12;
+        const raised = y > (room.floorY ?? 0) + 0.12;
         if (!placementIsSafe(
           plan,
           room,

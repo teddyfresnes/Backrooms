@@ -58,6 +58,17 @@ const backroomsInput = (playTimeSeconds = 120): BackroomsGameSaveInput => ({
 });
 
 describe('game save history', () => {
+  it('round-trips optional versioned surface anchors while accepting old payloads', () => {
+    for (const height of [-.8, .225, .9, 1.8]) {
+      const storage = new MemoryStorage(), input = backroomsInput();
+      const surface = { version: 1, id: 'chunk--2:7:1/vertical/ramp-1', layer: 'chunk--2:7:1/ground' };
+      const saved = writeGameSave(storage, { ...input, payload: { ...input.payload, localPosition: { x: 14, y: height + .865, z: -22 }, surface } });
+      expect(saved.ok).toBe(true); if (!saved.ok) throw new Error('save rejected');
+      const loaded = loadGameSave(storage, saved.save.id);
+      expect(loaded?.experienceId === 'backrooms' ? loaded.payload.surface : undefined).toEqual(surface);
+    }
+    expect(writeGameSave(new MemoryStorage(), backroomsInput()).ok).toBe(true);
+  });
   it('round-trips both strict payload variants and exposes compact summaries', () => {
     const storage = new MemoryStorage();
     const russian = writeGameSave(

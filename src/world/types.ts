@@ -1,3 +1,4 @@
+import type { InfiniteEdgeGates } from './InfiniteWorld';
 import type { WalkableTopology } from './WalkableTopology';
 
 export type RoomKind =
@@ -396,6 +397,7 @@ export interface SurfaceStyle {
 export interface WorldPlan {
   version: number;
   topology?: WalkableTopology;
+  edgeGates?: InfiniteEdgeGates;
   seed: string;
   size: number;
   wallHeight: number;
