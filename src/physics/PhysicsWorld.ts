@@ -19,11 +19,11 @@ const addStaticCollider = (
   body: RAPIER.RigidBody,
   source: StaticCollider,
 ): RAPIER.Collider => {
-  const description = RAPIER.ColliderDesc.cuboid(
+  const description = (source.vertices ? RAPIER.ColliderDesc.convexHull(new Float32Array(source.vertices))! : RAPIER.ColliderDesc.cuboid(
     source.halfExtents.x,
     source.halfExtents.y,
     source.halfExtents.z,
-  )
+  ))
     .setTranslation(source.center.x, source.center.y, source.center.z)
     .setFriction(source.kind === 'floor' || source.kind === 'step' ? 0.82 : 0.45)
     .setRestitution(0);
@@ -100,6 +100,11 @@ export class PhysicsWorld {
   }
 
   static async create(plan: WorldPlan): Promise<PhysicsWorld> { return new PhysicsWorld(plan); }
+  canStandAt(center: Vec3Data): boolean {
+    return !this.world.intersectionWithShape(center, IDENTITY_ROTATION,
+      new RAPIER.Capsule(STANDING_HALF_HEIGHT, PLAYER_RADIUS), undefined, undefined,
+      this.playerCollider, this.playerBody, this.isEnvironmentCollider);
+  }
   hasChunk(key: string): boolean { return this.chunkBodies.has(key); }
 
   addChunk(key: string, colliders: readonly StaticCollider[], offset: Vec3Data): void {

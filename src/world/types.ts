@@ -1,3 +1,5 @@
+import type { WalkableTopology } from './WalkableTopology';
+
 export type RoomKind =
   | 'office'
   | 'corridor'
@@ -62,6 +64,8 @@ export interface StaticCollider {
   halfExtents: Vec3Data;
   kind: 'wall' | 'column' | 'floor' | 'step' | 'barrier';
   rotation?: QuaternionData;
+  /** Convex hull vertices relative to center, shared with rendered slabs. */
+  vertices?: number[];
 }
 
 export type RoomAccess = 'open' | 'sealed' | 'secret';
@@ -72,6 +76,9 @@ export interface RoomRecord {
   kind: RoomKind;
   level: number;
   ceilingHeight: number;
+  /** Local absolute floor datum; level remains the historical room category. */
+  floorY?: number;
+  structuralCeilingY?: number;
   detailDensity: number;
   /** Restricted rooms are deliberately removed from the ordinary doorway graph. */
   access?: RoomAccess;
@@ -388,6 +395,7 @@ export interface SurfaceStyle {
 
 export interface WorldPlan {
   version: number;
+  topology?: WalkableTopology;
   seed: string;
   size: number;
   wallHeight: number;
