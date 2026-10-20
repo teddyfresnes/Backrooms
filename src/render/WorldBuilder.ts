@@ -1,4 +1,5 @@
 import { createWalkableGeometry } from './WalkableGeometry';
+import { applyRegionalLighting, createRegionalLightField, type RegionalLightField } from './RegionalLighting';
 import { createSpatialPrismGeometry } from './SpatialGeometry';
 import { applySurfaceLighting } from './SurfaceLighting';
 import * as THREE from 'three';
@@ -1419,6 +1420,7 @@ export class WorldView {
   private readonly animatedFogMaterials: THREE.ShaderMaterial[] = [];
   private readonly graffitiTextures: THREE.CanvasTexture[] = [];
   private readonly graffitiMaterials: THREE.MeshBasicMaterial[] = [];
+  private readonly regionalLightField?: RegionalLightField;
   private readonly surfaceStyle: SurfaceStyle;
   private readonly propLayer: WorldPropLayer;
   private readonly doorLayer: WorldDoorLayer;
@@ -1441,7 +1443,11 @@ export class WorldView {
       this.ownedMaterials = zonal.ownedMaterials;
     }
     this.surfaceStyle = plan.surfaceStyle ?? DEFAULT_SURFACE_STYLE;
-    for (const material of [this.materials.floor, this.materials.wall, this.materials.plaster, this.materials.ceiling, this.materials.baseboard]) applySurfaceLighting(material, plan);
+    this.regionalLightField = plan.spatial ? createRegionalLightField(plan) : undefined;
+    if (this.lightingContext) this.lightingContext.regionalField = this.regionalLightField;
+    for (const material of [this.materials.floor, this.materials.wall, this.materials.plaster, this.materials.ceiling, this.materials.baseboard]) {
+      if (this.regionalLightField) applyRegionalLighting(material, this.regionalLightField); else applySurfaceLighting(material, plan);
+    }
     this.materials.wall.color.multiplyScalar(this.surfaceStyle.wallTint);
     this.materials.plaster.color.multiplyScalar(this.surfaceStyle.wallTint);
     this.materials.floor.color.multiplyScalar(this.surfaceStyle.floorTint);
@@ -4109,6 +4115,7 @@ export class WorldView {
 
   setWorldOffset(offset: Readonly<THREE.Vector3>): void {
     this.lightingContext?.worldOffset.copy(offset);
+    this.regionalLightField?.offset.copy(offset);
   }
 
   getInteraction(
@@ -4192,6 +4199,7 @@ export class WorldView {
     this.graffitiMaterials.forEach((material) => material.dispose());
     this.graffitiTextures.forEach((texture) => texture.dispose());
     this.lightingContext?.lightField.dispose();
+    this.regionalLightField?.texture.dispose();
     this.bakedLightMaps?.general.dispose();
     this.bakedLightMaps?.ceiling.dispose();
     this.group.removeFromParent();

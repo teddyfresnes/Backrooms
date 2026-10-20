@@ -1,4 +1,4 @@
-import { findSurface, surfaceY, TOPOLOGY_VERSION } from '../world/WalkableTopology';
+import { cutRects, findSurface, surfaceY, TOPOLOGY_VERSION } from '../world/WalkableTopology';
 import { regionalOwnerAt } from '../world/RegionalPlan';
 import type { CharacterPit } from '../character/CharacterEnvironment';
 import * as THREE from 'three';
@@ -262,6 +262,13 @@ export class WorldStream {
     if (this.characterPitsCache) return this.characterPitsCache;
     const result: CharacterPit[] = [];
     for (const runtime of this.chunks.values()) {
+      for (const c of runtime.plan.spatial?.cells ?? []) {
+        if (c.mode !== 'gallery' && c.mode !== 'void') continue;
+        const cuts = runtime.plan.topology!.surfaces.filter(s => s.roomId?.startsWith(c.id + '/')).map(s => s.bounds);
+        const depth = (runtime.coord.story - (c.atriumOwner ?? runtime.coord.story) + 2) * 5.4;
+        for (const [i, b] of cutRects([c.bounds], cuts).entries()) result.push({ id: `${c.id}/pit-${i}`, minX: b.minX + runtime.offset.x, maxX: b.maxX + runtime.offset.x,
+          minZ: b.minZ + runtime.offset.z, maxZ: b.maxZ + runtime.offset.z, rimY: c.floorY + runtime.offset.y, bottom: -depth });
+      }
       for (const feature of runtime.plan.features) {
         if (feature.kind !== 'grid-pit') continue;
         feature.holes.forEach((hole, index) => result.push({
@@ -630,12 +637,17 @@ export class WorldStream {
 
   /** Prepares and mounts the destination collider before Game teleports. */
   async prepareLocateTarget(target: LocateTarget): Promise<boolean> {
-    return this.prepareAndMountCoords(locateWarmupCoords(target));
+    if (!await this.prepareAndMountCoords(locateWarmupCoords(target))) return false;
+    const runtime = this.chunks.get(target.chunkKey);
+    return !runtime || await this.prepareAndMountCoords(this.spatialVisibleCoords([runtime], target.position));
   }
 
   /** Prepares an exact saved chunk before restoring the player into it. */
   async prepareSavedChunk(coord: ChunkCoord): Promise<boolean> {
-    return this.prepareAndMountCoords([coord]);
+    if (!await this.prepareAndMountCoords([coord])) return false;
+    const runtime = this.chunks.get(createChunkKey(coord));
+    const targets = [...new Map((runtime?.plan.spatial?.dependencies ?? []).map(d => [createChunkKey(d.owner), d.owner])).values()];
+    return this.prepareAndMountCoords(targets);
   }
 
   private async prepareAndMountCoords(warmupCoords: readonly ChunkCoord[]): Promise<boolean> {
@@ -752,6 +764,13 @@ export class WorldStream {
     );
 
     for (const runtime of this.chunks.values()) {
+      for (const l of runtime.plan.spatial?.landmarks ?? []) {
+        const command = l.kind.startsWith('escalier-') ? 'escalier' : l.kind.startsWith('galerie-') ? l.kind : l.kind;
+        addTarget(runtime, command, l.kind.replaceAll('-', ' '), [l.kind], l.position);
+      }
+      for (const c of runtime.plan.spatial?.cells.filter(c => c.mode === 'rooms') ?? []) {
+        const p = rectCenter(c.bounds); addTarget(runtime, 'grand-plateau', 'grande zone régionale', ['plateau', 'zone'], { ...p, y: c.floorY + .865 });
+      }
       for (const s of runtime.plan.topology?.surfaces ?? []) {
         const p = rectCenter(s.bounds), y = surfaceY(s, p.x, p.z);
         if (s.role === 'ramp' && s.locomotion !== 'crouch') addTarget(runtime, 'rampe', 'rampe praticable', ['pente', 'slope'], { ...p, y: y + .9 });
@@ -1445,14 +1464,17 @@ export class WorldStream {
     return s ? { version: TOPOLOGY_VERSION, id: s.id, layer: s.layer } : undefined;
   }
 
-  restoreSurfacePosition(position: Vec3Data, anchor?: { version: number; id: string; layer: string }): Vec3Data {
-    const runtime = this.runtimeAt(new THREE.Vector3(position.x, position.y, position.z)); if (!runtime?.plan.topology) return position;
+  restoreSurfacePosition(position: Vec3Data, anchor?: { version: number; id: string; layer: string }, savedOwner?: ChunkCoord): Vec3Data {
+    const runtime = savedOwner ? this.chunks.get(createChunkKey(savedOwner)) : this.runtimeAt(new THREE.Vector3(position.x, position.y, position.z)); if (!runtime?.plan.topology) return position;
     const x = position.x - runtime.offset.x, z = position.z - runtime.offset.z;
     const exact = anchor?.version === TOPOLOGY_VERSION ? runtime.plan.topology.surfaces.find(s => s.id === anchor.id && pointInRect(x, z, s.bounds)) : undefined;
     const s = exact ?? findSurface(runtime.plan, { x, z, referenceY: position.y - runtime.offset.y - .865,
-      layer: anchor?.version === TOPOLOGY_VERSION ? anchor.layer : undefined, maxAbove: 4, maxBelow: 4 });
+      layer: anchor?.version === TOPOLOGY_VERSION ? anchor.layer : undefined, maxAbove: runtime.plan.spatial && anchor?.version !== TOPOLOGY_VERSION ? 20 : 4, maxBelow: runtime.plan.spatial && anchor?.version !== TOPOLOGY_VERSION ? 20 : 4 });
     const candidate = s && (s.access !== 'open' || s.reachable !== false) ? { x: position.x, y: runtime.offset.y + surfaceY(s, x, z) + .865, z: position.z } : undefined;
-    return candidate && this.physics.canStandAt(candidate) ? candidate : worldPoint(runtime.plan.spawn, runtime.offset);
+    if (candidate) for (const lift of s?.role === 'stair' ? [0, .05, .1, .15, .2, .25, .3] : [0]) {
+      const center = { ...candidate, y: candidate.y + lift }; if (this.physics.canStandAt(center)) return center;
+    }
+    return worldPoint(runtime.plan.spawn, runtime.offset);
   }
 
   private runtimeAt(position: THREE.Vector3): ActiveChunk | undefined {
@@ -1503,11 +1525,11 @@ export class WorldStream {
   /** Bound visible/landing dependencies to twelve additional source plans.
    * The same canonical atrium records are used before initial play and at runtime.
    */
-  private spatialVisibleCoords(sources: readonly { coord: ChunkCoord; plan: WorldPlan }[]): ChunkCoord[] {
+  private spatialVisibleCoords(sources: readonly { coord: ChunkCoord; plan: WorldPlan }[], position: Vec3Data = this.visibilityPosition): ChunkCoord[] {
     const targets = new Map<ChunkKey, { coord: ChunkCoord; distance: number }>();
     for (const { coord, plan } of sources) for (const d of plan.spatial?.dependencies ?? []) {
-      const offset = getChunkWorldOffset(coord), x = this.visibilityPosition.x - offset.x, z = this.visibilityPosition.z - offset.z;
-      const distance = distanceToRect(x, z, d.bounds), y = this.visibilityPosition.y - offset.y;
+      const offset = getChunkWorldOffset(coord), x = position.x - offset.x, z = position.z - offset.z;
+      const distance = distanceToRect(x, z, d.bounds), y = position.y - offset.y;
       if (distance > 36 || y < d.bottom - 12 || y > d.top + 12) continue;
       const key = createChunkKey(d.owner), old = targets.get(key);
       if (!old || distance < old.distance) targets.set(key, { coord: { ...d.owner }, distance });

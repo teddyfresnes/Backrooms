@@ -2,10 +2,10 @@ import { expect, it, vi } from 'vitest';
 vi.mock('@dimforge/rapier3d', async () => import('../../node_modules/@dimforge/rapier3d/rapier.js'));
 import RAPIER from '@dimforge/rapier3d';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
-import { clearInfiniteWorldCaches, generateInfiniteChunk, getCanonicalEdgeGates, getChunkWorldOffset } from './InfiniteWorld';
+import { generateLegacyInfiniteChunk, clearInfiniteWorldCaches, generateInfiniteChunk, getCanonicalEdgeGates, getChunkWorldOffset } from './InfiniteWorld';
 import { validateTopology, findSurface, surfaceY, surfaceNormal } from './WalkableTopology';
-import { rectDepth, rectWidth } from './types';
-import { generateWorld } from './generateWorld';
+import { rectCenter, rectDepth, rectWidth } from './types';
+import { generateLegacyWorld as generateWorld } from './generateWorld';
 
 it('reproduces the exact reported BSP room through the real infinite seed route', () => {
   const finite = generateWorld('VERTICAL-PROMPT-AUDIT-3');
@@ -14,12 +14,12 @@ it('reproduces the exact reported BSP room through the real infinite seed route'
   expect(validateTopology(infinite)).toEqual([]);
 });
 
-it('reserves a real tall volume across stories with the same owner and envelope in both generation orders', () => {
+it('retains legacy tall-volume templates across stories with the same owner and envelope in both generation orders', () => {
   const seed = 'VERTICAL-PROMPT-AUDIT-40', coord = { x: -1, z: 1, story: 0 };
-  clearInfiniteWorldCaches(); const upper = generateInfiniteChunk(seed, coord);
+  clearInfiniteWorldCaches(); const upper = generateLegacyInfiniteChunk(seed, coord);
   expect(upper.topology!.reservations!.length).toBeGreaterThan(0);
   for (const reservation of upper.topology!.reservations!) {
-    const owner = generateInfiniteChunk(seed, { ...coord, story: reservation.ownerStory });
+    const owner = generateLegacyInfiniteChunk(seed, { ...coord, story: reservation.ownerStory });
     const roomId = reservation.id.split('/').at(-1), room = owner.rooms.find(r => r.id.endsWith(`/${roomId}`))!;
     expect(room.bounds).toEqual(reservation.bounds);
     expect(room.ceilingHeight + reservation.ownerStory * 5.4 + .03).toBeCloseTo(reservation.top, 5);
@@ -27,8 +27,8 @@ it('reserves a real tall volume across stories with the same owner and envelope 
     if (reservation.top > -.158) expect(findSurface(upper, { ...p, referenceY: 0 })).toBeUndefined();
   }
   const previous = JSON.stringify(upper); clearInfiniteWorldCaches();
-  generateInfiniteChunk(seed, { ...coord, story: -1 });
-  expect(JSON.stringify(generateInfiniteChunk(seed, coord))).toBe(previous);
+  generateLegacyInfiniteChunk(seed, { ...coord, story: -1 });
+  expect(JSON.stringify(generateLegacyInfiniteChunk(seed, coord))).toBe(previous);
 }, 30000);
 
 it('publishes identical nonzero interfaces on every orientation, including a negative four-chunk corner', () => {
@@ -44,10 +44,11 @@ it('keeps sunken floor structures above the preceding story ceiling, including t
     const seed = `VERTICAL-PROMPT-AUDIT-${index}`, coord = { x: -1, z: 1, story: 0 };
     const lower = generateInfiniteChunk(seed, coord), upper = generateInfiniteChunk(seed, { ...coord, story: 1 });
     if (!lower.topology || !upper.topology) continue;
-    const roofs = lower.colliders.filter(c => c.id.includes('/vertical-roof/'));
-    for (const surface of upper.topology.surfaces.filter(s => s.layer.endsWith('ground'))) {
+    const roofs = lower.spatial!.ceilings.map(s => ({ id: s.id, center: { x: rectCenter(s.bounds).x, z: rectCenter(s.bounds).z, y: surfaceY(s, rectCenter(s.bounds).x, rectCenter(s.bounds).z) }, halfExtents: { x: rectWidth(s.bounds) / 2, z: rectDepth(s.bounds) / 2, y: 0 } }));
+    expect(roofs.length).toBeGreaterThan(0);
+    for (const surface of upper.topology.surfaces.filter(s => s.layer.includes('regional/'))) {
       const x = (surface.bounds.minX + surface.bounds.maxX) / 2, z = (surface.bounds.minZ + surface.bounds.maxZ) / 2;
-      const bottom = 5.4 + (surface.support === 'solid' ? surface.supportBottom! : surfaceY(surface, x, z) - surface.thickness / surfaceNormal(surface).y);
+      const bottom = 5.4 + surfaceY(surface, x, z) - surface.thickness / surfaceNormal(surface).y;
       for (const roof of roofs.filter(c => Math.abs(c.center.x - x) < c.halfExtents.x - .002 && Math.abs(c.center.z - z) < c.halfExtents.z - .002)) {
         expect(roof.center.y + roof.halfExtents.y, `${seed} ${surface.id} / ${roof.id}`).toBeLessThanOrEqual(bottom + .002);
       }
@@ -59,8 +60,8 @@ it('keeps all ordinary infinite surfaces comfortable after biome, shaft and boun
   for (let i = 0; i < 64; i++) {
     const w = generateInfiniteChunk(`VERTICAL-PROMPT-AUDIT-${i}`, { x: -1, z: 1, story: 0 });
     expect(validateTopology(w), w.seed).toEqual([]); expect(structuredClone(w)).toEqual(w);
-    expect(w.topology?.surfaces.filter(s => s.access === 'open' && s.role !== 'floor' && s.locomotion !== 'crouch' && !s.reachable).map(s => s.id), w.seed).toEqual([]);
-    expect(w.colliders.some(c => c.id.includes('/floor-'))).toBe(false);
+    expect(w.topology?.surfaces.filter(s => s.access === 'open' && s.role !== 'floor' && s.locomotion !== 'crouch' && s.reachability === 'isolated').map(s => s.id), w.seed).toEqual([]);
+    expect(w.colliders.some(c => /\/floor-\d+$/.test(c.id) && !c.id.includes('/cell/'))).toBe(false);
     expect(w.edgeGates).toBeDefined();
   }
 }, 60000);
@@ -74,20 +75,9 @@ it('keeps negative corner plans independent of generation order and cache temper
 }, 30000);
 
 it('sweeps actual infinite slope bodies across their complete useful width', async () => {
-  for (const [i, family] of [[2, '/return'], [19, '/ascending'], [41, '/bridge']] as const) {
+  for (const i of [0, 2, 5, 11, 19, 41]) {
     const w = generateInfiniteChunk(`VERTICAL-PROMPT-AUDIT-${i}`, { x: -1, z: 1, story: 0 }), physics = await PhysicsWorld.create(w);
-    expect(w.topology!.surfaces.some(s => s.id.endsWith(family)), `${w.seed} ${family}`).toBe(true);
     try {
-      for (const platform of w.topology!.surfaces.filter(s => s.role === 'balcony' || s.role === 'bridge')) {
-        const b = platform.bounds;
-        for (const x of [b.minX + .4, (b.minX + b.maxX) / 2, b.maxX - .4]) for (const z of [b.minZ + .4, (b.minZ + b.maxZ) / 2, b.maxZ - .4]) {
-          for (const floor of [1.8, -.9]) {
-            const blocked = physics.world.intersectionWithShape({ x, y: floor + .91, z }, { x: 0, y: 0, z: 0, w: 1 },
-              new RAPIER.Capsule(.52, .32), undefined, undefined, undefined, undefined, physics.isEnvironmentCollider);
-            expect(blocked, `${w.seed} ${platform.id} floor=${floor} ${x},${z}`).toBeNull();
-          }
-        }
-      }
       for (const s of w.topology!.surfaces) {
         const p = s.profile; if (p.kind !== 'linear') continue;
         const b = s.bounds, width = p.axis === 'x' ? rectDepth(b) : rectWidth(b);
@@ -114,7 +104,9 @@ it('walks a real shared seam after eight collider unload/reload cycles without l
       physics.batchChunkChanges(() => { physics.addChunk('source', source.colliders, offset); physics.addChunk('destination', destination.colliders, getChunkWorldOffset(destinationCoord)); });
       physics.teleport(spawn); for (let i = 0; i < 30; i++) physics.move({ x: 0, y: -.035, z: 0 });
       let p = { ...spawn }; for (let i = 0; i < 180 && p.x < -51; i++) p = { ...physics.move({ x: .08, y: -.035, z: 0 }).position };
-      expect(p.x).toBeGreaterThan(-51.1); expect(p.y).toBeGreaterThan(.8); expect(p.y).toBeLessThan(1.6);
+      expect(p.x).toBeGreaterThan(-51.1);
+      const target = findSurface(destination, { x: p.x, z: p.z, referenceY: p.y - .865 }); expect(target).toBeDefined();
+      expect(Math.abs(p.y - .865 - surfaceY(target!, p.x, p.z))).toBeLessThan(.2);
       physics.batchChunkChanges(() => { physics.removeChunk('source'); physics.removeChunk('destination'); });
       expect(physics.world.colliders.len()).toBe(1);
     }

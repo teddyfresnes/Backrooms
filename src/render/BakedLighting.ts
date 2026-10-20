@@ -144,7 +144,7 @@ const segmentHitsRect = (
 const worldOccluders = (plan: WorldPlan): BakedOccluder[] => [
   ...plan.walls
     .filter((wall) =>
-      bakedOccluderIntersectsLitStory(wall.bottom, wall.height, plan.wallHeight)
+      plan.spatial ? wall.height > 1.2 : bakedOccluderIntersectsLitStory(wall.bottom, wall.height, plan.wallHeight)
     )
     .map((wall) => {
       const halfLength = wall.length * 0.5;
@@ -329,7 +329,7 @@ export const bakeLightMapData = (plan: WorldPlan): BakedLightMapData => {
           visibilityOccluders: occluders.filter((occluder) =>
             rectsIntersect(pathBounds, occluder, 0.35),
           ),
-          ceilingVisibilityOccluders: ceilingOccluders.filter((occluder) =>
+          ceilingVisibilityOccluders: (plan.spatial ? occluders.filter(o => bakedOccluderReachesCeiling(o.bottom, o.top - o.bottom, room.ceilingHeight)) : ceilingOccluders).filter((occluder) =>
             rectsIntersect(pathBounds, occluder, 0.35),
           ),
         };

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyRegionalLighting, type RegionalLightField } from './RegionalLighting';
 import type { MaterialSet } from './MaterialLibrary';
 import type { Rect, VisualBiome, WorldPlan } from '../world/types';
 
@@ -84,6 +85,7 @@ interface ZonalShaderUniforms {
 }
 
 export interface ZonalLightingContext {
+  regionalField?: RegionalLightField;
   readonly zoneCount: number;
   readonly zones: THREE.Vector4[];
   readonly fluorescentTint: THREE.Color;
@@ -193,7 +195,7 @@ export const createFluorescentLightField = (plan: WorldPlan): THREE.DataTexture 
 
   const structuralRects: Rect[] = [];
   for (const wall of plan.walls) {
-    if (wall.bottom > 0.12 || wall.bottom + wall.height < 0.2) continue;
+    if (!plan.spatial && (wall.bottom > 0.12 || wall.bottom + wall.height < 0.2)) continue;
     const halfLength = wall.length * 0.5;
     const halfThickness = Math.max(0.08, wall.thickness * 0.5);
     structuralRects.push(wall.orientation === 'x'
@@ -480,6 +482,7 @@ export const applyZonalLighting = (
   material.customProgramCacheKey = () =>
     `zonal-fluorescent-lighting-v5-${supportsSurfaceNormal ? 'lit' : 'basic'}`;
   material.needsUpdate = true;
+  if (context.regionalField) applyRegionalLighting(material, context.regionalField);
 };
 
 /**

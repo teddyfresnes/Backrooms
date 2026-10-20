@@ -25,5 +25,6 @@ export interface SpatialArchitecture {
   ceilings: WalkableSurface[];
   prisms: SpatialPrism[];
   dependencies: SpatialDependency[];
+  interfaces: { id: string; side: 'north' | 'east' | 'south' | 'west'; surfaceId: string; position: Vec3Data; width: number; neighbor: SpatialAddress }[];
   landmarks: { kind: string; position: Vec3Data; destination?: Vec3Data; owner?: SpatialAddress }[];
 }

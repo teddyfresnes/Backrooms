@@ -291,7 +291,7 @@ export class Game {
       const destinationReady = await this.worldStream.prepareSavedChunk(chunk);
       if (this.disposed) return;
       if (!destinationReady) throw new Error('Impossible de préparer la sauvegarde sélectionnée.');
-      this.player.teleport(this.worldStream.restoreSurfacePosition(restoredPosition, surface));
+      this.player.teleport(this.worldStream.restoreSurfacePosition(restoredPosition, surface, chunk));
       this.player.setLookQuaternion(quaternion);
       this.playableSeconds = this.options.launch.save.playTimeSeconds;
     }

@@ -5,7 +5,7 @@ import {
   PIT_PRESENCE_RATE,
   UNLIT_ZONE_PRESENCE_RATE,
   fingerprintWorld,
-  generateWorld,
+  generateLegacyWorld as generateWorld,
   lightPanelOverlapsRect,
   validateWorldPlan,
   worldHasPit,
@@ -143,7 +143,7 @@ const boundaryOpeningWidths = (
 ): number[] => boundaryOpenings(world, room, side).map((opening) => opening.max - opening.min);
 
 
-describe('Level 0 procedural generator', () => {
+describe('legacy BSP templates retained for monuments and migration', () => {
   it.each(seeds)('is deterministic for %s', (seed) => {
     const first = generateWorld(seed);
     const second = generateWorld(seed);

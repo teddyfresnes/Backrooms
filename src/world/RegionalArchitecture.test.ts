@@ -43,11 +43,11 @@ it('uses real lower plans for open atria and directed drops, never orphan previe
     expect(validateTopology(w), w.seed).toEqual([]);
     for (const c of w.topology!.connections.filter(c => c.toOwner)) {
       const other = generateInfiniteChunk(w.seed, c.toOwner!);
-      expect(other.topology?.surfaces.some(s => s.id === c.to), c.to).toBe(true);
+      expect(c.targetKind === 'portal' ? other.spatial?.interfaces.some(p => p.id === c.to) : other.topology?.surfaces.some(s => s.id === c.to), c.to).toBe(true);
       if (c.kind === 'drop') { expect(c.direction).toBe('forward'); drops++; }
       if (c.kind === 'stairs') stairLinks++;
       const p = c.arrival!, localY = p.y - (c.toOwner!.story - w.spatial!.owner.story) * 5.4;
-      const surface = findSurface(other, { ...p, referenceY: localY }); expect(surface).toBeDefined();
+      const surface = findSurface(other, { x: p.x - (c.toOwner!.x - w.spatial!.owner.x) * 112, z: p.z - (c.toOwner!.z - w.spatial!.owner.z) * 112, referenceY: localY }); expect(surface).toBeDefined();
       overlapping++;
     }
   }
@@ -76,6 +76,19 @@ it('keeps the standing capsule free on generated floors and across real stairs',
       let actual = start;
       for (let t = 0; t < 240; t++) actual = { ...physics.move({ x: alongX ? .06 : 0, z: alongX ? 0 : .06, y: -.035 }).position };
       expect(alongX ? actual.x : actual.z, first.id).toBeGreaterThan((alongX ? b.x : b.z) - .5);
+    } finally { physics.dispose(); }
+  }
+});
+
+it('keeps every canonical opening body-free across its full useful width after thick walls and hall merges', async () => {
+  for (let i = 0; i < 20; i++) {
+    const w = generateInfiniteChunk(`REGIONAL-AUDIT-${i}`, { x: 0, z: 0, story: 0 }), physics = await PhysicsWorld.create(w);
+    try {
+      for (const edge of ['north', 'east', 'south', 'west'] as const) for (const gate of w.edgeGates![edge]) for (const t of [0, .25, .5, .75, 1]) {
+        const along = gate.offset + (2 * t - 1) * (gate.width / 2 - .35), x = edge === 'west' ? -55.6 : edge === 'east' ? 55.6 : along, z = edge === 'north' ? -55.6 : edge === 'south' ? 55.6 : along;
+        const blocker = physics.world.intersectionWithShape({ x, y: gate.floorY + .91, z }, { x: 0, y: 0, z: 0, w: 1 }, new RAPIER.Capsule(.52, .32), undefined, undefined, undefined, undefined, physics.isEnvironmentCollider);
+        expect(blocker, `${w.seed} ${edge} ${gate.offset} t=${t}`).toBeNull();
+      }
     } finally { physics.dispose(); }
   }
 });

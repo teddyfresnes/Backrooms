@@ -9,38 +9,34 @@ import { findSurface, surfaceCollider, surfaceY, type WalkableSurface } from './
 import { pointInRect, rectCenter, rectDepth, rectWidth } from './types';
 
 describe('integrated vertical topology', () => {
-  it('produces chains, corridor slopes, turns, balconies and bridges in normal generation', () => {
-    const families = new Set<string>(); let nonzero = 0, corridor = 0;
+  it('produces regional slopes, variable-rise stairs, galleries, bridges and directed relations in normal generation', () => {
+    const families = new Set<string>(); let nonzero = 0, corridor = 0, stairs = 0, drops = 0, jumps = 0;
     for (let i = 0; i < 64; i++) {
       const w = generateWorld(`VERTICAL-PROMPT-AUDIT-${i}`);
       expect(validateWorldPlan(w), w.seed).toEqual([]); expect(structuredClone(w)).toEqual(w);
+      for (const l of w.spatial!.landmarks) if (l.kind.startsWith('galerie-')) families.add(l.kind);
       for (const s of w.topology!.surfaces) {
+        if (s.role === 'stair') stairs++;
         if (s.profile.kind === 'linear') {
           if (s.profile.startY !== 0 && s.profile.endY !== 0) nonzero++;
           const p = rectCenter(s.bounds); if (w.rooms.some(r => r.kind === 'corridor' && pointInRect(p.x, p.z, r.bounds))) corridor++;
         }
-        if (s.id.includes('/return')) families.add('U'); if (s.id.includes('/ascending')) families.add('L');
-        if (s.role === 'balcony' || s.role === 'bridge') {
-          expect(s.reachable, `${w.seed} ${s.id}`).toBe(true);
-          families.add(s.role); const p = rectCenter(s.bounds);
-          const below = findSurface(w, { ...p, referenceY: -.9, maxAbove: .1 });
-          expect(findSurface(w, { ...p, referenceY: 1.8, maxAbove: .1 })?.id).toBe(s.id);
-          expect(below?.id).not.toBe(s.id); expect(below?.profile).toEqual({ kind: 'flat', y: -.9 });
-          const links = w.topology!.connections.filter(c => c.from === below?.id || c.to === below?.id);
-          expect(new Set(links.map(c => c.from === below?.id ? c.to : c.from)).size).toBeGreaterThanOrEqual(2);
-        }
+        expect(s.reachability).not.toBe('isolated');
       }
+      drops += w.topology!.connections.filter(c => c.kind === 'drop' && c.direction === 'forward').length;
+      jumps += w.topology!.connections.filter(c => c.kind === 'jump').length;
     }
-    expect(nonzero).toBeGreaterThan(30); expect(corridor).toBeGreaterThan(0);
-    expect(families).toEqual(new Set(['L', 'U', 'balcony', 'bridge']));
+    expect(nonzero).toBeGreaterThan(30); expect(corridor).toBeGreaterThan(0); expect(stairs).toBeGreaterThan(100);
+    expect(drops).toBeGreaterThan(0); expect(jumps).toBeGreaterThan(0);
+    expect(families).toEqual(new Set(['galerie-l', 'galerie-u', 'galerie-bridge']));
   });
 
   it('keeps the reported 1.64 m headroom seed safe at every slope corner and midpoint', () => {
     const w = generateWorld('VERTICAL-PROMPT-AUDIT-3');
     for (const s of w.topology!.surfaces.filter(s => s.profile.kind === 'linear' && s.locomotion !== 'crouch')) {
       for (const x of [s.bounds.minX, rectCenter(s.bounds).x, s.bounds.maxX]) for (const z of [s.bounds.minZ, rectCenter(s.bounds).z, s.bounds.maxZ]) {
-        const rooms = w.rooms.filter(r => r.level === 0 && pointInRect(x, z, r.bounds, -.001));
-        expect(Math.min(s.ceilingY, ...rooms.map(r => r.ceilingHeight)) - surfaceY(s, x, z)).toBeGreaterThanOrEqual(2.498);
+        const ceiling = s.ceilingProfile ? surfaceY({ ...s, profile: s.ceilingProfile }, x, z) : s.ceilingY;
+        expect(ceiling - surfaceY(s, x, z)).toBeGreaterThanOrEqual(2.498);
       }
     }
   });

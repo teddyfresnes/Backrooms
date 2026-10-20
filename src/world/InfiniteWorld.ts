@@ -3,7 +3,7 @@ import { applyRegionalClaims, planRegionalVolumes, type RegionalClaim } from './
 import { finalizeVerticalTopology, fitVerticalArchitecture, clearVerticalApertures } from './VerticalPlanner';
 import { prefixTopology, cutRects, LOWEST_STRUCTURE_Y } from './WalkableTopology';
 import { generateSpatialWorld } from './SpatialWorld';
-import { clearRegionalPlanCache, regionalDatum } from './RegionalPlan';
+import { clearRegionalPlanCache, regionalAtrium, regionalDatum, regionalStyle } from './RegionalPlan';
 import {
   addStepColliders,
   generateSurfaceStyle,
@@ -285,7 +285,9 @@ export const getCanonicalEdgeGates = (seed: string, key: ChunkKey | ChunkCoord, 
     const x = edge === 'west' ? coord.x * 4 : edge === 'east' ? coord.x * 4 + 3 : coord.x * 4 + index;
     const z = edge === 'north' ? coord.z * 4 : edge === 'south' ? coord.z * 4 + 3 : coord.z * 4 + index;
     const dx = edge === 'east' ? 1 : edge === 'west' ? -1 : 0, dz = edge === 'south' ? 1 : edge === 'north' ? -1 : 0;
-    return { offset, width: 4, floorY: (regionalDatum(seed, x, z).y + regionalDatum(seed, x + dx, z + dz).y) / 2,
+    const a = regionalDatum(seed, x, z), b = regionalDatum(seed, x + dx, z + dz);
+    const wide = a.id === b.id && regionalStyle(seed, a.id).family !== 'maze' && !regionalAtrium(seed, x, z, coord.story) && !regionalAtrium(seed, x + dx, z + dz, coord.story);
+    return { offset, width: wide ? 25.6 : 4, floorY: (a.y + b.y) / 2,
       layer: `regional/${coord.story}`, clearance: 3.05, slabThickness: .16 };
   });
 };
@@ -301,6 +303,12 @@ export const getInfiniteEdgeGates = (
     south: getCanonicalEdgeGates(seed, coord, 'south'),
     west: getCanonicalEdgeGates(seed, coord, 'west'),
   });
+};
+
+export const getLegacyInfiniteEdgeGates = (seed: string, key: ChunkKey | ChunkCoord): InfiniteEdgeGates => {
+  const coord = resolveCoord(key);
+  return { north: getLegacyCanonicalEdgeGates(seed, coord, 'north'), east: getLegacyCanonicalEdgeGates(seed, coord, 'east'),
+    south: getLegacyCanonicalEdgeGates(seed, coord, 'south'), west: getLegacyCanonicalEdgeGates(seed, coord, 'west') };
 };
 
 export const derivedChunkSeed = (seed: string, key: ChunkKey): string =>
@@ -2256,7 +2264,7 @@ export const generateLegacyInfiniteChunk = (
 ): WorldPlan => {
   const coord = resolveCoord(key);
   const normalizedKey = createChunkKey(coord);
-  const epicIndex = epicStructureIndexForCoord(seed, coord), edgeGates = getInfiniteEdgeGates(seed, coord);
+  const epicIndex = epicStructureIndexForCoord(seed, coord), edgeGates = getLegacyInfiniteEdgeGates(seed, coord);
   const regionKey = `${seed}:${normalizedKey}`, cachedRegion = regionalCache.get(regionKey);
   const regionalClaims = cachedRegion ?? (epicIndex === null ? planRegionalVolumes(coord.story,
     owner => structuralPlan(derivedChunkSeed(seed, createChunkKey({ ...coord, story: owner }))), claim => {
@@ -2264,7 +2272,7 @@ export const generateLegacyInfiniteChunk = (
         const address = { ...coord, story };
         if (epicStructureIndexForCoord(seed, address) !== null || protectedStructuralRects(seed, address).some(r => rectsOverlap(claim.bounds, r, .2))) return false;
         if (story !== claim.story) {
-          const gates = getInfiniteEdgeGates(seed, address);
+          const gates = getLegacyInfiniteEdgeGates(seed, address);
           for (const edge of ['north', 'south', 'east', 'west'] as const) for (const g of gates[edge]) if (rectsOverlap(claim.bounds, getVerticalGateApproach(INFINITE_CHUNK_SIZE, edge, g), .2)) return false;
         }
       }

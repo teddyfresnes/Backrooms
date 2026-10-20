@@ -6,8 +6,8 @@ import {
   ceilingOpeningsForChunk,
   createChunkKey,
   derivedChunkSeed,
-  generateInfiniteChunk,
-  getCanonicalEdgeGates,
+  generateLegacyInfiniteChunk as generateInfiniteChunk,
+  getLegacyCanonicalEdgeGates as getCanonicalEdgeGates,
   getChunkWorldOffset,
   getFloorOpenings,
   getInfiniteBiome,
@@ -212,7 +212,7 @@ const opposite: Record<ChunkEdge, ChunkEdge> = {
   west: 'east',
 };
 
-describe('InfiniteWorld chunk contracts', () => {
+describe('legacy monument and migration chunk contracts', () => {
   it('round-trips integer keys and exposes the 112m / 5.4m logical transform', () => {
     const coord = { x: -7, z: 13, story: 4 } as const;
     const key = createChunkKey(coord);
