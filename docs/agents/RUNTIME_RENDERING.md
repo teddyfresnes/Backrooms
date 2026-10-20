@@ -6,7 +6,12 @@ Le contrat commun des sols, couches et migrations est décrit dans
 ## Streaming
 
 `WorldStream` maintient les chunks actifs, les `WorldView` et les colliders
-associés. Le voisinage normal est un 3×3 sur l’étage courant.
+associés. Le voisinage de base est un 3×3 autour du propriétaire du support.
+Les dépendances spatiales à 36 m (enveloppe verticale ±12 m) ajoutent au plus
+12 propriétaires, triés par distance. Elles préchargent les niveaux visibles et
+les réceptions avant le franchissement. `supportedCoordAt` cherche d’abord un
+sol réel, puis le volume libre courant ; l’inverse régional ne sert qu’en repli.
+Les anciens aperçus ci-dessous concernent les monuments et le chemin legacy.
 
 - Au démarrage, jusqu’à trois workers temporaires préparent les voisins.
 - Ensuite, un worker persistant génère un chunk à la fois.
@@ -30,7 +35,13 @@ associés. Le voisinage normal est un 3×3 sur l’étage courant.
 Le worker (`src/world/infinite.worker.ts`) calcule le `WorldPlan` sérialisable.
 `WorldStream.mountChunk()` crée les matériaux zonaux puis applique l’offset monde
 au groupe Three.js, au contexte shader et au lot de colliders. Le démontage doit
-retirer les ressources visuelles et physiques.
+retirer les ressources visuelles et physiques, dont la texture d’exposition
+régionale. `buildSpatialArchitecture` consomme uniquement les surfaces/prismes
+communs ; aucune coque ou dalle historique n’est rajoutée à zéro. Les deux modes
+reçoivent le champ `RegionalLighting` indexé par intervalle vertical. Il réduit
+les fuites entre couches mais reste une approximation, pas un calcul d’ombres.
+Les sauvegardes reprojettent dans le propriétaire enregistré : voir le contrat
+vertical pour la migration des ancrages et le repli sûr.
 
 `/locate epic1`, `/locate epic2`, `/locate epic3`, `/locate epic4` et
 `/locate epic5` résout analytiquement l’occurrence la plus proche, même hors du

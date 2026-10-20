@@ -84,11 +84,17 @@ modifier temporairement le code.
 - Ne pas corriger ou reformater les modifications utilisateur hors périmètre.
 
 
-Pour les changements de hauteur, `npm run test:vertical` vérifie la géométrie
-Three/Rapier, les largeurs de capsule, le propriétaire, les sauvegardes et les
-cycles de streaming. `npm run audit:vertical` contrôle 128 adresses infinies et
-échoue en cas de dégagement invalide, de parcours vertical inaccessible ou de
-famille absente. `npm run benchmark:vertical` mesure 24 seeds identiques :
-médiane/P95, clonage, JSON, architecture Three, montage Rapier et mémoire JS.
-Ce benchmark ne mesure ni GPU ni draw calls ; ses lots de matériaux sont un
-indicateur géométrique. Conserver les contrôles avant/après sans charge concurrente.
+Pour les changements de hauteur, `npm run test:vertical` couvre les plans
+régionaux ordinaires, les parcours Three/Rapier, les ouvertures monumentales,
+les deux modes de rendu, les sauvegardes et les cycles de montage/démontage.
+`npm run audit:vertical` vérifie 128 seeds et huit voisinages de 5×5 chunks avec
+des objectifs de distribution déclarés avant le relevé. Les anciens tests BSP
+restent explicitement sur le générateur legacy utilisé par les monuments.
+
+`npm run benchmark:vertical` compare 24 seeds identiques : médiane/P95,
+clonage, JSON, architecture Three, montage Rapier et mémoire JS.
+`npm run benchmark:worker` mesure le même travail dans un worker Node avec
+transfert réel par clonage structuré et bake classique. Ce proxy ne mesure pas
+l’ordonnancement des Workers du navigateur. Aucun de ces benchmarks ne mesure
+GPU ou draw calls. Exécuter les mesures avant/après sans charge concurrente.
+Voir [REGIONAL_VALIDATION.md](../REGIONAL_VALIDATION.md) pour les preuves courantes.

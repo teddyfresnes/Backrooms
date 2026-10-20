@@ -1,100 +1,139 @@
-# Topologie verticale
+# Architecture régionale à plusieurs couches
 
-Le BSP conserve la version 10 et ses forks historiques. Les anciennes propositions
-de raised-zone participent encore aux réservations des passes héritées, puis sont
-retirées avant la résolution du sol. `topology.version = 1` versionne ce contrat
-séparément, sans redériver toute la trame des pièces.
+Le monde ordinaire utilise `WorldPlan.version = 11`, `topology.version = 2` et
+`spatial.version = 2`. Le BSP v10 reste disponible explicitement dans
+`generateLegacyWorld` / `generateLegacyInfiniteChunk` pour les monuments,
+leurs résumés et les reproductions `RAW_LOCAL_`.
 
-## Données communes
+## Planification avant construction
 
-`WalkableTopology.ts` décrit profils plats et linéaires, couches, connexions,
-volumes libres et solides. Les empreintes d’un coude sont des rectangles exacts.
-Un balcon possède une dalle et une sous-face ; la circulation sous cette dalle
-est une surface indépendante reliée au sol par deux accès.
+`RegionalPlan` découpe le monde en cellules de 28 m. Un Voronoï mondial, avec
+sites espacés de 168 m et influence bornée à neuf sites, attribue les districts.
+Leur altitude est un tirage signé dans [−7,5 ; +7,5] m, quantifié à 5 cm.
+Un district traverse plusieurs chunks et contient des dizaines de pièces.
+Zéro n’a aucun statut particulier, sauf dans le collier de compatibilité des
+entrées monumentales historiques. Ce collier ne concerne que leurs cellules
+limitrophes ; les autres cellules gardent leur relief.
 
-`RoomRecord.floorY` est un datum local. `ceilingHeight` reste le plan absolu du
-plafond local ; `structuralCeilingY` conserve le plafond avant résolution.
-`level` garde son sens historique. L’altitude mondiale est
-`story * 5.4 + altitudeLocale`. Le story est un propriétaire et une adresse.
+L’adresse `(x,z,story)` possède des données locales. Son offset monde est
+`(112*x, 5.4*story, 112*z)`. Un datum local n’est pas cet offset. Les tranches
+ordinaires répètent la même géographie horizontale à ce pas d’adresse ; les
+atria remplacent trois tranches par un volume libre commun. Ce choix borné
+n’est pas un partitionnement volumétrique arbitraire de tout l’espace 3D.
 
-`findSurface` exige une altitude aux pieds et accepte une couche. Sa fenêtre
-est +0,38 / −1,20 m. Le streaming utilise +0,20 / −0,50 m et conserve aussi le
-propriétaire du volume libre pendant un saut. Une chute dans un puits dépourvu
-de surface peut toujours changer de story.
+Le pipeline est : districts → cellules/couches/atria → circulations → sols et
+plafonds → cloisons/façades/portes → graphe et volumes → lumières et props.
+Un chunk est une matérialisation bornée du plan mondial, sans récursion ni
+consultation de voisins déjà générés. Le cache de datums est limité à 2048
+entrées et vidé par `clearInfiniteWorldCaches` avec les caches legacy bornés.
 
-Les huit sommets du prisme sont communs à Three et Rapier. L’épaisseur d’une
-dalle suit sa normale, y compris le décalage horizontal de la sous-face. Un
-support plein descend à `supportBottom`. Il n’est jamais remplacé par une boîte
-rectangulaire traversant l’entrée latérale d’une pente.
+## Surfaces, volumes et propriétaire
 
-## Contraintes et pipeline
+`WalkableSurface` décrit un profil plat ou linéaire, une couche, un propriétaire,
+une épaisseur et un plafond explicite, éventuellement profilé. `SpatialArchitecture`
+contient les cellules, prismes, plafonds, interfaces, dépendances et landmarks.
+Tout est sérialisable ; Three/Rapier ne figurent jamais dans un plan.
 
-Un potentiel unique par pièce rend les boucles cohérentes. Un secteur contient
-une à trois pièces ; le solveur accepte au plus huit secteurs après 48 propositions.
-Il privilégie les voisins de secteurs déjà décalés, avec les datums −0,8, −0,45,
-+0,4, +0,9 et +1,6 m. Un nouvel essai réduit localement l’amplitude. Une proposition
-impossible reçoit un diagnostic. Une pièce sans connexion publique n’est pas élevée.
+Les dalles font 16 cm, les plafonds suspendus 3 cm. La sous-face d’une pente est
+extrudée suivant sa normale. Les huit sommets et indices des prismes sont
+communs au rendu et aux colliders. Les murs cisaillés des raccords utilisent
+exactement les mêmes triangles Rapier, sans approximation par enveloppe convexe.
+Ils rejoignent le sol adjacent et le parcours ; aucun support ne descend à zéro.
+Les grands sols utilisent aussi leurs faces triangulées orientées : un recalage
+Rapier sur la sous-face d’une boîte mince était reproductible dans la boucle
+longue aux coordonnées symétriques. Les marches conservent leurs solides exacts.
 
-Les galeries en L et en demi-tour comportent de vrais paliers, un étage haut à
-+1,8 m et un passage bas à −0,9 m. Les passerelles rejoignent l’architecture
-opposée. La première pente conserve un dégagement de capsule devant elle.
+Les halls et ensembles à colonnes peuvent fusionner entre cellules d’un même
+district. Les cloisons à portes décalées, les changements d’épaisseur, les
+colonnes, les portes interactives et les circuits de blackout restent générés.
+Les colonnes retirent leur emprise des sols de navigation ; leurs IDs n’altèrent
+pas les autres surfaces. Les variantes BSP plus anciennes appartiennent au
+chemin legacy, pas à la distribution des nouveaux chunks ordinaires.
 
-Quantification : 0,05 m. Tolérance : 0,002 m. Circulation ordinaire : hauteur
-minimale 2,50 m, largeur 1,60 m et pente maximale 0,42. Le solveur vise 0,30 et
-des dégagements de 1,10 m. Les passages accroupis hérités restent identifiés ;
-leur hauteur utile minimale est 1,28 m. Aucun réglage du contrôleur n’est augmenté.
+## Circulations réelles
 
-Les réservations et frontières précèdent le solveur. Murs, plafonds, colonnes,
-lumières et sols sont ensuite raccordés ensemble. Les découpes finales de puits
-suivent la reconstruction des coques. Le graphe relie les bandes résiduelles
-entre pièces après érosion par la capsule et découpe des obstacles. Il ne relie
-pas deux couches qui partagent seulement leurs coordonnées X/Z.
-Un premier graphe avec la capsule réelle sert aussi à choisir les secteurs ; le
-flood-fill historique projeté ne peut plus déclarer seul un nouveau parcours.
-`accessReason` distingue une restriction intentionnelle d’un composant sans accès.
+Deux districts raccordent leurs datums par un palier partagé à leur moyenne,
+sans retour à zéro. Chaque demi-parcours a 9 m utiles et deux paliers de 1 m.
+Une pente jusqu’à 0,30 utilise une rampe ; sinon le nombre de marches est déduit
+du dénivelé avec une contremarche maximale de 17,5 cm. Les datums intermédiaires,
+bifurcations et directions se poursuivent sur plusieurs cellules.
 
-## Région et interfaces
+Une cellule intérieure de district peut devenir un atrium ordinaire. Une phase
+canonique par bande de quatre adresses lui donne un propriétaire haut, une
+adresse intermédiaire vide et un bas jouable deux adresses plus bas. Les trois
+plans sont générables indépendamment. Le bas contient de vraies pièces,
+cloisons, lumières et continuations vers le labyrinthe voisin.
 
-Les grandes hauteurs portent sur quatre stories au maximum. La région lit des
-résumés bruts de huit stories inférieurs, sans génération récursive. Les
-propriétaires inférieurs ont priorité ; puits, escaliers, entrées canoniques et
-architecture protégée restent prioritaires. Une enveloppe incompatible revient
-à un plafond confortable de 4,30 m avec un diagnostic. Les réservations gardent
-leurs intervalles et propriétaire ; elles restent distinctes des ouvertures et aperçus.
-La portée inclut le dessous possible des sols du story voisin, jusqu’à −1,06 m,
-même quand le volume s’arrête avant son datum zéro. Une telle réservation peut
-interdire un secteur encaissé sans retirer le sol ordinaire au-dessus. Les dalles
-de sol font 0,16 m et les dalles de plafond suspendu 0,03 m ; ces deux épaisseurs
-ne sont pas confondues dans le contrôle d’intersection entre stories.
+Le haut possède une galerie de 3 m longeant les murs, et selon la variante une
+passerelle ou un retour. Les escaliers droits, en L ou en U font 3,2 m de large ;
+leurs volées et paliers partagent le même tracé avec les découpes du bas. Le
+passage inférieur sous un escalier n’existe que si son dégagement atteint 2,5 m.
+Les secteurs trop bas sont fermés par des solides visibles correspondants.
+Les poutres des lumières inférieures sont réellement ancrées aux cloisons.
 
-Chaque `EdgeGate` sérialise altitude, couche, dégagement et épaisseur de dalle.
-Les deux côtés possèdent un palier et une approche inclinée compatibles. Les
-offsets incompatibles avec une gaine ou un accès protégé sont déplacés avec un
-nombre borné d’essais. Les monuments conservent leurs propres contrats.
+L’adresse intermédiaire contient des ouvertures hautes à seuil réel. Elles
+permettent de descendre de 5,4 m dans le bas, sans rampe ni retour direct par
+saut. Certaines passerelles ont une coupure de 1,4 m : le saut couru fonctionne
+dans les deux sens, la marche seule tombe, et le tour par la galerie reste possible.
+Les parapets restent entièrement sur leur dalle et s’interrompent aux passages.
 
-Caches bornés : 256 résumés structurels, 192 interfaces et enclos, 64 régions,
-et 192 entrées pour les caches historiques d’ouvertures. `clearInfiniteWorldCaches`
-les vide. Les interfaces transmises dans le plan worker évitent une nouvelle
-résolution lors du montage sur le thread principal.
+Les limites d’amplitude régionales sont explicites. Les grands escaliers d’atrium
+franchissent 10,8 m ; les escaliers interdistricts joignent des dénivelés variables.
+Les anciens sockets acceptent aussi `rise` / `stepsPerFlight`, avec leurs valeurs
+historiques par défaut pour les monuments existants.
 
-## Runtime et migration
+## Graphe et interfaces
 
-Les surfaces alimentent rendu, collisions, spawn, récupération, localisations,
-supports des props et propriétaire du streaming. Le personnage, les PNJ et les
-ragdolls interrogent le même monde Rapier. Les éclairages moderne et classique
-partagent l’occlusion des dalles, en distinguant leur dessus et leur dessous.
+Les arêtes distinguent marche, rampe, escalier, accroupissement, saut, chute et
+vue. `direction = forward` décrit les chutes ; les relations `view` ne participent
+pas au flood-fill. Un croisement projeté en X/Z ne crée aucune connexion.
+La largeur est dérivée des bords communs après retrait des murs et marge capsule.
 
-Les sauvegardes de schéma 2 restent lisibles et ajoutent éventuellement un
-ancrage `{version, id, layer}`. La restauration reprojette la position sur ce
-support et vérifie la capsule debout ; une position obstruée utilise le spawn sûr.
+`reachability` distingue local, régional, visible seulement et isolé. Une surface
+régionale non atteinte dans le seul plan local n’est pas déclarée scellée : elle
+peut dépendre d’un autre propriétaire. Les arrivées externes désignent soit une
+surface réelle préfixée, soit un nœud canonique d’interface partagé.
 
-`?seed=RAW_LOCAL_VERTICAL-PROMPT-AUDIT-3` conserve le seed BSP brut du signalement
-dans le chunk racine. Ses voisins restent coordonnés. Sans ce préfixe, le seed
-est global et chaque chunk conserve sa dérivation habituelle.
+Chaque `EdgeGate` porte hauteur, largeur, couche et dégagement. Les mêmes
+cellules mondiales produisent les deux côtés. Les halls partagent de larges
+ouvertures ; les autres entrées font 4 m. Une zone plate franchit une frontière
+sans pente artificielle. Les portes monumentales conservent leurs mesures et un
+vestibule de 5 m libère les cloisons perpendiculaires à leur entrée décalée.
 
-Les commandes `/locate rampe`, `/locate balcon`, `/locate passerelle` et
-`/locate secteur-encaisse` utilisent les surfaces montées.
+Les IDs possédés et leurs références reçoivent `chunk-x:z:story/`. Les IDs
+`interface/...` sont mondiaux et ne sont pas préfixés. `arrival` est exprimé dans
+le repère du plan source ; convertir avec les offsets avant d’interroger la cible.
 
-Les tests `WalkableTopology`, `VerticalTopology`, `InfiniteVertical` et
-`WorldStreamVertical` couvrent profils Three/Rapier, largeur utile, chaînes,
-couches, coutures négatives, caches, démontages physiques et restauration.
+## Runtime, lumière et sauvegardes
+
+`WorldStream` choisit d’abord le propriétaire du support physique, puis celui du
+volume libre courant. `regionalOwnerAt` sert de repli sans support monté.
+Le 3×3 de base est complété par au plus 12 propriétaires de dépendances, dans
+une portée horizontale de 36 m et une enveloppe verticale élargie de 12 m.
+Le démarrage, la localisation et la restauration préparent ces destinations.
+Le personnage et les ragdolls conservent les réglages actuels et le même Rapier.
+
+`buildSpatialArchitecture` rend uniquement les surfaces et prismes du nouveau
+plan. Aucune reconstruction héritée ne rajoute un sol ou plafond à zéro. Les
+UV restent à l’échelle monde sur les rampes, marches, chants et sous-faces.
+
+Les deux rendus utilisent `RegionalLighting`, atlas 64×64 avec trois intervalles
+verticaux par texel. Une lumière n’affecte que le volume libre qui la contient.
+Ce champ module l’exposition et conserve les blackouts ; le mode classique le
+combine avec son bake. C’est une approximation d’éclairage, sans preuve de
+compilation GPU, d’ombres exactes ou de qualité visuelle dans les tests Node.
+L’atlas est libéré avec chaque vue ; il ne crée pas un shader par seed.
+
+Le schéma de sauvegarde 2 reste lisible. L’ancrage optionnel `{version,id,layer}`
+et l’adresse enregistrée retrouvent le support. Un ancien ancrage est reprojeté
+sur le plan du propriétaire sauvegardé (fenêtre de 20 m), puis la capsule est
+vérifiée. Une position obstruée ou sans support utilise le spawn sûr de ce plan.
+Les arrivées après chute sont acceptées même sans trajet local depuis le spawn.
+
+`/locate` propose `grand-plateau`, `rampe-regionale`, `escalier-regional`,
+`escalier-l`, `escalier-u`, `escalier-bridge`, `galerie-l`, `galerie-u`,
+`galerie-bridge`, `ouverture-haute` et `saut-passerelle` dans les plans montés.
+`/logs` expose notamment la version du plan et le propriétaire courant.
+
+Les preuves, mesures comparables et parcours sont dans
+[REGIONAL_VALIDATION.md](REGIONAL_VALIDATION.md).

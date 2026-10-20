@@ -27,8 +27,9 @@ Ne pas inventorier `public/assets/`. Pour les objets, commencer par
 
 Application Vite/TypeScript en vue FPS, avec Three.js pour le rendu et Rapier
 pour la physique. Le monde est déterministe à partir d’un seed. Chaque chunk
-mesure 112 m, chaque étage logique 5,4 m, et `WorldStream` maintient un voisinage
-horizontal 3×3.
+mesure 112 m. Le pas d’adresse verticale de 5,4 m ne définit pas le sol :
+`RegionalPlan` choisit les datums régionaux et `SpatialWorld` leurs volumes.
+`WorldStream` maintient un voisinage horizontal 3×3 et les propriétaires visibles.
 
 Flux principal :
 

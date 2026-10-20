@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-20",
+  "runtimeCommit": "e7599f2b0887627e9de9a6cce1e599c2fd884c6e",
+  "baselineCommit": "f5cf66e4367402e4cf5c482fa43f11ef2224fb39",
+  "generatorVersion": 11,
+  "generalTests": {
+    "passed": 539,
+    "failed": 1,
+    "total": 540,
+    "preexistingFailure": "ImportedApartmentIntegration: attributed root name",
+    "confirmedOnBaseline": true
+  },
+  "characterTests": {
+    "existingRegressions": 637,
+    "newRegionalFalls": 2,
+    "finalCommandExitCode": 0
+  },
+  "siteTests": {
+    "verticalPassed": 50,
+    "verticalFailed": 0,
+    "wardrobeObjectsVerified": 148,
+    "clothingFilesLossless": 148
+  },
+  "deployment": {
+    "project_id": "appgprj_6ad38cbd518c81918ef345d5a1eb55fc",
+    "version_id": "appgprj_6ad38cbd518c81918ef345d5a1eb55fc~appgver_c081fa07e9208191852152f02c80e8dd",
+    "version_number": 11,
+    "commit_sha": "3292edf2f2f2823e5c4e53b9026bedcbc66248d6",
+    "deployment_id": "appgdep_6ad7a7cb1a1881919cc5739fb732bda2",
+    "status": "succeeded",
+    "url": "https://backrooms-integre.teddykoeh.chatgpt.site"
+  },
+  "browserWebGLVerified": false
+}

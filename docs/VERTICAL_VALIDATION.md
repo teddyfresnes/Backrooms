@@ -1,4 +1,7 @@
-# Validation de la topologie verticale
+# Validation historique de la topologie verticale v1
+
+Ce relevé concerne la livraison précédente. Le résultat actuel est dans
+[REGIONAL_VALIDATION.md](REGIONAL_VALIDATION.md).
 
 Mesures du 20 octobre 2026, Node 24.19.0, Three 0.185.1, Rapier 0.19.3.
 Référence : `1adab41df7b3b8d7726c8b0468097b184e54613d` ; code mesuré :

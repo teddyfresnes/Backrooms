@@ -20,31 +20,24 @@ rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/
 
 ## Ordre du pipeline
 
-`generateWorld(seed)` :
+Le pipeline ordinaire (plan version 11, topologie/spatial version 2) est :
 
-1. crée la coque, le BSP, les salles et les portails ;
-2. choisit le spawn et réserve les salles incompatibles ;
-3. conserve les propositions héritées, puis remplace les îlots par la topologie verticale ;
-4. résout les potentiels des pièces et les dégagements, puis raccorde murs et colliders ;
-5. classe les surfaces et connexions compatibles en altitude ;
-6. reconstruit les extensions des zones en contrebas ;
-7. place lumières et détails ;
-8. construit les surfaces communes, leurs sous-faces et prismes physiques, puis valide le plan.
+1. `RegionalPlan` choisit les districts mondiaux et leurs datums signés ;
+2. il réserve les atria et leur propriété sur trois adresses verticales ;
+3. `SpatialConnectors` déduit les parcours, paliers et dégagements inférieurs ;
+4. `SpatialWorld` matérialise sols, marches, plafonds, murs, portes et détails ;
+5. il relie les surfaces avec des arêtes typées/orientées, puis choisit le spawn ;
+6. `generateInfiniteChunk` applique palette et props, préfixe les IDs et références.
 
-L’ordre est une dépendance réelle. Un ajout qui occupe le sol doit arriver avant
-les lumières et les props, ou déclencher explicitement leur recalcul.
+La génération ne lit jamais un voisin déjà produit. Les interfaces viennent des
+mêmes cellules mondiales des deux côtés. Le pas d’adresse 5,4 m est une translation
+entre propriétaires ; les sols locaux suivent les datums régionaux, pas zéro.
 
-`generateInfiniteChunk(seed, coord)` :
-
-1. dérive le seed, les interfaces et les réservations régionales bornées ;
-2. appelle `generateWorld` avec ces contraintes avant le solveur vertical ;
-3. applique biome logique et biome visuel ;
-4. réconcilie puits, escaliers et ouvertures avec les étages voisins ;
-5. retire les landmarks réservés au monde fini ;
-6. remplace les rares slots épiques par leur plan monumental canonique ;
-7. raccorde les frontières non nulles et reconstruit les dérivés affectés ;
-8. finalise surfaces, accessibilité, lumières et props hors monuments ;
-9. préfixe les IDs et transmet aussi les interfaces sérialisées au runtime.
+`generateLegacyWorld` et `generateLegacyInfiniteChunk` conservent le BSP et les
+contrats des monuments et de `RAW_LOCAL_`. `structuralOnly` utilise ce pipeline
+pour les résumés historiques. Ses règles de raised-zone, coques hautes et previews
+ci-dessous restent propres à ce chemin. Les tests BSP l’appellent explicitement ;
+ils ne mesurent pas la distribution ordinaire actuelle.
 
 Les biomes visuels occupent des macro-zones 2×2 stables sur tous les étages.
 Le jaune ordinaire couvre 70 % des macro-zones ; rouge, blanc et jaune sombre
@@ -112,9 +105,11 @@ néons jaunes : seul son profil d’éclairage moderne est plus faible.
 ### Topologie verticale
 
 - Taille de chunk : `INFINITE_CHUNK_SIZE = 112`.
-- Hauteur d’étage : `INFINITE_STORY_PITCH = 5.4`.
-- Un chunk possède un étage canonique. Les volumes inférieurs visibles dans le
-  même plan ne sont que des aperçus de transition.
+- Pas d’adresse : `INFINITE_STORY_PITCH = 5.4`, sans datum de sol implicite.
+- `spatial.owner` possède ses données, pas tous les volumes de sa colonne. Un
+  atrium traverse trois adresses ; son bas est un vrai plan `lower-maze`.
+- `spatial.dependencies` désigne les propriétaires réels à charger. Les anciennes
+  previews ci-dessous concernent uniquement le pipeline legacy des monuments.
 - `floorOpenings`, `ceilingOpenings`, `lowerPreviewOpenings` et
   `stairCeilingOpenings` ont des rôles distincts ; ne pas les fusionner.
 - `StairSocketFeature.layout` choisit une volée `straight` ou un demi-tour
@@ -194,8 +189,8 @@ néons jaunes : seul son profil d’éclairage moderne est plus faible.
 | Besoin | Commencer par |
 |---|---|
 | Nouvelle donnée ou feature | `types.ts`, puis `docs/ADDING_FEATURES.md` |
-| Forme des salles/portes | `generateWorld.ts` près du BSP et des portails |
-| Frontières entre chunks | portes canoniques et `emitBoundary()` dans `InfiniteWorld.ts` |
+| Forme des salles/portes | `SpatialWorld.ts` ; BSP legacy dans `generateWorld.ts` |
+| Frontières entre chunks | `RegionalPlan.ts`, `getCanonicalEdgeGates`, `SpatialWorld.ts` |
 | Puits ou étages | `generateWorld.ts`, `InfiniteWorld.ts`, `StairLayout.ts` |
 | Monument `epicN` | `EpicStructures.ts`, puis `WorldBuilder.ts` et `WorldStream.ts` |
 | Biome/topologie régionale | `getInfiniteBiome()` / `applyBiome()` |

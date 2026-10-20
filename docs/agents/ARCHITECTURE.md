@@ -74,7 +74,9 @@ progression visuelle et audio ; l’entrée directe masque le menu sans transiti
 avant que cet écran soit retiré, afin qu’aucune frame du menu ne fuite en jeu.
 Le contrat central du labyrinthe reste `WorldPlan` dans `src/world/types.ts` ;
 la génération ne crée que des données et le rendu et la physique les consomment
-séparément.
+séparément. Le chemin ordinaire passe par `RegionalPlan` → `SpatialConnectors` →
+`SpatialWorld`, avant les détails. L’adresse `story` ne donne pas l’altitude du sol.
+Le BSP historique reste explicite pour les monuments et les reproductions brutes.
 
 ## Responsabilités
 
