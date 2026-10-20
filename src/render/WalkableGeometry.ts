@@ -6,8 +6,8 @@ export const createWalkableGeometry = (surface: WalkableSurface, face: 'top' | '
   const vertices = slabVertices(surface), indices = face === 'top' ? SLAB_INDICES.slice(0, 6) : face === 'underside' ? SLAB_INDICES.slice(6, 12) : SLAB_INDICES.slice(12);
   const positions: number[] = [], uv: number[] = [], colors: number[] = [];
   for (let t = 0; t < indices.length; t += 3) {
-    const a = indices[t]! * 3, b = indices[t + 1]! * 3;
-    const alongX = Math.abs(vertices[a]! - vertices[b]!) >= Math.abs(vertices[a + 2]! - vertices[b + 2]!);
+    const corners = indices.slice(t, t + 3), xs = corners.map(i => vertices[i * 3]!), zs = corners.map(i => vertices[i * 3 + 2]!);
+    const alongX = Math.max(...xs) - Math.min(...xs) >= Math.max(...zs) - Math.min(...zs);
     for (const index of indices.slice(t, t + 3)) {
       const x = vertices[index * 3]!, y = vertices[index * 3 + 1]!, z = vertices[index * 3 + 2]!;
       positions.push(x, y, z); colors.push(1, 1, 1);

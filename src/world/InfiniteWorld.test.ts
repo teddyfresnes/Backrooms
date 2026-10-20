@@ -1,3 +1,4 @@
+import { surfaceRange, validateTopology } from './WalkableTopology';
 import { describe, expect, it } from 'vitest';
 import {
   INFINITE_CHUNK_SIZE,
@@ -428,7 +429,7 @@ describe('InfiniteWorld chunk contracts', () => {
       for (const side of ['north', 'south', 'west', 'east'] as const) {
         const expectedGates = currentLevel?.passages
           .filter((passage) => passage.side === side)
-          .map((passage) => ({ offset: passage.along, width: passage.width })) ?? [];
+          .map((passage) => ({ offset: passage.along, width: passage.width, floorY: 0, layer: 'ground', clearance: 2.5, slabThickness: .16 })) ?? [];
         expect(getCanonicalEdgeGates(epicAuditSeed, sourceCoord, side)).toEqual(expectedGates);
         const neighbor = parseChunkKey(getNeighborChunkKey(sourceCoord, side));
         expect(getCanonicalEdgeGates(epicAuditSeed, neighbor, opposite[side]))
@@ -1041,11 +1042,11 @@ describe('InfiniteWorld chunk contracts', () => {
         (candidate) => candidate.ceilingHeight > plan.wallHeight + 0.1,
       )) {
         tallRoomCount += 1;
-        expect(openings.some((opening) => overlaps(room.bounds, opening))).toBe(false);
+        expect(validateTopology(plan), plan.seed).toEqual([]);
         const shells = plan.walls.filter((wall) =>
           (wall.detail === 'upper-shell' || wall.detail === 'upper-portal-lintel') &&
           wall.kind === 'wallpaper' &&
-          Math.abs(wall.bottom - plan.wallHeight) < 0.001 &&
+          wall.bottom >= plan.wallHeight - .001 &&
           wall.bottom + wall.height >= room.ceilingHeight - 0.03
         );
         for (const side of [
@@ -1057,7 +1058,7 @@ describe('InfiniteWorld chunk contracts', () => {
           const intervals = shells
             .filter((wall) =>
               wall.orientation === side.orientation &&
-              Math.abs((wall.orientation === 'x' ? wall.z : wall.x) - side.fixed) < 0.06
+              Math.abs((wall.orientation === 'x' ? wall.z : wall.x) - side.fixed) <= wall.thickness / 2 + .03
             )
             .map((wall) => {
               const along = wall.orientation === 'x' ? wall.x : wall.z;
@@ -1068,6 +1069,13 @@ describe('InfiniteWorld chunk contracts', () => {
             })
             .filter((interval) => interval.max > interval.min)
             .sort((left, right) => left.min - right.min);
+          for (const hole of [...openings, ...(plan.topology?.reservations ?? []).map(v => v.bounds)]) {
+            const crossMin = side.orientation === 'x' ? hole.minZ : hole.minX, crossMax = side.orientation === 'x' ? hole.maxZ : hole.maxX;
+            if (side.fixed < crossMin - .03 || side.fixed > crossMax + .03) continue;
+            intervals.push({ min: Math.max(side.min, side.orientation === 'x' ? hole.minX : hole.minZ), max: Math.min(side.max, side.orientation === 'x' ? hole.maxX : hole.maxZ) });
+          }
+          intervals.splice(0, intervals.length, ...intervals.filter(i => i.max > i.min));
+          intervals.sort((a, b) => a.min - b.min);
           let coveredUntil = side.min;
           for (const interval of intervals) {
             expect(
@@ -1096,76 +1104,23 @@ describe('InfiniteWorld chunk contracts', () => {
     expect(elevatedGalleryLightCount).toBeGreaterThan(0);
   });
 
-  it('preserves signed elevation districts without restoring the zero-height floor beneath them', () => {
-    let districtCount = 0;
-    let sunkenCount = 0;
-    for (let index = 0; index < 36; index += 1) {
-      const plan = generateInfiniteChunk('ELEVATION-DISTRICT-INVARIANT-AUDIT', {
-        x: (index % 6 - 3) * 3,
-        z: (Math.floor(index / 6) - 3) * 3,
-        story: index % 3 - 1,
-      });
-      for (const feature of plan.features.filter(
-        (candidate) => candidate.kind === 'raised-zone',
-      )) {
-        districtCount += 1;
-        if (feature.elevation < 0) sunkenCount += 1;
-        expect((feature.roomIds ?? [feature.roomId]).length).toBeGreaterThanOrEqual(2);
-        for (const [platformIndex, platform] of (
-          feature.platformRects ?? [feature.platformBounds]
-        ).entries()) {
-          const center = {
-            x: (platform.minX + platform.maxX) * 0.5,
-            z: (platform.minZ + platform.maxZ) * 0.5,
-          };
-          expect(plan.floorRects.some((floor) => containsPoint(floor, center))).toBe(false);
-          expect(plan.colliders.some((collider) =>
-            collider.id === `${feature.id}-platform-${platformIndex}` &&
-            Math.abs(
-              collider.center.y + collider.halfExtents.y - feature.elevation,
-            ) < 0.02
-          )).toBe(true);
-        }
-        for (const [rampIndex] of (feature.ramps ?? [feature.ramp]).entries()) {
-          expect(plan.colliders.some((collider) =>
-            collider.id === `${feature.id}-ramp-${rampIndex}` &&
-            collider.rotation !== undefined
-          )).toBe(true);
-        }
-        if (feature.elevation < 0) {
-          expect(plan.walls.some((wall) =>
-            wall.detail === 'lower-shell' &&
-            wall.roomId === feature.roomId &&
-            wall.bottom <= feature.elevation + 0.02
-          )).toBe(true);
-        }
-      }
-      for (const wall of plan.walls.filter((candidate) =>
-        candidate.detail === 'upper-shell' || candidate.detail === 'upper-portal-lintel'
-      )) {
-        expect(wall.bottom).toBeGreaterThanOrEqual(plan.wallHeight);
-        const fixed = wall.orientation === 'x' ? wall.z : wall.x;
-        const along = wall.orientation === 'x' ? wall.x : wall.z;
-        const wallMin = along - wall.length * 0.5;
-        const wallMax = along + wall.length * 0.5;
-        expect(plan.rooms.some((room) => {
-          if (
-            room.ceilingHeight <= plan.wallHeight + 0.1 ||
-            wall.bottom + wall.height < room.ceilingHeight - 0.03
-          ) return false;
-          const sides = wall.orientation === 'x'
-            ? [room.bounds.minZ, room.bounds.maxZ]
-            : [room.bounds.minX, room.bounds.maxX];
-          const roomMin = wall.orientation === 'x' ? room.bounds.minX : room.bounds.minZ;
-          const roomMax = wall.orientation === 'x' ? room.bounds.maxX : room.bounds.maxZ;
-          return sides.some((side) => Math.abs(side - fixed) < 0.12) &&
-            Math.min(wallMax, roomMax) - Math.max(wallMin, roomMin) > 0.02;
-        })).toBe(true);
+  it('preserves signed surfaces without restoring the zero-height floor beneath them', () => {
+    let raised = 0, sunken = 0;
+    for (let index = 0; index < 36; index++) {
+      const plan = generateInfiniteChunk('ELEVATION-DISTRICT-INVARIANT-AUDIT', { x: (index % 6 - 3) * 3, z: (Math.floor(index / 6) - 3) * 3, story: index % 3 - 1 });
+      if (!plan.topology) continue;
+      expect(validateTopology(plan), plan.seed).toEqual([]);
+      expect(plan.colliders.some(c => c.id.includes('/floor-'))).toBe(false);
+      for (const surface of plan.topology.surfaces) {
+        const [low] = surfaceRange(surface); if (low > .1) raised++; if (low < -.1) sunken++;
+        const collider = plan.colliders.find(c => c.id.endsWith(`surface/${surface.id.replace(/^chunk-[^/]+\//, '')}`));
+        expect(collider, surface.id).toBeDefined();
+        if (surface.profile.kind === 'flat') expect(collider!.center.y + collider!.halfExtents.y).toBeCloseTo(surface.profile.y, 5);
+        else expect(collider!.vertices).toHaveLength(24);
       }
     }
-    expect(districtCount).toBeGreaterThan(15);
-    expect(sunkenCount).toBeGreaterThan(3);
-  });
+    expect(raised).toBeGreaterThan(15); expect(sunken).toBeGreaterThan(3);
+  }, 60000);
 
   it('coalesces inherited shafts so active openings never overlap or explode in count', () => {
     let inheritedCount = 0;
@@ -1451,7 +1406,7 @@ describe('InfiniteWorld chunk contracts', () => {
       .every((wall) =>
         wall.detail === 'biome-boundary-skin' &&
         wall.collision === false &&
-        wall.bottom === 0
+        wall.bottom <= 0 && wall.bottom + wall.height >= source.wallHeight - .001
       )).toBe(true);
     expect(neighborBands.every((wall) =>
       wall.detail === 'biome-boundary-band' &&

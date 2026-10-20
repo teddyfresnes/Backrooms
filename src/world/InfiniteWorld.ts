@@ -1,13 +1,14 @@
 import { applyVerticalBoundaries, getVerticalGateApproach } from './VerticalBoundaries';
 import { applyRegionalClaims, planRegionalVolumes, type RegionalClaim } from './RegionalVolumes';
 import { finalizeVerticalTopology, fitVerticalArchitecture, clearVerticalApertures } from './VerticalPlanner';
-import { prefixTopology, cutRects } from './WalkableTopology';
+import { prefixTopology, cutRects, LOWEST_STRUCTURE_Y } from './WalkableTopology';
 import {
   addStepColliders,
   generateSurfaceStyle,
   generateWorld,
   generateStructuralPlan,
   rebuildVerticalCeilingShells,
+  populateVerticalRoomLighting,
   lightPanelOverlapsRect,
   MAX_PIT_STORIES,
   rebuildSunkenArchitectureExtensions,
@@ -312,7 +313,7 @@ const protectedStructuralRects = (seed: string, coord: ChunkCoord): Rect[] => {
   return [...canonicalShaftEnclosures(seed, coord).map(e => e.bounds), ...inheritedShaftOpeningsForChunk(seed, coord),
     ...extractLocalShaftHoles(raw), ...(stair ? [stair.bounds] : []),
     ...raw.features.flatMap(f => f.kind === 'stair-socket' || f.kind === 'squeeze-view' ? [f.bounds] : []),
-    ...raw.solidMasses.map(m => m.bounds)];
+    ...raw.solidMasses.map(m => m.bounds), ...raw.rooms.filter(r => r.accessReason === 'intentional').map(r => r.bounds)];
 };
 const regionalCache = new Map<string, RegionalClaim[]>();
 export const clearInfiniteWorldCaches = (): void => {
@@ -2243,7 +2244,7 @@ export const generateInfiniteChunk = (
   const regionKey = `${seed}:${normalizedKey}`, cachedRegion = regionalCache.get(regionKey);
   const regionalClaims = cachedRegion ?? (epicIndex === null ? planRegionalVolumes(coord.story,
     owner => structuralPlan(derivedChunkSeed(seed, createChunkKey({ ...coord, story: owner }))), claim => {
-      for (let story = claim.story; story <= Math.floor((claim.top - .001) / INFINITE_STORY_PITCH); story++) {
+      for (let story = claim.story; story <= Math.floor((claim.top - LOWEST_STRUCTURE_Y - .001) / INFINITE_STORY_PITCH); story++) {
         const address = { ...coord, story };
         if (epicStructureIndexForCoord(seed, address) !== null || protectedStructuralRects(seed, address).some(r => rectsOverlap(claim.bounds, r, .2))) return false;
         if (story !== claim.story) {
@@ -2359,6 +2360,10 @@ export const generateInfiniteChunk = (
     fitVerticalArchitecture(plan); rebuildVerticalCeilingShells(plan); clearVerticalApertures(plan); fitVerticalArchitecture(plan);
     for (const l of plan.lights.filter(l => l.level >= 0)) { const r = plan.rooms.find(r => r.id === l.roomId); if (r) l.ceilingY = r.ceilingHeight; }
     finalizeVerticalTopology(plan);
+    const previousLightCount = plan.lights.length;
+    populateVerticalRoomLighting(plan);
+    applyVisualBiome({ ...plan, lights: plan.lights.slice(previousLightCount) }, visualBiome, `${chunkSeed}:vertical-topology:v1`);
+    enforceUnlitZones(plan);
     populateRareProps(plan, `${seed}:${normalizedKey}:rare-props`);
   }
   prefixPlanIds(plan, normalizedKey);

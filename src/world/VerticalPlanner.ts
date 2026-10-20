@@ -1,7 +1,7 @@
 import { SeededRandom } from './SeededRandom';
 import type { Rect, RoomRecord, WallSegment, WorldPlan } from './types';
 import { pointInRect, rectCenter, rectDepth, rectWidth } from './types';
-import { classifySurfaceAccess, cutRects, findSurface, MIN_CLEARANCE, MIN_ROUTE_WIDTH, overlapRect,
+import { classifySurfaceAccess, cutRects, findSurface, MIN_CLEARANCE, MIN_ROUTE_WIDTH, overlapRect, CEILING_TILE_THICKNESS,
   SLAB_THICKNESS, surfaceCollider, surfaceRange, surfaceY, TOPOLOGY_VERSION,
   type SurfaceConnection, type WalkableSurface } from './WalkableTopology';
 
@@ -101,7 +101,7 @@ export const planVerticalTopology = (world: WorldPlan, edges: readonly VerticalP
   }
   for (const r of world.rooms) { r.floorY = heights.get(r.id) ?? 0; r.ceilingHeight = Math.max(r.ceilingHeight, quantize(r.floorY + 2.65)); if (r.floorY !== 0) reserved.add(r.id); }
   const galleryRoom = rng.fork('gallery-room').shuffle(world.rooms.filter(r => !reserved.has(r.id) && (r.access ?? 'open') === 'open' && r.level === 0 && r.id !== 'room-grand-hall' &&
-    heights.get(r.id) === 0 && r.ceilingHeight <= 4.3 && rectWidth(r.bounds) >= 15 && rectDepth(r.bounds) >= 13 &&
+    heights.get(r.id) === 0 && r.ceilingHeight <= 4.3 && rectWidth(r.bounds) >= 17.5 && rectDepth(r.bounds) >= 13.5 &&
     r.bounds.minX > -half + 1.2 && r.bounds.maxX < half - 1.2 && r.bounds.minZ > -half + 1.2 && r.bounds.maxZ < half - 1.2 &&
     !world.solidMasses.some(m => overlapRect(m.bounds, r.bounds)) && !(world.symmetryZones ?? []).some(z => overlapRect(z, r.bounds)) &&
     !world.features.some(f => f.kind !== 'impossible-vista' && f.kind !== 'interactive-door' && overlapRect(f.bounds, r.bounds)) &&
@@ -131,12 +131,12 @@ export const planVerticalTopology = (world: WorldPlan, edges: readonly VerticalP
       add('entry', { minX: 1, maxX: 1 + run, minZ: 1, maxZ: 1 + w }, { kind: 'linear', axis: 'x', startY: 0, endY: .9 }, 'ramp', true);
       add('turn', { minX: 1 + run, maxX: 1 + run + w, minZ: 1, maxZ: 1 + w }, { kind: 'flat', y: .9 }, 'landing', true);
       add('ascending', { minX: 1 + run, maxX: 1 + run + w, minZ: 1 + w, maxZ: 1 + w + run }, { kind: 'linear', axis: 'z', startY: .9, endY: 1.8 }, 'ramp', true);
-      const platform = { minX: 1 + run, maxX: family === 'bridge' ? width - 1.32 : 1 + run + w + 3, minZ: 1 + w + run, maxZ: 1 + w * 2 + run };
+      const platform = { minX: 1 + run, maxX: family === 'bridge' ? width - 1.72 : 1 + run + w + 3, minZ: 1 + w + run, maxZ: 1 + w * 2 + run };
       add(family === 'bridge' ? 'bridge' : 'balcony', platform, { kind: 'flat', y: 1.8 }, family === 'bridge' ? 'bridge' : 'balcony', false);
       add('underpass', platform, { kind: 'flat', y: -.9 }, 'landing', false, true);
       add('underpass-entry', { minX: platform.minX, maxX: platform.minX + w, minZ: platform.maxZ, maxZ: platform.maxZ + run }, { kind: 'linear', axis: 'z', startY: -.9, endY: 0 }, 'ramp', true, true);
       add('underpass-exit', family === 'bridge'
-        ? { minX: platform.maxX - w, maxX: platform.maxX, minZ: platform.minZ - run, maxZ: platform.minZ }
+        ? { minX: platform.maxX - w, maxX: platform.maxX, minZ: platform.minZ - run + .2, maxZ: platform.minZ }
         : { minX: platform.maxX, maxX: platform.maxX + run, minZ: platform.minZ, maxZ: platform.maxZ },
         { kind: 'linear', axis: family === 'bridge' ? 'z' : 'x', startY: family === 'bridge' ? 0 : -.9, endY: family === 'bridge' ? -.9 : 0 }, 'ramp', true, true);
     }
@@ -148,7 +148,7 @@ export const planVerticalTopology = (world: WorldPlan, edges: readonly VerticalP
       if (mirrorZ) { const min = depth - r.maxZ; r.maxZ = depth - r.minZ; r.minZ = min; if (s.profile.kind === 'linear' && s.profile.axis === 'z') [s.profile.startY, s.profile.endY] = [s.profile.endY, s.profile.startY]; }
       // One side anchors to the wall; the approach axis retains a full landing
       // before the first slope, including the capsule's forward hemisphere.
-      const shiftX = family === 'U' ? -.88 : .22, shiftZ = family === 'U' ? .22 : -.88;
+      const shiftX = family === 'U' ? -.88 : 1.6, shiftZ = family === 'U' ? 1.6 : -.88;
       const dx = b.minX + (mirrorX ? -shiftX : shiftX), dz = b.minZ + (mirrorZ ? -shiftZ : shiftZ);
       s.bounds = { minX: r.minX + dx, maxX: r.maxX + dx, minZ: r.minZ + dz, maxZ: r.maxZ + dz };
     }
@@ -193,16 +193,32 @@ export const fitVerticalArchitecture = (world: WorldPlan): void => {
   const routes = t.surfaces.filter(s => s.role !== 'floor' && !s.id.startsWith('vertical/crawl/'));
   const gallery = routes.filter(s => s.id.startsWith('vertical/gallery/'));
   if (gallery.length) clipVerticalArchitecture(world, gallery.map(s => {
-    const r = world.rooms.find(r => r.id === s.roomId)?.bounds, b = routeBounds(s, .55);
+    const r = world.rooms.find(r => r.id === s.roomId)?.bounds, b = routeBounds(s, 1.1);
     return r ? { minX: Math.max(b.minX, r.minX + .12), maxX: Math.min(b.maxX, r.maxX - .12), minZ: Math.max(b.minZ, r.minZ + .12), maxZ: Math.min(b.maxZ, r.maxZ - .12) } : b;
   }), w => !w.id.includes('shaft-enclosure') && !w.id.startsWith('inherited-'));
+  // A shared lintel can span several openings. Raise only the exact portion
+  // above this route, preserving every unrelated part of the facade.
+  for (const [i, route] of routes.filter(s => s.role === 'ramp').entries()) {
+    const cut = routeBounds(route, .12), bottom = surfaceRange(route)[1] + 2.55;
+    const headers = world.walls.filter(w => w.detail === 'upper-portal-lintel' && w.bottom < bottom - .001 && overlapRect(wallBounds(w), cut, -.002));
+    if (!headers.length) continue;
+    const ids = new Set(headers.map(w => w.id));
+    clipVerticalArchitecture(world, [cut], w => ids.has(w.id));
+    for (const original of headers) {
+      const top = original.bottom + original.height; if (top <= bottom + .01) continue;
+      const b = wallBounds(original), r = { minX: Math.max(b.minX, cut.minX), maxX: Math.min(b.maxX, cut.maxX), minZ: Math.max(b.minZ, cut.minZ), maxZ: Math.min(b.maxZ, cut.maxZ) };
+      const wall = { ...original, id: `${original.id}/vertical-head-${i}`, bottom, height: top - bottom,
+        x: (r.minX + r.maxX) / 2, z: (r.minZ + r.maxZ) / 2,
+        length: original.orientation === 'x' ? rectWidth(r) : rectDepth(r), thickness: original.orientation === 'x' ? rectDepth(r) : rectWidth(r) };
+      world.walls.push(wall); if (wall.collision) world.colliders.push(wallCollider(wall));
+    }
+  }
   const removed = new Set<string>();
   world.walls = world.walls.flatMap(w => {
     if (w.id.startsWith('inherited-') || w.id.includes('shaft-enclosure') || w.id.startsWith('vertical-guard/')) return [w];
     const footprint = wallBounds(w), adjacent = world.rooms.filter(r => r.level === 0 && overlapRect(footprint, r.bounds, .08));
     const top = w.bottom + w.height;
     if (w.bottom <= .04 && w.bottom > -1.5 && adjacent.length) w.bottom = Math.min(w.bottom, ...adjacent.map(r => r.floorY ?? 0));
-    if (w.detail === 'upper-portal-lintel') for (const s of routes) if (overlapRect(footprint, routeBounds(s, .12))) w.bottom = Math.max(w.bottom, surfaceRange(s)[1] + 2.55);
     w.height = top - w.bottom;
     removed.add(`collider-${w.id}`);
     return w.height > .01 ? [w] : [];
@@ -222,7 +238,7 @@ export const fitVerticalArchitecture = (world: WorldPlan): void => {
 
 /** Apertures own their whole body volume after late ceiling-shell reconstruction. */
 export const clearVerticalApertures = (world: WorldPlan): void => {
-  const cuts = [...(world.floorOpenings ?? []), ...(world.ceilingOpenings ?? []), ...(world.topology?.reservations ?? []).map(v => v.bounds)];
+  const cuts = [...(world.floorOpenings ?? []), ...(world.ceilingOpenings ?? []), ...(world.topology?.reservations ?? []).filter(v => v.top > world.wallHeight - .01).map(v => v.bounds)];
   clipVerticalArchitecture(world, cuts, w => w.detail === 'upper-shell' || w.detail === 'upper-portal-lintel');
 };
 
@@ -243,7 +259,7 @@ export const finalizeVerticalTopology = (world: WorldPlan): void => {
     for (const [i, r] of f.hump.ramps.entries()) special.push({ ...common, id: `vertical/crawl/${f.id}/ramp-${i}`, role: 'ramp', bounds: r.bounds,
       profile: { kind: 'linear', axis: r.axis, startY: r.riseDirection > 0 ? 0 : f.hump.elevation, endY: r.riseDirection > 0 ? f.hump.elevation : 0 } });
   }
-  const openings = [...(world.floorOpenings ?? []), ...(t.reservations ?? []).filter(v => v.top > .02).map(v => v.bounds)];
+  const openings = [...(world.floorOpenings ?? []), ...(t.reservations ?? []).filter(v => v.top > -SLAB_THICKNESS + .002).map(v => v.bounds)];
   const groundCuts = special.filter(s => s.layer === 'ground' || s.support === 'solid').map(s => s.bounds);
   const overhead = special.filter(s => s.layer !== 'ground' && s.support === 'slab' && s.profile.kind === 'flat');
   const roofRects = world.features.flatMap(f => f.kind === 'squeeze-view' ? f.passageRects ?? [f.bounds] : []);
@@ -264,7 +280,7 @@ export const finalizeVerticalTopology = (world: WorldPlan): void => {
       surfaces.push(s);
     }
   };
-  for (const r of rooms) addFloors(r.bounds, r.floorY ?? 0, r.ceilingHeight, `vertical/room/${r.id}`, r.id, r.access ?? 'open');
+  for (const r of rooms) addFloors(r.bounds, r.floorY ?? 0, r.ceilingHeight, `vertical/room/${r.id}`, r.id, r.accessReason === 'unreachable' ? 'open' : r.access ?? 'open');
   for (const [i, r] of cutRects([{ minX: -half, maxX: half, minZ: -half, maxZ: half }], rooms.map(r => r.bounds)).entries()) addFloors(r, 0, world.wallHeight, `vertical/residual-${i}`);
   for (const s of special) {
     const pieces = s.layer === 'ground' ? cutRects([s.bounds], openings) : [s.bounds];
@@ -276,6 +292,7 @@ export const finalizeVerticalTopology = (world: WorldPlan): void => {
   }
   const previousConnections = t.connections; t.surfaces = surfaces;
   const connections: SurfaceConnection[] = [];
+  const openableDoors = new Set(world.features.flatMap(f => f.kind === 'interactive-door' ? [f.colliderId] : []));
   const linkAt = (x: number, z: number, id: string, width: number) => {
     const touching = surfaces.filter(s => pointInRect(x, z, s.bounds, -.005));
     for (let a = 0; a < touching.length; a++) for (let b = a + 1; b < touching.length; b++) {
@@ -298,7 +315,7 @@ export const finalizeVerticalTopology = (world: WorldPlan): void => {
     const join = (axis: 'x' | 'z', fixed: number, min: number, max: number) => {
       let gaps = [{ min, max }]; const foot = a.profile.kind === 'flat' ? a.profile.y : 0, height = a.locomotion === 'crouch' || b.locomotion === 'crouch' ? 1.2 : 1.75;
       for (const c of world.colliders) {
-        if (c.kind === 'floor' || c.center.y + c.halfExtents.y < foot + .05 || c.center.y - c.halfExtents.y > foot + height) continue;
+        if (c.kind === 'floor' || openableDoors.has(c.id) || c.center.y + c.halfExtents.y < foot + .05 || c.center.y - c.halfExtents.y > foot + height) continue;
         const cross = axis === 'x' ? c.center.z : c.center.x, crossHalf = axis === 'x' ? c.halfExtents.z : c.halfExtents.x;
         if (Math.abs(cross - fixed) > crossHalf + .34) continue;
         const along = axis === 'x' ? c.center.x : c.center.z, half = (axis === 'x' ? c.halfExtents.x : c.halfExtents.z) + .34;
@@ -338,9 +355,9 @@ export const finalizeVerticalTopology = (world: WorldPlan): void => {
       }
     }
   }
-  const roofCuts = [...(world.ceilingOpenings ?? []), ...(world.stairCeilingOpenings ?? []), ...(t.reservations ?? []).map(v => v.bounds)];
-  for (const r of rooms) for (const [i, b] of cutRects([r.bounds], roofCuts).entries()) {
-    const p = rectCenter(b); world.colliders.push({ id: `vertical-roof/${r.id}/${i}`, kind: 'barrier', center: { ...p, y: r.ceilingHeight + .08 }, halfExtents: { x: rectWidth(b) / 2, y: .08, z: rectDepth(b) / 2 } });
+  const roofCuts = [...(world.ceilingOpenings ?? []), ...(world.stairCeilingOpenings ?? [])];
+  for (const r of rooms) for (const [i, b] of cutRects([r.bounds], [...roofCuts, ...(t.reservations ?? []).filter(v => v.top > r.ceilingHeight - .002).map(v => v.bounds)]).entries()) {
+    const p = rectCenter(b); world.colliders.push({ id: `vertical-roof/${r.id}/${i}`, kind: 'barrier', center: { ...p, y: r.ceilingHeight + CEILING_TILE_THICKNESS / 2 }, halfExtents: { x: rectWidth(b) / 2, y: CEILING_TILE_THICKNESS / 2, z: rectDepth(b) / 2 } });
   }
   world.floorRects = surfaces.filter(s => s.layer === 'ground').map(s => s.bounds);
   const free = (x: number, z: number, y: number) => !world.colliders.some(c => c.kind !== 'floor' && c.kind !== 'step' &&
@@ -354,4 +371,7 @@ export const finalizeVerticalTopology = (world: WorldPlan): void => {
     if (candidate) world.spawn = { ...candidate.p, y: surfaceY(candidate.s, candidate.p.x, candidate.p.z) + .9 };
   }
   classifySurfaceAccess(world);
+  const inaccessible = new Set(rooms.filter(r => r.access === 'sealed').map(r => r.id));
+  world.lights = world.lights.filter(l => !inaccessible.has(l.roomId));
+  world.detailSockets = world.detailSockets.filter(d => !inaccessible.has(d.roomId));
 };

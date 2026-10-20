@@ -2173,6 +2173,7 @@ const assignRestrictedRooms = (
   );
   for (const room of restrictedRooms) {
     room.access = secretIds.has(room.id) ? 'secret' : 'sealed';
+    room.accessReason = 'intentional';
     room.detailDensity = 0;
     reservedRoomIds.add(room.id);
   }
@@ -4669,9 +4670,10 @@ const classifyInaccessibleRooms = (
       }
     }
     if (!reachable) {
+      room.accessReason ??= 'unreachable';
       room.access = 'sealed';
       room.detailDensity = 0;
-    } else if (room.access === 'sealed') {
+    } else if (room.access === 'sealed' && room.accessReason !== 'intentional') {
       room.access = world.features.some(
         (feature) =>
           feature.kind === 'squeeze-view' &&
@@ -5011,7 +5013,7 @@ const populateLightsAndDetails = (world: WorldPlan, rootRng: SeededRandom): void
       for (let attempt = 0; attempt < 8 && !position; attempt += 1) {
         const candidate = {
           x: rng.float(room.bounds.minX + 1.4, room.bounds.maxX - 1.4),
-          y: 0,
+          y: room.floorY ?? 0,
           z: rng.float(room.bounds.minZ + 1.4, room.bounds.maxZ - 1.4),
         };
         if (!world.solidMasses.some((mass) => pointInRect(candidate.x, candidate.z, mass.bounds, -0.55))) {
@@ -5035,6 +5037,13 @@ const populateLightsAndDetails = (world: WorldPlan, rootRng: SeededRandom): void
       });
     }
   }
+};
+
+export const populateVerticalRoomLighting = (world: WorldPlan): void => {
+  const newlyOpen = world.rooms.filter(r => r.level === 0 && r.access !== 'sealed' && !world.lights.some(l => l.roomId === r.id && l.level >= 0));
+  if (!newlyOpen.length) return;
+  const view = { ...world, rooms: newlyOpen, floorOpenings: [...(world.floorOpenings ?? []), ...(world.topology?.reservations ?? []).map(v => v.bounds)] };
+  populateLightsAndDetails(view, new SeededRandom(`${world.seed}:v${world.version}`).fork('vertical-topology:lighting-v1'));
 };
 
 const applyLightingZones = (world: WorldPlan, rootRng: SeededRandom): void => {
@@ -5320,18 +5329,26 @@ export const generateWorld = (seed: string, structuralOnly = false, verticalRese
   world.features = world.features.filter(f => f.kind !== 'raised-zone');
   world.walls = world.walls.filter(w => !sealIds.has(w.id));
   world.colliders = world.colliders.filter(c => !legacyIds.some(id => c.id.startsWith(`${id}-`)) && !sealIds.has(c.id.replace(/^collider-/, '')));
+  mutable.walls = world.walls; mutable.colliders = world.colliders;
+  classifyInaccessibleRooms(mutable, world);
   const verticalReserved = new Set<string>([spawnRoom.id]);
   for (const f of world.features) {
     if (f.kind === 'interactive-door') { verticalReserved.add(f.sourceRoomId); verticalReserved.add(f.targetRoomId); }
     else if (f.kind !== 'impossible-vista') verticalReserved.add(f.roomId);
   }
   for (const r of world.rooms) if (verticalReservations.some(b => r.bounds.minX < b.maxX + .6 && r.bounds.maxX > b.minX - .6 && r.bounds.minZ < b.maxZ + .6 && r.bounds.maxZ > b.minZ - .6)) verticalReserved.add(r.id);
-  planVerticalTopology(world, discoverVerticalPortals(world), verticalReserved, rootRng, verticalReservations);
+  const verticalEdges = discoverVerticalPortals(world);
+  // Eligibility uses the same body-aware surface graph as the final plan. The
+  // old projected flood-fill can overestimate an isolated doorway by a cell.
+  world.topology = { version: 1, ownerStory: 0, surfaces: [], connections: [], volumes: [], diagnostics: [],
+    portals: verticalEdges.map(e => ({ ...e.portal, firstRoomId: e.firstRoom.id, secondRoomId: e.secondRoom.id })) };
+  finalizeVerticalTopology(world);
+  for (const r of world.rooms) if (!world.topology.surfaces.some(surface => surface.roomId === r.id && surface.reachable)) verticalReserved.add(r.id);
+  planVerticalTopology(world, verticalEdges, verticalReserved, rootRng, verticalReservations);
   fitVerticalArchitecture(world);
   rebuildVerticalCeilingShells(world);
   fitVerticalArchitecture(world);
   mutable.walls = world.walls; mutable.colliders = world.colliders;
-  classifyInaccessibleRooms(mutable, world);
   addInteractiveDoorColliders(world, interactiveDoors);
   rebuildSunkenArchitectureExtensions(world);
   populateLightsAndDetails(world, rootRng);

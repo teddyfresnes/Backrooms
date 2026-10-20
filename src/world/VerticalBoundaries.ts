@@ -28,5 +28,13 @@ export const applyVerticalBoundaries = (world: WorldPlan, gates: InfiniteEdgeGat
       { ...base, id: `vertical/seam-${edge}-${i}/arrival`, role: 'landing', bounds: rect(7.2, 8.4), profile: { kind: 'flat', y: 0 } });
     for (const r of world.rooms.filter(r => r.level === 0 && overlapRect(r.bounds, approach))) r.ceilingHeight = Math.max(r.ceilingHeight, base.ceilingY);
   }
-  clipVerticalArchitecture(world, cuts, w => !w.id.startsWith('inherited-') && !w.id.startsWith('regional-enclosure/'));
+  for (const w of world.walls.filter(w => w.detail === 'biome-boundary-skin' || w.detail === 'biome-boundary-band')) {
+    for (const s of topology.surfaces.filter(s => s.id.startsWith('vertical/seam-'))) {
+      const b = s.bounds, halfX = (w.orientation === 'x' ? w.length : w.thickness) / 2, halfZ = (w.orientation === 'z' ? w.length : w.thickness) / 2;
+      if (!overlapRect(b, { minX: w.x - halfX, maxX: w.x + halfX, minZ: w.z - halfZ, maxZ: w.z + halfZ }, .03)) continue;
+      const low = s.profile.kind === 'flat' ? s.profile.y : Math.min(s.profile.startY, s.profile.endY), bottom = Math.min(w.bottom, low);
+      w.height += w.bottom - bottom; w.bottom = bottom;
+    }
+  }
+  clipVerticalArchitecture(world, cuts, w => !w.id.startsWith('inherited-') && !w.id.startsWith('regional-enclosure/') && w.detail !== 'biome-boundary-skin' && w.detail !== 'biome-boundary-band');
 };

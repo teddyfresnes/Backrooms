@@ -83,6 +83,8 @@ export interface RoomRecord {
   detailDensity: number;
   /** Restricted rooms are deliberately removed from the ordinary doorway graph. */
   access?: RoomAccess;
+  /** Distinguish deliberate restrictions from a provisional navigation result. */
+  accessReason?: 'intentional' | 'unreachable';
 }
 
 export interface ColumnSlot {

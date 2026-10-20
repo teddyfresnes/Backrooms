@@ -24,26 +24,27 @@ rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/
 
 1. crée la coque, le BSP, les salles et les portails ;
 2. choisit le spawn et réserve les salles incompatibles ;
-3. ajoute features, variations de plafond, élévations et relief architectural ;
-4. resynchronise murs et colliders après les transformations ;
-5. classe les zones inaccessibles ;
+3. conserve les propositions héritées, puis remplace les îlots par la topologie verticale ;
+4. résout les potentiels des pièces et les dégagements, puis raccorde murs et colliders ;
+5. classe les surfaces et connexions compatibles en altitude ;
 6. reconstruit les extensions des zones en contrebas ;
 7. place lumières et détails ;
-8. calcule `floorOpenings`, `floorRects` et valide le plan.
+8. construit les surfaces communes, leurs sous-faces et prismes physiques, puis valide le plan.
 
 L’ordre est une dépendance réelle. Un ajout qui occupe le sol doit arriver avant
 les lumières et les props, ou déclencher explicitement leur recalcul.
 
 `generateInfiniteChunk(seed, coord)` :
 
-1. dérive un seed propre au chunk et appelle `generateWorld` ;
-2. applique biome logique et biome visuel ;
-3. réconcilie puits, escaliers et ouvertures avec les étages voisins ;
-4. retire les landmarks réservés au monde fini ;
-5. remplace les rares slots épiques par leur plan monumental canonique ;
-6. recrée les limites et portes canoniques du chunk ;
-7. reconstruit les extensions affectées, place les props rares hors monuments ;
-8. préfixe les IDs et attache les métadonnées runtime.
+1. dérive le seed, les interfaces et les réservations régionales bornées ;
+2. appelle `generateWorld` avec ces contraintes avant le solveur vertical ;
+3. applique biome logique et biome visuel ;
+4. réconcilie puits, escaliers et ouvertures avec les étages voisins ;
+5. retire les landmarks réservés au monde fini ;
+6. remplace les rares slots épiques par leur plan monumental canonique ;
+7. raccorde les frontières non nulles et reconstruit les dérivés affectés ;
+8. finalise surfaces, accessibilité, lumières et props hors monuments ;
+9. préfixe les IDs et transmet aussi les interfaces sérialisées au runtime.
 
 Les biomes visuels occupent des macro-zones 2×2 stables sur tous les étages.
 Le jaune ordinaire couvre 70 % des macro-zones ; rouge, blanc et jaune sombre
@@ -73,12 +74,13 @@ néons jaunes : seul son profil d’éclairage moderne est plus faible.
 - `floorRects` décrit le sol effectivement rendu et praticable.
 - Les rampes et marches ont une géométrie visuelle et des formes Rapier issues
   des mêmes dimensions.
-- Une `raised-zone` réserve aussi ses `approachRoomIds` : chaque rampe doit
-  traverser une pièce simple et large, sans plafond bas, carrefour ni relief
-  architectural ajouté par une passe ultérieure.
+- Les sols ordinaires viennent de `WalkableTopology.ts`, sans doublon à Y=0.
+  `floorY` est un datum ; `ceilingHeight` reste une altitude absolue locale.
+  Voir [le contrat vertical](../VERTICAL_TOPOLOGY.md) pour couches, profils,
+  volumes, budgets, priorités régionales, migrations et tests physiques.
 - Une coque de plafond haut rejoint exactement le sommet du mur bas. Un linteau
-  de portail commence légèrement au-dessus et le rendu soustrait son empreinte
-  du plafond bas voisin. Sa sous-face reste exactement à `wallHeight` : elle
+  de portail garde le dégagement du profil desservi et le rendu soustrait son empreinte
+  du plafond voisin. Sa sous-face suit le dégagement du sol desservi : elle
   continue le plafond si au moins une pièce adjacente est basse, mais emploie le
   papier peint si les deux pièces ont un plafond haut. Si le wrapper rabaisse ensuite
   la pièce à cause d’une ouverture verticale ou d’une façade incomplète, il

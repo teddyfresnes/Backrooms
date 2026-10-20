@@ -21,6 +21,7 @@ describe('integrated vertical topology', () => {
         }
         if (s.id.includes('/return')) families.add('U'); if (s.id.includes('/ascending')) families.add('L');
         if (s.role === 'balcony' || s.role === 'bridge') {
+          expect(s.reachable, `${w.seed} ${s.id}`).toBe(true);
           families.add(s.role); const p = rectCenter(s.bounds);
           const below = findSurface(w, { ...p, referenceY: -.9, maxAbove: .1 });
           expect(findSurface(w, { ...p, referenceY: 1.8, maxAbove: .1 })?.id).toBe(s.id);

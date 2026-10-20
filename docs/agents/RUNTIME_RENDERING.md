@@ -1,5 +1,8 @@
 # Runtime, rendu et physique
 
+Le contrat commun des sols, couches et migrations est décrit dans
+[VERTICAL_TOPOLOGY.md](../VERTICAL_TOPOLOGY.md).
+
 ## Streaming
 
 `WorldStream` maintient les chunks actifs, les `WorldView` et les colliders

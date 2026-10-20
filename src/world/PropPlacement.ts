@@ -292,7 +292,7 @@ const placementIsSafe = (
   if (!rectContains(room.bounds, bounds, roomMargin)) return false;
   if (plan.topology) {
     const p = rectCenter(bounds), surface = findSurface(plan, { ...p, referenceY: room.floorY ?? 0 });
-    if (!surface || surface.profile.kind !== 'flat' || !rectContains(surface.bounds, bounds, .04)) return false;
+    if (!surface || surface.reachable === false || surface.profile.kind !== 'flat' || !rectContains(surface.bounds, bounds, .04)) return false;
   } else if (!plan.floorRects.some((floor) => rectContains(floor, bounds, 0.04))) return false;
   if (plan.topology?.surfaces.some(s => s.role === 'ramp' || s.role === 'balcony' || s.role === 'bridge' ? rectsOverlap(bounds, s.bounds, .62) : false)) return false;
   if (structuralRects(plan).some((rect) => rectsOverlap(bounds, rect, 0.62))) return false;

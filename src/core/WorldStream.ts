@@ -1436,7 +1436,7 @@ export class WorldStream {
     const exact = anchor?.version === TOPOLOGY_VERSION ? runtime.plan.topology.surfaces.find(s => s.id === anchor.id && pointInRect(x, z, s.bounds)) : undefined;
     const s = exact ?? findSurface(runtime.plan, { x, z, referenceY: position.y - runtime.offset.y - .865,
       layer: anchor?.version === TOPOLOGY_VERSION ? anchor.layer : undefined, maxAbove: 4, maxBelow: 4 });
-    const candidate = s ? { x: position.x, y: runtime.offset.y + surfaceY(s, x, z) + .865, z: position.z } : undefined;
+    const candidate = s && (s.access !== 'open' || s.reachable !== false) ? { x: position.x, y: runtime.offset.y + surfaceY(s, x, z) + .865, z: position.z } : undefined;
     return candidate && this.physics.canStandAt(candidate) ? candidate : worldPoint(runtime.plan.spawn, runtime.offset);
   }
 

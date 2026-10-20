@@ -49,6 +49,9 @@ lumières et sols sont ensuite raccordés ensemble. Les découpes finales de pui
 suivent la reconstruction des coques. Le graphe relie les bandes résiduelles
 entre pièces après érosion par la capsule et découpe des obstacles. Il ne relie
 pas deux couches qui partagent seulement leurs coordonnées X/Z.
+Un premier graphe avec la capsule réelle sert aussi à choisir les secteurs ; le
+flood-fill historique projeté ne peut plus déclarer seul un nouveau parcours.
+`accessReason` distingue une restriction intentionnelle d’un composant sans accès.
 
 ## Région et interfaces
 
@@ -58,6 +61,11 @@ propriétaires inférieurs ont priorité ; puits, escaliers, entrées canoniques
 architecture protégée restent prioritaires. Une enveloppe incompatible revient
 à un plafond confortable de 4,30 m avec un diagnostic. Les réservations gardent
 leurs intervalles et propriétaire ; elles restent distinctes des ouvertures et aperçus.
+La portée inclut le dessous possible des sols du story voisin, jusqu’à −1,06 m,
+même quand le volume s’arrête avant son datum zéro. Une telle réservation peut
+interdire un secteur encaissé sans retirer le sol ordinaire au-dessus. Les dalles
+de sol font 0,16 m et les dalles de plafond suspendu 0,03 m ; ces deux épaisseurs
+ne sont pas confondues dans le contrôle d’intersection entre stories.
 
 Chaque `EdgeGate` sérialise altitude, couche, dégagement et épaisseur de dalle.
 Les deux côtés possèdent un palier et une approche inclinée compatibles. Les

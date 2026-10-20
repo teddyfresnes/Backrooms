@@ -8,6 +8,9 @@ export const MIN_CLEARANCE = 2.5;
 export const MIN_ROUTE_WIDTH = 1.6;
 export const MAX_RAMP_GRADE = .42;
 export const SLAB_THICKNESS = .16;
+/** Suspended ceiling tiles are separate from the structural floor above. */
+export const CEILING_TILE_THICKNESS = .03;
+export const LOWEST_STRUCTURE_Y = -1.06;
 export type HeightProfile = { kind: 'flat'; y: number } | { kind: 'linear'; axis: 'x' | 'z'; startY: number; endY: number };
 export interface WalkableSurface {
   id: string; roomId?: string; ownerStory: number; layer: string;
@@ -82,6 +85,7 @@ export const prefixTopology = (world: WorldPlan, prefix: string, story: number):
   for (const v of t.volumes) { v.id = prefix + v.id; v.surfaceId = prefix + v.surfaceId; v.ownerStory = story; }
   for (const p of t.portals ?? []) { p.firstRoomId = prefix + p.firstRoomId; p.secondRoomId = prefix + p.secondRoomId; }
   for (const r of t.reservations ?? []) r.id = prefix + r.id;
+  for (const d of t.diagnostics) d.id = prefix + d.id;
 };
 export const validateTopology = (w: WorldPlan): string[] => {
   const t = w.topology; if (!t) return [];
@@ -117,4 +121,12 @@ export const classifySurfaceAccess = (world: WorldPlan): void => {
   const reached = new Set(queue);
   for (let i = 0; i < queue.length; i++) for (const id of edges.get(queue[i]!) ?? []) if (!reached.has(id)) { reached.add(id); queue.push(id); }
   for (const s of t.surfaces) s.reachable = reached.has(s.id);
+  for (const room of world.rooms.filter(r => r.level === 0 && r.accessReason !== 'intentional')) {
+    if (t.surfaces.some(s => s.roomId === room.id && s.reachable)) {
+      room.access = 'open'; if (room.accessReason === 'unreachable') delete room.accessReason;
+    } else {
+      room.access = 'sealed'; room.accessReason = 'unreachable'; room.detailDensity = 0;
+      if (!t.diagnostics.some(d => d.id === room.id && d.reason === 'no body-compatible route from the spawn or a canonical seam')) t.diagnostics.push({ id: room.id, reason: 'no body-compatible route from the spawn or a canonical seam' });
+    }
+  }
 };
