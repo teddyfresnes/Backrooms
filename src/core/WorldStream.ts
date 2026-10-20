@@ -1,4 +1,5 @@
 import { findSurface, surfaceY, TOPOLOGY_VERSION } from '../world/WalkableTopology';
+import { regionalOwnerAt } from '../world/RegionalPlan';
 import type { CharacterPit } from '../character/CharacterEnvironment';
 import * as THREE from 'three';
 import type {
@@ -217,6 +218,7 @@ export class WorldStream {
   private readonly chunks = new Map<ChunkKey, ActiveChunk>();
   private readonly localPlayer = new THREE.Vector3();
   private readonly runtimeOffset = new THREE.Vector3();
+  private readonly visibilityPosition = new THREE.Vector3();
   private readonly diagnosticsRaycaster = new THREE.Raycaster();
   private centerCoord: ChunkCoord = { x: 0, z: 0, story: 0 };
   private pendingChunks = 0;
@@ -291,6 +293,7 @@ export class WorldStream {
     }
 
     const initialCoords = streamedCoordsAround(originMetadata.coord);
+    this.visibilityPosition.set(this.originPlan.spawn.x, this.originPlan.spawn.y, this.originPlan.spawn.z);
     const neighbourCoords = initialCoords.filter(
       (coord) => createChunkKey(coord) !== originMetadata.key,
     );
@@ -308,6 +311,17 @@ export class WorldStream {
     } catch {
       this.disableWorker();
       prepared.clear();
+    }
+
+    if (this.originPlan.spatial) {
+      const inputs = new Map<ChunkKey, WorldPlan>([[originMetadata.key, this.originPlan], ...[...prepared].map(([key, value]) => [key, value.plan] as [ChunkKey, WorldPlan])]);
+      if (!this.worker) for (const coord of neighbourCoords) inputs.set(createChunkKey(coord), generateInfiniteChunk(this.seed, coord));
+      const targets = this.spatialVisibleCoords([...inputs].map(([key, plan]) => ({ coord: parseChunkKey(key), plan })));
+      const extra = targets.filter(c => !initialCoords.some(o => createChunkKey(o) === createChunkKey(c)));
+      const ready = this.worker ? await this.prepareInitialChunks(extra) : new Map<ChunkKey, PreparedChunk>();
+      for (const [key, plan] of inputs) if (key !== originMetadata.key && !prepared.has(key)) prepared.set(key, { plan });
+      for (const [key, value] of ready) prepared.set(key, value);
+      initialCoords.push(...extra);
     }
 
     try {
@@ -349,6 +363,7 @@ export class WorldStream {
     playerPosition: THREE.Vector3,
   ): void {
     if (!this.initialized || this.disposed) return;
+    this.visibilityPosition.copy(playerPosition);
 
     const observedCenter = this.supportedCoordAt(playerPosition);
     const epicPinnedCoord = this.getEpicPinnedCoord(playerPosition);
@@ -1404,7 +1419,7 @@ export class WorldStream {
 
   supportedCoordAt(position: Pick<THREE.Vector3, 'x' | 'y' | 'z'>): ChunkCoord {
     const monumental = this.getEpicPinnedCoord(position); if (monumental) return { ...monumental };
-    const fallback = streamChunkCoordAt(position);
+    const fallback = this.originPlan.spatial ? regionalOwnerAt(this.seed, position.x, position.y, position.z) : streamChunkCoordAt(position);
     const candidates = [...this.chunks.values()].filter(r => r.coord.x === fallback.x && r.coord.z === fallback.z)
       .sort((a, b) => Number(b.coord.story === this.centerCoord.story) - Number(a.coord.story === this.centerCoord.story));
     for (const runtime of candidates) {
@@ -1478,9 +1493,26 @@ export class WorldStream {
     ) ?? false;
     // The source plan itself contains the whole longitudinal fissure. Loading
     // x-neighbours would put ordinary walls and colliders through it at ±56 m.
-    return ownsLongFissure
-      ? streamedCoordsAroundLongitudinalEpic(this.centerCoord)
-      : coords;
+    if (ownsLongFissure) return streamedCoordsAroundLongitudinalEpic(this.centerCoord);
+    const keys = new Set(coords.map(createChunkKey));
+    const sources = [...this.chunks.values()].filter(r => keys.has(r.key));
+    for (const c of this.spatialVisibleCoords(sources)) if (!keys.has(createChunkKey(c))) { keys.add(createChunkKey(c)); coords.push(c); }
+    return coords;
+  }
+
+  /** Bound visible/landing dependencies to twelve additional source plans.
+   * The same canonical atrium records are used before initial play and at runtime.
+   */
+  private spatialVisibleCoords(sources: readonly { coord: ChunkCoord; plan: WorldPlan }[]): ChunkCoord[] {
+    const targets = new Map<ChunkKey, { coord: ChunkCoord; distance: number }>();
+    for (const { coord, plan } of sources) for (const d of plan.spatial?.dependencies ?? []) {
+      const offset = getChunkWorldOffset(coord), x = this.visibilityPosition.x - offset.x, z = this.visibilityPosition.z - offset.z;
+      const distance = distanceToRect(x, z, d.bounds), y = this.visibilityPosition.y - offset.y;
+      if (distance > 36 || y < d.bottom - 12 || y > d.top + 12) continue;
+      const key = createChunkKey(d.owner), old = targets.get(key);
+      if (!old || distance < old.distance) targets.set(key, { coord: { ...d.owner }, distance });
+    }
+    return [...targets.values()].sort((a, b) => a.distance - b.distance || a.coord.story - b.coord.story).slice(0, 12).map(t => t.coord);
   }
 
   private readonly onWorkerMessage = (event: MessageEvent<WorkerResponse>): void => {

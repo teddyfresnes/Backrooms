@@ -2,10 +2,12 @@ import { applyVerticalBoundaries, getVerticalGateApproach } from './VerticalBoun
 import { applyRegionalClaims, planRegionalVolumes, type RegionalClaim } from './RegionalVolumes';
 import { finalizeVerticalTopology, fitVerticalArchitecture, clearVerticalApertures } from './VerticalPlanner';
 import { prefixTopology, cutRects, LOWEST_STRUCTURE_Y } from './WalkableTopology';
+import { generateSpatialWorld } from './SpatialWorld';
+import { clearRegionalPlanCache, regionalDatum } from './RegionalPlan';
 import {
   addStepColliders,
   generateSurfaceStyle,
-  generateWorld,
+  generateLegacyWorld as generateWorld,
   generateStructuralPlan,
   rebuildVerticalCeilingShells,
   populateVerticalRoomLighting,
@@ -265,7 +267,7 @@ const epicAbyssGatesForEdge = (
   );
 };
 
-export const getCanonicalEdgeGates = (
+export const getLegacyCanonicalEdgeGates = (
   seed: string,
   key: ChunkKey | ChunkCoord,
   edge: ChunkEdge,
@@ -273,6 +275,19 @@ export const getCanonicalEdgeGates = (
   const coord = resolveCoord(key);
   return epicAbyssGatesForEdge(seed, coord, edge) ??
     gatesForAddress(seed, canonicalEdgeAddress(coord, edge));
+};
+
+export const getCanonicalEdgeGates = (seed: string, key: ChunkKey | ChunkCoord, edge: ChunkEdge): readonly EdgeGate[] => {
+  const coord = resolveCoord(key), neighbor = parseChunkKey(getNeighborChunkKey(coord, edge));
+  if (seed.startsWith('RAW_LOCAL_') || epicStructureIndexForCoord(seed, coord) !== null || epicStructureIndexForCoord(seed, neighbor) !== null)
+    return getLegacyCanonicalEdgeGates(seed, coord, edge);
+  return [-42, -14, 14, 42].map((offset, index) => {
+    const x = edge === 'west' ? coord.x * 4 : edge === 'east' ? coord.x * 4 + 3 : coord.x * 4 + index;
+    const z = edge === 'north' ? coord.z * 4 : edge === 'south' ? coord.z * 4 + 3 : coord.z * 4 + index;
+    const dx = edge === 'east' ? 1 : edge === 'west' ? -1 : 0, dz = edge === 'south' ? 1 : edge === 'north' ? -1 : 0;
+    return { offset, width: 4, floorY: (regionalDatum(seed, x, z).y + regionalDatum(seed, x + dx, z + dz).y) / 2,
+      layer: `regional/${coord.story}`, clearance: 3.05, slabThickness: .16 };
+  });
 };
 
 export const getInfiniteEdgeGates = (
@@ -317,6 +332,7 @@ const protectedStructuralRects = (seed: string, coord: ChunkCoord): Rect[] => {
 };
 const regionalCache = new Map<string, RegionalClaim[]>();
 export const clearInfiniteWorldCaches = (): void => {
+  clearRegionalPlanCache();
   structuralCache.clear(); enclosureCache.clear(); canonicalGateCache.clear(); regionalCache.clear();
   inheritedShaftOpeningsCache.clear(); floorOpeningsCache.clear(); inheritedStairCache.clear(); rawLocalFloorOpeningsCache.clear();
 };
@@ -2234,7 +2250,7 @@ const stripFiniteLandmarks = (plan: WorldPlan): void => {
   });
 };
 
-export const generateInfiniteChunk = (
+export const generateLegacyInfiniteChunk = (
   seed: string,
   key: ChunkKey | ChunkCoord,
 ): WorldPlan => {
@@ -2371,6 +2387,21 @@ export const generateInfiniteChunk = (
   plan.edgeGates = edgeGates;
 
   attachInfiniteChunkMetadata(seed, plan, coord, biome, edgeGates, visualBiome);
+  return plan;
+};
+
+export const generateInfiniteChunk = (seed: string, key: ChunkKey | ChunkCoord): WorldPlan => {
+  const coord = resolveCoord(key);
+  if (seed.startsWith('RAW_LOCAL_') || epicStructureIndexForCoord(seed, coord) !== null) return generateLegacyInfiniteChunk(seed, coord);
+  const gates = getInfiniteEdgeGates(seed, coord), normalizedKey = createChunkKey(coord);
+  const style = generateSurfaceStyle(`${seed}:spatial-column:v2:${coord.x}:${coord.z}`);
+  const plan = generateSpatialWorld(seed, coord, style, gates);
+  const biome = getInfiniteBiome(seed, coord), visual = getInfiniteVisualBiome(seed, coord);
+  plan.visualBiome = visual;
+  applyVisualBiome(plan, visual, `${seed}:spatial-palette:v2:${coord.x}:${coord.z}`);
+  populateRareProps(plan, `${seed}:${normalizedKey}:spatial-props:v2`);
+  prefixPlanIds(plan, normalizedKey); plan.edgeGates = gates;
+  attachInfiniteChunkMetadata(seed, plan, coord, biome, gates, visual);
   return plan;
 };
 

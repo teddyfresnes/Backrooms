@@ -1,7 +1,8 @@
 import type { Rect, RoomAccess, StaticCollider, WorldPlan } from './types';
 import { pointInRect, rectDepth, rectWidth } from './types';
+import type { SpatialAddress } from './SpatialTypes';
 
-export const TOPOLOGY_VERSION = 1;
+export const TOPOLOGY_VERSION = 2;
 export const SURFACE_EPSILON = .002;
 export const HEIGHT_QUANTUM = .05;
 export const MIN_CLEARANCE = 2.5;
@@ -14,11 +15,20 @@ export const LOWEST_STRUCTURE_Y = -1.06;
 export type HeightProfile = { kind: 'flat'; y: number } | { kind: 'linear'; axis: 'x' | 'z'; startY: number; endY: number };
 export interface WalkableSurface {
   id: string; roomId?: string; ownerStory: number; layer: string;
-  role: 'floor' | 'ramp' | 'landing' | 'balcony' | 'bridge'; bounds: Rect; profile: HeightProfile;
+  role: 'floor' | 'ramp' | 'stair' | 'landing' | 'balcony' | 'bridge'; bounds: Rect; profile: HeightProfile;
+  ceilingProfile?: HeightProfile;
   ceilingY: number; thickness: number; support: 'slab' | 'solid'; supportBottom?: number;
   access: RoomAccess; edges: 'architecture' | 'guarded' | 'drop'; reachable?: boolean; locomotion?: 'stand' | 'crouch';
+  reachability?: 'local' | 'regional' | 'visible-only' | 'isolated';
 }
-export interface SurfaceConnection { id: string; from: string; to: string; at: { x: number; z: number }; width: number; access: RoomAccess }
+export interface SurfaceConnection {
+  id: string; from: string; to: string; at: { x: number; z: number }; width: number; access: RoomAccess;
+  kind?: 'walk' | 'ramp' | 'stairs' | 'crouch' | 'jump' | 'drop' | 'view';
+  direction?: 'both' | 'forward';
+  arrival?: { x: number; y: number; z: number };
+  /** External endpoints belong to real generated plans, never previews. */
+  toOwner?: SpatialAddress;
+}
 export interface StructuralVolume { id: string; surfaceId: string; bounds: Rect; bottom: number; top: number; purpose: 'clearance' | 'structure'; ownerStory: number }
 export interface VerticalReservation { id: string; bounds: Rect; bottom: number; top: number; ownerStory: number }
 export interface WalkableTopology {
@@ -81,11 +91,16 @@ export const surfaceCollider = (s: WalkableSurface): StaticCollider => {
 export const prefixTopology = (world: WorldPlan, prefix: string, story: number): void => {
   const t = world.topology; if (!t) return; t.ownerStory = story;
   for (const s of t.surfaces) { s.id = prefix + s.id; s.layer = prefix + s.layer; s.ownerStory = story; if (s.roomId) s.roomId = prefix + s.roomId; }
-  for (const c of t.connections) { c.id = prefix + c.id; c.from = prefix + c.from; c.to = prefix + c.to; }
+  for (const c of t.connections) { c.id = prefix + c.id; c.from = prefix + c.from; c.to = c.toOwner ? `chunk-${c.toOwner.x}:${c.toOwner.z}:${c.toOwner.story}/` + c.to : prefix + c.to; }
   for (const v of t.volumes) { v.id = prefix + v.id; v.surfaceId = prefix + v.surfaceId; v.ownerStory = story; }
   for (const p of t.portals ?? []) { p.firstRoomId = prefix + p.firstRoomId; p.secondRoomId = prefix + p.secondRoomId; }
   for (const r of t.reservations ?? []) r.id = prefix + r.id;
   for (const d of t.diagnostics) d.id = prefix + d.id;
+  if (world.spatial) {
+    for (const p of world.spatial.prisms) p.id = prefix + p.id;
+    for (const s of world.spatial.ceilings) { s.id = prefix + s.id; if (s.roomId) s.roomId = prefix + s.roomId; }
+    for (const c of world.spatial.cells) c.id = prefix + c.id;
+  }
 };
 export const validateTopology = (w: WorldPlan): string[] => {
   const t = w.topology; if (!t) return [];
@@ -96,7 +111,9 @@ export const validateTopology = (w: WorldPlan): string[] => {
     const [lo, hi] = surfaceRange(s), crawl = s.locomotion === 'crouch';
     if (![lo, hi, s.ceilingY, ...Object.values(s.bounds)].every(Number.isFinite)) issue(s.id, 'non-finite profile');
     if (rectWidth(s.bounds) <= 0 || rectDepth(s.bounds) <= 0) issue(s.id, 'empty footprint');
-    if (s.access === 'open' && s.ceilingY - hi < (crawl ? 1.28 : MIN_CLEARANCE) - SURFACE_EPSILON) issue(s.id, 'insufficient clearance');
+    const clearance = s.ceilingProfile ? Math.min(...[[s.bounds.minX, s.bounds.minZ], [s.bounds.maxX, s.bounds.maxZ]].map(([x, z]) =>
+      surfaceY({ ...s, profile: s.ceilingProfile! }, x!, z!) - surfaceY(s, x!, z!))) : s.ceilingY - hi;
+    if (s.access === 'open' && clearance < (crawl ? 1.28 : MIN_CLEARANCE) - SURFACE_EPSILON) issue(s.id, 'insufficient clearance');
     if (s.profile.kind === 'linear') {
       const run = s.profile.axis === 'x' ? rectWidth(s.bounds) : rectDepth(s.bounds), width = s.profile.axis === 'x' ? rectDepth(s.bounds) : rectWidth(s.bounds);
       if (!crawl && (hi - lo) / run > MAX_RAMP_GRADE + SURFACE_EPSILON) issue(s.id, 'slope exceeds budget');
@@ -106,21 +123,33 @@ export const validateTopology = (w: WorldPlan): string[] => {
   const byId = new Map(t.surfaces.map(s => [s.id, s]));
   for (const c of t.connections) {
     const a = byId.get(c.from), b = byId.get(c.to);
-    if (!a || !b) { issue(c.id, 'orphan connection'); continue; }
+    if (!a || (!b && !c.toOwner)) { issue(c.id, 'orphan connection'); continue; }
+    if (c.toOwner) { if (!c.arrival || !Object.values(c.arrival).every(Number.isFinite)) issue(c.id, 'external connection without a finite arrival'); continue; }
+    if (!b) continue;
+    if (c.kind === 'view' || c.kind === 'drop' || c.kind === 'jump') {
+      if (c.kind === 'drop' && c.direction !== 'forward') issue(c.id, 'drop must be directed');
+      continue;
+    }
     if (!pointInRect(c.at.x, c.at.z, a.bounds, -.01) || !pointInRect(c.at.x, c.at.z, b.bounds, -.01)) issue(c.id, 'connection outside surface');
-    if (Math.abs(surfaceY(a, c.at.x, c.at.z) - surfaceY(b, c.at.x, c.at.z)) > SURFACE_EPSILON) issue(c.id, 'discontinuous connection');
+    if (Math.abs(surfaceY(a, c.at.x, c.at.z) - surfaceY(b, c.at.x, c.at.z)) > (c.kind === 'stairs' ? .19 : SURFACE_EPSILON)) issue(c.id, 'discontinuous connection');
   }
   return issues;
 };
 export const classifySurfaceAccess = (world: WorldPlan): void => {
   const t = world.topology; if (!t) return;
   const edges = new Map(t.surfaces.map(s => [s.id, [] as string[]]));
-  for (const c of t.connections) if (c.access === 'open') { edges.get(c.from)?.push(c.to); edges.get(c.to)?.push(c.from); }
+  for (const c of t.connections) if (c.access === 'open' && c.kind !== 'view') { edges.get(c.from)?.push(c.to); if (c.direction !== 'forward') edges.get(c.to)?.push(c.from); }
   const start = findSurface(world, { x: world.spawn.x, z: world.spawn.z, referenceY: world.spawn.y - .9 });
   const queue = t.surfaces.filter(s => s.id.includes('/seam-') && s.role === 'landing').map(s => s.id); if (start) queue.push(start.id);
   const reached = new Set(queue);
   for (let i = 0; i < queue.length; i++) for (const id of edges.get(queue[i]!) ?? []) if (!reached.has(id)) { reached.add(id); queue.push(id); }
-  for (const s of t.surfaces) s.reachable = reached.has(s.id);
+  for (const s of t.surfaces) {
+    s.reachable = reached.has(s.id) ? true : world.spatial ? undefined : false;
+    if (world.spatial) s.reachability = reached.has(s.id) ? 'local' : 'regional';
+  }
+  // The regional graph includes directed/external routes. A local flood fill
+  // cannot classify an entire visible region as sealed or remove its lights.
+  if (world.spatial) return;
   for (const room of world.rooms.filter(r => r.level === 0 && r.accessReason !== 'intentional')) {
     if (t.surfaces.some(s => s.roomId === room.id && s.reachable)) {
       room.access = 'open'; if (room.accessReason === 'unreachable') delete room.accessReason;

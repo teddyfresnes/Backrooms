@@ -1,5 +1,6 @@
 import { discoverVerticalPortals, planVerticalTopology, fitVerticalArchitecture, finalizeVerticalTopology } from './VerticalPlanner';
 import { validateTopology } from './WalkableTopology';
+import { generateSpatialWorld } from './SpatialWorld';
 import { createDefaultFeatureRegistry } from './FeatureRegistry';
 import {
   getPassageHoleAbyssBottom,
@@ -5176,7 +5177,7 @@ export const generateSurfaceStyle = (seed: string): SurfaceStyle => {
   };
 };
 
-export const generateWorld = (seed: string, structuralOnly = false, verticalReservations: readonly Rect[] = [], subfloorReservations: readonly { bounds: Rect; top: number }[] = []): WorldPlan => {
+export const generateLegacyWorld = (seed: string, structuralOnly = false, verticalReservations: readonly Rect[] = [], subfloorReservations: readonly { bounds: Rect; top: number }[] = []): WorldPlan => {
   const rootRng = new SeededRandom(`${seed}:v${GENERATOR_VERSION}`);
   const surfaceStyle = generateSurfaceStyle(seed);
   const half = WORLD_SIZE * 0.5;
@@ -5398,11 +5399,19 @@ export const generateWorld = (seed: string, structuralOnly = false, verticalRese
 
 export const generateStructuralPlan = (seed: string): WorldPlan => generateWorld(seed, true);
 
+/** Ordinary worlds are materialized from the regional volume plan. The legacy
+ * generator remains explicit for monument templates and old save diagnostics. */
+export const generateWorld = (seed: string, structuralOnly = false, verticalReservations: readonly Rect[] = [], subfloorReservations: readonly { bounds: Rect; top: number }[] = []): WorldPlan =>
+  structuralOnly || verticalReservations.length > 0 || subfloorReservations.length > 0
+    ? generateLegacyWorld(seed, structuralOnly, verticalReservations, subfloorReservations)
+    : generateSpatialWorld(seed, { x: 0, z: 0, story: 0 }, generateSurfaceStyle(seed));
+
 export const fingerprintWorld = (world: WorldPlan): string => {
   const payload = [
     world.version,
     world.seed,
     JSON.stringify(world.topology ?? null),
+    JSON.stringify(world.spatial ?? null),
     world.rooms
       .map((room) => `${room.id}:${room.kind}:${room.access ?? 'open'}:${rectArea(room.bounds).toFixed(2)}`)
       .join('|'),

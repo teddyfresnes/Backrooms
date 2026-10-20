@@ -19,7 +19,7 @@ const addStaticCollider = (
   body: RAPIER.RigidBody,
   source: StaticCollider,
 ): RAPIER.Collider => {
-  const description = (source.vertices ? RAPIER.ColliderDesc.convexHull(new Float32Array(source.vertices))! : RAPIER.ColliderDesc.cuboid(
+  const description = (source.vertices && source.indices ? RAPIER.ColliderDesc.trimesh(new Float32Array(source.vertices), new Uint32Array(source.indices)) : source.vertices ? RAPIER.ColliderDesc.convexHull(new Float32Array(source.vertices))! : RAPIER.ColliderDesc.cuboid(
     source.halfExtents.x,
     source.halfExtents.y,
     source.halfExtents.z,

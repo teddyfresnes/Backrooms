@@ -1,4 +1,5 @@
 import { createWalkableGeometry } from './WalkableGeometry';
+import { createSpatialPrismGeometry } from './SpatialGeometry';
 import { applySurfaceLighting } from './SurfaceLighting';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -1551,7 +1552,17 @@ export class WorldView {
     if (group.children.length > 0) this.group.add(group);
   }
 
+  private buildSpatialArchitecture(): void {
+    const spatial = this.plan.spatial!, surfaces = this.plan.topology!.surfaces;
+    makeMesh(mergeOrSingle(surfaces.map(s => createWalkableGeometry(s, 'top', this.surfaceStyle.floorPatternScale, this.surfaceStyle.floorQuarterTurn))), this.materials.floor, 'regional-carpet-floors', this.group);
+    makeMesh(mergeOrSingle(surfaces.map(s => createWalkableGeometry(s, 'underside', this.surfaceStyle.ceilingPatternScale))), this.materials.ceiling, 'regional-floor-undersides', this.group);
+    makeMesh(mergeOrSingle(surfaces.map(s => createWalkableGeometry(s, 'sides', this.surfaceStyle.wallPatternScale))), this.materials.wall, 'regional-floor-chants', this.group);
+    for (const face of ['top', 'underside', 'sides'] as const) makeMesh(mergeOrSingle(spatial.ceilings.map(s => createWalkableGeometry(s, face, this.surfaceStyle.ceilingPatternScale))), this.materials.ceiling, `regional-ceilings-${face}`, this.group);
+    for (const material of ['wall', 'plaster', 'ceiling', 'baseboard'] as const) makeMesh(mergeOrSingle(spatial.prisms.filter(p => p.material === material).map(p => createSpatialPrismGeometry(p, this.surfaceStyle.wallPatternScale))), this.materials[material], `regional-${material}-structures`, this.group);
+  }
+
   private buildArchitecture(): void {
+    if (this.plan.spatial) { this.buildSpatialArchitecture(); return; }
     const wallGeometries: THREE.BufferGeometry[] = [];
     const lowerWallGeometries: THREE.BufferGeometry[] = [];
     const shaftCarpetGeometries: THREE.BufferGeometry[] = [];
