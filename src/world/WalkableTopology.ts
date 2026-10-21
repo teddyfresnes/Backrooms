@@ -30,6 +30,8 @@ export interface SurfaceConnection {
   /** External endpoints belong to real generated plans, never previews. */
   toOwner?: SpatialAddress;
   targetKind?: 'surface' | 'portal';
+  /** The passage exists after the player opens this interactive leaf. */
+  requiresDoorId?: string;
 }
 export interface StructuralVolume { id: string; surfaceId: string; bounds: Rect; bottom: number; top: number; purpose: 'clearance' | 'structure'; ownerStory: number }
 export interface VerticalReservation { id: string; bounds: Rect; bottom: number; top: number; ownerStory: number }
@@ -93,7 +95,7 @@ export const surfaceCollider = (s: WalkableSurface): StaticCollider => {
 export const prefixTopology = (world: WorldPlan, prefix: string, story: number): void => {
   const t = world.topology; if (!t) return; t.ownerStory = story;
   for (const s of t.surfaces) { s.id = prefix + s.id; s.layer = prefix + s.layer; s.ownerStory = story; if (s.roomId) s.roomId = prefix + s.roomId; }
-  for (const c of t.connections) { c.id = prefix + c.id; c.from = prefix + c.from; c.to = c.targetKind === 'portal' ? c.to : c.toOwner ? `chunk-${c.toOwner.x}:${c.toOwner.z}:${c.toOwner.story}/` + c.to : prefix + c.to; }
+  for (const c of t.connections) { if (c.requiresDoorId) c.requiresDoorId = prefix + c.requiresDoorId; c.id = prefix + c.id; c.from = prefix + c.from; c.to = c.targetKind === 'portal' ? c.to : c.toOwner ? `chunk-${c.toOwner.x}:${c.toOwner.z}:${c.toOwner.story}/` + c.to : prefix + c.to; }
   for (const v of t.volumes) { v.id = prefix + v.id; v.surfaceId = prefix + v.surfaceId; v.ownerStory = story; }
   for (const p of t.portals ?? []) { p.firstRoomId = prefix + p.firstRoomId; p.secondRoomId = prefix + p.secondRoomId; }
   for (const r of t.reservations ?? []) r.id = prefix + r.id;

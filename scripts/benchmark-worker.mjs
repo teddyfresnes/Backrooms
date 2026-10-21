@@ -13,6 +13,7 @@ await build({ stdin: { contents: `
   import { performance } from 'node:perf_hooks';
   import { getHeapStatistics } from 'node:v8';
   import { generateInfiniteChunk, clearInfiniteWorldCaches } from './src/world/InfiniteWorld';
+  import { bakeRegionalLightData } from './src/render/RegionalLighting';
   import { bakeLightMapData } from './src/render/BakedLighting';
   parentPort.postMessage({ ready: true });
   parentPort.on('message', ({ seed, warm, legacy, warmup }) => {
@@ -21,8 +22,9 @@ await build({ stdin: { contents: `
     if (warmup) { generateInfiniteChunk(seed, coord); parentPort.postMessage({ ready: true }); return; }
     const start = performance.now(), plan = generateInfiniteChunk(seed, coord);
     const generated = performance.now(), lightMaps = legacy ? bakeLightMapData(plan) : undefined;
-    parentPort.postMessage({ plan, lightMaps, generationMs: generated - start,
-      bakeMs: performance.now() - generated, heapBytes: getHeapStatistics().used_heap_size });
+    const regionalLightData = !legacy && plan.spatial ? bakeRegionalLightData(plan) : undefined;
+    parentPort.postMessage({ plan, lightMaps, regionalLightData, generationMs: generated - start,
+      bakeMs: performance.now() - generated, heapBytes: getHeapStatistics().used_heap_size }, regionalLightData ? [regionalLightData.bounds.buffer, regionalLightData.lighting.buffer] : lightMaps ? [lightMaps.general.buffer, lightMaps.ceiling.buffer] : []);
   });
 `, resolveDir: process.cwd(), loader: 'ts' }, outfile: output, bundle: true, platform: 'node', format: 'esm', packages: 'external' });
 const started = performance.now(), worker = new Worker(output);
@@ -47,7 +49,7 @@ try {
       const result = await next, roundTripMs = performance.now() - start;
       values.push({ generationMs: result.generationMs, bakeMs: result.bakeMs, roundTripMs,
         transferAndDispatchMs: roundTripMs - result.generationMs - result.bakeMs,
-        heapBytes: result.heapBytes, clonedBytes: Buffer.byteLength(JSON.stringify(result.plan)) });
+        heapBytes: result.heapBytes, clonedBytes: Buffer.byteLength(JSON.stringify(result.plan)), lightBufferBytes: result.regionalLightData ? result.regionalLightData.bounds.byteLength + result.regionalLightData.lighting.byteLength : result.lightMaps ? result.lightMaps.general.byteLength + result.lightMaps.ceiling.byteLength : 0 });
     }
     modes[mode] = Object.fromEntries(Object.keys(values[0]).map(key => [key, summary(values.map(v => v[key]))]));
   }

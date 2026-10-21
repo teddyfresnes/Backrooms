@@ -3,6 +3,7 @@
 import { generateInfiniteChunk } from './InfiniteWorld';
 import type { ChunkKey } from './InfiniteWorld';
 import type { BakedLightMapData } from '../render/BakedLighting';
+import type { RegionalLightData } from '../render/RegionalLighting';
 import type { LightingMode } from '../render/LightingMode';
 
 interface GenerateRequest {
@@ -17,6 +18,7 @@ interface GenerateResponse {
   key: ChunkKey;
   plan?: ReturnType<typeof generateInfiniteChunk>;
   lightMaps?: BakedLightMapData;
+  regionalLightData?: RegionalLightData;
   error?: string;
 }
 
@@ -29,12 +31,16 @@ scope.addEventListener('message', async (event: MessageEvent<GenerateRequest>) =
     const lightMaps = event.data.lightingMode === 'legacy'
       ? (await import('../render/BakedLighting')).bakeLightMapData(plan)
       : undefined;
-    const response: GenerateResponse = { id, key, plan, lightMaps };
+    const regionalLightData = plan.spatial && event.data.lightingMode !== 'legacy'
+      ? (await import('../render/RegionalLighting')).bakeRegionalLightData(plan) : undefined;
+    const response: GenerateResponse = { id, key, plan, lightMaps, regionalLightData };
     if (lightMaps) {
       scope.postMessage(response, [
         lightMaps.general.buffer as ArrayBuffer,
         lightMaps.ceiling.buffer as ArrayBuffer,
       ]);
+    } else if (regionalLightData) {
+      scope.postMessage(response, [regionalLightData.bounds.buffer as ArrayBuffer, regionalLightData.lighting.buffer as ArrayBuffer]);
     } else {
       scope.postMessage(response);
     }

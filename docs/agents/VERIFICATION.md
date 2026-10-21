@@ -90,6 +90,10 @@ les deux modes de rendu, les sauvegardes et les cycles de montage/démontage.
 `npm run audit:vertical` vérifie 128 seeds et huit voisinages de 5×5 chunks avec
 des objectifs de distribution déclarés avant le relevé. Les anciens tests BSP
 restent explicitement sur le générateur legacy utilisé par les monuments.
+`RegionalBsp.test.ts` mesure le vrai chemin ordinaire et contrôle 32 seeds de
+connectivité physique des surfaces, sans assimiler les noms de familles à des formes.
+`RegionalLighting.test.ts` vérifie l’invariance par translation, plus de trois couches,
+le transfert des buffers worker et le nettoyage des deux textures modernes.
 
 `npm run benchmark:vertical` compare 24 seeds identiques : médiane/P95,
 clonage, JSON, architecture Three, montage Rapier et mémoire JS.

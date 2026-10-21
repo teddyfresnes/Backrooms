@@ -20,24 +20,31 @@ rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/
 
 ## Ordre du pipeline
 
-Le pipeline ordinaire (plan version 11, topologie/spatial version 2) est :
+Le pipeline ordinaire (plan version 12, topologie/spatial version 2) est :
 
 1. `RegionalPlan` choisit les districts mondiaux et leurs datums signés ;
 2. il réserve les atria et leur propriété sur trois adresses verticales ;
 3. `SpatialConnectors` déduit les parcours, paliers et dégagements inférieurs ;
-4. `SpatialWorld` matérialise sols, marches, plafonds, murs, portes et détails ;
-5. il relie les surfaces avec des arêtes typées/orientées, puis choisit le spawn ;
+4. `SpatialWorld` réutilise `generateBspArchitecture` sur des domaines canoniques
+   de 224 m (2×2 chunks), puis matérialise aux datums finaux les pièces historiques,
+   murs épais, détails et plafonds ; les grandes familles restent minoritaires ;
+5. `BspConnectivity` ouvre les partitions ordinaires qui isolent une poche après
+   découpe ; le graphe distingue les portes à ouvrir (`requiresDoorId`), les vues
+   et les chutes. Les petits rectangles de dallage ne sont pas des obstacles ;
 6. `generateInfiniteChunk` applique palette et props, préfixe les IDs et références.
 
 La génération ne lit jamais un voisin déjà produit. Les interfaces viennent des
 mêmes cellules mondiales des deux côtés. Le pas d’adresse 5,4 m est une translation
 entre propriétaires ; les sols locaux suivent les datums régionaux, pas zéro.
 
-`generateLegacyWorld` et `generateLegacyInfiniteChunk` conservent le BSP et les
+`generateLegacyWorld` et `generateLegacyInfiniteChunk` conservent le pipeline complet et les
 contrats des monuments et de `RAW_LOCAL_`. `structuralOnly` utilise ce pipeline
 pour les résumés historiques. Ses règles de raised-zone, coques hautes et previews
 ci-dessous restent propres à ce chemin. Les tests BSP l’appellent explicitement ;
-ils ne mesurent pas la distribution ordinaire actuelle.
+ils ne mesurent pas la distribution ordinaire actuelle. `RegionalBsp.test.ts`
+contrôle cette dernière, y compris les épaisseurs, les continuations de pièces
+et la connexion des sols aux vraies circulations. Le cache de 32 domaines BSP
+est vidé avec `clearInfiniteWorldCaches`.
 
 Les biomes visuels occupent des macro-zones 2×2 stables sur tous les étages.
 Le jaune ordinaire couvre 70 % des macro-zones ; rouge, blanc et jaune sombre
@@ -189,7 +196,7 @@ néons jaunes : seul son profil d’éclairage moderne est plus faible.
 | Besoin | Commencer par |
 |---|---|
 | Nouvelle donnée ou feature | `types.ts`, puis `docs/ADDING_FEATURES.md` |
-| Forme des salles/portes | `SpatialWorld.ts` ; BSP legacy dans `generateWorld.ts` |
+| Forme des salles/portes | `SpatialWorld.ts`, `generateBspArchitecture` et `BspConnectivity.ts` |
 | Frontières entre chunks | `RegionalPlan.ts`, `getCanonicalEdgeGates`, `SpatialWorld.ts` |
 | Puits ou étages | `generateWorld.ts`, `InfiniteWorld.ts`, `StairLayout.ts` |
 | Monument `epicN` | `EpicStructures.ts`, puis `WorldBuilder.ts` et `WorldStream.ts` |

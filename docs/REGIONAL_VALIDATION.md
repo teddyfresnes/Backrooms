@@ -1,5 +1,8 @@
 # Validation de l’architecture régionale
 
+> Rapport historique de la version 11. La restauration du BSP et de la lumière
+> en version 12 est documentée dans [BSP_RESTORATION.md](BSP_RESTORATION.md).
+
 Relevé du 20 octobre 2026, Node 24.19.0, Three 0.185.1, Rapier 0.19.3.
 Référence conservée : `f5cf66e4367402e4cf5c482fa43f11ef2224fb39` (PR #2).
 Code fonctionnel : `e7599f2b0887627e9de9a6cce1e599c2fd884c6e`.

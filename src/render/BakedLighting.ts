@@ -302,7 +302,7 @@ export const bakeLightMapData = (plan: WorldPlan): BakedLightMapData => {
     if (room.level < 0) continue;
     const directLights = activeUpperLights.filter((light) => light.roomId === room.id);
     const neighbouringLights = activeUpperLights
-      .filter((light) => light.roomId !== room.id)
+      .filter((light) => light.roomId !== room.id && (!plan.spatial || (light.ceilingY > (room.floorY ?? 0) + .25 && light.ceilingY <= room.ceilingHeight + .15)))
       .map((light) => ({ light, distance: pointDistanceToRect(light.x, light.z, room.bounds) }))
       .filter((candidate) => candidate.distance <= NEIGHBOUR_LIGHT_REACH)
       .sort((left, right) => left.distance - right.distance)
@@ -327,7 +327,7 @@ export const bakeLightMapData = (plan: WorldPlan): BakedLightMapData => {
           crossRoom,
           samples: emitterSamples(light.x, light.z, light.rotation, light.width),
           visibilityOccluders: occluders.filter((occluder) =>
-            rectsIntersect(pathBounds, occluder, 0.35),
+            rectsIntersect(pathBounds, occluder, 0.35) && (!plan.spatial || (occluder.bottom < (room.floorY ?? 0) + 1.2 && occluder.top > (room.floorY ?? 0) + .2)),
           ),
           ceilingVisibilityOccluders: (plan.spatial ? occluders.filter(o => bakedOccluderReachesCeiling(o.bottom, o.top - o.bottom, room.ceilingHeight)) : ceilingOccluders).filter((occluder) =>
             rectsIntersect(pathBounds, occluder, 0.35),

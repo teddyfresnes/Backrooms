@@ -47,7 +47,7 @@ export const regionalDatum = (seed: string, x: number, z: number): RegionalDatum
 };
 export const regionalStyle = (seed: string, regionId: string) => {
   const rng = new SeededRandom(`${seed}:spatial-style:v2:${regionId}`);
-  return { family: rng.weighted([{ value: 'maze' as const, weight: .7 }, { value: 'hall' as const, weight: .15 }, { value: 'pillars' as const, weight: .15 }]),
+  return { family: rng.weighted([{ value: 'maze' as const, weight: .88 }, { value: 'hall' as const, weight: .08 }, { value: 'pillars' as const, weight: .04 }]),
     wallHalf: rng.weighted([{ value: .12, weight: .12 }, { value: .6, weight: .58 }, { value: 1.2, weight: .3 }]) };
 };
 export const clearRegionalPlanCache = () => datumCache.clear();

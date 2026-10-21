@@ -5177,6 +5177,34 @@ export const generateSurfaceStyle = (seed: string): SurfaceStyle => {
   };
 };
 
+/** Shared historical BSP, before any floor/vertical materialization. The regional
+ * path supplies its final datums and reservations; this is not a flat world
+ * translated after generation. A 224m template crosses source chunk boundaries. */
+export const generateBspArchitecture = (seed: string): WorldPlan => {
+  const rng = new SeededRandom(seed).fork('historical-bsp');
+  const mutable: MutablePlan = { walls: [], rooms: [], colliders: [], portals: [], wallIndex: 0 };
+  const bounds = { minX: -112, maxX: 112, minZ: -112, maxZ: 112 };
+  if (rng.fork('hall-presence').chance(.65)) splitWorldWithGrandHall(bounds, rng.fork('topology'), mutable);
+  else splitPartitions(bounds, 0, 'root', rng.fork('topology'), mutable);
+  const world: WorldPlan = { version: 12, seed, size: 224, wallHeight: WALL_HEIGHT,
+    rooms: mutable.rooms, walls: mutable.walls, colliders: mutable.colliders, columns: [], solidMasses: [],
+    lights: [], missingCeilingTiles: [], features: [], detailSockets: [], floorRects: [], spawn: { x: 0, y: .865, z: 0 } };
+  selectArchitectureZones(world, rng);
+  addCeilingVariations(mutable, world, new Set(), rng);
+  // Address ownership still repeats at 5.4m. Keep ordinary roofs below the
+  // next owner's slab instead of importing the legacy nine-metre shells.
+  for (const room of world.rooms) room.ceilingHeight = Math.min(room.ceilingHeight, 4.35);
+  addColumnsAndPartialWalls(mutable, world, new Set(), rng);
+  enforcePortalClearances(mutable);
+  addInteractiveDoors(mutable, world, rng);
+  world.walls = mutable.walls; world.colliders = mutable.colliders;
+  addSolidMasses(world, new Set(), rng);
+  cleanWallJunctions(world);
+  populateLightsAndDetails(world, rng);
+  applyLightingZones(world, rng);
+  return world;
+};
+
 export const generateLegacyWorld = (seed: string, structuralOnly = false, verticalReservations: readonly Rect[] = [], subfloorReservations: readonly { bounds: Rect; top: number }[] = []): WorldPlan => {
   const rootRng = new SeededRandom(`${seed}:v${GENERATOR_VERSION}`);
   const surfaceStyle = generateSurfaceStyle(seed);

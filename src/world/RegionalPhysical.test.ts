@@ -184,16 +184,41 @@ it('physically completes a multi-chunk loop through several regional datums in b
   })).values()];
   const worlds = coords.map(c => generateInfiniteChunk(seed, c)), physics = await PhysicsWorld.create({ ...worlds[0]!, colliders: [] });
   for (let i = 0; i < coords.length; i++) physics.addChunk(String(i), worlds[i]!.colliders, getChunkWorldOffset(coords[i]!));
-  const points = cells.map(c => ({ x: c.x * 28 - 42, z: c.z * 28 - 42, y: regionalDatum(seed, c.x, c.z).y + .865 }));
-  console.info('REGIONAL_MACRO_ROUTE', JSON.stringify({ seed, coords, points, length: cells.length * 28 }));
-  try {
-    let at = points[0]!; physics.teleport(at);
-    for (const route of [[...points.slice(1), points[0]!], [...points.slice(1).reverse(), points[0]!]]) for (const target of route) {
-      at = walkTo(physics, at, target, tuning.sprintSpeed);
-      const support = Math.abs(at.y - target.y) > .05 ? worlds.flatMap((w, i) => w.topology!.surfaces.filter(s => {
-        const o = getChunkWorldOffset(coords[i]!); return at.x - o.x >= s.bounds.minX && at.x - o.x <= s.bounds.maxX && at.z - o.z >= s.bounds.minZ && at.z - o.z <= s.bounds.maxZ;
-      }).map(s => ({ id: s.id, bounds: s.bounds, profile: s.profile }))) : [];
-      expect(at.y, JSON.stringify({ target, actual: at, support })).toBeCloseTo(target.y, 1);
+  const nodes = new Map(worlds.flatMap((w, i) => w.topology!.surfaces.map(s => [s.id, { s, offset: getChunkWorldOffset(coords[i]!) }] as const)));
+  const graph = new Map<string, { to: string; at: Vec3Data }[]>();
+  const link = (from: string, to: string, at: Vec3Data) => graph.set(from, [...(graph.get(from) ?? []), { to, at }]);
+  const ports = new Map<string, { surfaceId: string; at: Vec3Data }[]>();
+  for (let i = 0; i < worlds.length; i++) {
+    const w = worlds[i]!, o = getChunkWorldOffset(coords[i]!);
+    for (const c of w.topology!.connections) {
+      if (!nodes.has(c.from) || !nodes.has(c.to) || c.kind === 'view' || c.kind === 'drop' || c.kind === 'jump' || c.requiresDoorId) continue;
+      const n = nodes.get(c.from)!, at = { x: c.at.x + o.x, z: c.at.z + o.z, y: surfaceY(n.s, c.at.x, c.at.z) + o.y + .865 };
+      link(c.from, c.to, at); if (c.direction === 'both') link(c.to, c.from, at);
     }
+    for (const p of w.spatial!.interfaces) ports.set(p.id, [...(ports.get(p.id) ?? []), { surfaceId: p.surfaceId, at: { x: p.position.x + o.x, z: p.position.z + o.z, y: p.position.y + o.y + .865 } }]);
+  }
+  for (const values of ports.values()) for (const a of values) for (const b of values) if (a !== b) link(a.surfaceId, b.surfaceId, a.at);
+  const points = cells.map(c => {
+    const desired = { x: c.x * 28 - 42, z: c.z * 28 - 42 }, y = regionalDatum(seed, c.x, c.z).y;
+    const candidates = [...nodes].flatMap(([id, n]) => {
+      const p = rectCenter(n.s.bounds), at = { x: p.x + n.offset.x, z: p.z + n.offset.z, y: surfaceY(n.s, p.x, p.z) + n.offset.y + .865 };
+      return n.s.role === 'floor' && Math.abs(at.y - y - .865) < .05 && physics.canStandAt(at) ? [{ id, at, distance: Math.hypot(at.x - desired.x, at.z - desired.z) }] : [];
+    }).sort((a, b) => a.distance - b.distance);
+    expect(candidates[0]).toBeDefined(); return candidates[0]!;
+  });
+  console.info('REGIONAL_BSP_ROUTE', JSON.stringify({ seed, coords, points: points.map(p => p.at), nominalLength: cells.length * 28 }));
+  try {
+    let current = points[0]!, at = current.at, travelled = 0; physics.teleport(at);
+    for (const route of [[...points.slice(1), points[0]!], [...points.slice(1).reverse(), points[0]!]]) for (const target of route) {
+      const queue = [current.id], previous = new Map<string, { from: string; at: Vec3Data }>(); previous.set(current.id, { from: '', at });
+      for (let i = 0; i < queue.length && !previous.has(target.id); i++) for (const edge of graph.get(queue[i]!) ?? []) if (!previous.has(edge.to)) { previous.set(edge.to, { from: queue[i]!, at: edge.at }); queue.push(edge.to); }
+      expect(previous.has(target.id), `no ordinary BSP path ${current.id} -> ${target.id}`).toBe(true);
+      const crossings: Vec3Data[] = []; let cursor = target.id;
+      while (cursor !== current.id) { const step = previous.get(cursor)!; crossings.unshift(step.at); cursor = step.from; }
+      for (const goal of [...crossings, target.at]) { travelled += Math.hypot(goal.x - at.x, goal.z - at.z); at = walkTo(physics, at, goal, tuning.sprintSpeed); }
+      expect(at.y).toBeCloseTo(target.at.y, 1); current = target;
+    }
+    expect(travelled).toBeGreaterThan(700);
+    console.info('REGIONAL_BSP_TRAVERSED_METRES', travelled);
   } finally { physics.dispose(); }
 });

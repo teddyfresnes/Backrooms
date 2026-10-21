@@ -42,8 +42,11 @@ it('uses real lower plans for open atria and directed drops, never orphan previe
   for (let i = 0; i < 16; i++) {
     const w = generateInfiniteChunk(`REGIONAL-AUDIT-${i}`, { x: 0, z: 0, story: 0 });
     expect(validateTopology(w), w.seed).toEqual([]);
+    const destinations = new Map<string, ReturnType<typeof generateInfiniteChunk>>();
     for (const c of w.topology!.connections.filter(c => c.toOwner)) {
-      const other = generateInfiniteChunk(w.seed, c.toOwner!);
+      const key = JSON.stringify(c.toOwner);
+      let other = destinations.get(key);
+      if (!other) { other = generateInfiniteChunk(w.seed, c.toOwner!); destinations.set(key, other); }
       expect(c.targetKind === 'portal' ? other.spatial?.interfaces.some(p => p.id === c.to) : other.topology?.surfaces.some(s => s.id === c.to), c.to).toBe(true);
       if (c.kind === 'drop') { expect(c.direction).toBe('forward'); drops++; }
       if (c.kind === 'stairs') stairLinks++;

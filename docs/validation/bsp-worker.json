@@ -1,0 +1,123 @@
+{
+  "node": "v24.19.0",
+  "seeds": [
+    "VERTICAL-PROMPT-AUDIT-0",
+    "VERTICAL-PROMPT-AUDIT-1",
+    "VERTICAL-PROMPT-AUDIT-2",
+    "VERTICAL-PROMPT-AUDIT-3",
+    "VERTICAL-PROMPT-AUDIT-4",
+    "VERTICAL-PROMPT-AUDIT-5",
+    "VERTICAL-PROMPT-AUDIT-6",
+    "VERTICAL-PROMPT-AUDIT-7",
+    "VERTICAL-PROMPT-AUDIT-8",
+    "VERTICAL-PROMPT-AUDIT-9",
+    "VERTICAL-PROMPT-AUDIT-10",
+    "VERTICAL-PROMPT-AUDIT-11",
+    "VERTICAL-PROMPT-AUDIT-12",
+    "VERTICAL-PROMPT-AUDIT-13",
+    "VERTICAL-PROMPT-AUDIT-14",
+    "VERTICAL-PROMPT-AUDIT-15",
+    "VERTICAL-PROMPT-AUDIT-16",
+    "VERTICAL-PROMPT-AUDIT-17",
+    "VERTICAL-PROMPT-AUDIT-18",
+    "VERTICAL-PROMPT-AUDIT-19",
+    "VERTICAL-PROMPT-AUDIT-20",
+    "VERTICAL-PROMPT-AUDIT-21",
+    "VERTICAL-PROMPT-AUDIT-22",
+    "VERTICAL-PROMPT-AUDIT-23"
+  ],
+  "startupMs": 105.451594,
+  "modes": {
+    "cold-modern": {
+      "generationMs": {
+        "median": 173.91379800000004,
+        "p95": 365.89561000000003
+      },
+      "bakeMs": {
+        "median": 37.1530470000007,
+        "p95": 59.62430900000004
+      },
+      "roundTripMs": {
+        "median": 233.94297699999993,
+        "p95": 424.737611
+      },
+      "transferAndDispatchMs": {
+        "median": 17.271699000000353,
+        "p95": 30.372207999999773
+      },
+      "heapBytes": {
+        "median": 65775760,
+        "p95": 115920016
+      },
+      "clonedBytes": {
+        "median": 2545820,
+        "p95": 3704754
+      },
+      "lightBufferBytes": {
+        "median": 184320,
+        "p95": 368640
+      }
+    },
+    "warm-modern": {
+      "generationMs": {
+        "median": 76.51989200000025,
+        "p95": 117.18660100000034
+      },
+      "bakeMs": {
+        "median": 25.267002000000502,
+        "p95": 38.117662000000564
+      },
+      "roundTripMs": {
+        "median": 125.39606400000048,
+        "p95": 160.4030990000001
+      },
+      "transferAndDispatchMs": {
+        "median": 18.82350900000165,
+        "p95": 28.487513000000035
+      },
+      "heapBytes": {
+        "median": 76731712,
+        "p95": 148717456
+      },
+      "clonedBytes": {
+        "median": 2545820,
+        "p95": 3704754
+      },
+      "lightBufferBytes": {
+        "median": 184320,
+        "p95": 368640
+      }
+    },
+    "cold-legacy": {
+      "generationMs": {
+        "median": 157.7342009999993,
+        "p95": 205.87001299999974
+      },
+      "bakeMs": {
+        "median": 374.3060689999984,
+        "p95": 467.39917700000115
+      },
+      "roundTripMs": {
+        "median": 559.5013020000006,
+        "p95": 660.8582430000024
+      },
+      "transferAndDispatchMs": {
+        "median": 18.706834000000526,
+        "p95": 26.946554999998625
+      },
+      "heapBytes": {
+        "median": 58183488,
+        "p95": 151412368
+      },
+      "clonedBytes": {
+        "median": 2545820,
+        "p95": 3704754
+      },
+      "lightBufferBytes": {
+        "median": 401408,
+        "p95": 401408
+      }
+    }
+  },
+  "limitation": "Node worker_threads CPU/structured-clone proxy; no browser Worker scheduling, GPU, draw calls or frame latency."
+}

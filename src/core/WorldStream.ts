@@ -8,6 +8,7 @@ import type {
   WorldDiagnostics,
 } from './Diagnostics';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
+import { bakeRegionalLightData, type RegionalLightData } from '../render/RegionalLighting';
 import { bakeLightMapData } from '../render/BakedLighting';
 import type { BakedLightMapData } from '../render/BakedLighting';
 import type { LightingMode } from '../render/LightingMode';
@@ -54,6 +55,7 @@ interface ActiveChunk {
   coord: Readonly<ChunkCoord>;
   plan: WorldPlan;
   lightMaps?: BakedLightMapData;
+  regionalLightData?: RegionalLightData;
   lightingMode: LightingMode;
   view: WorldView;
   offset: THREE.Vector3;
@@ -64,18 +66,21 @@ interface WorkerResponse {
   key: ChunkKey;
   plan?: WorldPlan;
   lightMaps?: BakedLightMapData;
+  regionalLightData?: RegionalLightData;
   error?: string;
 }
 
 interface LightingWorkerResponse {
   id: number;
   lightMaps?: BakedLightMapData;
+  regionalLightData?: RegionalLightData;
   error?: string;
 }
 
 interface PreparedChunk {
   plan: WorldPlan;
   lightMaps?: BakedLightMapData;
+  regionalLightData?: RegionalLightData;
 }
 
 export interface WorldLightingContext {
@@ -312,6 +317,7 @@ export class WorldStream {
     const originLightMaps = this.lightingMode === 'legacy'
       ? bakeLightMapData(this.originPlan)
       : undefined;
+    const originRegionalLightData = this.originPlan.spatial && this.lightingMode !== 'legacy' ? bakeRegionalLightData(this.originPlan) : undefined;
     let prepared = new Map<ChunkKey, PreparedChunk>();
     try {
       prepared = await workerPreparation;
@@ -344,6 +350,7 @@ export class WorldStream {
             plan,
             coord,
             key === originMetadata.key ? originLightMaps : ready?.lightMaps,
+            key === originMetadata.key ? originRegionalLightData : ready?.regionalLightData,
           );
         }
       });
@@ -415,6 +422,7 @@ export class WorldStream {
           prepared?.plan ?? generateInfiniteChunk(this.seed, centerKey),
           this.centerCoord,
           prepared?.lightMaps,
+          prepared?.regionalLightData,
         );
         this.preparedChunks.delete(centerKey);
         sourcesChanged = true;
@@ -433,7 +441,7 @@ export class WorldStream {
       const readyKey = createChunkKey(readyCoord);
       const ready = this.preparedChunks.get(readyKey)!;
       this.preparedChunks.delete(readyKey);
-      this.mountChunk(ready.plan, readyCoord, ready.lightMaps);
+      this.mountChunk(ready.plan, readyCoord, ready.lightMaps, ready.regionalLightData);
       sourcesChanged = true;
       missing = desiredCoords.filter((coord) => !this.chunks.has(createChunkKey(coord)));
     }
@@ -664,7 +672,7 @@ export class WorldStream {
             const lightMaps = this.lightingMode === 'legacy'
               ? bakeLightMapData(plan)
               : undefined;
-            return { plan, lightMaps };
+            return { plan, lightMaps, regionalLightData: undefined };
           })();
       return { coord, key, prepared: generated };
     }));
@@ -672,7 +680,7 @@ export class WorldStream {
     this.physics.batchChunkChanges(() => {
       for (const ready of prepared) {
         if (!ready.prepared) continue;
-        this.mountChunk(ready.prepared.plan, ready.coord, ready.prepared.lightMaps);
+        this.mountChunk(ready.prepared.plan, ready.coord, ready.prepared.lightMaps, ready.prepared.regionalLightData);
       }
     });
     for (const ready of prepared) this.preparedChunks.delete(ready.key);
@@ -704,6 +712,7 @@ export class WorldStream {
           this.recoveryChunk!.prepared.plan,
           coord,
           this.recoveryChunk!.prepared.lightMaps,
+          this.recoveryChunk!.prepared.regionalLightData,
         );
       });
       this.refreshLightSources();
@@ -717,7 +726,7 @@ export class WorldStream {
     }
     this.physics.batchChunkChanges(() => {
       const plan = prepared?.plan ?? generateInfiniteChunk(this.seed, key);
-      this.mountChunk(plan, coord, prepared?.lightMaps);
+      this.mountChunk(plan, coord, prepared?.lightMaps, prepared?.regionalLightData);
     });
     this.preparedChunks.delete(key);
     this.refreshLightSources();
@@ -1336,7 +1345,7 @@ export class WorldStream {
     const view = new WorldView(
       runtime.plan,
       this.materials[runtime.plan.visualBiome ?? 'yellow'],
-      { lightingMode: mode, bakedLightMaps: mode === 'legacy' ? lightMaps : undefined },
+      { lightingMode: mode, bakedLightMaps: mode === 'legacy' ? lightMaps : undefined, regionalLightData: runtime.regionalLightData },
     );
     view.group.position.copy(runtime.offset);
     view.setWorldOffset(runtime.offset);
@@ -1362,6 +1371,7 @@ export class WorldStream {
     plan: WorldPlan,
     coordOverride?: Readonly<ChunkCoord>,
     suppliedLightMaps?: BakedLightMapData,
+    suppliedRegionalLightData?: RegionalLightData,
   ): void {
     let metadata = getInfiniteChunkMetadata(plan);
     if (!metadata && coordOverride) {
@@ -1380,7 +1390,7 @@ export class WorldStream {
     const view = new WorldView(
       plan,
       this.materials[plan.visualBiome ?? 'yellow'],
-      { lightingMode: this.lightingMode, bakedLightMaps: lightMaps },
+      { lightingMode: this.lightingMode, bakedLightMaps: lightMaps, regionalLightData: suppliedRegionalLightData },
     );
     view.group.position.copy(offset);
     view.setWorldOffset(offset);
@@ -1393,6 +1403,7 @@ export class WorldStream {
         coord,
         plan,
         lightMaps,
+        regionalLightData: suppliedRegionalLightData,
         lightingMode: this.lightingMode,
         view,
         offset,
@@ -1411,7 +1422,7 @@ export class WorldStream {
       // would overlap epic1's stacked previews with the real lower stories.
       this.recoveryChunk = {
         key,
-        prepared: { plan: runtime.plan, lightMaps: runtime.lightMaps },
+        prepared: { plan: runtime.plan, lightMaps: runtime.lightMaps, regionalLightData: runtime.regionalLightData },
       };
     }
     this.physics.removeChunk(key);
@@ -1551,6 +1562,7 @@ export class WorldStream {
         this.preparedChunks.set(request.key, {
           plan: event.data.plan,
           lightMaps: event.data.lightMaps,
+          regionalLightData: event.data.regionalLightData,
         });
         if (this.preparedChunks.size > 12) {
           const oldest = this.preparedChunks.keys().next().value;
@@ -1560,7 +1572,7 @@ export class WorldStream {
       this.pumpVerticalPrefetch();
       return;
     }
-    this.mountChunk(event.data.plan, request.coord, event.data.lightMaps);
+    this.mountChunk(event.data.plan, request.coord, event.data.lightMaps, event.data.regionalLightData);
     this.refreshLightSources();
     this.pendingChunks = Math.max(0, this.pendingChunks - 1);
     this.pumpVerticalPrefetch();
@@ -1613,7 +1625,7 @@ export class WorldStream {
           if (response.error || !response.plan) {
             throw new Error(response.error ?? `Worker returned no plan for ${key}.`);
           }
-          prepared.set(key, { plan: response.plan, lightMaps: response.lightMaps });
+          prepared.set(key, { plan: response.plan, lightMaps: response.lightMaps, regionalLightData: response.regionalLightData });
         }
       } finally {
         worker.terminate();
@@ -1649,7 +1661,7 @@ export class WorldStream {
       if (response.error || !response.plan) {
         throw new Error(response.error ?? `Worker returned no plan for ${key}.`);
       }
-      return { plan: response.plan, lightMaps: response.lightMaps };
+      return { plan: response.plan, lightMaps: response.lightMaps, regionalLightData: response.regionalLightData };
     } finally {
       this.preparationWorkers.delete(worker);
       worker.terminate();

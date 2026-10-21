@@ -35,11 +35,14 @@ Les anciens aperçus ci-dessous concernent les monuments et le chemin legacy.
 Le worker (`src/world/infinite.worker.ts`) calcule le `WorldPlan` sérialisable.
 `WorldStream.mountChunk()` crée les matériaux zonaux puis applique l’offset monde
 au groupe Three.js, au contexte shader et au lot de colliders. Le démontage doit
-retirer les ressources visuelles et physiques, dont la texture d’exposition
+retirer les ressources visuelles et physiques, dont les deux textures de lumière
 régionale. `buildSpatialArchitecture` consomme uniquement les surfaces/prismes
-communs ; aucune coque ou dalle historique n’est rajoutée à zéro. Les deux modes
-reçoivent le champ `RegionalLighting` indexé par intervalle vertical. Il réduit
-les fuites entre couches mais reste une approximation, pas un calcul d’ombres.
+communs et écrit directement les buffers par matériau, sans géométrie GPU
+intermédiaire pour chaque fragment ; aucune dalle historique n’est rajoutée à zéro. Le mode moderne sélectionne le champ fluorescent historique par volume dans
+`RegionalLighting`, sans multiplier une seconde fois l’exposition. Les buffers
+CPU sont calculés et transférés par `infinite.worker`, puis montés avec le chunk.
+Le mode classique conserve son bake, avec filtrage vertical des contributions.
+Ces méthodes restent des approximations, pas un calcul d’ombres 3D.
 Les sauvegardes reprojettent dans le propriétaire enregistré : voir le contrat
 vertical pour la migration des ancrages et le repli sûr.
 
@@ -185,10 +188,18 @@ redondante, pas de lui appliquer un décalage arbitraire.
 non morts restent des émetteurs visuels ; le rendu des surfaces utilise un champ
 fluorescent dans `ZonalLighting.ts`. Une clé directionnelle douce, sans shadow
 map, révèle les normales et les coins sans réintroduire les bandes du bake.
-Chaque chunk dérive aussi de ses panneaux et volumes une texture RG8 de 96² :
+Le chemin historique dérive des panneaux et volumes une texture RG8 de 96² :
 elle produit de larges nappes locales et une proximité structurelle très douce
 aux contacts, sans rayon ni visibilité murale. Le shader effectue une seule
 lecture par fragment et la texture doit être libérée avec le `WorldView`.
+Pour les plans spatiaux modernes, les mêmes valeurs sont regroupées dans un atlas
+96² par couche : bornes verticales float en nearest, exposition/contacts/blackout
+en RGBA8 linéaire. Le nombre de couches suit le chevauchement réel sans troncature
+à trois. Les contacts sont relatifs au sol et au plafond du volume. Deux volumes
+ayant les mêmes sources/structures réutilisent leur calcul CPU ; le worker
+transfère les buffers, sans objets Three dans `WorldPlan`. Les deux textures GPU
+sont libérées au démontage. Les pièces utilisent les panneaux fiables, teintes,
+intensités et dispositions du générateur historique.
 
 `WorldPlan.unlitZones` reste en coordonnées locales. Le shader évalue ces
 rectangles depuis la position monde moins l’origine du chunk, avec un fondu aux

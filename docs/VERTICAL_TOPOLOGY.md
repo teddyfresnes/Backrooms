@@ -1,9 +1,10 @@
 # Architecture régionale à plusieurs couches
 
-Le monde ordinaire utilise `WorldPlan.version = 11`, `topology.version = 2` et
-`spatial.version = 2`. Le BSP v10 reste disponible explicitement dans
+Le monde ordinaire utilise `WorldPlan.version = 12`, `topology.version = 2` et
+`spatial.version = 2`. Le pipeline complet v10 reste disponible explicitement dans
 `generateLegacyWorld` / `generateLegacyInfiniteChunk` pour les monuments,
-leurs résumés et les reproductions `RAW_LOCAL_`.
+leurs résumés et les reproductions `RAW_LOCAL_`. Les plateaux ordinaires réutilisent
+aussi ses subdivisions, ouvertures, épaisseurs et détails via `generateBspArchitecture`.
 
 ## Planification avant construction
 
@@ -47,8 +48,14 @@ Les halls et ensembles à colonnes peuvent fusionner entre cellules d’un même
 district. Les cloisons à portes décalées, les changements d’épaisseur, les
 colonnes, les portes interactives et les circuits de blackout restent générés.
 Les colonnes retirent leur emprise des sols de navigation ; leurs IDs n’altèrent
-pas les autres surfaces. Les variantes BSP plus anciennes appartiennent au
-chemin legacy, pas à la distribution des nouveaux chunks ordinaires.
+pas les autres surfaces. Le BSP est planifié sur 224 m, avant les découpes locales ; aucune façade n’est
+créée à une frontière de cellule à datum identique. Les pièces ordinaires gardent
+un plafond de base à 2,74 m, avec variations bornées à 4,35 m pour conserver le
+pas d’adresse actuel. Les parcours inclinés gardent leur dégagement de 3,05 m.
+Les murs, masses et pilastres sont exclus des sols de navigation. Une passe
+bornée répare les poches créées par les découpes, sans toucher aux façades
+régionales, aux supports d’escaliers ou aux portes. Les arcs de porte portent
+`requiresDoorId`, préfixé avec les autres références.
 
 ## Circulations réelles
 
@@ -117,12 +124,13 @@ Le personnage et les ragdolls conservent les réglages actuels et le même Rapie
 plan. Aucune reconstruction héritée ne rajoute un sol ou plafond à zéro. Les
 UV restent à l’échelle monde sur les rampes, marches, chants et sous-faces.
 
-Les deux rendus utilisent `RegionalLighting`, atlas 64×64 avec trois intervalles
-verticaux par texel. Une lumière n’affecte que le volume libre qui la contient.
-Ce champ module l’exposition et conserve les blackouts ; le mode classique le
-combine avec son bake. C’est une approximation d’éclairage, sans preuve de
-compilation GPU, d’ombres exactes ou de qualité visuelle dans les tests Node.
-L’atlas est libéré avec chaque vue ; il ne crée pas un shader par seed.
+Le mode moderne réutilise le champ fluorescent historique, sélectionné par
+volume : atlas 96² avec autant de couches que le chevauchement réel. Il ne rajoute
+aucun multiplicateur d’exposition. Les contacts utilisent le sol et plafond locaux.
+Le worker prépare des buffers sérialisables et les transfère avant le montage ;
+les deux textures GPU sont possédées par la vue. Le classique conserve son bake
+avec filtrage vertical des sources et occluders. Les pannes et blackouts suivent
+la logique historique des pièces.
 
 Le schéma de sauvegarde 2 reste lisible. L’ancrage optionnel `{version,id,layer}`
 et l’adresse enregistrée retrouvent le support. Un ancien ancrage est reprojeté

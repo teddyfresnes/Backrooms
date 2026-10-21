@@ -8,6 +8,7 @@ export interface SpatialPrism {
   vertices: number[];
   material: 'wall' | 'ceiling' | 'baseboard' | 'plaster';
   collision: boolean;
+  tint?: number;
 }
 export interface SpatialDependency {
   owner: SpatialAddress; bounds: Rect; bottom: number; top: number;

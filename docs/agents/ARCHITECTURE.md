@@ -76,7 +76,9 @@ Le contrat central du labyrinthe reste `WorldPlan` dans `src/world/types.ts` ;
 la génération ne crée que des données et le rendu et la physique les consomment
 séparément. Le chemin ordinaire passe par `RegionalPlan` → `SpatialConnectors` →
 `SpatialWorld`, avant les détails. L’adresse `story` ne donne pas l’altitude du sol.
-Le BSP historique reste explicite pour les monuments et les reproductions brutes.
+Le pipeline historique complet reste explicite pour les monuments et les reproductions
+brutes. Son BSP est également réutilisé sur 224 m dans les plateaux ordinaires ;
+les réservations régionales précèdent la matérialisation aux altitudes finales.
 
 ## Responsabilités
 

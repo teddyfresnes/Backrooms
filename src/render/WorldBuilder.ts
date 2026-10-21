@@ -1,6 +1,6 @@
-import { createWalkableGeometry } from './WalkableGeometry';
-import { applyRegionalLighting, createRegionalLightField, type RegionalLightField } from './RegionalLighting';
-import { createSpatialPrismGeometry } from './SpatialGeometry';
+import { createWalkableBatch, createWalkableGeometry } from './WalkableGeometry';
+import { applyRegionalLighting, createRegionalLightField, type RegionalLightData, type RegionalLightField } from './RegionalLighting';
+import { createSpatialPrismBatch } from './SpatialGeometry';
 import { applySurfaceLighting } from './SurfaceLighting';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -1395,6 +1395,7 @@ const DEFAULT_SURFACE_STYLE: SurfaceStyle = {
 export interface WorldViewOptions {
   lightingMode?: LightingMode;
   bakedLightMaps?: BakedLightMapData;
+  regionalLightData?: RegionalLightData;
 }
 
 export class WorldView {
@@ -1443,10 +1444,10 @@ export class WorldView {
       this.ownedMaterials = zonal.ownedMaterials;
     }
     this.surfaceStyle = plan.surfaceStyle ?? DEFAULT_SURFACE_STYLE;
-    this.regionalLightField = plan.spatial ? createRegionalLightField(plan) : undefined;
+    this.regionalLightField = plan.spatial && this.lightingContext ? createRegionalLightField(plan, options.regionalLightData) : undefined;
     if (this.lightingContext) this.lightingContext.regionalField = this.regionalLightField;
     for (const material of [this.materials.floor, this.materials.wall, this.materials.plaster, this.materials.ceiling, this.materials.baseboard]) {
-      if (this.regionalLightField) applyRegionalLighting(material, this.regionalLightField); else applySurfaceLighting(material, plan);
+      if (this.regionalLightField) applyRegionalLighting(material, this.regionalLightField); else if (!plan.spatial) applySurfaceLighting(material, plan);
     }
     this.materials.wall.color.multiplyScalar(this.surfaceStyle.wallTint);
     this.materials.plaster.color.multiplyScalar(this.surfaceStyle.wallTint);
@@ -1560,11 +1561,14 @@ export class WorldView {
 
   private buildSpatialArchitecture(): void {
     const spatial = this.plan.spatial!, surfaces = this.plan.topology!.surfaces;
-    makeMesh(mergeOrSingle(surfaces.map(s => createWalkableGeometry(s, 'top', this.surfaceStyle.floorPatternScale, this.surfaceStyle.floorQuarterTurn))), this.materials.floor, 'regional-carpet-floors', this.group);
-    makeMesh(mergeOrSingle(surfaces.map(s => createWalkableGeometry(s, 'underside', this.surfaceStyle.ceilingPatternScale))), this.materials.ceiling, 'regional-floor-undersides', this.group);
-    makeMesh(mergeOrSingle(surfaces.map(s => createWalkableGeometry(s, 'sides', this.surfaceStyle.wallPatternScale))), this.materials.wall, 'regional-floor-chants', this.group);
-    for (const face of ['top', 'underside', 'sides'] as const) makeMesh(mergeOrSingle(spatial.ceilings.map(s => createWalkableGeometry(s, face, this.surfaceStyle.ceilingPatternScale))), this.materials.ceiling, `regional-ceilings-${face}`, this.group);
-    for (const material of ['wall', 'plaster', 'ceiling', 'baseboard'] as const) makeMesh(mergeOrSingle(spatial.prisms.filter(p => p.material === material).map(p => createSpatialPrismGeometry(p, this.surfaceStyle.wallPatternScale))), this.materials[material], `regional-${material}-structures`, this.group);
+    makeMesh(createWalkableBatch(surfaces, 'top', this.surfaceStyle.floorPatternScale, this.surfaceStyle.floorQuarterTurn), this.materials.floor, 'regional-carpet-floors', this.group);
+    makeMesh(createWalkableBatch(surfaces, 'underside', this.surfaceStyle.ceilingPatternScale), this.materials.ceiling, 'regional-floor-undersides', this.group);
+    makeMesh(createWalkableBatch(surfaces, 'sides', this.surfaceStyle.wallPatternScale), this.materials.wall, 'regional-floor-chants', this.group);
+    for (const face of ['top', 'underside', 'sides'] as const) makeMesh(createWalkableBatch(spatial.ceilings, face, this.surfaceStyle.ceilingPatternScale), this.materials.ceiling, `regional-ceilings-${face}`, this.group);
+    for (const material of ['wall', 'plaster', 'ceiling', 'baseboard'] as const) {
+      const prisms = spatial.prisms.filter(p => p.material === material);
+      if (prisms.length) makeMesh(createSpatialPrismBatch(prisms, this.surfaceStyle.wallPatternScale), this.materials[material], `regional-${material}-structures`, this.group);
+    }
   }
 
   private buildArchitecture(): void {
@@ -4200,6 +4204,7 @@ export class WorldView {
     this.graffitiTextures.forEach((texture) => texture.dispose());
     this.lightingContext?.lightField.dispose();
     this.regionalLightField?.texture.dispose();
+    this.regionalLightField?.lighting.dispose();
     this.bakedLightMaps?.general.dispose();
     this.bakedLightMaps?.ceiling.dispose();
     this.group.removeFromParent();

@@ -2,6 +2,7 @@ import { performance } from 'node:perf_hooks';
 import { getHeapStatistics } from 'node:v8';
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d';
+import { bakeRegionalLightData } from '../src/render/RegionalLighting';
 import { WorldView } from '../src/render/WorldBuilder';
 import { PhysicsWorld } from '../src/physics/PhysicsWorld';
 import type { MaterialSet } from '../src/render/MaterialLibrary';
@@ -37,7 +38,9 @@ const reproduction = async () => {
   physics.dispose(); view.dispose(); Object.values(materials).forEach(m => m.dispose()); return result;
 };
 const architecturalMetrics = async (world: WorldPlan) => {
-  const materials = materialsForAudit(), start = performance.now(), view = new WorldView({ ...world, propPlacements: [] }, materials); await view.ready;
+  const bakeStart = performance.now(), regionalLightData = world.spatial ? bakeRegionalLightData(world) : undefined;
+  const regionalBakeMs = performance.now() - bakeStart;
+  const materials = materialsForAudit(), start = performance.now(), view = new WorldView({ ...world, propPlacements: [] }, materials, { regionalLightData }); await view.ready;
   const prepareMs = performance.now() - start; let triangles = 0, materialBatches = 0;
   view.group.traverse(object => {
     if (!(object instanceof THREE.Mesh)) return;
@@ -48,9 +51,10 @@ const architecturalMetrics = async (world: WorldPlan) => {
   const mountStart = performance.now(), physics = await PhysicsWorld.create({ ...world, propPlacements: [] });
   const physicsMountMs = performance.now() - mountStart, heap = getHeapStatistics().used_heap_size;
   physics.dispose(); view.dispose(); Object.values(materials).forEach(m => m.dispose());
-  return { prepareMs, physicsMountMs, triangles, materialBatches, heap };
+  return { prepareMs, regionalBakeMs, physicsMountMs, triangles, materialBatches, heap };
 };
 const measure = async (infinite: boolean, warm = false) => {
+  const regionalBakeMs: number[] = [];
   const times: number[] = [], bytes: number[] = [], colliders: number[] = [], cloneMs: number[] = [], prepareMs: number[] = [], physicsMountMs: number[] = [], triangles: number[] = [], materialBatches: number[] = [], heaps: number[] = [];
   (globalThis as { gc?: () => void }).gc?.(); const heapBefore = getHeapStatistics().used_heap_size;
   for (const seed of seeds) {
@@ -60,11 +64,11 @@ const measure = async (infinite: boolean, warm = false) => {
     times.push(performance.now() - start);
     const cloneStart = performance.now(); structuredClone(world); cloneMs.push(performance.now() - cloneStart);
     bytes.push(Buffer.byteLength(JSON.stringify(world))); colliders.push(world.colliders.length);
-    const metrics = await architecturalMetrics(world); prepareMs.push(metrics.prepareMs); physicsMountMs.push(metrics.physicsMountMs);
+    const metrics = await architecturalMetrics(world); prepareMs.push(metrics.prepareMs); regionalBakeMs.push(metrics.regionalBakeMs); physicsMountMs.push(metrics.physicsMountMs);
     triangles.push(metrics.triangles); materialBatches.push(metrics.materialBatches); heaps.push(metrics.heap);
   }
   (globalThis as { gc?: () => void }).gc?.();
-  return { generationMs: summary(times), cloneMs: summary(cloneMs), architecturalPrepareMs: summary(prepareMs), physicsMountMs: summary(physicsMountMs),
+  return { generationMs: summary(times), cloneMs: summary(cloneMs), architecturalPrepareMs: summary(prepareMs), regionalBakeMs: summary(regionalBakeMs), physicsMountMs: summary(physicsMountMs),
     jsonBytes: summary(bytes), colliders: summary(colliders), triangles: summary(triangles), materialBatches: summary(materialBatches), sampledHeapPeakBytes: Math.max(...heaps), retainedHeapDeltaBytes: getHeapStatistics().used_heap_size - heapBefore };
 };
 /** Acceptance thresholds are declared before collecting the normal-seed sample. */

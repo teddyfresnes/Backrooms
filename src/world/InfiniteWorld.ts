@@ -2,7 +2,7 @@ import { applyVerticalBoundaries, getVerticalGateApproach } from './VerticalBoun
 import { applyRegionalClaims, planRegionalVolumes, type RegionalClaim } from './RegionalVolumes';
 import { finalizeVerticalTopology, fitVerticalArchitecture, clearVerticalApertures } from './VerticalPlanner';
 import { prefixTopology, cutRects, LOWEST_STRUCTURE_Y } from './WalkableTopology';
-import { generateSpatialWorld } from './SpatialWorld';
+import { clearBspArchitectureCache, generateSpatialWorld } from './SpatialWorld';
 import { clearRegionalPlanCache, regionalAtrium, regionalDatum, regionalStyle } from './RegionalPlan';
 import {
   addStepColliders,
@@ -340,6 +340,7 @@ const protectedStructuralRects = (seed: string, coord: ChunkCoord): Rect[] => {
 };
 const regionalCache = new Map<string, RegionalClaim[]>();
 export const clearInfiniteWorldCaches = (): void => {
+  clearBspArchitectureCache();
   clearRegionalPlanCache();
   structuralCache.clear(); enclosureCache.clear(); canonicalGateCache.clear(); regionalCache.clear();
   inheritedShaftOpeningsCache.clear(); floorOpeningsCache.clear(); inheritedStairCache.clear(); rawLocalFloorOpeningsCache.clear();
