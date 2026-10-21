@@ -39,7 +39,7 @@ it('shares actual nonzero seam heights and preserves order and structured clonin
 
 it('uses real lower plans for open atria and directed drops, never orphan previews', () => {
   let drops = 0, stairLinks = 0, overlapping = 0;
-  for (let i = 0; i < 16; i++) {
+  for (const i of [...Array.from({ length: 16 }, (_, i) => i), 23, 69]) {
     const w = generateInfiniteChunk(`REGIONAL-AUDIT-${i}`, { x: 0, z: 0, story: 0 });
     expect(validateTopology(w), w.seed).toEqual([]);
     const destinations = new Map<string, ReturnType<typeof generateInfiniteChunk>>();
@@ -63,7 +63,7 @@ it('keeps the standing capsule free on generated floors and across real stairs',
     const w = generateInfiniteChunk(`REGIONAL-AUDIT-${i}`, { x: 0, z: 0, story: 0 }), physics = await PhysicsWorld.create(w);
     try {
       expect(physics.canStandAt(w.spawn), w.seed).toBe(true);
-      for (const s of w.topology!.surfaces.filter(s => s.role === 'floor' && s.bounds.maxX - s.bounds.minX > 3 && s.bounds.maxZ - s.bounds.minZ > 3)) {
+      for (const s of w.topology!.surfaces.filter(s => s.role === 'floor' && s.locomotion !== 'crouch' && s.bounds.maxX - s.bounds.minX > 3 && s.bounds.maxZ - s.bounds.minZ > 3)) {
         const p = rectCenter(s.bounds), y = surfaceY(s, p.x, p.z);
         const blocker = physics.world.intersectionWithShape({ ...p, y: y + .91 }, { x: 0, y: 0, z: 0, w: 1 }, new RAPIER.Capsule(.52, .32),
           undefined, undefined, undefined, undefined, physics.isEnvironmentCollider);

@@ -37,6 +37,6 @@ export const endpointStairRun = (bounds: Rect, axis: 'x' | 'z', startY: number, 
   return Array.from({ length: count }, (_, index) => ({ index, count,
     bounds: axis === 'x' ? { ...bounds, minX: min + (max - min) * index / count, maxX: min + (max - min) * (index + 1) / count }
       : { ...bounds, minZ: min + (max - min) * index / count, maxZ: min + (max - min) * (index + 1) / count },
-    profile: { kind: 'flat' as const, y: startY + (endY - startY) * (index + .5) / count },
+    profile: { kind: 'flat' as const, y: index === count - 1 ? endY : startY + (endY - startY) * (index + 1) / count },
   }));
 };

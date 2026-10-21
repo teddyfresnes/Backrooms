@@ -101,4 +101,10 @@ clonage, JSON, architecture Three, montage Rapier et mémoire JS.
 transfert réel par clonage structuré et bake classique. Ce proxy ne mesure pas
 l’ordonnancement des Workers du navigateur. Aucun de ces benchmarks ne mesure
 GPU ou draw calls. Exécuter les mesures avant/après sans charge concurrente.
-Voir [REGIONAL_VALIDATION.md](../REGIONAL_VALIDATION.md) pour les preuves courantes.
+Voir [TRANSITION_VALIDATION.md](../validation/TRANSITION_VALIDATION.md) pour v13
+et [REGIONAL_VALIDATION.md](../REGIONAL_VALIDATION.md) pour la référence antérieure.
+
+Les tests `TransitionLayout`, `TransitionMount`, `SpatialFeaturesPhysical`,
+`ArchitecturalUV` et `ArchitectureDebug` protègent les transitions v13, les
+trous réintégrés et les ressources des diagnostics. La séparation entre toit et
+étage supérieur se mesure au même point horizontal, y compris sur un toit incliné.

@@ -1,3 +1,4 @@
+import { ArchitectureDebug, type ArchitectureDebugMode } from './ArchitectureDebug';
 import { createWalkableBatch, createWalkableGeometry } from './WalkableGeometry';
 import { applyRegionalLighting, createRegionalLightField, type RegionalLightData, type RegionalLightField } from './RegionalLighting';
 import { createSpatialPrismBatch } from './SpatialGeometry';
@@ -1400,6 +1401,7 @@ export interface WorldViewOptions {
 
 export class WorldView {
   readonly group = new THREE.Group();
+  private architectureDebug?: ArchitectureDebug;
   readonly ready: Promise<void>;
   private readonly emitterMesh: THREE.InstancedMesh;
   private readonly fixtureSlots: LightSlot[];
@@ -1561,13 +1563,14 @@ export class WorldView {
 
   private buildSpatialArchitecture(): void {
     const spatial = this.plan.spatial!, surfaces = this.plan.topology!.surfaces;
-    makeMesh(createWalkableBatch(surfaces, 'top', this.surfaceStyle.floorPatternScale, this.surfaceStyle.floorQuarterTurn), this.materials.floor, 'regional-carpet-floors', this.group);
-    makeMesh(createWalkableBatch(surfaces, 'underside', this.surfaceStyle.ceilingPatternScale), this.materials.ceiling, 'regional-floor-undersides', this.group);
-    makeMesh(createWalkableBatch(surfaces, 'sides', this.surfaceStyle.wallPatternScale), this.materials.wall, 'regional-floor-chants', this.group);
-    for (const face of ['top', 'underside', 'sides'] as const) makeMesh(createWalkableBatch(spatial.ceilings, face, this.surfaceStyle.ceilingPatternScale), this.materials.ceiling, `regional-ceilings-${face}`, this.group);
+    const origin = { x: spatial.owner.x * 112, y: spatial.owner.story * 5.4, z: spatial.owner.z * 112 };
+    makeMesh(createWalkableBatch(surfaces, 'top', this.surfaceStyle.floorPatternScale, this.surfaceStyle.floorQuarterTurn, origin, true), this.materials.floor, 'regional-carpet-floors', this.group);
+    makeMesh(createWalkableBatch(surfaces, 'underside', this.surfaceStyle.ceilingPatternScale, false, origin, true), this.materials.ceiling, 'regional-floor-undersides', this.group);
+    makeMesh(createWalkableBatch(surfaces, 'sides', this.surfaceStyle.wallPatternScale, false, origin, true), this.materials.wall, 'regional-floor-chants', this.group);
+    for (const face of ['top', 'underside', 'sides'] as const) makeMesh(createWalkableBatch(spatial.ceilings, face, this.surfaceStyle.ceilingPatternScale, false, origin, true), this.materials.ceiling, `regional-ceilings-${face}`, this.group);
     for (const material of ['wall', 'plaster', 'ceiling', 'baseboard'] as const) {
       const prisms = spatial.prisms.filter(p => p.material === material);
-      if (prisms.length) makeMesh(createSpatialPrismBatch(prisms, this.surfaceStyle.wallPatternScale), this.materials[material], `regional-${material}-structures`, this.group);
+      if (prisms.length) makeMesh(createSpatialPrismBatch(prisms, material === 'ceiling' ? this.surfaceStyle.ceilingPatternScale : this.surfaceStyle.wallPatternScale, origin), this.materials[material], `regional-${material}-structures`, this.group);
     }
   }
 
@@ -3157,6 +3160,7 @@ export class WorldView {
   }
 
   private buildRaisedZones(): void {
+    if (this.plan.spatial) return; // Regional features already own their authoritative surfaces and solids.
     const features = this.plan.features.filter(
       (feature): feature is RaisedZoneFeature => feature.kind === 'raised-zone',
     );
@@ -3241,6 +3245,7 @@ export class WorldView {
   }
 
   private buildLowPassages(): void {
+    if (this.plan.spatial) return; // Regional features already own their authoritative surfaces and solids.
     const features = this.plan.features.filter(
       (feature): feature is SqueezeViewFeature => feature.kind === 'squeeze-view',
     );
@@ -3433,6 +3438,7 @@ export class WorldView {
   }
 
   private buildPitFeatures(): void {
+    if (this.plan.spatial) return; // Regional features already own their authoritative surfaces and solids.
     const features = this.plan.features.filter((feature): feature is GridPitFeature => feature.kind === 'grid-pit');
     const sideGeometries: THREE.BufferGeometry[] = [];
     const abyssSideGeometries: THREE.BufferGeometry[] = [];
@@ -3553,6 +3559,7 @@ export class WorldView {
   }
 
   private buildStairs(): void {
+    if (this.plan.spatial) return; // Regional features already own their authoritative surfaces and solids.
     const stairFeatures = this.plan.features.filter(
       (feature): feature is StairSocketFeature => feature.kind === 'stair-socket',
     );
@@ -4117,6 +4124,11 @@ export class WorldView {
     this.doorLayer.update(delta);
   }
 
+  setArchitectureDebug(mode: ArchitectureDebugMode): void {
+    this.architectureDebug ??= new ArchitectureDebug(this.group, this.plan);
+    this.architectureDebug.setMode(mode);
+  }
+
   setWorldOffset(offset: Readonly<THREE.Vector3>): void {
     this.lightingContext?.worldOffset.copy(offset);
     this.regionalLightField?.offset.copy(offset);
@@ -4194,6 +4206,7 @@ export class WorldView {
   }
 
   dispose(): void {
+    this.architectureDebug?.dispose();
     this.doorLayer.dispose();
     this.propLayer.dispose();
     this.group.traverse((object) => {

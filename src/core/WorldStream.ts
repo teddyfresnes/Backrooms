@@ -1,3 +1,4 @@
+import type { ArchitectureDebugMode } from '../render/ArchitectureDebug';
 import { cutRects, findSurface, surfaceY, TOPOLOGY_VERSION } from '../world/WalkableTopology';
 import { regionalOwnerAt } from '../world/RegionalPlan';
 import type { CharacterPit } from '../character/CharacterEnvironment';
@@ -224,6 +225,11 @@ export class WorldStream {
   private readonly localPlayer = new THREE.Vector3();
   private readonly runtimeOffset = new THREE.Vector3();
   private readonly visibilityPosition = new THREE.Vector3();
+  private architectureDebugMode: ArchitectureDebugMode = 'off';
+  setArchitectureDebug(mode: ArchitectureDebugMode): void {
+    this.architectureDebugMode = mode;
+    for (const runtime of this.chunks.values()) runtime.view.setArchitectureDebug(mode);
+  }
   private readonly diagnosticsRaycaster = new THREE.Raycaster();
   private centerCoord: ChunkCoord = { x: 0, z: 0, story: 0 };
   private pendingChunks = 0;
@@ -270,17 +276,18 @@ export class WorldStream {
       for (const c of runtime.plan.spatial?.cells ?? []) {
         if (c.mode !== 'gallery' && c.mode !== 'void') continue;
         const cuts = runtime.plan.topology!.surfaces.filter(s => s.roomId?.startsWith(c.id + '/')).map(s => s.bounds);
-        const depth = (runtime.coord.story - (c.atriumOwner ?? runtime.coord.story) + 2) * 5.4;
+        const depth = (runtime.coord.story - (c.atriumLower ?? (c.atriumOwner ?? runtime.coord.story) - 2)) * 5.4;
         for (const [i, b] of cutRects([c.bounds], cuts).entries()) result.push({ id: `${c.id}/pit-${i}`, minX: b.minX + runtime.offset.x, maxX: b.maxX + runtime.offset.x,
           minZ: b.minZ + runtime.offset.z, maxZ: b.maxZ + runtime.offset.z, rimY: c.floorY + runtime.offset.y, bottom: -depth });
       }
       for (const feature of runtime.plan.features) {
-        if (feature.kind !== 'grid-pit') continue;
-        feature.holes.forEach((hole, index) => result.push({
+        if (feature.kind !== 'grid-pit' && feature.kind !== 'squeeze-view') continue;
+        const rim = runtime.plan.rooms.find(r => r.id === feature.roomId)?.floorY ?? 0;
+        (feature.holes ?? []).forEach((hole, index) => result.push({
           id: `${runtime.key}:${feature.id}:${index}`,
           minX: hole.minX + runtime.offset.x, maxX: hole.maxX + runtime.offset.x,
           minZ: hole.minZ + runtime.offset.z, maxZ: hole.maxZ + runtime.offset.z,
-          rimY: runtime.offset.y, bottom: -hole.depth,
+          rimY: runtime.offset.y + rim, bottom: -hole.depth,
         }));
       }
     }
@@ -830,6 +837,7 @@ export class WorldStream {
         );
       }
       for (const feature of runtime.plan.features) {
+        const featureFloor = 'roomId' in feature ? runtime.plan.rooms.find(r => r.id === feature.roomId)?.floorY ?? 0 : 0;
         if (feature.kind === 'grid-pit') {
           const largest = [...feature.holes].sort((a, b) => rectArea(b) - rectArea(a))[0];
           if (largest) {
@@ -838,14 +846,14 @@ export class WorldStream {
               'holes',
               `trous en grille ${feature.pattern}`,
               ['hole', 'holes', 'trou', 'trous', 'pit', 'grille'],
-              approachPointForRect(largest, feature.bounds, 0.865),
+              approachPointForRect(largest, feature.bounds, featureFloor + 0.865),
             );
             addTarget(
               runtime,
               'large-hole',
               'grand trou',
               ['grand-trou', 'big-hole', 'large-hole', 'hole-large'],
-              approachPointForRect(largest, feature.bounds, 0.865),
+              approachPointForRect(largest, feature.bounds, featureFloor + 0.865),
             );
           }
           for (const hole of feature.holes) {
@@ -860,7 +868,7 @@ export class WorldStream {
               hole.kind === 'void'
                 ? ['void', 'abyss', 'abysse', 'deep-hole', 'trou-profond']
                 : ['hole', 'holes', 'trou', 'trous', 'pit'],
-              approachPointForRect(hole, feature.bounds, 0.865),
+              approachPointForRect(hole, feature.bounds, featureFloor + 0.865),
             );
           }
           const drop = feature.holes.find((hole) => hole.kind !== 'void');
@@ -892,8 +900,8 @@ export class WorldStream {
           const center = rectCenter(feature.bounds);
           const crouchOnly = (feature.clearanceHeight ?? this.originPlan.wallHeight) < 1.6;
           const entrance = feature.axis === 'x'
-            ? { x: feature.bounds.minX - 1.05, y: 0.865, z: center.z }
-            : { x: center.x, y: 0.865, z: feature.bounds.minZ - 1.05 };
+            ? { x: feature.bounds.minX - 1.05, y: featureFloor + 0.865, z: center.z }
+            : { x: center.x, y: featureFloor + 0.865, z: feature.bounds.minZ - 1.05 };
           addTarget(
             runtime,
             crouchOnly ? 'crawl-passage' : 'breach',
@@ -936,8 +944,8 @@ export class WorldStream {
             ? ramp.axis === 'x' ? ramp.bounds.minX : ramp.bounds.minZ
             : ramp.axis === 'x' ? ramp.bounds.maxX : ramp.bounds.maxZ;
           const entrance = ramp.axis === 'x'
-            ? { x: baseAlong, y: 0.865, z: center.z }
-            : { x: center.x, y: 0.865, z: baseAlong };
+            ? { x: baseAlong, y: featureFloor + 0.865, z: center.z }
+            : { x: center.x, y: featureFloor + 0.865, z: baseAlong };
           addTarget(
             runtime,
             feature.elevation < 0 ? 'sunken-zone' : 'raised-zone',
@@ -1348,6 +1356,7 @@ export class WorldStream {
       { lightingMode: mode, bakedLightMaps: mode === 'legacy' ? lightMaps : undefined, regionalLightData: runtime.regionalLightData },
     );
     view.group.position.copy(runtime.offset);
+    view.setArchitectureDebug(this.architectureDebugMode);
     view.setWorldOffset(runtime.offset);
     await view.ready;
     if (
@@ -1393,6 +1402,7 @@ export class WorldStream {
       { lightingMode: this.lightingMode, bakedLightMaps: lightMaps, regionalLightData: suppliedRegionalLightData },
     );
     view.group.position.copy(offset);
+    view.setArchitectureDebug(this.architectureDebugMode);
     view.setWorldOffset(offset);
     try {
       this.physics.addChunk(key, plan.colliders, offset);

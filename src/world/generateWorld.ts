@@ -1,3 +1,4 @@
+import type { SqueezeViewFeature } from './types';
 import { discoverVerticalPortals, planVerticalTopology, fitVerticalArchitecture, finalizeVerticalTopology } from './VerticalPlanner';
 import { validateTopology } from './WalkableTopology';
 import { generateSpatialWorld } from './SpatialWorld';
@@ -756,7 +757,7 @@ const splitWorldWithGrandHall = (
   }
 };
 
-const buildGridPit = (
+export const buildGridPit = (
   room: RoomRecord,
   rng: SeededRandom,
   lowerBounds: Rect,
@@ -5180,6 +5181,25 @@ export const generateSurfaceStyle = (seed: string): SurfaceStyle => {
 /** Shared historical BSP, before any floor/vertical materialization. The regional
  * path supplies its final datums and reservations; this is not a flat world
  * translated after generation. A 224m template crosses source chunk boundaries. */
+/** Reuse the legacy room-network vocabulary as a pure proposal. Its old preview
+ * colliders/lights are deliberately not installed in the regional world. */
+export const proposeSpatialCrawl = (room: RoomRecord, seed: string, breach = false): { feature: SqueezeViewFeature; walls: WallSegment[] } | undefined => {
+  const world: WorldPlan = { version: 13, seed, size: 112, wallHeight: 2.74, rooms: [{ ...room, floorY: 0, ceilingHeight: 2.74, kind: 'office' }],
+    walls: [], colliders: [], columns: [], solidMasses: [], lights: [], missingCeilingTiles: [], features: [], detailSockets: [], floorRects: [], spawn: { x: 0, y: .865, z: 0 } };
+  const mutable: MutablePlan = { walls: [], rooms: world.rooms, colliders: [], portals: [], wallIndex: 0 };
+  if (breach) {
+    const b = room.bounds, x = (b.minX + b.maxX) / 2;
+    world.rooms = [{ ...world.rooms[0]!, id: `${room.id}/west`, bounds: { ...b, maxX: x } },
+      { ...world.rooms[0]!, id: `${room.id}/east`, bounds: { ...b, minX: x } }];
+    mutable.rooms = world.rooms;
+    mutable.walls.push({ id: 'breach-host', x, z: (b.minZ + b.maxZ) / 2, orientation: 'z', length: b.maxZ - b.minZ,
+      bottom: 0, height: 2.74, thickness: 1.2, tint: 1, collision: true, kind: 'wallpaper' });
+    addWallBreaches(mutable, world, new SeededRandom(seed));
+  } else addSqueezeViews(mutable, world, new Set(), new SeededRandom(seed));
+  const feature = world.features.find((f): f is SqueezeViewFeature => f.kind === 'squeeze-view');
+  return feature ? { feature, walls: mutable.walls } : undefined;
+};
+
 export const generateBspArchitecture = (seed: string): WorldPlan => {
   const rng = new SeededRandom(seed).fork('historical-bsp');
   const mutable: MutablePlan = { walls: [], rooms: [], colliders: [], portals: [], wallIndex: 0 };

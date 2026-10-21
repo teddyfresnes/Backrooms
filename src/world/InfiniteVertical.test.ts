@@ -44,13 +44,13 @@ it('keeps sunken floor structures above the preceding story ceiling, including t
     const seed = `VERTICAL-PROMPT-AUDIT-${index}`, coord = { x: -1, z: 1, story: 0 };
     const lower = generateInfiniteChunk(seed, coord), upper = generateInfiniteChunk(seed, { ...coord, story: 1 });
     if (!lower.topology || !upper.topology) continue;
-    const roofs = lower.spatial!.ceilings.map(s => ({ id: s.id, center: { x: rectCenter(s.bounds).x, z: rectCenter(s.bounds).z, y: surfaceY(s, rectCenter(s.bounds).x, rectCenter(s.bounds).z) }, halfExtents: { x: rectWidth(s.bounds) / 2, z: rectDepth(s.bounds) / 2, y: 0 } }));
+    const roofs = lower.spatial!.ceilings;
     expect(roofs.length).toBeGreaterThan(0);
     for (const surface of upper.topology.surfaces.filter(s => s.layer.includes('regional/'))) {
       const x = (surface.bounds.minX + surface.bounds.maxX) / 2, z = (surface.bounds.minZ + surface.bounds.maxZ) / 2;
       const bottom = 5.4 + surfaceY(surface, x, z) - surface.thickness / surfaceNormal(surface).y;
-      for (const roof of roofs.filter(c => Math.abs(c.center.x - x) < c.halfExtents.x - .002 && Math.abs(c.center.z - z) < c.halfExtents.z - .002)) {
-        expect(roof.center.y + roof.halfExtents.y, `${seed} ${surface.id} / ${roof.id}`).toBeLessThanOrEqual(bottom + .002);
+      for (const roof of roofs.filter(c => x > c.bounds.minX + .002 && x < c.bounds.maxX - .002 && z > c.bounds.minZ + .002 && z < c.bounds.maxZ - .002)) {
+        expect(surfaceY(roof, x, z), `${seed} ${surface.id} / ${roof.id}`).toBeLessThanOrEqual(bottom + .002);
       }
     }
   }

@@ -101,6 +101,8 @@ export const prefixTopology = (world: WorldPlan, prefix: string, story: number):
   for (const r of t.reservations ?? []) r.id = prefix + r.id;
   for (const d of t.diagnostics) d.id = prefix + d.id;
   if (world.spatial) {
+    for (const r of world.spatial.reliefs ?? []) { r.id = prefix + r.id; r.roomId = prefix + r.roomId; r.surfaceIds = r.surfaceIds.map(id => prefix + id); }
+    for (const t of world.spatial.transitions ?? []) { t.id = prefix + t.id; t.roomId = prefix + t.roomId; }
     for (const i of world.spatial.interfaces) i.surfaceId = prefix + i.surfaceId;
     for (const p of world.spatial.prisms) p.id = prefix + p.id;
     for (const s of world.spatial.ceilings) { s.id = prefix + s.id; if (s.roomId) s.roomId = prefix + s.roomId; }

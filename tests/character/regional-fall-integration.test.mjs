@@ -15,7 +15,7 @@ for (const shared of [false, true]) test(`the real ${shared ? 'shared' : 'player
   let world, cell;
   for (let i = 0; i < 32 && !cell; i++) {
     world = generateInfiniteChunk(`REGIONAL-AUDIT-${i}`, { x: 0, z: 0, story: 0 });
-    cell = world.spatial.cells.find(c => c.mode === 'gallery');
+    cell = world.spatial.cells.find(c => c.mode === 'gallery' && c.atriumLower === -2);
   }
   assert.ok(cell);
   const physics = await Physics.create({ ...world, colliders: [] });

@@ -42,7 +42,10 @@ intermédiaire pour chaque fragment ; aucune dalle historique n’est rajoutée 
 `RegionalLighting`, sans multiplier une seconde fois l’exposition. Les buffers
 CPU sont calculés et transférés par `infinite.worker`, puis montés avec le chunk.
 Le mode classique conserve son bake, avec filtrage vertical des contributions.
+Les UV partagent une origine monde et les quatre chunks d’un BSP conservent
+les mêmes motifs. Les chants enfouis sont éliminés par `SurfaceExposure`.
 Ces méthodes restent des approximations, pas un calcul d’ombres 3D.
+`/geometry uv|volumes|off` active un diagnostic temporaire, libéré au démontage.
 Les sauvegardes reprojettent dans le propriétaire enregistré : voir le contrat
 vertical pour la migration des ancrages et le repli sûr.
 

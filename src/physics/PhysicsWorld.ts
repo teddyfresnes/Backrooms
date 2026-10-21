@@ -64,6 +64,7 @@ export class PhysicsWorld {
   private crouched = false;
   private chunkMutationDepth = 0;
   private chunkSynchronizationPending = false;
+  private emptyChunkIndexPending = false;
 
   private constructor(plan: WorldPlan) {
     this.gameplayRandom = new SeededRandom(plan.seed).fork('physics-gameplay');
@@ -231,6 +232,7 @@ export class PhysicsWorld {
     for (let i = 0; i < body.numColliders(); i++) this.environmentKinds.delete(body.collider(i).handle);
     this.environmentBodies.delete(body.handle);
     this.world.removeRigidBody(body);
+    if (this.environmentKinds.size === 0) this.emptyChunkIndexPending = true;
     this.chunkBodies.delete(key);
     this.chunkColliders.delete(key);
     this.requestChunkSynchronization();
@@ -522,7 +524,21 @@ export class PhysicsWorld {
       throw new Error(`Invalid ${label}: expected finite coordinates.`);
     }
   }
-  private synchronizeChunkChanges(): void { this.world.step(); }
+  private synchronizeChunkChanges(): void {
+    if (this.emptyChunkIndexPending) {
+      this.emptyChunkIndexPending = false;
+      if (this.environmentKinds.size === 0) {
+        // No environment leaf survives. Start a fresh query tree instead of
+        // retaining Rapier's empty BVH across complete streamed scene reloads.
+        // Controllers retain this wrapper. Replace only its owned raw tree.
+        const broadPhase = this.world.broadPhase;
+        const RawBroadPhase = broadPhase.raw.constructor as new () => typeof broadPhase.raw;
+        broadPhase.free(); broadPhase.raw = new RawBroadPhase();
+        this.world.colliders.forEach(c => { const enabled = c.isEnabled(); if (enabled) { c.setEnabled(false); c.setEnabled(true); } });
+      }
+    }
+    this.world.step();
+  }
   private requestChunkSynchronization(): void {
     if (this.chunkMutationDepth > 0) { this.chunkSynchronizationPending = true; return; }
     this.synchronizeChunkChanges();

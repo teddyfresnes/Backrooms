@@ -605,6 +605,7 @@ export class Game {
       { value: '/save', label: '/save', detail: 'SAUVEGARDE MAINTENANT' },
       VIEWMODEL_COMPLETION,
       { value: '/logs', label: '/logs', detail: 'AFFICHE OU MASQUE LE PANNEAU TECHNIQUE' },
+      { value: '/geometry ', label: '/geometry uv|volumes|off', detail: 'DIAGNOSTIC DES TEXTURES ET VOLUMES' },
       { value: '/noclip', label: '/noclip', detail: 'ACTIVE OU DESACTIVE LE VOL LIBRE' },
       { value: '/locate ', label: '/locate <cible>', detail: 'TÉLÉPORTE VERS UNE CIBLE CONNUE' },
     ];
@@ -670,7 +671,7 @@ export class Game {
         const feedback = 'SYNTAXE: /help';
         return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
       }
-      const feedback = '/viewmodel - première / troisième personne · /save - sauvegarder · /locate <cible> - teleportation · /noclip [on|off] - vol libre · /logs [on|off] - diagnostic';
+      const feedback = '/viewmodel - première / troisième personne · /save - sauvegarder · /locate <cible> - teleportation · /noclip [on|off] - vol libre · /logs [on|off] - diagnostic · /geometry uv|volumes|off - textures et volumes';
       return { close: false, feedback, messages: [echo, { kind: 'system', text: feedback }] };
     }
     if (normalizedCommand === 'save') {
@@ -681,6 +682,16 @@ export class Game {
         feedback,
         messages: [echo, { kind: saved ? 'system' : 'error', text: feedback }],
       };
+    }
+    if (normalizedCommand === 'geometry') {
+      const mode = args[0]?.toLowerCase();
+      if (args.length !== 1 || !['off', 'uv', 'volumes'].includes(mode ?? '')) {
+        const feedback = 'SYNTAXE: /geometry uv|volumes|off';
+        return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
+      }
+      this.worldStream?.setArchitectureDebug(mode as 'off' | 'uv' | 'volumes');
+      const feedback = `DIAGNOSTIC ARCHITECTURE : ${mode!.toUpperCase()}`;
+      return { close: true, feedback, messages: [echo, { kind: 'system', text: feedback }] };
     }
     if (normalizedCommand === 'logs') {
       const visible = resolveDiagnosticsVisibility(this.diagnosticsVisible, args);

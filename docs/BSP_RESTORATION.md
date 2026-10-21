@@ -1,5 +1,7 @@
 # Labyrinthe historique dans le relief régional — version 12
 
+Référence historique. Les contrats courants sont dans [TRANSITION_INTEGRATION.md](TRANSITION_INTEGRATION.md).
+
 Le monde ordinaire réutilise le BSP et les détails historiques, dans les volumes
 à datums régionaux. Les cellules de 28 m ne dessinent plus quatre pièces fixes
 ni une façade à chaque frontière d’un plateau. Les grands espaces, atria,

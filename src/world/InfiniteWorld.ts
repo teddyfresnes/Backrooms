@@ -2403,7 +2403,10 @@ export const generateInfiniteChunk = (seed: string, key: ChunkKey | ChunkCoord):
   const coord = resolveCoord(key);
   if (seed.startsWith('RAW_LOCAL_') || epicStructureIndexForCoord(seed, coord) !== null) return generateLegacyInfiniteChunk(seed, coord);
   const gates = getInfiniteEdgeGates(seed, coord), normalizedKey = createChunkKey(coord);
-  const style = generateSurfaceStyle(`${seed}:spatial-column:v2:${coord.x}:${coord.z}`);
+  const finish = generateSurfaceStyle(`${seed}:spatial-finish:v3:${Math.floor(coord.x / 2)}:${Math.floor(coord.z / 2)}`);
+  const style = { ...generateSurfaceStyle(`${seed}:spatial-column:v2:${coord.x}:${coord.z}`),
+    floorPatternScale: finish.floorPatternScale, floorQuarterTurn: finish.floorQuarterTurn,
+    wallPatternScale: finish.wallPatternScale, ceilingPatternScale: finish.ceilingPatternScale };
   const plan = generateSpatialWorld(seed, coord, style, gates);
   const biome = getInfiniteBiome(seed, coord), visual = getInfiniteVisualBiome(seed, coord);
   plan.visualBiome = visual;

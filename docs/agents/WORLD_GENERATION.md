@@ -20,18 +20,24 @@ rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/
 
 ## Ordre du pipeline
 
-Le pipeline ordinaire (plan version 12, topologie/spatial version 2) est :
+Le pipeline ordinaire (plan version 13, topologie/spatial version 2) est :
 
 1. `RegionalPlan` choisit les districts mondiaux et leurs datums signés ;
-2. il réserve les atria et leur propriété sur trois adresses verticales ;
-3. `SpatialConnectors` déduit les parcours, paliers et dégagements inférieurs ;
+2. il réserve les atria et leur propriété sur deux ou trois adresses verticales ;
+3. `SpatialConnectors` et `TransitionLayout` déduisent les chambres, parcours,
+   toits et paliers stables ; `SpatialFeatures` réserve les anciens trous et
+   passages, avec leurs vrais propriétaires source/arrivée ;
 4. `SpatialWorld` réutilise `generateBspArchitecture` sur des domaines canoniques
    de 224 m (2×2 chunks), puis matérialise aux datums finaux les pièces historiques,
    murs épais, détails et plafonds ; les grandes familles restent minoritaires ;
-5. `BspConnectivity` ouvre les partitions ordinaires qui isolent une poche après
+5. `SpatialRelief` ajoute les socles et terrasses pleins au sol porteur ;
+6. `BspConnectivity` ouvre les partitions ordinaires qui isolent une poche après
    découpe ; le graphe distingue les portes à ouvrir (`requiresDoorId`), les vues
    et les chutes. Les petits rectangles de dallage ne sont pas des obstacles ;
-6. `generateInfiniteChunk` applique palette et props, préfixe les IDs et références.
+7. `generateInfiniteChunk` applique palette et props, préfixe les IDs et références.
+
+Voir [les contrats de transition](../TRANSITION_INTEGRATION.md) pour les plafonds
+continus, les salles de plusieurs cellules et la conservation des anciennes features.
 
 La génération ne lit jamais un voisin déjà produit. Les interfaces viennent des
 mêmes cellules mondiales des deux côtés. Le pas d’adresse 5,4 m est une translation

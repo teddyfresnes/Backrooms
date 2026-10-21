@@ -100,7 +100,7 @@ const diversity = () => {
       modes[c.mode] = (modes[c.mode] ?? 0) + 1;
       const style = regionalStyle(seed, c.regionId).family; styles[style] = (styles[style] ?? 0) + 1;
       if (c.mode === 'gallery') {
-        const lower = get(seed, { ...coord, story: c.atriumOwner! - 2 });
+        const lower = get(seed, { ...coord, story: c.atriumLower! });
         if (lower.spatial?.cells.some(l => l.mode === 'lower-maze' && l.bounds.minX === c.bounds.minX && l.bounds.minZ === c.bounds.minZ)) overlappingCells++;
       }
     }

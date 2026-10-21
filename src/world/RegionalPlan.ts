@@ -1,6 +1,7 @@
+import { planRegionalTransition } from './TransitionLayout';
 import { SeededRandom } from './SeededRandom';
 import { epicStructureIndexForCoord } from './EpicStructures';
-import type { Rect } from './types';
+import { pointInRect, type Rect } from './types';
 import type { SpatialAddress } from './SpatialTypes';
 
 export const SPATIAL_VERSION = 2;
@@ -53,31 +54,58 @@ export const regionalStyle = (seed: string, regionId: string) => {
 export const clearRegionalPlanCache = () => datumCache.clear();
 export const regionalCellId = (x: number, z: number, story: number) => `cell/${x}/${z}/${story}`;
 
-export interface AtriumPlan { owner: number; lower: number; variant: 'L' | 'U' | 'bridge'; stairs: boolean }
-/** An atrium is a three-address volume, not an extra floor in one room.
- * Only a single owner in each four-address vertical band may claim it.
- */
+export interface AtriumPlan {
+  owner: number; lower: number; variant: 'L' | 'U' | 'bridge'; stairs: boolean;
+  anchorX: number; anchorZ: number; cellsX: number; cellsZ: number;
+  ringWidth: number; routeWidth: number; midFraction: number;
+  routeKind: 'ramp' | 'stairs'; openLower: boolean;
+  composition: 'gallery' | 'terraces' | 'mounds';
+}
+/** Canonical 2x2 planning domains choose one 1..4-cell room. Domains align
+ * with chunk boundaries; its clipped BSP neighbours need no generated state. */
 export const regionalAtrium = (seed: string, x: number, z: number, story: number): AtriumPlan | undefined => {
-  const h = regionalDatum(seed, x, z); if (h.id === 'monument-interface') return;
-  if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => regionalDatum(seed, x + dx!, z + dz!).id !== h.id)) return;
-  const rng = randomAt(seed, `atrium:${x}:${z}`); if (!rng.chance(.19)) return;
+  const ax = Math.floor(x / 2) * 2, az = Math.floor(z / 2) * 2;
+  const rng = randomAt(seed, `atrium-room:v3:${ax}:${az}`);
+  if (!rng.chance(.5)) return;
+  const shape = rng.weighted([{ value: [1, 1], weight: .4 }, { value: [2, 1], weight: .25 },
+    { value: [1, 2], weight: .2 }, { value: [2, 2], weight: .15 }]);
+  const cellsX = shape[0]!, cellsZ = shape[1]!;
+  const anchorX = ax + (cellsX === 1 ? rng.int(0, 1) : 0), anchorZ = az + (cellsZ === 1 ? rng.int(0, 1) : 0);
+  if (x < anchorX || z < anchorZ || x >= anchorX + cellsX || z >= anchorZ + cellsZ) return;
+  const datum = regionalDatum(seed, anchorX, anchorZ);
+  if (datum.id === 'monument-interface') return;
+  for (let iz = anchorZ - 1; iz <= anchorZ + cellsZ; iz++) for (let ix = anchorX - 1; ix <= anchorX + cellsX; ix++) {
+    // Only cells sharing a facade need its datum. Rejecting the four diagonal
+    // corners unnecessarily suppressed big rooms near a jagged district edge.
+    if ((ix < anchorX || ix >= anchorX + cellsX) && (iz < anchorZ || iz >= anchorZ + cellsZ)) continue;
+    if (regionalDatum(seed, ix, iz).id !== datum.id) return;
+  }
   const phase = rng.int(0, 3), owner = Math.floor((story - phase + 2) / 4) * 4 + phase;
-  if (story > owner || story < owner - 2) return;
-  return { owner, lower: owner - 2, variant: rng.pick(['L', 'U', 'bridge'] as const), stairs: rng.chance(.8) };
+  const depth = rng.fork('depth').weighted([{ value: 1, weight: .28 }, { value: 2, weight: .72 }]);
+  if (story > owner || story < owner - depth) return;
+  return { owner, lower: owner - depth, anchorX, anchorZ, cellsX, cellsZ,
+    variant: rng.fork('circulation-variant').pick(['L', 'U', 'bridge'] as const), stairs: rng.chance(.8),
+    ringWidth: rng.float(2.7, 4.8), routeWidth: rng.float(2.4, 3.8), midFraction: rng.float(.4, .6),
+    routeKind: rng.chance(.55) ? 'ramp' : 'stairs', openLower: rng.chance(.6),
+    composition: rng.weighted([{ value: 'gallery' as const, weight: .55 }, { value: 'terraces' as const, weight: .25 }, { value: 'mounds' as const, weight: .2 }]) };
 };
 
 /** Physical base at a world point, including inter-district approaches.
  * This inverse is used only when no mounted support or clearance volume owns the body.
  */
 export const regionalBaseAt = (seed: string, x: number, z: number): number => {
-  const c = spatialCellAt(x, z), b = spatialCellBounds(c.x, c.z), cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
-  const h = regionalDatum(seed, c.x, c.z).y, dx = x - cx, dz = z - cz;
-  const alongX = Math.abs(dz) <= SPATIAL_ROUTE_WIDTH / 2 && Math.abs(dx) >= 3;
-  const alongZ = Math.abs(dx) <= SPATIAL_ROUTE_WIDTH / 2 && Math.abs(dz) >= 3;
-  if (!alongX && !alongZ) return h;
-  const sign = Math.sign(alongX ? dx : dz), next = regionalDatum(seed, c.x + (alongX ? sign : 0), c.z + (alongZ ? sign : 0)).y;
-  const t = Math.max(0, Math.min(1, (Math.abs(alongX ? dx : dz) - 4) / 9));
-  return h + ((h + next) / 2 - h) * t;
+  const c = spatialCellAt(x, z), b = spatialCellBounds(c.x, c.z), h = regionalDatum(seed, c.x, c.z).y;
+  for (const [side, dx, dz] of [['north', 0, -1], ['east', 1, 0], ['south', 0, 1], ['west', -1, 0]] as const) {
+    const next = regionalDatum(seed, c.x + dx, c.z + dz).y; if (Math.abs(next - h) < .001) continue;
+    const t = planRegionalTransition(seed, c.x, c.z, 0, side, b, h, next, 'inverse');
+    if (!pointInRect(x, z, t.bounds)) continue;
+    if (pointInRect(x, z, t.approach.bounds)) return t.approach.y;
+    if (pointInRect(x, z, t.landing.bounds)) return t.landing.y;
+    const along = t.axis === 'x' ? x - t.run.minX : z - t.run.minZ;
+    const run = t.axis === 'x' ? t.run.maxX - t.run.minX : t.run.maxZ - t.run.minZ;
+    return t.startY + (t.endY - t.startY) * Math.max(0, Math.min(1, along / run));
+  }
+  return h;
 };
 export const regionalOwnerAt = (seed: string, x: number, y: number, z: number): SpatialAddress => ({
   x: Math.floor((x + 56) / 112), z: Math.floor((z + 56) / 112),

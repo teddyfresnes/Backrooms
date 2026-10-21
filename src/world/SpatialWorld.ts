@@ -1,3 +1,6 @@
+import { applySpatialRelief } from './SpatialRelief';
+import { clearSpatialFeatureCache, planSpatialFeature, installSpatialFeature, connectSpatialFeatures, type SpatialFeatureSlice } from './SpatialFeatures';
+import { planRegionalTransition, restrictProfile, transitionTreads } from './TransitionLayout';
 import { stitchBspPartitions } from './BspConnectivity';
 import { generateBspArchitecture, lightPanelOverlapsRect } from './generateWorld';
 import type { Rect, SurfaceStyle, WorldPlan } from './types';
@@ -5,7 +8,7 @@ import { pointInRect, rectCenter, rectDepth, rectWidth } from './types';
 import { ADDRESS_PITCH, regionalAtrium, regionalCellId, regionalDatum, regionalStyle, SPATIAL_CLEARANCE, spatialCellBounds } from './RegionalPlan';
 import type { SpatialAddress, SpatialPrism } from './SpatialTypes';
 import type { InfiniteEdgeGates } from './InfiniteWorld';
-import { atriumCirculation, atriumGround, atriumGroundId, atriumTreads } from './SpatialConnectors';
+import { atriumCirculation, atriumGround, atriumGroundId, atriumTreads, atriumHole, legTreads, atriumLandingPads, atriumArrival } from './SpatialConnectors';
 import { endpointStairRun, offsetProfile, prismCollider, profilePrism, slabMeshCollider } from './SpatialGeometry';
 import { classifySurfaceAccess, cutRects, findSurface, overlapRect, surfaceCollider, surfaceRange, surfaceY, TOPOLOGY_VERSION,
   type HeightProfile, type SurfaceConnection, type WalkableSurface } from './WalkableTopology';
@@ -15,7 +18,7 @@ type Side = typeof sides[number];
 const deltas: Record<Side, [number, number]> = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
 const flat = (y: number): HeightProfile => ({ kind: 'flat', y });
 const templates = new Map<string, WorldPlan>();
-export const clearBspArchitectureCache = (): void => templates.clear();
+export const clearBspArchitectureCache = (): void => { templates.clear(); clearSpatialFeatureCache(); };
 const intersect = (a: Rect, b: Rect): Rect | undefined => {
   const r = { minX: Math.max(a.minX, b.minX), maxX: Math.min(a.maxX, b.maxX), minZ: Math.max(a.minZ, b.minZ), maxZ: Math.min(a.maxZ, b.maxZ) };
   return rectWidth(r) > .005 && rectDepth(r) > .005 ? r : undefined;
@@ -28,11 +31,12 @@ const expand = (r: Rect, d: number): Rect => ({ minX: r.minX - d, maxX: r.maxX +
  */
 export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?: SurfaceStyle, boundaryGates?: InfiniteEdgeGates): WorldPlan => {
   const offset = { x: owner.x * 112, z: owner.z * 112 }, local = (b: Rect): Rect => ({ minX: b.minX - offset.x, maxX: b.maxX - offset.x, minZ: b.minZ - offset.z, maxZ: b.maxZ - offset.z });
-  const world: WorldPlan = { version: 12, seed, size: 112, wallHeight: 3.05, rooms: [], walls: [], columns: [], solidMasses: [], lights: [], missingCeilingTiles: [],
+  const world: WorldPlan = { version: 13, seed, size: 112, wallHeight: 3.05, rooms: [], walls: [], columns: [], solidMasses: [], lights: [], missingCeilingTiles: [],
     features: [], detailSockets: [], colliders: [], floorRects: [], floorOpenings: [], ceilingOpenings: [], stairCeilingOpenings: [], spawn: { x: 0, y: 0, z: 0 }, surfaceStyle: style, edgeGates: boundaryGates,
     topology: { version: TOPOLOGY_VERSION, ownerStory: owner.story, surfaces: [], connections: [], volumes: [], diagnostics: [] },
-    spatial: { version: 2, owner: { ...owner }, cells: [], ceilings: [], prisms: [], dependencies: [], interfaces: [], landmarks: [] } };
+    spatial: { version: 2, owner: { ...owner }, cells: [], ceilings: [], prisms: [], dependencies: [], interfaces: [], landmarks: [], transitions: [] } };
   const topology = world.topology!, spatial = world.spatial!;
+  const featureSlices: SpatialFeatureSlice[] = [];
   const mx = Math.floor(owner.x / 2), mz = Math.floor(owner.z / 2);
   const templateKey = `${seed}:bsp-district:v1:${mx}:${mz}:${owner.story}`;
   let template = templates.get(templateKey);
@@ -77,36 +81,42 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     if (story === owner.story) return;
     spatial.dependencies.push({ owner: { ...owner, story }, bounds, bottom, top, reason });
   };
-  const connector = (id: string, roomId: string, bounds: Rect, axis: 'x' | 'z', a: number, b: number, roof = true, ceiling?: number) => {
-    const run = axis === 'x' ? rectWidth(bounds) : rectDepth(bounds), difference = Math.abs(b - a);
-    if (difference < .001) return [addSurface(id, roomId, bounds, flat(a), 'floor', roof, ceiling)];
-    if (difference / run <= .3) return [addSurface(id, roomId, bounds, { kind: 'linear', axis, startY: a, endY: b }, 'ramp', roof, ceiling)];
-    return endpointStairRun(bounds, axis, a, b).map(step => addSurface(`${id}/step-${step.index}`, roomId, step.bounds, step.profile, 'stair', roof, ceiling));
-  };
 
+  const processedAtria = new Set<string>();
   for (let iz = 0; iz < 4; iz++) for (let ix = 0; ix < 4; ix++) {
-    const gx = owner.x * 4 + ix, gz = owner.z * 4 + iz, id = regionalCellId(gx, gz, owner.story), b = local(spatialCellBounds(gx, gz)), p = rectCenter(b);
+    let gx = owner.x * 4 + ix, gz = owner.z * 4 + iz;
     const datum = regionalDatum(seed, gx, gz), h = datum.y, atrium = regionalAtrium(seed, gx, gz, owner.story);
+    let b = local(spatialCellBounds(gx, gz));
+    if (atrium) {
+      gx = atrium.anchorX; gz = atrium.anchorZ;
+      const key = `${gx}/${gz}`; if (processedAtria.has(key)) continue; processedAtria.add(key);
+      const first = spatialCellBounds(gx, gz), last = spatialCellBounds(gx + atrium.cellsX - 1, gz + atrium.cellsZ - 1);
+      b = local({ minX: first.minX, minZ: first.minZ, maxX: last.maxX, maxZ: last.maxZ });
+    }
+    const id = regionalCellId(gx, gz, owner.story), p = rectCenter(b);
     const { family, wallHalf } = regionalStyle(seed, datum.id);
     const mode = !atrium ? 'rooms' : owner.story === atrium.owner ? 'gallery' : owner.story === atrium.lower ? 'lower-maze' : 'void';
     const roofY = atrium ? h + (atrium.owner - owner.story) * ADDRESS_PITCH + SPATIAL_CLEARANCE : h + SPATIAL_CLEARANCE;
     const roomId = `${id}/room`;
-    spatial.cells.push({ id, regionId: datum.id, bounds: b, floorY: h, mode, ...(atrium ? { atriumOwner: atrium.owner } : {}) });
+    spatial.cells.push({ id, regionId: datum.id, bounds: b, floorY: h, mode, ...(atrium ? { atriumOwner: atrium.owner, atriumLower: atrium.lower } : {}) });
     world.rooms.push({ id: roomId, bounds: b, kind: mode === 'lower-maze' ? 'lower-maze' : mode === 'gallery' ? 'pit-gallery' : family === 'maze' ? 'corridor' : 'open-hall', level: 0,
       floorY: h, ceilingHeight: roofY, structuralCeilingY: roofY, detailDensity: mode === 'void' ? 0 : .25, access: 'open' });
+    const heritage = !atrium ? planSpatialFeature(seed, gx, gz, owner.story, b) : undefined;
+    if (heritage) featureSlices.push(heritage);
+    const routeReservations: Rect[] = heritage ? [expand(heritage.reservation, .8)] : [];
     if (atrium) {
       for (let story = atrium.lower; story <= atrium.owner; story++) dependency(story, b, h + (atrium.lower - owner.story) * 5.4, roofY, 'atrium');
-      const hole = { minX: b.minX + 3, maxX: b.maxX - 3, minZ: b.minZ + 3, maxZ: b.maxZ - 3 };
+      const hole = atriumHole(b, atrium);
       if (mode !== 'lower-maze') world.floorOpenings!.push(mode === 'void' ? { ...b } : hole);
       if (mode !== 'gallery') world.ceilingOpenings!.push({ ...b });
       if (mode === 'gallery') {
-        const lower = h - 10.8;
+        const lower = h - (atrium.owner - atrium.lower) * ADDRESS_PITCH;
         const ring = cutRects([b], [hole]);
         ring.forEach((r, i) => addSurface(`${id}/gallery-${i}`, roomId, r, flat(h), 'balcony', false, roofY));
         // The bridge is supported at the real wall galleries at both ends.
         const circulation = atriumCirculation(b, h, atrium), bridge = circulation.bridge;
-        if (atrium.variant === 'L') {
-          const gap = b.minX + 9;
+        if (atrium.variant === 'L' && atrium.owner - atrium.lower > 1) {
+          const gap = b.minX + rectWidth(b) * .32;
           const west = addSurface(`${id}/bridge/jump-west`, roomId, { ...bridge, maxX: gap - .7 }, flat(h), 'bridge', false, roofY);
           const east = addSurface(`${id}/bridge/jump-east`, roomId, { ...bridge, minX: gap + .7 }, flat(h), 'bridge', false, roofY);
           west.openEdges = ['east']; east.openEdges = ['west'];
@@ -114,30 +124,45 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
           topology.connections.push({ id: `${id}/bridge-jump`, from: west.id, to: east.id, at, arrival, width: 3.2, kind: 'jump', direction: 'both', access: 'open' });
           spatial.landmarks.push({ kind: 'saut-passerelle', position: { ...at, y: h + .865 }, destination: { ...arrival, y: h + .865 } });
         } else if (atrium.variant === 'bridge') addSurface(`${id}/bridge`, roomId, bridge, flat(h), 'bridge', false, roofY);
-        if (atrium.variant === 'L') addSurface(`${id}/return`, roomId, { minX: p.x - 1.6, maxX: p.x + 1.6, minZ: hole.minZ, maxZ: bridge.minZ }, flat(h), 'balcony', false, roofY);
+        if (atrium.variant === 'L' && atrium.owner - atrium.lower > 1) addSurface(`${id}/return`, roomId, { minX: p.x - 1.6, maxX: p.x + 1.6, minZ: hole.minZ, maxZ: bridge.minZ }, flat(h), 'balcony', false, roofY);
         // One full-width stair fits against the east wall, outside the upper ring.
         if (atrium.stairs) {
-          const runs = circulation.legs.map(leg => endpointStairRun(leg.bounds, leg.axis, leg.startY, leg.endY).map(step => addSurface(`${id}/atrium-stairs/${leg.name}/step-${step.index}`, roomId, step.bounds, step.profile, 'stair', false, roofY)));
+          const runs = circulation.legs.map(leg => legTreads(leg).map(step => {
+            const sf = addSurface(`${id}/atrium-stairs/${leg.name}/step-${step.index}`, roomId, step.bounds, step.profile, leg.kind === 'ramp' ? 'ramp' : 'stair', false, roofY);
+            sf.thickness = .27;
+            if (leg.kind === 'ramp') { sf.support = 'solid'; sf.supportBottom = lower - .16; }
+            return sf;
+          }));
           if (circulation.landing) addSurface(`${id}/atrium-stairs/landing`, roomId, circulation.landing.bounds, flat(circulation.landing.y), 'landing', false, roofY).edges = 'guarded';
           const lowRun = runs.at(-1)!, lastLeg = circulation.legs.at(-1)!, end = lastLeg.startY < lastLeg.endY ? lowRun[0]! : lowRun.at(-1)!;
-          const exit = circulation.exit, lowerId = regionalCellId(gx, gz, atrium.lower);
+          const pad = atriumArrival(b, lower, atrium, circulation.exit.x, circulation.exit.z);
+          const exit = { ...pad.point, y: lower }, lowerId = regionalCellId(gx, gz, atrium.lower);
           topology.connections.push({ id: `${id}/stairs-exit`, from: end.id, to: atriumGroundId(lowerId, b, lower, atrium, exit.x, exit.z),
             at: rectCenter(end.bounds), arrival: exit, width: 3.2, kind: 'stairs', direction: 'both', access: 'open', toOwner: { ...owner, story: atrium.lower } });
-          spatial.landmarks.push({ kind: `escalier-${atrium.variant.toLowerCase()}`, position: { x: rectCenter(circulation.legs[0]!.bounds).x, y: h + .865, z: circulation.legs[0]!.bounds.minZ - .5 }, destination: { ...exit, y: exit.y + .865 }, owner: { ...owner, story: atrium.lower } });
+          const entry = circulation.legs[0]!, middle = rectCenter(entry.bounds);
+          spatial.landmarks.push({ kind: `escalier-${atrium.variant.toLowerCase()}`, position: { x: entry.axis === 'x' ? entry.bounds.minX - .5 : middle.x,
+            y: h + .865, z: entry.axis === 'z' ? entry.bounds.minZ - .5 : middle.z }, destination: { ...exit, y: exit.y + .865 }, owner: { ...owner, story: atrium.lower } });
 
         }
         spatial.ceilings.push({ id: `${id}/atrium-roof`, roomId, ownerStory: owner.story, layer: `regional/${owner.story}`, role: 'floor', bounds: b, profile: flat(roofY + .03),
           ceilingY: roofY, thickness: .03, support: 'slab', access: 'sealed', edges: 'architecture' });
         spatial.landmarks.push({ kind: `galerie-${atrium.variant.toLowerCase()}`, position: { x: p.x, y: h + .865, z: b.minZ + 1.5 } });
-        const viewAt = { x: b.minX + 1.5, z: p.z };
+        const viewAt = { x: b.minX + 1.5, z: p.z }, viewArrival = atriumArrival(b, lower, atrium, viewAt.x, viewAt.z).point;
         topology.connections.push({ id: `${id}/overlook`, from: `${id}/gallery-0`, to: atriumGroundId(regionalCellId(gx, gz, atrium.lower), b, lower, atrium, viewAt.x, viewAt.z), at: viewAt,
-          arrival: { ...viewAt, y: lower }, width: 3, kind: 'view', direction: 'forward', access: 'open', toOwner: { ...owner, story: atrium.lower } });
+          arrival: { ...viewArrival, y: lower }, width: 3, kind: 'view', direction: 'forward', access: 'open', toOwner: { ...owner, story: atrium.lower } });
 
       } else if (mode === 'lower-maze') {
-        atriumGround(b, h, atrium).forEach((part, i) => addSurface(`${id}/floor${i ? `-${i}` : ''}`, roomId, part.bounds, flat(h), 'floor', false, part.ceilingY));
-        for (const [i, step] of atriumTreads(b, h + 10.8, atrium).entries()) {
-          const y = step.profile.kind === 'flat' ? step.profile.y : Math.min(step.profile.startY, step.profile.endY);
-          if (y - .16 - h < 2.5 && y - .16 > h) addPrism(profilePrism(`${id}/enclosed-stair-support-${i}`, step.bounds, flat(h - .16), flat(y - .16)));
+        const pads = atriumLandingPads(b, h, atrium);
+        atriumGround(b, h, atrium).forEach((part, i) => cutRects([part.bounds], pads.map(p => p.bounds)).forEach((bounds, j) =>
+          addSurface(`${id}/floor${i ? `-${i}` : ''}/pad-cut-${j}`, roomId, bounds, flat(h), 'floor', false, part.ceilingY)));
+        for (const pad of pads) {
+          const ground = atriumGround(b, h, atrium).find(p => pointInRect(pad.point.x, pad.point.z, p.bounds, -.001));
+          addSurface(`${id}/arrival-${pad.index}`, roomId, pad.bounds, flat(h), 'landing', false, ground?.ceilingY ?? roofY);
+        }
+        for (const [i, step] of atriumTreads(b, h + (atrium.owner - atrium.lower) * ADDRESS_PITCH, atrium).entries()) {
+          if (step.profile.kind !== 'flat') continue;
+          const y = step.profile.y;
+          if (y - .27 - h < 2.5 && y - .27 > h) addPrism(profilePrism(`${id}/enclosed-stair-support-${i}`, step.bounds, flat(h - .16), flat(y - .27)));
         }
       }
       else {
@@ -145,47 +170,69 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
         // void, with no reciprocal route and no invented ramp below them.
         for (const side of sides) {
           const axis = side === 'north' || side === 'south' ? 'z' : 'x', sign = side === 'north' || side === 'west' ? -1 : 1;
-          const sill: Rect = axis === 'x' ? { minX: sign < 0 ? b.minX : b.maxX - 1.5, maxX: sign < 0 ? b.minX + 1.5 : b.maxX, minZ: p.z - 2, maxZ: p.z + 2 }
-            : { minZ: sign < 0 ? b.minZ : b.maxZ - 1.5, maxZ: sign < 0 ? b.minZ + 1.5 : b.maxZ, minX: p.x - 2, maxX: p.x + 2 };
-          const s = addSurface(`${id}/window-${side}`, roomId, sill, flat(h), 'landing', false, roofY);
-          const arrival = { x: p.x + (axis === 'x' ? sign * 10 : 0), y: h - 5.4, z: p.z + (axis === 'z' ? sign * 10 : 0) };
-          topology.connections.push({ id: `${id}/drop-${side}`, from: s.id, to: atriumGroundId(regionalCellId(gx, gz, atrium.lower), b, h - 5.4, atrium, arrival.x, arrival.z), at: rectCenter(sill), arrival,
-            width: 4, kind: 'drop', direction: 'forward', access: 'open', toOwner: { ...owner, story: atrium.lower } });
-          spatial.landmarks.push({ kind: 'ouverture-haute', position: { ...rectCenter(sill), y: h + .865 }, destination: { ...arrival, y: arrival.y + .865 }, owner: { ...owner, story: atrium.lower } });
+          const span = axis === 'x' ? rectDepth(b) : rectWidth(b), start = axis === 'x' ? b.minZ : b.minX;
+          for (let i = 0; i < Math.round(span / 28); i++) {
+            const cross = start + (i + .5) * 28;
+            const sill: Rect = axis === 'x' ? { minX: sign < 0 ? b.minX : b.maxX - 1.5, maxX: sign < 0 ? b.minX + 1.5 : b.maxX, minZ: cross - 2, maxZ: cross + 2 }
+              : { minZ: sign < 0 ? b.minZ : b.maxZ - 1.5, maxZ: sign < 0 ? b.minZ + 1.5 : b.maxZ, minX: cross - 2, maxX: cross + 2 };
+            const suffix = `${i ? `${i}/` : ''}${side}`;
+            const sf = addSurface(`${id}/window-${suffix}`, roomId, sill, flat(h), 'landing', false, roofY);
+            const from = rectCenter(sill), desired = { x: from.x - (axis === 'x' ? sign * 6 : 0), z: from.z - (axis === 'z' ? sign * 6 : 0) };
+            const arrival = { ...atriumArrival(b, h - 5.4, atrium, desired.x, desired.z).point, y: h - 5.4 };
+            topology.connections.push({ id: `${id}/drop-${suffix}`, from: sf.id, to: atriumGroundId(regionalCellId(gx, gz, atrium.lower), b, h - 5.4, atrium, arrival.x, arrival.z), at: from, arrival,
+              width: 4, kind: 'drop', direction: 'forward', access: 'open', toOwner: { ...owner, story: atrium.lower } });
+            spatial.landmarks.push({ kind: 'ouverture-haute', position: { ...from, y: h + .865 }, destination: { ...arrival, y: arrival.y + .865 }, owner: { ...owner, story: atrium.lower } });
+          }
         }
       }
     } else {
       const branchCuts: Rect[] = [];
       for (const side of sides) {
-        const [dx, dz] = deltas[side], other = regionalDatum(seed, gx + dx, gz + dz), y = (h + other.y) / 2;
-        if (Math.abs(y - h) < .001) continue;
-        const alongX = dx !== 0, reverse = dx < 0 || dz < 0;
-        const corridor: Rect = alongX ? { minX: reverse ? b.minX : p.x + 3, maxX: reverse ? p.x - 3 : b.maxX, minZ: p.z - 2, maxZ: p.z + 2 }
-          : { minZ: reverse ? b.minZ : p.z + 3, maxZ: reverse ? p.z - 3 : b.maxZ, minX: p.x - 2, maxX: p.x + 2 };
-        branchCuts.push(corridor);
-        const core = alongX ? (reverse ? corridor.maxX : corridor.minX) : reverse ? corridor.maxZ : corridor.minZ;
-        const edge = alongX ? (reverse ? corridor.minX : corridor.maxX) : reverse ? corridor.minZ : corridor.maxZ;
-        const part = (a: number, end: number): Rect => alongX ? { ...corridor, minX: Math.min(a, end), maxX: Math.max(a, end) } : { ...corridor, minZ: Math.min(a, end), maxZ: Math.max(a, end) };
-        const sign = reverse ? -1 : 1, first = core + sign, last = edge - sign;
-        const approach = addSurface(`${id}/${side}/approach`, roomId, part(core, first), flat(h));
-        const route = connector(`${id}/${side}/route`, roomId, part(first, last), alongX ? 'x' : 'z', reverse ? y : h, reverse ? h : y);
-        const seam = addSurface(`${id}/${side}/seam`, roomId, part(last, edge), flat(y), 'landing');
-        // Side walls follow the exact connector envelope, rather than a solid
-        // wedge extruded down to a forgotten ground datum.
-        for (const s of [approach, ...route, seam]) for (const sideSign of [-1, 1]) {
-          const r = s.bounds, sb = alongX ? { ...r, minZ: sideSign < 0 ? r.minZ - .16 : r.maxZ, maxZ: sideSign < 0 ? r.minZ : r.maxZ + .16 }
-            : { ...r, minX: sideSign < 0 ? r.minX - .16 : r.maxX, maxX: sideSign < 0 ? r.minX : r.maxX + .16 };
-          const corners = [[sb.minX, sb.minZ], [sb.minX, sb.maxZ], [sb.maxX, sb.maxZ], [sb.maxX, sb.minZ]];
-          const bottoms = corners.map(([x, z]) => {
-            const inside = alongX ? Math.abs(z! - (sideSign < 0 ? r.minZ : r.maxZ)) < .001 : Math.abs(x! - (sideSign < 0 ? r.minX : r.maxX)) < .001;
-            return inside ? surfaceY(s, x!, z!) - .16 : h - .16;
-          });
-          // Each address owns a 5.4m sheared band. Both visible faces start at
-          // their respective floor, and adjacent owners meet without overlap.
-          const vertices = [ADDRESS_PITCH, 0].flatMap(d => corners.flatMap(([x, z], i) => [x!, bottoms[i]! + d, z!]));
-          addPrism({ id: `${s.id}/side-${sideSign}`, vertices, material: 'wall', collision: true });
+        const [dx, dz] = deltas[side], other = regionalDatum(seed, gx + dx, gz + dz);
+        if (Math.abs(other.y - h) < .001) continue;
+        const t = planRegionalTransition(seed, gx, gz, owner.story, side, b, h, other.y, `${id}/${side}/route`);
+        spatial.transitions!.push(t);
+        branchCuts.push(t.bounds);
+        routeReservations.push(expand(t.bounds, t.wallThickness + .55));
+        world.rooms.push({ id: t.roomId, bounds: expand(t.bounds, t.wallThickness), kind: 'corridor', level: 0,
+          floorY: Math.min(t.startY, t.endY), ceilingHeight: Math.max(t.startY, t.endY) + 3.08,
+          structuralCeilingY: Math.max(t.startY, t.endY) + 3.08, detailDensity: .1, access: 'open' });
+        addSurface(`${t.id}/approach`, t.roomId, t.approach.bounds, flat(t.approach.y));
+        const route = transitionTreads(t).map(step => {
+          const sf = addSurface(t.kind === 'ramp' ? t.id : `${t.id}/step-${step.index}`, t.roomId,
+            step.bounds, step.profile, t.kind === 'ramp' ? 'ramp' : 'stair', false);
+          sf.ceilingProfile = restrictProfile(t.run, t.roof, step.bounds);
+          sf.ceilingY = Math.max(t.startY, t.endY) + 3.05;
+          if (t.kind === 'stairs') sf.thickness = .27;
+          return sf;
+        });
+        spatial.ceilings.push({ ...route[0]!, id: `${t.id}/roof`, bounds: t.run, profile: offsetProfile(t.roof, .03),
+          ceilingProfile: undefined, thickness: .03, role: 'floor', support: 'slab', access: 'sealed' });
+        addSurface(`${t.id}/landing`, t.roomId, t.landing.bounds, flat(t.landing.y), 'landing');
+        // Three structural panels per side, bounded by the actual continuous
+        // roof. The outer face meets the host room's floor/ceiling, not a 5.4m band.
+        for (const [name, bounds, profile] of [['approach', t.approach.bounds, flat(t.approach.y)],
+          ['run', t.run, t.profile], ['landing', t.landing.bounds, flat(t.landing.y)]] as const) for (const sign of [-1, 1]) {
+          const alongX = t.axis === 'x', w = t.wallThickness;
+          const r = alongX ? { ...bounds, minZ: sign < 0 ? bounds.minZ - w : bounds.maxZ, maxZ: sign < 0 ? bounds.minZ : bounds.maxZ + w }
+            : { ...bounds, minX: sign < 0 ? bounds.minX - w : bounds.maxX, maxX: sign < 0 ? bounds.minX : bounds.maxX + w };
+          const corners = [[r.minX, r.minZ], [r.minX, r.maxZ], [r.maxX, r.maxZ], [r.maxX, r.minZ]];
+          const vertices = [true, false].flatMap(top => corners.flatMap(([x, z]) => {
+            const inside = alongX ? Math.abs(z! - (sign < 0 ? bounds.minZ : bounds.maxZ)) < .001
+              : Math.abs(x! - (sign < 0 ? bounds.minX : bounds.maxX)) < .001;
+            const foot = inside ? surfaceY({ bounds, profile } as WalkableSurface, x!, z!) : h;
+            // The flat approach has two real side doorways. Keeping its
+            // entire sides solid can seal a BSP corner between two chambers.
+            return [x!, foot + (top ? inside ? 3.08 : 2.77 : name === 'approach' ? 2.5 : -.2), z!];
+          }));
+          addPrism({ id: `${t.id}/${name}/side-${sign}`, vertices, material: 'wall', collision: true });
         }
-        spatial.landmarks.push({ kind: route[0]?.role === 'stair' ? 'escalier-regional' : 'rampe-regionale', position: { ...rectCenter(corridor), y: (h + y) / 2 + .865 } });
+        const center = rectCenter(t.run), roof = surfaceY({ bounds: t.run, profile: t.roof } as WalkableSurface, center.x, center.z);
+        world.lights.push({ id: `${t.id}/light`, x: center.x, z: center.z, roomId: t.roomId, ceilingY: roof,
+          width: 1.55, rotation: t.axis === 'x' ? 0 : Math.PI / 2, intensity: 1.08, color: 0xffffe4,
+          dead: false, unstable: false, phase: 0, level: 0 });
+        spatial.landmarks.push({ kind: t.kind === 'stairs' ? 'escalier-regional' : 'rampe-regionale',
+          position: { ...center, y: surfaceY({ bounds: t.run, profile: t.profile } as WalkableSurface, center.x, center.z) + .865 } });
       }
       cutRects([b], branchCuts).forEach((r, i) => addSurface(`${id}/floor${i ? `-${i}` : ''}`, roomId, r, flat(h)));
     }
@@ -195,24 +242,21 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     if (mode === 'rooms' || mode === 'lower-maze') {
       const protectedRoutes: Rect[] = [];
       if (mode === 'lower-maze') {
-        protectedRoutes.push({ ...b, minX: p.x - 2.2, maxX: p.x + 2.2 }, { ...b, minZ: p.z - 2.2, maxZ: p.z + 2.2 });
+        for (let x = b.minX + 14; x < b.maxX; x += 28) protectedRoutes.push({ ...b, minX: x - 2.2, maxX: x + 2.2 });
+        for (let z = b.minZ + 14; z < b.maxZ; z += 28) protectedRoutes.push({ ...b, minZ: z - 2.2, maxZ: z + 2.2 });
+        if (atrium) protectedRoutes.push(...atriumLandingPads(b, h, atrium).map(p => expand(p.bounds, .5)));
         if (atrium?.stairs) {
-          const circulation = atriumCirculation(b, h + 10.8, atrium);
+          const circulation = atriumCirculation(b, h + (atrium.owner - atrium.lower) * ADDRESS_PITCH, atrium);
           protectedRoutes.push(...circulation.legs.map(l => expand(l.bounds, .5)));
           protectedRoutes.push(expand({ minX: circulation.exit.x - 1.6, maxX: circulation.exit.x + 1.6, minZ: circulation.exit.z - 1.6, maxZ: circulation.exit.z + 1.6 }, .4));
         }
         for (const floor of topology.surfaces.filter(s => s.roomId === roomId && s.role === 'floor')) {
           const c = rectCenter(floor.bounds); protectedRoutes.push({ minX: c.x - .6, maxX: c.x + .6, minZ: c.z - .6, maxZ: c.z + .6 });
         }
-      } else for (const side of sides) {
-        const [dx, dz] = deltas[side];
-        if (Math.abs(regionalDatum(seed, gx + dx, gz + dz).y - h) < .001) continue;
-        protectedRoutes.push(dx ? { ...b, minX: dx < 0 ? b.minX : p.x - 3, maxX: dx < 0 ? p.x + 3 : b.maxX, minZ: p.z - 3.2, maxZ: p.z + 3.2 }
-          : { ...b, minZ: dz < 0 ? b.minZ : p.z - 3, maxZ: dz < 0 ? p.z + 3 : b.maxZ, minX: p.x - 3.2, maxX: p.x + 3.2 });
-      }
-      const normal = family === 'maze' || mode === 'lower-maze';
+      } else protectedRoutes.push(...routeReservations);
+      const normal = mode === 'lower-maze' ? !atrium?.openLower : family === 'maze';
       const parts = normal ? template.rooms.flatMap(r => { const bounds = intersect(move(r.bounds), b); return bounds ? [{ source: r, bounds, id: `${id}/bsp/${r.id}` }] : []; })
-        : [{ source: { ...world.rooms.at(-1)!, kind: 'open-hall' as const, ceilingHeight: 2.74, id: 'hall' }, bounds: b, id: `${id}/hall` }];
+        : [{ source: { ...world.rooms.find(r => r.id === roomId)!, kind: 'open-hall' as const, ceilingHeight: 2.74, id: 'hall' }, bounds: b, id: `${id}/hall` }];
       world.rooms = world.rooms.filter(r => r.id !== roomId);
       for (const part of parts) world.rooms.push({ ...part.source, id: part.id, bounds: part.bounds, floorY: h,
         ceilingHeight: mode === 'lower-maze' ? roofY : h + part.source.ceilingHeight, structuralCeilingY: mode === 'lower-maze' ? roofY : h + part.source.ceilingHeight, access: 'open' });
@@ -267,7 +311,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
         // entire envelope excluded from the full stair circulation.
         for (const sz of [-1, 1]) {
           const beam = { ...b, minZ: p.z + sz * 8 - .12, maxZ: p.z + sz * 8 + .12 };
-          if (protectedRoutes.filter(r => rectWidth(r) < 10 && rectDepth(r) > 10).some(r => overlapRect(r, beam) && atrium?.stairs && atriumCirculation(b, h + 10.8, atrium).legs.some(l => overlapRect(l.bounds, beam)))) continue;
+          if (protectedRoutes.filter(r => rectWidth(r) < 10 && rectDepth(r) > 10).some(r => overlapRect(r, beam) && atrium?.stairs && atriumCirculation(b, h + (atrium.owner - atrium.lower) * ADDRESS_PITCH, atrium).legs.some(l => overlapRect(l.bounds, beam)))) continue;
           addPrism(profilePrism(`${id}/fixture-beam-${sz}`, beam, flat(h + 2.74), flat(h + 2.96), 'plaster'));
           for (const sx of [-1, 1]) { const x = p.x + sx * 8, z = p.z + sz * 8, room = roomAt(x, z); if (room && !lightBlocked(x, z)) world.lights.push({ id: `${id}/lower-light-${sx}-${sz}`, x, z, roomId: room.id, ceilingY: h + 2.74, width: 1.55, rotation: 0, intensity: 1.08, color: 0xffffe4, dead: false, unstable: false, phase: 0, level: 0 }); }
         }
@@ -288,9 +332,9 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
       const sideBounds = (lo: number, hi: number): Rect => alongX ? { minX: lo, maxX: hi, minZ: side === 'north' ? b.minZ : b.maxZ - wallHalf, maxZ: side === 'north' ? b.minZ + wallHalf : b.maxZ }
         : { minZ: lo, maxZ: hi, minX: side === 'west' ? b.minX : b.maxX - wallHalf, maxX: side === 'west' ? b.minX + wallHalf : b.maxX };
       const bottom = h - .16, top = h + ADDRESS_PITCH - .16;
-      const outside = side === 'north' ? iz === 0 : side === 'south' ? iz === 3 : side === 'west' ? ix === 0 : ix === 3;
+      const outside = side === 'north' ? Math.abs(b.minZ + 56) < .001 : side === 'south' ? Math.abs(b.maxZ - 56) < .001 : side === 'west' ? Math.abs(b.minX + 56) < .001 : Math.abs(b.maxX - 56) < .001;
       const gates = outside && boundaryGates ? boundaryGates[side].filter(g => g.offset + g.width / 2 > min && g.offset - g.width / 2 < max)
-        .map(g => ({ min: Math.max(min, g.offset - g.width / 2), max: Math.min(max, g.offset + g.width / 2), y: g.floorY })) : [{ min: mid - 2, max: mid + 2, y: portalY }];
+        .map(g => ({ min: Math.max(min, g.offset - g.width / 2), max: Math.min(max, g.offset + g.width / 2), y: g.floorY })) : Array.from({ length: Math.round((max - min) / 28) }, (_, i) => ({ min: min + (i + .5) * 28 - 2, max: min + (i + .5) * 28 + 2, y: portalY }));
       let cursor = min;
       for (const [i, g] of [...gates].sort((a, b) => a.min - b.min).entries()) {
         wall(`${id}/facade-${side}/part-${i}`, sideBounds(cursor, g.min), bottom, top);
@@ -306,6 +350,13 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     }
   }
 
+  for (const slice of featureSlices) installSpatialFeature(world, slice, {
+    surface: (id, roomId, bounds, y, ceiling, role = 'floor') => addSurface(id, roomId, bounds, flat(y), role, false, ceiling),
+    prism: addPrism, wall,
+  });
+
+  applySpatialRelief(world, featureSlices.map(s => s.reservation), wall);
+
   const carve = (source: typeof world.walls[number], aperture: Rect) => {
     if (!world.walls.includes(source)) return;
     const bounds = { minX: source.x - (source.orientation === 'x' ? source.length : source.thickness) / 2, maxX: source.x + (source.orientation === 'x' ? source.length : source.thickness) / 2,
@@ -314,6 +365,34 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     cutRects([bounds], [aperture]).forEach((b, i) => wall(`${source.id}/regional-door-${i}`, b, source.bottom, source.bottom + source.height, source.tint));
   };
 
+  // A door crosses the thickness of its host wall. BSP room bounds can stop
+  // on opposite wall faces, so explicitly own both halves of its real threshold.
+  for (const door of world.features.filter(f => f.kind === 'interactive-door')) {
+    const alongX = door.orientation === 'x', x = door.position.x, z = door.position.z, h = door.position.y;
+    const aperture: Rect = alongX ? { minX: x - door.width / 2, maxX: x + door.width / 2, minZ: z - 1.6, maxZ: z + 1.6 }
+      : { minX: x - 1.6, maxX: x + 1.6, minZ: z - door.width / 2, maxZ: z + door.width / 2 };
+    for (const source of [...world.walls]) {
+      if (!source.id.includes('/bsp/') || source.bottom > h + .05) continue;
+      const bounds = { minX: source.x - (source.orientation === 'x' ? source.length : source.thickness) / 2,
+        maxX: source.x + (source.orientation === 'x' ? source.length : source.thickness) / 2,
+        minZ: source.z - (source.orientation === 'z' ? source.length : source.thickness) / 2,
+        maxZ: source.z + (source.orientation === 'z' ? source.length : source.thickness) / 2 };
+      const clipped = intersect(bounds, aperture); if (!clipped) continue;
+      carve(source, aperture);
+      wall(`${source.id}/door-lintel`, clipped, h + door.height, source.bottom + source.height, source.tint);
+    }
+    topology.surfaces = topology.surfaces.flatMap(sf => sf.profile.kind !== 'flat' || Math.abs(surfaceRange(sf)[0] - h) > .01 || !overlapRect(sf.bounds, aperture) ? [sf]
+      : cutRects([sf.bounds], [aperture]).map((bounds, i) => ({ ...sf, id: `${sf.id}/door-cut-${i}`, bounds })));
+    spatial.ceilings = spatial.ceilings.flatMap(sf => !overlapRect(sf.bounds, aperture) ? [sf]
+      : cutRects([sf.bounds], [aperture]).map((bounds, i) => ({ ...sf, id: `${sf.id}/door-cut-${i}`, bounds })));
+    const roof = Math.max(h + 2.5, Math.min(...world.rooms.filter(r => r.id === door.sourceRoomId || r.id === door.targetRoomId).map(r => r.ceilingHeight)));
+    for (const sign of [-1, 1]) {
+      const bounds = alongX ? { ...aperture, minZ: sign < 0 ? aperture.minZ : z, maxZ: sign < 0 ? z : aperture.maxZ }
+        : { ...aperture, minX: sign < 0 ? aperture.minX : x, maxX: sign < 0 ? x : aperture.maxX };
+      addSurface(`${door.id}/threshold-${sign}`, sign < 0 ? door.sourceRoomId : door.targetRoomId, bounds, flat(h), 'landing', true, roof);
+    }
+  }
+
   for (const surface of [...topology.surfaces, ...spatial.ceilings]) {
     if (world.rooms.some(r => r.id === surface.roomId)) continue;
     const p = rectCenter(surface.bounds), room = world.rooms.find(r => pointInRect(p.x, p.z, r.bounds, -.001) && Math.abs((r.floorY ?? 0) - surfaceRange(surface)[0]) < 12);
@@ -321,9 +400,11 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
   }
   const rawSurfaces = topology.surfaces;
   const rebuildFloors = () => {
-    const floorCuts = world.walls.filter(w => w.height > 1.8).map(w => ({ bounds: { minX: w.x - (w.orientation === 'x' ? w.length : w.thickness) / 2, maxX: w.x + (w.orientation === 'x' ? w.length : w.thickness) / 2,
-      minZ: w.z - (w.orientation === 'z' ? w.length : w.thickness) / 2, maxZ: w.z + (w.orientation === 'z' ? w.length : w.thickness) / 2 }, bottom: w.bottom, top: w.bottom + w.height }));
-    topology.surfaces = rawSurfaces.flatMap(s => !s.id.includes('/bsp-') || s.role !== 'floor' ? [s] : cutRects([s.bounds], floorCuts.filter(c => c.bottom < surfaceRange(s)[0] + .05 && c.top > surfaceRange(s)[0] + .1).map(c => c.bounds))
+    const doors = new Set(world.features.filter(f => f.kind === 'interactive-door').map(f => f.colliderId));
+    const floorCuts = world.colliders.filter(c => c.kind === 'wall' && !doors.has(c.id)).map(c => ({
+      bounds: { minX: c.center.x - c.halfExtents.x, maxX: c.center.x + c.halfExtents.x, minZ: c.center.z - c.halfExtents.z, maxZ: c.center.z + c.halfExtents.z },
+      bottom: c.center.y - c.halfExtents.y, top: c.center.y + c.halfExtents.y }));
+    topology.surfaces = rawSurfaces.flatMap(s => s.role !== 'floor' ? [s] : cutRects([s.bounds], floorCuts.filter(c => c.bottom < surfaceRange(s)[0] + .05 && c.top > surfaceRange(s)[0] + .1).map(c => c.bounds))
       .map((bounds, i) => ({ ...s, id: `${s.id}/clear-${i}`, bounds })));
     topology.connections = topology.connections.filter(c => !c.id.startsWith('join/'));
   };
@@ -392,12 +473,13 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     topology.connections.push({ id: `${support.id}/external-${side}`, from: support.id, to: node, at: { x: inside.x, z: inside.z }, width: gate.width, kind: 'walk', direction: 'both', access: 'open',
       targetKind: 'portal', toOwner: neighbor, arrival: { x: position.x + dx * .1, y: position.y, z: position.z + dz * .1 } });
   }
+  connectSpatialFeatures(world, featureSlices);
   connectSpatialSurfaces(world);
   world.colliders.push(...topology.surfaces.map(s => s.role === 'floor' ? slabMeshCollider(s) : surfaceCollider(s)), ...spatial.ceilings.map(s => ({ ...surfaceCollider(s), id: s.id, kind: 'barrier' as const })));
   topology.volumes = topology.surfaces.flatMap(s => [{ id: `${s.id}/clearance`, surfaceId: s.id, bounds: s.bounds, bottom: surfaceRange(s)[0], top: s.ceilingY, purpose: 'clearance' as const, ownerStory: owner.story },
-    { id: `${s.id}/structure`, surfaceId: s.id, bounds: s.bounds, bottom: surfaceRange(s)[0] - .16, top: surfaceRange(s)[1], purpose: 'structure' as const, ownerStory: owner.story }]);
+    { id: `${s.id}/structure`, surfaceId: s.id, bounds: s.bounds, bottom: s.support === 'solid' ? s.supportBottom ?? surfaceRange(s)[0] - .16 : surfaceRange(s)[0] - .16, top: surfaceRange(s)[1], purpose: 'structure' as const, ownerStory: owner.story }]);
   world.floorRects = topology.surfaces.map(s => s.bounds);
-  const candidates = topology.surfaces.filter(s => s.role === 'floor' && s.profile.kind === 'flat' && rectWidth(s.bounds) > 2 && rectDepth(s.bounds) > 2)
+  const candidates = topology.surfaces.filter(s => s.role === 'floor' && s.locomotion !== 'crouch' && s.profile.kind === 'flat' && rectWidth(s.bounds) > 2 && rectDepth(s.bounds) > 2)
     .map(s => ({ s, p: rectCenter(s.bounds) })).filter(({ s, p }) => !world.colliders.some(c => c.kind === 'wall' && Math.abs(c.center.x - p.x) < c.halfExtents.x + .4 && Math.abs(c.center.z - p.z) < c.halfExtents.z + .4 && c.center.y + c.halfExtents.y > surfaceY(s, p.x, p.z) + .1 && c.center.y - c.halfExtents.y < surfaceY(s, p.x, p.z) + 1.8))
     .sort((a, b) => Math.hypot(a.p.x, a.p.z) - Math.hypot(b.p.x, b.p.z));
   const spawn = candidates[0] ?? { s: topology.surfaces[0]!, p: rectCenter(topology.surfaces[0]!.bounds) };
@@ -429,8 +511,9 @@ export const connectSpatialSurfaces = (world: WorldPlan): void => {
     // both isolated valid floor around T-junctions after BSP clipping.
     let gaps = [{ min: lo, max: hi }];
     const foot = Math.max(surfaceY(a.s, p.x, p.z), surfaceY(b.s, p.x, p.z));
+    const headroom = a.s.locomotion === 'crouch' || b.s.locomotion === 'crouch' ? 1.26 : 1.75;
     for (const c of world.colliders) {
-      if (c.kind !== 'wall' || c.center.y + c.halfExtents.y < foot + .05 || c.center.y - c.halfExtents.y > foot + 1.75) continue;
+      if (c.kind !== 'wall' || c.center.y + c.halfExtents.y < foot + .05 || c.center.y - c.halfExtents.y > foot + headroom) continue;
       const cross = a.axis === 'x' ? c.center.z : c.center.x, crossHalf = a.axis === 'x' ? c.halfExtents.z : c.halfExtents.x;
       if (Math.abs(cross - a.fixed) > crossHalf + .34) continue;
       const along = a.axis === 'x' ? c.center.x : c.center.z, half = (a.axis === 'x' ? c.halfExtents.x : c.halfExtents.z) + .34;

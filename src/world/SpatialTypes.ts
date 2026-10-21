@@ -1,5 +1,7 @@
 import type { Rect, Vec3Data } from './types';
 import type { WalkableSurface } from './WalkableTopology';
+import type { SpatialReliefRecord } from './SpatialRelief';
+import type { TransitionLayout } from './TransitionLayout';
 
 export interface SpatialAddress { x: number; z: number; story: number }
 export interface SpatialPrism {
@@ -18,6 +20,7 @@ export interface SpatialCellRecord {
   id: string; regionId: string; bounds: Rect; floorY: number;
   mode: 'rooms' | 'gallery' | 'void' | 'lower-maze';
   atriumOwner?: number;
+  atriumLower?: number;
 }
 export interface SpatialArchitecture {
   version: 2;
@@ -28,4 +31,6 @@ export interface SpatialArchitecture {
   dependencies: SpatialDependency[];
   interfaces: { id: string; side: 'north' | 'east' | 'south' | 'west'; surfaceId: string; position: Vec3Data; width: number; neighbor: SpatialAddress }[];
   landmarks: { kind: string; position: Vec3Data; destination?: Vec3Data; owner?: SpatialAddress }[];
+  transitions?: TransitionLayout[];
+  reliefs?: SpatialReliefRecord[];
 }

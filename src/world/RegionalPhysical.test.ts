@@ -14,9 +14,11 @@ import { createWalkableGeometry } from '../render/WalkableGeometry';
 import { surfaceY } from './WalkableTopology';
 
 const dt = 1 / 60, tuning = MOVEMENT_TUNING.locomotion;
+const samples = new Map<number, WorldPlan>();
 const sample = (kind: string) => {
-  for (let i = 0; i < 64; i++) {
-    const seed = `REGIONAL-AUDIT-${i}`, world = generateInfiniteChunk(seed, { x: 0, z: 0, story: 0 });
+  for (let i = 0; i < 128; i++) {
+    const seed = `REGIONAL-AUDIT-${i}`, world = samples.get(i) ?? generateInfiniteChunk(seed, { x: 0, z: 0, story: 0 });
+    samples.set(i, world);
     const landmark = world.spatial!.landmarks.find(l => l.kind === kind);
     if (landmark) return { world, landmark };
   }
@@ -45,16 +47,18 @@ it.each(['l', 'u', 'bridge'])('walks the entire generated %s atrium stair down a
   const cell = world.spatial!.cells.find(c => c.mode === 'gallery' && c.bounds.minX < landmark.position.x && c.bounds.maxX > landmark.position.x && c.bounds.minZ < landmark.position.z && c.bounds.maxZ > landmark.position.z)!;
   const center = rectCenter(cell.bounds), c = spatialCellAt(center.x, center.z), a = regionalAtrium(world.seed, c.x, c.z, 0)!;
   const route = atriumCirculation(cell.bounds, cell.floorY, a), first = route.legs[0]!;
-  let p: Vec3Data = { x: rectCenter(first.bounds).x, y: cell.floorY + .865, z: first.bounds.minZ - .6 };
+  const entrance = { x: first.axis === 'x' ? first.bounds.minX - .6 : rectCenter(first.bounds).x, y: cell.floorY + .865,
+    z: first.axis === 'z' ? first.bounds.minZ - .6 : rectCenter(first.bounds).z };
+  let p: Vec3Data = { ...entrance };
   physics.teleport(p);
   try {
     for (let i = 0; i < 20; i++) p = { ...physics.move({ x: 0, y: -.035, z: 0 }).position };
     const waypoints = route.landing ? [{ x: rectCenter(first.bounds).x, z: rectCenter(route.landing.bounds).z },
-      { x: route.exit.x, z: route.landing.bounds.minZ + 1.6 }, route.exit] : [route.exit];
+      { x: route.exit.x, z: rectCenter(route.landing.bounds).z }, route.exit] : [route.exit];
     for (const point of waypoints) p = walkTo(physics, p, point);
-    expect(p.y).toBeCloseTo(cell.floorY - 10.8 + .865, 1);
+    expect(p.y).toBeCloseTo(cell.floorY - (a.owner - a.lower) * 5.4 + .865, 1);
     for (const point of [...waypoints.slice(0, -1)].reverse()) p = walkTo(physics, p, point);
-    p = walkTo(physics, p, { x: rectCenter(first.bounds).x, z: first.bounds.minZ - .6 });
+    p = walkTo(physics, p, entrance);
     expect(p.y).toBeCloseTo(cell.floorY + .865, 1);
   } finally { physics.dispose(); }
 });
@@ -128,20 +132,23 @@ it('uses the same wall faces in Three and Rapier, including sheared floor-to-sta
 
 it('walks below an unconnected upper bridge and exposes its real underside without a middle floor', async () => {
   const { world } = sample('galerie-bridge'), bridge = world.topology!.surfaces.find(s => s.role === 'bridge' && s.id.endsWith('/bridge'))!;
+  const sourceCell = world.spatial!.cells.find(c => c.mode === 'gallery' && c.bounds.minX <= bridge.bounds.minX && c.bounds.maxX >= bridge.bounds.maxX && c.bounds.minZ <= bridge.bounds.minZ && c.bounds.maxZ >= bridge.bounds.maxZ)!;
+  const cellAt = spatialCellAt(sourceCell.bounds.minX + .1, sourceCell.bounds.minZ + .1);
+  const atrium = regionalAtrium(world.seed, cellAt.x, cellAt.z, 0)!, span = (atrium.owner - atrium.lower) * 5.4;
   const p = rectCenter(bridge.bounds), h = surfaceY(bridge, p.x, p.z), physics = await mount(world);
   const material = new THREE.MeshBasicMaterial(), geometry = createWalkableGeometry(bridge, 'underside');
   const mesh = new THREE.Mesh(geometry, material); mesh.updateMatrixWorld();
   try {
-    let at = { x: p.x, y: h - 10.8 + .865, z: p.z - 5 }; physics.teleport(at);
+    let at = { x: p.x, y: h - span + .865, z: p.z - 5 }; physics.teleport(at);
     at = walkTo(physics, at, { x: p.x, z: p.z + 5 });
-    expect(at.y).toBeCloseTo(h - 10.8 + .865, 1);
+    expect(at.y).toBeCloseTo(h - span + .865, 1);
     const origin = new THREE.Vector3(p.x, h - 2, p.z), up = new THREE.Vector3(0, 1, 0);
     const rendered = new THREE.Raycaster(origin, up, 0, 3).intersectObject(mesh)[0];
     const physical = physics.world.castRay(new RAPIER.Ray(origin, up), 3, true, undefined, undefined, undefined, undefined, physics.isEnvironmentCollider);
     expect(rendered?.point.y).toBeCloseTo(h - .16, 4);
     expect(physical?.timeOfImpact).toBeCloseTo(1.84, 4);
     const down = physics.world.castRay(new RAPIER.Ray(origin, { x: 0, y: -1, z: 0 }), 12, true, undefined, undefined, undefined, undefined, physics.isEnvironmentCollider);
-    expect(down?.timeOfImpact).toBeCloseTo(8.8, 4);
+    expect(down?.timeOfImpact).toBeCloseTo(span - 2, 4);
   } finally { geometry.dispose(); material.dispose(); physics.dispose(); }
 });
 

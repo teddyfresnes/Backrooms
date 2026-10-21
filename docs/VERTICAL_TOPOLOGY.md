@@ -1,6 +1,6 @@
 # Architecture régionale à plusieurs couches
 
-Le monde ordinaire utilise `WorldPlan.version = 12`, `topology.version = 2` et
+Le monde ordinaire utilise `WorldPlan.version = 13`, `topology.version = 2` et
 `spatial.version = 2`. Le pipeline complet v10 reste disponible explicitement dans
 `generateLegacyWorld` / `generateLegacyInfiniteChunk` pour les monuments,
 leurs résumés et les reproductions `RAW_LOCAL_`. Les plateaux ordinaires réutilisent
@@ -19,7 +19,7 @@ limitrophes ; les autres cellules gardent leur relief.
 L’adresse `(x,z,story)` possède des données locales. Son offset monde est
 `(112*x, 5.4*story, 112*z)`. Un datum local n’est pas cet offset. Les tranches
 ordinaires répètent la même géographie horizontale à ce pas d’adresse ; les
-atria remplacent trois tranches par un volume libre commun. Ce choix borné
+atria remplacent deux ou trois tranches par un volume libre commun. Ce choix borné
 n’est pas un partitionnement volumétrique arbitraire de tout l’espace 3D.
 
 Le pipeline est : districts → cellules/couches/atria → circulations → sols et
@@ -60,19 +60,20 @@ régionales, aux supports d’escaliers ou aux portes. Les arcs de porte portent
 ## Circulations réelles
 
 Deux districts raccordent leurs datums par un palier partagé à leur moyenne,
-sans retour à zéro. Chaque demi-parcours a 9 m utiles et deux paliers de 1 m.
-Une pente jusqu’à 0,30 utilise une rampe ; sinon le nombre de marches est déduit
+sans retour à zéro. `TransitionLayout` réserve une chambre de largeur et longueur
+variables avec approche, volée et palier commun de 2,2 m.
+Une pente jusqu’à 0,40 peut utiliser une rampe ; sinon le nombre de marches est déduit
 du dénivelé avec une contremarche maximale de 17,5 cm. Les datums intermédiaires,
 bifurcations et directions se poursuivent sur plusieurs cellules.
 
-Une cellule intérieure de district peut devenir un atrium ordinaire. Une phase
-canonique par bande de quatre adresses lui donne un propriétaire haut, une
-adresse intermédiaire vide et un bas jouable deux adresses plus bas. Les trois
-plans sont générables indépendamment. Le bas contient de vraies pièces,
+Une à quatre cellules intérieures de district peuvent devenir un atrium de
+28 à 56 m. Une phase canonique par bande de quatre adresses lui donne un
+propriétaire haut, un bas jouable une ou deux adresses plus bas et, dans le
+second cas, une adresse intermédiaire vide. Les plans sont générables indépendamment. Le bas contient de vraies pièces,
 cloisons, lumières et continuations vers le labyrinthe voisin.
 
-Le haut possède une galerie de 3 m longeant les murs, et selon la variante une
-passerelle ou un retour. Les escaliers droits, en L ou en U font 3,2 m de large ;
+Le haut possède une galerie de 2,7 à 4,8 m longeant les murs, et selon la variante
+une passerelle ou un retour. Les escaliers droits, en L ou en U font 2,4 à 3,8 m de large ;
 leurs volées et paliers partagent le même tracé avec les découpes du bas. Le
 passage inférieur sous un escalier n’existe que si son dégagement atteint 2,5 m.
 Les secteurs trop bas sont fermés par des solides visibles correspondants.
@@ -85,7 +86,10 @@ dans les deux sens, la marche seule tombe, et le tour par la galerie reste possi
 Les parapets restent entièrement sur leur dalle et s’interrompent aux passages.
 
 Les limites d’amplitude régionales sont explicites. Les grands escaliers d’atrium
-franchissent 10,8 m ; les escaliers interdistricts joignent des dénivelés variables.
+franchissent 5,4 ou 10,8 m ; les transitions interdistricts et reliefs joignent
+des dénivelés partiels variables. Les monticules et terrasses ont des solides
+jusqu’au sol porteur. Voir [TRANSITION_INTEGRATION.md](TRANSITION_INTEGRATION.md)
+pour les toits continus, UV et familles historiques réintégrées.
 Les anciens sockets acceptent aussi `rise` / `stepsPerFlight`, avec leurs valeurs
 historiques par défaut pour les monuments existants.
 
