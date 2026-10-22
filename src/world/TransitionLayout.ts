@@ -9,6 +9,8 @@ export interface TransitionLayout {
   id: string; roomId: string; bounds: Rect; axis: 'x' | 'z';
   startY: number; endY: number; width: number; wallThickness: number;
   enclosure: 'chamber'; kind: 'ramp' | 'stairs';
+  /** Canonical full connection; its two clipped halves are one flight. */
+  linkId: string; composition: 'single' | 'landing'; clearance: number;
   approach: { bounds: Rect; y: number }; landing: { bounds: Rect; y: number };
   run: Rect; profile: HeightProfile; roof: HeightProfile;
 }
@@ -29,8 +31,10 @@ export const planRegionalTransition = (seed: string, gx: number, gz: number, _st
   const center = axis === 'x' ? (bounds.minX + bounds.maxX) / 2 : (bounds.minZ + bounds.maxZ) / 2;
   const edge = axis === 'x' ? reverse ? bounds.minX : bounds.maxX : reverse ? bounds.minZ : bounds.maxZ;
   const available = Math.abs(edge - center);
-  const approachDepth = 1;
-  const seamDepth = 2.2;
+  const approachDepth = 2.2;
+  const composition = difference > 5.5 || rng.fork('composition').chance(.8) ? 'single' : 'landing';
+  const seamDepth = composition === 'single' ? 0 : 2.2;
+  const clearance = rng.fork('clearance').pick([3.8, 4.05]);
   if (difference > 6) width = 4;
   const minimumRun = Math.max(2.6, difference / .94);
   const inner = Math.min(rng.float(3.6, 7.8), available - approachDepth - seamDepth - minimumRun);
@@ -46,9 +50,10 @@ export const planRegionalTransition = (seed: string, gx: number, gz: number, _st
   const kind = grade <= .4 && rng.fork('finish').chance(.82) ? 'ramp' : 'stairs';
   const profile: HeightProfile = { kind: 'linear', axis, startY, endY };
   return { id, roomId: `${id}/chamber`, bounds: rect(core, edge), axis, startY, endY, width,
+    linkId: `transition/${pair}/${_story}`, composition, clearance,
     wallThickness: rng.pick([.6, .8, 1.05]), enclosure: 'chamber', kind,
     approach: { bounds: rect(core, first), y: floorY }, landing: { bounds: rect(last, edge), y: landingY },
-    run, profile, roof: offsetProfile(profile, 3.05) };
+    run, profile, roof: offsetProfile(profile, clearance) };
 };
 
 export const restrictProfile = (bounds: Rect, profile: HeightProfile, part: Rect): HeightProfile => profile.kind === 'flat'

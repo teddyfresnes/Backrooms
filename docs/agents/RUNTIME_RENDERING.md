@@ -44,6 +44,11 @@ CPU sont calculés et transférés par `infinite.worker`, puis montés avec le c
 Le mode classique conserve son bake, avec filtrage vertical des contributions.
 Les UV partagent une origine monde et les quatre chunks d’un BSP conservent
 les mêmes motifs. Les chants enfouis sont éliminés par `SurfaceExposure`.
+`PrismExposure` soustrait les rectangles coplanaires superposés de même normale
+avant la séparation en matériaux : murs BSP, façades et plinthes ne redessinent
+plus la même face. Les UV des fragments gardent leur origine monde.
+`CeilingFixture` aligne les diffuseurs sur le profil du toit et place leurs
+coins sous sa vraie sous-face ; un luminaire ne traverse pas un plafond incliné.
 Ces méthodes restent des approximations, pas un calcul d’ombres 3D.
 `/geometry uv|volumes|off` active un diagnostic temporaire, libéré au démontage.
 Les sauvegardes reprojettent dans le propriétaire enregistré : voir le contrat

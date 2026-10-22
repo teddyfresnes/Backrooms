@@ -1,4 +1,4 @@
-# Transitions et volumes intégrés — version 13
+# Transitions et volumes intégrés — version 14
 
 Les salles ordinaires conservent le BSP historique, ses murs épais et son
 éclairage. Les transitions et les salles à plusieurs hauteurs sont composées
@@ -6,16 +6,30 @@ avant leurs réservations ; leurs surfaces finales alimentent Three et Rapier.
 
 ## Causes corrigées
 
-- Un plafond était créé par marche et les parois de 16 cm dépassaient jusqu’à
-  une bande de 5,4 m. `TransitionLayout` décrit désormais une chambre, une
-  approche, une volée, un palier et un seul profil de toit pour la volée.
+- `TransitionLayout` décrit une chambre, une approche et un seul profil de toit
+  par volée. Le dégagement régional passe de 3,05 m à 3,8 ou 4,05 m ; la coupe
+  du plafond ordinaire inclut toute l’épaisseur des murs de la cage.
+- Les raccords entre datums différents sont sélectionnés avant les réservations :
+  un maximum par cellule et au moins 49 m entre centres. Une frontière non
+  sélectionnée garde sa façade fermée. Les passages à même datum sont conservés.
+- Les deux moitiés canoniques d’un raccord partagent `linkId`, composition et
+  gabarit. Environ 80 % demandent une seule volée continue ; les autres ont un
+  vrai palier intermédiaire. Les grands dénivelés imposent la volée continue.
+  Une couture de chunk ou de cellule ne crée pas un deuxième escalier.
 - La largeur, la longueur et le revêtement de la volée variaient peu. Les
   chambres mesurent 4 / 4,8 / 5,6 m de large ; leurs parois mesurent 0,6 à
   1,05 m. Le choix rampe/escalier dépend du dénivelé et de la longueur disponible.
-- Deux cages perpendiculaires pouvaient enfermer un coin de pièce. Leurs
-  approches plates possèdent deux entrées latérales sous linteau, avec sol continu.
-- La façade de 4 m empiétait sur les voies larges. Le palier commence désormais
-  2,2 m avant la couture, pour dégager l’épaisseur de façade et le corps.
+- Les approches plates de 2,2 m ont des entrées latérales de 1,6 m entre vrais
+  piédroits. Un linteau frontal ferme le changement de hauteur du plafond.
+  La façade est découpée selon la largeur réelle du raccord, sans bande basse
+  traversant une volée continue à la couture.
+- Les parois de cage sont des bandes verticales porteuses contiguës de 5,4 m,
+  possédées sans chevauchement par les adresses verticales. Les dépendances
+  chargent toutes les bandes nécessaires du point bas au toit. Aucune base
+  diagonale ne laisse une pointe de mur suspendue au-dessus de la pièce voisine.
+- Après les découpes et portes, `StructuralSupports` réduit les `upper-shell`
+  aux murs porteurs réels. Un linteau garde ses deux appuis ou sa continuation
+  canonique ; les fragments sans appui sont retirés du rendu et de la collision.
 - Les hauteurs finales des marches échantillonnaient le milieu de chaque
   intervalle. La dernière marche atteint exactement la destination ; les
   contremarches restent au plus à 17,5 cm et les dalles de marche font 27 cm.
@@ -30,7 +44,7 @@ avant leurs réservations ; leurs surfaces finales alimentent Three et Rapier.
 
 ## Contrats
 
-`WorldPlan.version` vaut 13. Les champs ajoutés à `SpatialArchitecture` sont
+`WorldPlan.version` vaut 14. Les champs ajoutés à `SpatialArchitecture` sont
 optionnels pour la lecture des anciens plans ; la topologie reste compatible
 avec la version 2. Les ancrages de sauvegarde sont recherchés puis vérifiés
 contre le corps réel, avec le repli sûr existant.
@@ -62,7 +76,8 @@ emprise propre, réservée avant le BSP. Leur découpage ne disparaît pas lorsq
 relief est ajouté au sol inférieur. Les relations dirigées référencent ces vrais
 paliers, jamais une preview décorative.
 
-`SpatialRelief` produit des monticules à deux rampes et des terrasses successives.
+`SpatialRelief` produit des monticules à une rampe (65 % des tirages) ou à deux
+rampes opposées symétriques, ainsi que des terrasses successives.
 Leurs surfaces ont `support: solid` et `supportBottom` au véritable sol porteur.
 Les grands reliefs peuvent rejoindre 3,6 m dans un atrium ; les reliefs ordinaires
 restent entre 0,4 et 1,2 m, sous un toit compatible avec le propriétaire suivant.
@@ -76,6 +91,13 @@ planimétrique, comme la référence historique ; elle assure la continuité au
 palier plutôt qu’une nouvelle phase de texture à chaque marche.
 `SurfaceExposure` supprime les chants complètement internes et la partie enfouie
 des contremarches massives, sans retirer les sous-faces des ponts.
+`PrismExposure` soustrait les recouvrements rectangulaires coplanaires de même
+orientation entre tous les matériaux structurels, avant leur mise en lots.
+Les fragments gardent la même phase UV monde ; aucun décalage de profondeur
+ne masque les doublons. Les faces inclinées conservent leurs sommets exacts.
+`CeilingFixture` incline chaque diffuseur selon le toit réel et place toute sa
+face à 3,6 cm sous la sous-face, y compris sur les rampes. Le champ fluorescent,
+les intensités et les coefficients des deux modes d’éclairage sont conservés.
 
 Les cycles qui retirent tous les chunks reconstruisent l’index de requête Rapier
 quand aucun collider d’environnement ne subsiste. Cela évite de réutiliser son
@@ -84,7 +106,7 @@ partagée par les contrôleurs. Les corps, vitesses et réglages physiques sont 
 
 ## Conservation des familles historiques
 
-| Famille | Chemin ordinaire v13 | Conservation / adaptation |
+| Famille | Chemin ordinaire v14 | Conservation / adaptation |
 |---|---|---|
 | BSP, masses, niches, colonnes, portes | Présent | Helpers historiques, seuils et références de porte réconciliés |
 | `epic1` à `epic5` | Colonnes monumentales protégées | Générateur legacy et helpers géométriques conservés |
@@ -132,8 +154,9 @@ réelle à travers un ancien puits sur plusieurs propriétaires.
 
 `npm run test:vertical` comprend ces essais et les cycles de montage/démontage.
 Les mesures, limites et reproductions sont dans
-[TRANSITION_VALIDATION.md](validation/TRANSITION_VALIDATION.md) ; les anciens
-résultats v12 de `BSP_RESTORATION.md` restent une référence historique.
+[STAIR_FIX_VALIDATION.md](validation/STAIR_FIX_VALIDATION.md) ; les résultats
+v13 de `TRANSITION_VALIDATION.md` et v12 de `BSP_RESTORATION.md` restent des
+références historiques.
 Le service de prévisualisation supervisée étant indisponible dans l’environnement
 de réalisation, le rendu WebGL, les shaders, les draw calls et l’aspect final des
 textures ne peuvent pas être déclarés vérifiés par ces tests CPU.

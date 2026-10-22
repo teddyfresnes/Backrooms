@@ -4,7 +4,7 @@ import { cutRects, overlapRect, surfaceRange, type HeightProfile, type WalkableS
 import { rectCenter, rectDepth, rectWidth, type Rect, type WorldPlan } from './types';
 
 export interface SpatialReliefRecord {
-  id: string; roomId: string; kind: 'mound' | 'terraces'; bounds: Rect; baseY: number; peakY: number; surfaceIds: string[];
+  id: string; roomId: string; kind: 'mound' | 'terraces'; bounds: Rect; baseY: number; peakY: number; surfaceIds: string[]; access?: 'single' | 'opposed' | 'terraced';
 }
 export const applySpatialRelief = (w: WorldPlan, avoid: readonly Rect[], header: (id: string, b: Rect, bottom: number, top: number) => void): void => {
   const spatial = w.spatial!, topology = w.topology!;
@@ -44,11 +44,17 @@ export const applySpatialRelief = (w: WorldPlan, avoid: readonly Rect[], header:
       made.push({ ...floor, id: `${id}/${name}`, bounds, profile, role: profile.kind === 'linear' ? 'ramp' : 'landing', ceilingY: roof,
         ceilingProfile: { kind: 'flat', y: roof }, support: 'solid', supportBottom: h - .16, thickness: .16, edges: 'architecture' });
     };
+    const access = kind === 'mound' ? rng.fork('access').chance(.65) ? 'single' : 'opposed' : 'terraced';
     if (kind === 'mound') {
-      const run = length * .34;
-      add('up', rect(start, start + run), { kind: 'linear', axis: alongX ? 'x' : 'z', startY: h, endY: h + peak });
-      add('platform', rect(start + run, start + length - run), { kind: 'flat', y: h + peak });
-      add('down', rect(start + length - run, start + length), { kind: 'linear', axis: alongX ? 'x' : 'z', startY: h + peak, endY: h });
+      const run = length * .34, reverse = access === 'single' && rng.fork('entrance-end').chance(.5);
+      if (reverse) {
+        add('platform', rect(start, start + length - run), { kind: 'flat', y: h + peak });
+        add('down', rect(start + length - run, start + length), { kind: 'linear', axis: alongX ? 'x' : 'z', startY: h + peak, endY: h });
+      } else {
+        add('up', rect(start, start + run), { kind: 'linear', axis: alongX ? 'x' : 'z', startY: h, endY: h + peak });
+        add('platform', rect(start + run, start + length - (access === 'opposed' ? run : 0)), { kind: 'flat', y: h + peak });
+        if (access === 'opposed') add('down', rect(start + length - run, start + length), { kind: 'linear', axis: alongX ? 'x' : 'z', startY: h + peak, endY: h });
+      }
     } else {
       const count = rng.int(3, 5), segment = length / (count * 2);
       for (let i = 0; i < count; i++) {
@@ -85,12 +91,12 @@ export const applySpatialRelief = (w: WorldPlan, avoid: readonly Rect[], header:
       }
       for (const l of w.lights) if (l.roomId === floor.roomId) l.ceilingY = roof;
     }
-    spatial.reliefs.push({ id, roomId: floor.roomId!, kind, bounds: footprint, baseY: h, peakY: h + peak, surfaceIds: made.map(s => s.id) });
+    spatial.reliefs.push({ id, roomId: floor.roomId!, kind, bounds: footprint, baseY: h, peakY: h + peak, access, surfaceIds: made.map(s => s.id) });
     const flats = made.filter(s => s.profile.kind === 'flat'), ramps = made.filter(s => s.profile.kind === 'linear').map(s => ({ bounds: s.bounds,
       axis: s.profile.kind === 'linear' ? s.profile.axis : 'x' as const, riseDirection: (s.profile.kind === 'linear' && s.profile.endY < s.profile.startY ? -1 : 1) as -1 | 1 }));
     w.features.push({ kind: 'raised-zone', id, roomId: floor.roomId!, roomIds: [floor.roomId!], bounds: footprint,
       platformBounds: flats.at(-1)!.bounds, platformRects: flats.map(s => s.bounds), elevation: h + peak, ramp: ramps[0]!, ramps });
-    const first = made[0]!, point = rectCenter(first.bounds);
+    const first = made.find(s => s.profile.kind === 'linear')!, point = rectCenter(first.bounds);
     spatial.landmarks.push({ kind: kind === 'mound' ? 'monticule-massif' : 'salle-en-gradins', position: { ...point, y: h + peak / (kind === 'mound' ? 2 : made.length) + .865 } });
   }
 };

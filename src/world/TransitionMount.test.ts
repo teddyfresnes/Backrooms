@@ -39,16 +39,18 @@ it('keeps a mounted support stable while neighbouring layers unload and reload',
   } finally { physics.dispose(); }
 }, 30000);
 
-it('walks through the side entrance of a flat approach out of the corner between two chambers', async () => {
-  const w = generateInfiniteChunk('BSP-CONNECTIVITY-6', { x: 0, z: 0, story: 0 });
-  const route = w.spatial!.transitions!.find(t => t.id.includes('/cell/3/1/0/east/route'))!;
-  const b = route.approach.bounds, x = (b.minX + b.maxX) / 2;
-  const physics = await PhysicsWorld.create({ ...w, spawn: { x, y: route.approach.y + .9, z: b.minZ - route.wallThickness - .5 } });
+it('walks through a real side doorway under a bearing lintel of an isolated cage', async () => {
+  const w = generateInfiniteChunk('REGIONAL-AUDIT-3', { x: 0, z: 0, story: 0 });
+  const route = w.spatial!.transitions![0]!, b = route.approach.bounds, alongX = route.axis === 'x';
+  const start = { x: alongX ? (b.minX + b.maxX) / 2 : b.minX - route.wallThickness - .5,
+    z: alongX ? b.minZ - route.wallThickness - .5 : (b.minZ + b.maxZ) / 2, y: route.approach.y + .9 };
+  const physics = await PhysicsWorld.create({ ...w, spawn: start });
   try {
     for (let tick = 0; tick < 20; tick++) physics.move({ x: 0, y: -.035, z: 0 });
     let p = physics.getPosition();
-    for (let tick = 0; tick < 100 && p.z < b.minZ + .8; tick++) p = physics.move({ x: 0, y: -.035, z: .05 }).position;
-    expect(p.z).toBeGreaterThan(b.minZ + .7);
+    for (let tick = 0; tick < 100 && (alongX ? p.z < b.minZ + .8 : p.x < b.minX + .8); tick++)
+      p = physics.move({ x: alongX ? 0 : .05, y: -.035, z: alongX ? .05 : 0 }).position;
+    expect(alongX ? p.z : p.x).toBeGreaterThan((alongX ? b.minZ : b.minX) + .7);
     expect(p.y).toBeCloseTo(route.approach.y + .865, 1);
   } finally { physics.dispose(); }
 });

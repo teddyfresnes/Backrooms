@@ -108,3 +108,8 @@ Les tests `TransitionLayout`, `TransitionMount`, `SpatialFeaturesPhysical`,
 `ArchitecturalUV` et `ArchitectureDebug` protègent les transitions v13, les
 trous réintégrés et les ressources des diagnostics. La séparation entre toit et
 étage supérieur se mesure au même point horizontal, y compris sur un toit incliné.
+`TransitionIsolation` et `PrismExposure` couvrent la sélection espacée v14,
+la volée unique, les vrais appuis, les bandes verticales sans recouvrement,
+le dégagement raycasté dans la géométrie finale et les coins des diffuseurs.
+Le rapport [STAIR_FIX_VALIDATION.md](../validation/STAIR_FIX_VALIDATION.md)
+distingue les contrôles CPU du contrôle visuel WebGL.

@@ -20,11 +20,13 @@ rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/
 
 ## Ordre du pipeline
 
-Le pipeline ordinaire (plan version 13, topologie/spatial version 2) est :
+Le pipeline ordinaire (plan version 14, topologie/spatial version 2) est :
 
 1. `RegionalPlan` choisit les districts mondiaux et leurs datums signés ;
 2. il réserve les atria et leur propriété sur deux ou trois adresses verticales ;
-3. `SpatialConnectors` et `TransitionLayout` déduisent les chambres, parcours,
+3. `RegionalPlan.hasRegionalTransition` sélectionne les raccords isolés entre
+   datums différents (au plus un par cellule, centres espacés d’au moins 49 m).
+   `SpatialConnectors` et `TransitionLayout` déduisent les chambres, parcours,
    toits et paliers stables ; `SpatialFeatures` réserve les anciens trous et
    passages, avec leurs vrais propriétaires source/arrivée ;
 4. `SpatialWorld` réutilise `generateBspArchitecture` sur des domaines canoniques
@@ -33,7 +35,9 @@ Le pipeline ordinaire (plan version 13, topologie/spatial version 2) est :
 5. `SpatialRelief` ajoute les socles et terrasses pleins au sol porteur ;
 6. `BspConnectivity` ouvre les partitions ordinaires qui isolent une poche après
    découpe ; le graphe distingue les portes à ouvrir (`requiresDoorId`), les vues
-   et les chutes. Les petits rectangles de dallage ne sont pas des obstacles ;
+   et les chutes. Les petits rectangles de dallage ne sont pas des obstacles.
+   `StructuralSupports` réconcilie ensuite les coques et linteaux avec leurs
+   vrais appuis après les réservations et portes ;
 7. `generateInfiniteChunk` applique palette et props, préfixe les IDs et références.
 
 Voir [les contrats de transition](../TRANSITION_INTEGRATION.md) pour les plafonds

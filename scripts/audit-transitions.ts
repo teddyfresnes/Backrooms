@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { generateInfiniteChunk, clearInfiniteWorldCaches } from '../src/world/InfiniteWorld';
 import { validateTopology, surfaceY } from '../src/world/WalkableTopology';
 import { createSpatialPrismBatch } from '../src/render/SpatialGeometry';
+import { prismExposure } from '../src/render/PrismExposure';
 import { rectDepth, rectWidth } from '../src/world/types';
 import type { WorldPlan } from '../src/world/types';
 
@@ -9,6 +10,7 @@ const quantiles = (values: number[]) => {
   const s = [...values].sort((a, b) => a - b);
   return { min: s[0], median: s[Math.floor(s.length / 2)], p95: s[Math.ceil(s.length * .95) - 1], max: s.at(-1) };
 };
+const compositions: Record<string, number> = {}, moundAccess: Record<string, number> = {};
 const errors: unknown[] = [], families: Record<string, number> = {}, examples: Record<string, unknown> = {};
 const lengths: number[] = [], widths: number[] = [], grades: number[] = [], rises: number[] = [], roomShapes = new Set<string>();
 let externalLinks = 0, sourceHoles = 0, ordinary = 0, hall = 0, reliefs = 0, uvTriangles = 0, voidSources = 0;
@@ -26,11 +28,13 @@ for (const [index, seed] of seeds.entries()) {
   }
   for (const cell of w.spatial!.cells.filter(c => c.mode === 'gallery')) roomShapes.add(`${rectWidth(cell.bounds)}x${rectDepth(cell.bounds)}x${(owner.story - cell.atriumLower!) * 5.4}`);
   for (const t of w.spatial!.transitions!) {
+    compositions[t.composition] = (compositions[t.composition] ?? 0) + 1;
     const length = t.axis === 'x' ? rectWidth(t.run) : rectDepth(t.run);
     lengths.push(length); widths.push(t.width); rises.push(Math.abs(t.endY - t.startY)); grades.push(Math.abs(t.endY - t.startY) / length);
     if (w.spatial!.ceilings.filter(c => c.id === `${t.id}/roof`).length !== 1) errors.push({ seed, issue: 'flight roof multiplicity', id: t.id });
   }
   reliefs += w.spatial!.reliefs?.length ?? 0;
+  for (const r of w.spatial!.reliefs ?? []) if (r.kind === 'mound') moundAccess[r.access!] = (moundAccess[r.access!] ?? 0) + 1;
   for (const f of w.features) {
     const kind = f.kind === 'squeeze-view' ? `${f.kind}/${f.passageStyle}/${f.breachProfile ?? 'network'}` : f.kind;
     families[kind] = (families[kind] ?? 0) + 1;
@@ -53,20 +57,20 @@ for (const [index, seed] of seeds.entries()) {
         errors.push({ seed, issue: 'arrival outside its actual destination', id: c.id, to: c.to });
     }
   }
-  const geometry = createSpatialPrismBatch(w.spatial!.prisms), p = geometry.getAttribute('position'), uv = geometry.getAttribute('uv');
+  const geometry = createSpatialPrismBatch(w.spatial!.prisms, 1, undefined, prismExposure(w.spatial!.prisms)), p = geometry.getAttribute('position'), uv = geometry.getAttribute('uv');
   for (let i = 0; i < p.count; i += 3) {
     const ax = p.getX(i + 1) - p.getX(i), ay = p.getY(i + 1) - p.getY(i), az = p.getZ(i + 1) - p.getZ(i);
     const bx = p.getX(i + 2) - p.getX(i), by = p.getY(i + 2) - p.getY(i), bz = p.getZ(i + 2) - p.getZ(i);
     const area3 = Math.hypot(ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx);
     const areaUv = (uv.getX(i + 1) - uv.getX(i)) * (uv.getY(i + 2) - uv.getY(i)) - (uv.getY(i + 1) - uv.getY(i)) * (uv.getX(i + 2) - uv.getX(i));
-    if (area3 > .00001 && (!Number.isFinite(areaUv) || Math.abs(areaUv) < 1e-10)) errors.push({ seed, issue: 'collapsed UV triangle', prism: w.spatial!.prisms[Math.floor(i / 36)]?.id, triangle: i / 3 });
+    if (area3 > .00001 && (!Number.isFinite(areaUv) || Math.abs(areaUv) < 1e-10)) errors.push({ seed, issue: 'collapsed UV triangle', triangle: i / 3 });
     uvTriangles++;
   }
   geometry.dispose();
 }
-const report = { planVersion: 13, seeds, corpus: { fixed: 64, holdout: 32 }, families, examples, roomShapes: [...roomShapes].sort(),
+const report = { planVersion: 14, compositions, moundAccess, seeds, corpus: { fixed: 64, holdout: 32 }, families, examples, roomShapes: [...roomShapes].sort(),
   transitionLength: quantiles(lengths), transitionWidth: quantiles(widths), transitionGrade: quantiles(grades), transitionRise: quantiles(rises),
   ordinaryBspRoomFootprintShare: ordinary / (ordinary + hall), externalLinks, sourceHoles, voidSources, reliefs, uvTriangles, errors };
-writeFileSync(process.argv[2] ?? 'docs/validation/transition-integration.json', JSON.stringify(report, null, 2) + '\n');
+writeFileSync(process.argv[2] ?? 'docs/validation/stair-fix-integration.json', JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify({ seeds: seeds.length, externalLinks, sourceHoles, reliefs, uvTriangles, errors: errors.length }));
 if (errors.length) process.exitCode = 1;

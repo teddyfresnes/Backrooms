@@ -14,8 +14,8 @@ it('solves variable chambers with shared widths, partial rises and continuous ro
     expect(t.wallThickness).toBeGreaterThanOrEqual(.6);
     expect(t.roof.kind).toBe('linear');
     if (t.roof.kind === 'linear') {
-      expect(t.roof.startY - t.startY).toBeCloseTo(3.05, 10);
-      expect(t.roof.endY - t.endY).toBeCloseTo(3.05, 10);
+      expect(t.roof.startY - t.startY).toBeCloseTo(t.clearance, 10);
+      expect(t.roof.endY - t.endY).toBeCloseTo(t.clearance, 10);
     }
     if (t.kind === 'ramp') expect(Math.abs(t.endY - t.startY) / run).toBeLessThanOrEqual(.4);
     else expect(Math.abs(t.endY - t.startY) / count).toBeLessThanOrEqual(.175);
@@ -49,11 +49,11 @@ it('constructs one roof per generated flight, closed risers and roof-bounded thi
         expect(w.spatial!.ceilings.some(c => c.id.startsWith(`${s.id}/ceiling`))).toBe(false);
       }
       const panels = w.spatial!.prisms.filter(p => p.id.startsWith(`${t.id}/`) && p.id.includes('/side-'));
-      expect(panels).toHaveLength(6);
-      for (const p of panels) for (const y of p.vertices.filter((_, j) => j % 3 === 1)) expect(y).toBeLessThanOrEqual(Math.max(t.startY, t.endY) + 3.080001);
+      expect(panels.length).toBeGreaterThanOrEqual(8);
+      for (const p of panels) for (const y of p.vertices.filter((_, j) => j % 3 === 1)) expect(y).toBeLessThanOrEqual(t.approach.y + 5.24 + .000001);
     }
   }
-  expect(stairs).toBeGreaterThan(20); expect(ramps).toBeGreaterThan(5);
+  expect(stairs).toBeGreaterThan(20); expect(ramps).toBeGreaterThan(2);
 }, 30000);
 
 it('preserves real legacy holes and their canonical arrival floors through structured cloning', () => {

@@ -3,7 +3,7 @@ import { applyRegionalClaims, planRegionalVolumes, type RegionalClaim } from './
 import { finalizeVerticalTopology, fitVerticalArchitecture, clearVerticalApertures } from './VerticalPlanner';
 import { prefixTopology, cutRects, LOWEST_STRUCTURE_Y } from './WalkableTopology';
 import { clearBspArchitectureCache, generateSpatialWorld } from './SpatialWorld';
-import { clearRegionalPlanCache, regionalAtrium, regionalDatum, regionalStyle } from './RegionalPlan';
+import { clearRegionalPlanCache, hasRegionalTransition, regionalAtrium, regionalDatum, regionalStyle } from './RegionalPlan';
 import {
   addStepColliders,
   generateSurfaceStyle,
@@ -281,14 +281,15 @@ export const getCanonicalEdgeGates = (seed: string, key: ChunkKey | ChunkCoord, 
   const coord = resolveCoord(key), neighbor = parseChunkKey(getNeighborChunkKey(coord, edge));
   if (seed.startsWith('RAW_LOCAL_') || epicStructureIndexForCoord(seed, coord) !== null || epicStructureIndexForCoord(seed, neighbor) !== null)
     return getLegacyCanonicalEdgeGates(seed, coord, edge);
-  return [-42, -14, 14, 42].map((offset, index) => {
+  return [-42, -14, 14, 42].flatMap((offset, index) => {
     const x = edge === 'west' ? coord.x * 4 : edge === 'east' ? coord.x * 4 + 3 : coord.x * 4 + index;
     const z = edge === 'north' ? coord.z * 4 : edge === 'south' ? coord.z * 4 + 3 : coord.z * 4 + index;
     const dx = edge === 'east' ? 1 : edge === 'west' ? -1 : 0, dz = edge === 'south' ? 1 : edge === 'north' ? -1 : 0;
     const a = regionalDatum(seed, x, z), b = regionalDatum(seed, x + dx, z + dz);
+    if (Math.abs(a.y - b.y) > .001 && !hasRegionalTransition(seed, x, z, edge)) return [];
     const wide = a.id === b.id && regionalStyle(seed, a.id).family !== 'maze' && !regionalAtrium(seed, x, z, coord.story) && !regionalAtrium(seed, x + dx, z + dz, coord.story);
-    return { offset, width: wide ? 25.6 : 4, floorY: (a.y + b.y) / 2,
-      layer: `regional/${coord.story}`, clearance: 3.05, slabThickness: .16 };
+    return [{ offset, width: wide ? 25.6 : 4, floorY: (a.y + b.y) / 2,
+      layer: `regional/${coord.story}`, clearance: 3.05, slabThickness: .16 }];
   });
 };
 

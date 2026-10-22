@@ -6,7 +6,7 @@ import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { MOVEMENT_TUNING } from '../player/MovementConfig';
 import { generateInfiniteChunk, getChunkWorldOffset } from './InfiniteWorld';
 import { atriumCirculation } from './SpatialConnectors';
-import { regionalAtrium, regionalDatum, spatialCellAt } from './RegionalPlan';
+import { hasRegionalTransition, regionalAtrium, regionalDatum, spatialCellAt } from './RegionalPlan';
 import { rectCenter } from './types';
 import type { WorldPlan, Vec3Data } from './types';
 import { createSpatialPrismGeometry } from '../render/SpatialGeometry';
@@ -109,10 +109,13 @@ it('requires and permits a real running jump over a generated bridge gap in both
 });
 
 it('uses the same wall faces in Three and Rapier, including sheared floor-to-stair joints', async () => {
-  const world = generateInfiniteChunk('REGIONAL-AUDIT-3', { x: 0, z: 0, story: 0 }), physics = await PhysicsWorld.create(world);
-  try {
+  const world = generateInfiniteChunk('REGIONAL-AUDIT-3', { x: 0, z: 0, story: 0 });
+  {
     const walls = world.spatial!.prisms.filter(p => p.id.includes('/side-')).slice(0, 24); expect(walls.length).toBeGreaterThan(0);
     for (const p of walls) {
+      // Adjacent bearing piers share internal faces; compare each actual solid
+      // independently instead of starting a ray inside its neighbour.
+      const physics = await PhysicsWorld.create({ ...world, colliders: world.colliders.filter(c => c.id === p.id) });
       const geometry = createSpatialPrismGeometry(p), mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })); mesh.updateMatrixWorld();
       const pos = geometry.getAttribute('position');
       for (let i = 12; i < pos.count; i += 3) {
@@ -125,9 +128,9 @@ it('uses the same wall faces in Three and Rapier, including sheared floor-to-sta
         const physical = physics.world.castRay(new RAPIER.Ray(origin, direction), 1, true, undefined, undefined, undefined, undefined, physics.isEnvironmentCollider);
         expect(physical?.timeOfImpact, p.id).toBeCloseTo(.2, 3);
       }
-      geometry.dispose(); (mesh.material as THREE.Material).dispose();
+      geometry.dispose(); (mesh.material as THREE.Material).dispose(); physics.dispose();
     }
-  } finally { physics.dispose(); }
+  }
 });
 
 it('walks below an unconnected upper bridge and exposes its real underside without a middle floor', async () => {
@@ -153,12 +156,24 @@ it('walks below an unconnected upper bridge and exposes its real underside witho
 });
 
 it('walks and runs a real nonzero regional ramp, stops on it and reverses without changing the controller', async () => {
-  const { world } = sample('rampe-regionale'), ramp = world.topology!.surfaces.find(s => s.profile.kind === 'linear' && s.profile.startY !== 0 && s.profile.endY !== 0)!;
+  const { world } = sample('rampe-regionale');
+  const t = world.spatial!.transitions!.find(t => t.kind === 'ramp')!;
+  const ramp = world.topology!.surfaces.find(s => s.id === t.id)!;
   expect(ramp).toBeDefined();
   const p = ramp.profile; if (p.kind !== 'linear') throw new Error('Expected a sloping generated surface');
-  const physics = await mount(world), center = rectCenter(ramp.bounds), axis = p.axis;
-  const a = { ...center, [axis]: (axis === 'x' ? ramp.bounds.minX : ramp.bounds.minZ) - .5, y: p.startY + .865 };
-  const b = { ...center, [axis]: (axis === 'x' ? ramp.bounds.maxX : ramp.bounds.maxZ) + .5 };
+  const physics = await mount(world), local = rectCenter(ramp.bounds), axis = p.axis, sourceOffset = getChunkWorldOffset(world.spatial!.owner);
+  const match = /cell\/(-?\d+)\/(-?\d+)\/(-?\d+)\/(north|east|south|west)\/route/.exec(t.id)!;
+  const gx = Number(match[1]), gz = Number(match[2]), side = match[4]!;
+  const dx = side === 'east' ? 1 : side === 'west' ? -1 : 0, dz = side === 'south' ? 1 : side === 'north' ? -1 : 0;
+  const targetOwner = { x: Math.floor((gx + dx) / 4), z: Math.floor((gz + dz) / 4), story: world.spatial!.owner.story };
+  const other = targetOwner.x === world.spatial!.owner.x && targetOwner.z === world.spatial!.owner.z ? world : generateInfiniteChunk(world.seed, targetOwner);
+  if (other !== world) physics.addChunk('horizontal-partner', other.colliders, getChunkWorldOffset(targetOwner));
+  const partner = other.spatial!.transitions!.find(c => c.linkId === t.linkId && (other !== world || c.id !== t.id))!;
+  expect(partner).toBeDefined();
+  const targetOffset = getChunkWorldOffset(other.spatial!.owner), a0 = rectCenter(t.approach.bounds), b0 = rectCenter(partner.approach.bounds);
+  const center = { x: local.x + sourceOffset.x, z: local.z + sourceOffset.z };
+  const a = { x: a0.x + sourceOffset.x, z: a0.z + sourceOffset.z, y: t.approach.y + sourceOffset.y + .865 };
+  const b = { x: b0.x + targetOffset.x, z: b0.z + targetOffset.z, y: partner.approach.y + targetOffset.y + .865 };
   try {
     physics.teleport(a); let at = { ...a };
     for (let i = 0; i < 20; i++) at = { ...physics.move({ x: 0, y: -.035, z: 0 }).position };
@@ -167,30 +182,44 @@ it('walks and runs a real nonzero regional ramp, stops on it and reverses withou
     for (let i = 0; i < 60; i++) at = { ...physics.move({ x: 0, y: -.035, z: 0 }).position };
     expect(at.y).toBeCloseTo(stoppedY, 1);
     at = walkTo(physics, at, a); expect(at.y).toBeCloseTo(a.y, 1);
-    at = walkTo(physics, at, b, tuning.sprintSpeed); expect(at.y).toBeCloseTo(p.endY + .865, 1);
+    at = walkTo(physics, at, b, tuning.sprintSpeed); expect(at.y).toBeCloseTo(b.y, 1);
     at = walkTo(physics, at, a, tuning.sprintSpeed); expect(at.y).toBeCloseTo(a.y, 1);
   } finally { physics.dispose(); }
 });
 
 it('physically completes a multi-chunk loop through several regional datums in both directions', async () => {
-  let sample: { seed: string; cells: { x: number; z: number }[] } | undefined;
-  for (let i = 0; i < 8 && !sample; i++) for (let z = -6; z <= 0 && !sample; z++) for (let x = -6; x <= 0 && !sample; x++) {
-    const seed = `REGIONAL-AUDIT-${i}`, cells = [];
-    for (let dx = 0; dx <= 4; dx++) cells.push({ x: x + dx, z });
-    for (let dz = 1; dz <= 3; dz++) cells.push({ x: x + 4, z: z + dz });
-    for (let dx = 3; dx >= 0; dx--) cells.push({ x: x + dx, z: z + 3 });
-    for (let dz = 2; dz > 0; dz--) cells.push({ x, z: z + dz });
-    const datums = cells.map(c => regionalDatum(seed, c.x, c.z));
-    if (new Set(datums.map(d => d.id)).size < 3 || Math.max(...datums.map(d => d.y)) - Math.min(...datums.map(d => d.y)) < 8 ||
-      cells.some(c => regionalAtrium(seed, c.x, c.z, 0)) || datums.some(d => d.id === 'monument-interface')) continue;
-    sample = { seed, cells };
+  let sample: { seed: string; cells: { x: number; z: number }[]; coords: { x: number; z: number; story: number }[] } | undefined;
+  // Choose a connected region of the sparse circulation network. An arbitrary
+  // rectangle can now correctly cross a sealed height boundary.
+  for (let i = 0; i < 16 && !sample; i++) {
+    const seed = `REGIONAL-AUDIT-${i}`, remaining = new Set<string>();
+    for (let z = -4; z < 8; z++) for (let x = -4; x < 8; x++) if (!regionalAtrium(seed, x, z, 0) && regionalDatum(seed, x, z).id !== 'monument-interface') remaining.add(`${x}:${z}`);
+    while (remaining.size && !sample) {
+      const first = remaining.values().next().value!, queue = [first]; remaining.delete(first);
+      for (let j = 0; j < queue.length; j++) {
+        const [x, z] = queue[j]!.split(':').map(Number) as [number, number];
+        for (const [side, dx, dz] of [['north', 0, -1], ['east', 1, 0], ['south', 0, 1], ['west', -1, 0]] as const) {
+          const key = `${x + dx}:${z + dz}`;
+          if (!remaining.has(key) || Math.abs(regionalDatum(seed, x, z).y - regionalDatum(seed, x + dx, z + dz).y) > .001 && !hasRegionalTransition(seed, x, z, side)) continue;
+          remaining.delete(key); queue.push(key);
+        }
+      }
+      const component = queue.map(k => { const [x, z] = k.split(':').map(Number) as [number, number]; return { x, z }; });
+      const datums = component.map(c => regionalDatum(seed, c.x, c.z));
+      if (new Set(datums.map(d => d.id)).size < 3 || Math.max(...datums.map(d => d.y)) - Math.min(...datums.map(d => d.y)) < 8) continue;
+      const start = component[0]!, far = [...component].sort((a, b) => Math.hypot(b.x - start.x, b.z - start.z) - Math.hypot(a.x - start.x, a.z - start.z))[0]!;
+      const third = [...component].filter(c => regionalDatum(seed, c.x, c.z).id !== regionalDatum(seed, start.x, start.z).id && regionalDatum(seed, c.x, c.z).id !== regionalDatum(seed, far.x, far.z).id)
+        .sort((a, b) => Math.hypot(b.x - far.x, b.z - far.z) - Math.hypot(a.x - far.x, a.z - far.z))[0];
+      if (!third) continue;
+      const coords = [...new Map(component.map(c => { const owner = { x: Math.floor(c.x / 4), z: Math.floor(c.z / 4), story: 0 }; return [`${owner.x}:${owner.z}`, owner] as const; })).values()];
+      sample = { seed, cells: [start, far, third], coords };
+    }
   }
   expect(sample).toBeDefined();
-  const { seed, cells } = sample!, coords = [...new Map(cells.map(c => {
-    const owner = { x: Math.floor(c.x / 4), z: Math.floor(c.z / 4), story: 0 }; return [`${owner.x}:${owner.z}`, owner] as const;
-  })).values()];
+  const { seed, cells, coords } = sample!;
   const worlds = coords.map(c => generateInfiniteChunk(seed, c)), physics = await PhysicsWorld.create({ ...worlds[0]!, colliders: [] });
   for (let i = 0; i < coords.length; i++) physics.addChunk(String(i), worlds[i]!.colliders, getChunkWorldOffset(coords[i]!));
+  for (const [index, world] of worlds.entries()) for (const door of world.features) if (door.kind === 'interactive-door') physics.setChunkColliderEnabled(String(index), door.colliderId, false);
   const nodes = new Map(worlds.flatMap((w, i) => w.topology!.surfaces.map(s => [s.id, { s, offset: getChunkWorldOffset(coords[i]!) }] as const)));
   const graph = new Map<string, { to: string; at: Vec3Data }[]>();
   const link = (from: string, to: string, at: Vec3Data) => graph.set(from, [...(graph.get(from) ?? []), { to, at }]);
@@ -198,7 +227,7 @@ it('physically completes a multi-chunk loop through several regional datums in b
   for (let i = 0; i < worlds.length; i++) {
     const w = worlds[i]!, o = getChunkWorldOffset(coords[i]!);
     for (const c of w.topology!.connections) {
-      if (!nodes.has(c.from) || !nodes.has(c.to) || c.kind === 'view' || c.kind === 'drop' || c.kind === 'jump' || c.requiresDoorId) continue;
+      if (!nodes.has(c.from) || !nodes.has(c.to) || c.kind === 'view' || c.kind === 'drop' || c.kind === 'jump') continue;
       const n = nodes.get(c.from)!, at = { x: c.at.x + o.x, z: c.at.z + o.z, y: surfaceY(n.s, c.at.x, c.at.z) + o.y + .865 };
       link(c.from, c.to, at); if (c.direction === 'both') link(c.to, c.from, at);
     }
@@ -221,11 +250,20 @@ it('physically completes a multi-chunk loop through several regional datums in b
       for (let i = 0; i < queue.length && !previous.has(target.id); i++) for (const edge of graph.get(queue[i]!) ?? []) if (!previous.has(edge.to)) { previous.set(edge.to, { from: queue[i]!, at: edge.at }); queue.push(edge.to); }
       expect(previous.has(target.id), `no ordinary BSP path ${current.id} -> ${target.id}`).toBe(true);
       const crossings: Vec3Data[] = []; let cursor = target.id;
-      while (cursor !== current.id) { const step = previous.get(cursor)!; crossings.unshift(step.at); cursor = step.from; }
+      const inset = (id: string, at: Vec3Data): Vec3Data => {
+        const node = nodes.get(id)!, b = node.s.bounds, ox = node.offset.x, oz = node.offset.z;
+        const dx = Math.min(.42, (b.maxX - b.minX) / 2), dz = Math.min(.42, (b.maxZ - b.minZ) / 2);
+        const x = Math.max(b.minX + ox + dx, Math.min(b.maxX + ox - dx, at.x)), z = Math.max(b.minZ + oz + dz, Math.min(b.maxZ + oz - dz, at.z));
+        const p = { x, z, y: surfaceY(node.s, x - ox, z - oz) + node.offset.y + .91 };
+        return physics.canStandAt(p) ? p : at;
+      };
+      // Turn inside the floor polygon. Walking exactly along an artificial
+      // tessellation edge can put half the capsule inside a wall ending there.
+      while (cursor !== current.id) { const step = previous.get(cursor)!; crossings.unshift(inset(step.from, step.at), inset(cursor, step.at)); cursor = step.from; }
       for (const goal of [...crossings, target.at]) { travelled += Math.hypot(goal.x - at.x, goal.z - at.z); at = walkTo(physics, at, goal, tuning.sprintSpeed); }
       expect(at.y).toBeCloseTo(target.at.y, 1); current = target;
     }
     expect(travelled).toBeGreaterThan(700);
     console.info('REGIONAL_BSP_TRAVERSED_METRES', travelled);
   } finally { physics.dispose(); }
-});
+}, 90_000);

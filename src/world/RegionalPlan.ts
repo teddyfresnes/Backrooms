@@ -51,7 +51,29 @@ export const regionalStyle = (seed: string, regionId: string) => {
   return { family: rng.weighted([{ value: 'maze' as const, weight: .88 }, { value: 'hall' as const, weight: .08 }, { value: 'pillars' as const, weight: .04 }]),
     wallHalf: rng.weighted([{ value: .12, weight: .12 }, { value: .6, weight: .58 }, { value: 1.2, weight: .3 }]) };
 };
-export const clearRegionalPlanCache = () => datumCache.clear();
+const transitionCache = new Map<string, boolean>();
+/** One isolated connection wins a bounded neighbourhood. Both endpoints and
+ * every vertical owner derive the same decision without reading a chunk. */
+export const hasRegionalTransition = (seed: string, x: number, z: number, side: 'north' | 'east' | 'south' | 'west'): boolean => {
+  const axis = side === 'east' || side === 'west' ? 'x' : 'z';
+  const ax = x - Number(side === 'west'), az = z - Number(side === 'north');
+  const key = `${seed}/${ax}/${az}/${axis}`, cached = transitionCache.get(key);
+  if (cached !== undefined) return cached;
+  const candidate = (gx: number, gz: number, a: 'x' | 'z') => {
+    if (Math.abs(regionalDatum(seed, gx, gz).y - regionalDatum(seed, gx + Number(a === 'x'), gz + Number(a === 'z')).y) < .001) return;
+    return { x: gx + (a === 'x' ? 1 : .5), z: gz + (a === 'z' ? 1 : .5),
+      rank: new SeededRandom(`${seed}:isolated-transition:v1:${gx}:${gz}:${a}`).float(0, 1), id: `${gx}/${gz}/${a}` };
+  };
+  const own = candidate(ax, az, axis); let selected = own !== undefined;
+  if (own) for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) for (const a of ['x', 'z'] as const) {
+    const other = candidate(ax + dx, az + dz, a);
+    if (!other || other.id === own.id || Math.hypot(own.x - other.x, own.z - other.z) >= 1.75) continue;
+    if (other.rank < own.rank || other.rank === own.rank && other.id < own.id) selected = false;
+  }
+  transitionCache.set(key, selected); if (transitionCache.size > 2048) transitionCache.delete(transitionCache.keys().next().value!);
+  return selected;
+};
+export const clearRegionalPlanCache = () => { datumCache.clear(); transitionCache.clear(); };
 export const regionalCellId = (x: number, z: number, story: number) => `cell/${x}/${z}/${story}`;
 
 export interface AtriumPlan {
@@ -97,6 +119,7 @@ export const regionalBaseAt = (seed: string, x: number, z: number): number => {
   const c = spatialCellAt(x, z), b = spatialCellBounds(c.x, c.z), h = regionalDatum(seed, c.x, c.z).y;
   for (const [side, dx, dz] of [['north', 0, -1], ['east', 1, 0], ['south', 0, 1], ['west', -1, 0]] as const) {
     const next = regionalDatum(seed, c.x + dx, c.z + dz).y; if (Math.abs(next - h) < .001) continue;
+    if (!hasRegionalTransition(seed, c.x, c.z, side)) continue;
     const t = planRegionalTransition(seed, c.x, c.z, 0, side, b, h, next, 'inverse');
     if (!pointInRect(x, z, t.bounds)) continue;
     if (pointInRect(x, z, t.approach.bounds)) return t.approach.y;

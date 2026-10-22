@@ -1,4 +1,6 @@
 import { ArchitectureDebug, type ArchitectureDebugMode } from './ArchitectureDebug';
+import { prismExposure } from './PrismExposure';
+import { ceilingFixturePose } from './CeilingFixture';
 import { createWalkableBatch, createWalkableGeometry } from './WalkableGeometry';
 import { applyRegionalLighting, createRegionalLightField, type RegionalLightData, type RegionalLightField } from './RegionalLighting';
 import { createSpatialPrismBatch } from './SpatialGeometry';
@@ -1568,9 +1570,10 @@ export class WorldView {
     makeMesh(createWalkableBatch(surfaces, 'underside', this.surfaceStyle.ceilingPatternScale, false, origin, true), this.materials.ceiling, 'regional-floor-undersides', this.group);
     makeMesh(createWalkableBatch(surfaces, 'sides', this.surfaceStyle.wallPatternScale, false, origin, true), this.materials.wall, 'regional-floor-chants', this.group);
     for (const face of ['top', 'underside', 'sides'] as const) makeMesh(createWalkableBatch(spatial.ceilings, face, this.surfaceStyle.ceilingPatternScale, false, origin, true), this.materials.ceiling, `regional-ceilings-${face}`, this.group);
+    const exposedPrisms = prismExposure(spatial.prisms);
     for (const material of ['wall', 'plaster', 'ceiling', 'baseboard'] as const) {
       const prisms = spatial.prisms.filter(p => p.material === material);
-      if (prisms.length) makeMesh(createSpatialPrismBatch(prisms, material === 'ceiling' ? this.surfaceStyle.ceilingPatternScale : this.surfaceStyle.wallPatternScale, origin), this.materials[material], `regional-${material}-structures`, this.group);
+      if (prisms.length) makeMesh(createSpatialPrismBatch(prisms, material === 'ceiling' ? this.surfaceStyle.ceilingPatternScale : this.surfaceStyle.wallPatternScale, origin, exposedPrisms), this.materials[material], `regional-${material}-structures`, this.group);
     }
   }
 
@@ -3417,10 +3420,8 @@ export class WorldView {
     const quaternion = new THREE.Quaternion();
     const scale = new THREE.Vector3();
     const position = new THREE.Vector3();
-    const axis = new THREE.Vector3(0, 1, 0);
     this.fixtureSlots.forEach((slot, index) => {
-      quaternion.setFromAxisAngle(axis, slot.rotation);
-      position.set(slot.x, slot.ceilingY - 0.036, slot.z);
+      ceilingFixturePose(this.plan, slot, position, quaternion);
       // A dead slot represents a missing fluorescent panel, not a bright
       // white rectangle that merely stopped illuminating the room.
       scale.set(
