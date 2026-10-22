@@ -3,6 +3,7 @@ import { rectCenter, rectDepth, rectWidth } from './types';
 import type { AtriumPlan } from './RegionalPlan';
 import { endpointStairRun } from './SpatialGeometry';
 import { cutRects, overlapRect, type HeightProfile } from './WalkableTopology';
+import { atriumFloorBounds, atriumRimPoints, atriumSection } from './AtriumEnvelope';
 
 export interface SpatialStairLeg { name: string; bounds: Rect; axis: 'x' | 'z'; startY: number; endY: number; kind: 'ramp' | 'stairs' }
 export interface AtriumCirculation { legs: SpatialStairLeg[]; landing?: { bounds: Rect; y: number }; exit: { x: number; y: number; z: number }; bridge: Rect }
@@ -43,9 +44,30 @@ export const atriumTreads = (b: Rect, upper: number, a: AtriumPlan): { bounds: R
   const route = atriumCirculation(b, upper, a);
   return [...route.legs.flatMap(legTreads), ...(route.landing ? [{ bounds: route.landing.bounds, profile: { kind: 'flat' as const, y: route.landing.y } }] : [])];
 };
+/** Two filled ramp legs and the perimeter plinth enclose this corner entirely.
+ * Its landing bears to the bottom instead of advertising an inaccessible cave. */
+export const enclosedAtriumLanding = (b: Rect, upper: number, a: AtriumPlan) => {
+  if (!a.stairs) return;
+  const route = atriumCirculation(b, upper, a);
+  return route.legs.every(l => l.kind === 'ramp') ? route.landing : undefined;
+};
 export interface GroundPatch { bounds: Rect; ceilingY: number; ceilingProfile?: HeightProfile }
+export const atriumStairPocket = (b: Rect, upper: number, a: AtriumPlan): Rect[] => {
+  if (!a.stairs) return [];
+  const p = atriumCirculation(b, upper, a).exit, half = a.routeWidth / 2 + .8;
+  return [{ minX: Math.max(b.minX, p.x - half), maxX: Math.min(b.maxX, p.x + half), minZ: Math.max(b.minZ, p.z - half), maxZ: Math.min(b.maxZ, p.z + half) }];
+};
 export const atriumGround = (b: Rect, lower: number, a: AtriumPlan): GroundPatch[] => {
-  let result: GroundPatch[] = [{ bounds: b, ceilingY: lower + (a.owner - a.lower) * 5.4 + 3.05 }];
+  const roof = lower + (a.owner - a.lower) * 5.4 + 3.05;
+  const enclosed = enclosedAtriumLanding(b, lower + (a.owner - a.lower) * 5.4, a);
+  const base = atriumFloorBounds(b, a, a.lower);
+  for (const pocket of atriumStairPocket(b, lower + (a.owner - a.lower) * 5.4, a)) base.push(...cutRects([pocket], base));
+  const inner = atriumSection(b, a, a.lower).hole;
+  let result: GroundPatch[] = base.flatMap(bounds => {
+    const outside = cutRects([bounds], [inner]).map(bounds => ({ bounds, ceilingY: lower + 2.74 }));
+    const intersection = { minX: Math.max(bounds.minX, inner.minX), maxX: Math.min(bounds.maxX, inner.maxX), minZ: Math.max(bounds.minZ, inner.minZ), maxZ: Math.min(bounds.maxZ, inner.maxZ) };
+    return [...outside, ...(rectWidth(intersection) > .001 && rectDepth(intersection) > .001 ? [{ bounds: intersection, ceilingY: roof }] : [])];
+  });
   for (const step of atriumTreads(b, lower + (a.owner - a.lower) * 5.4, a)) {
     if (step.profile.kind === 'linear') {
       result = result.flatMap(p => cutRects([p.bounds], [step.bounds]).map(bounds => ({ ...p, bounds })));
@@ -58,7 +80,7 @@ export const atriumGround = (b: Rect, lower: number, a: AtriumPlan): GroundPatch
     result = result.flatMap(p => {
       if (!overlapRect(p.bounds, step.bounds)) return [p];
       const outside = cutRects([p.bounds], [step.bounds]).map(bounds => ({ bounds, ceilingY: p.ceilingY }));
-      if (ceiling - lower < 2.5) return outside;
+      if (ceiling - lower < 2.5 || enclosed) return outside;
       return [...outside, { bounds: { minX: Math.max(p.bounds.minX, step.bounds.minX), maxX: Math.min(p.bounds.maxX, step.bounds.maxX),
         minZ: Math.max(p.bounds.minZ, step.bounds.minZ), maxZ: Math.min(p.bounds.maxZ, step.bounds.maxZ) }, ceilingY: Math.min(p.ceilingY, ceiling) }];
     });
@@ -66,10 +88,11 @@ export const atriumGround = (b: Rect, lower: number, a: AtriumPlan): GroundPatch
   return result;
 };
 export interface AtriumLandingPad { bounds: Rect; point: { x: number; z: number }; index: number }
-export const atriumLandingPads = (b: Rect, lower: number, a: AtriumPlan): AtriumLandingPad[] => {
-  const upper = lower + (a.owner - a.lower) * 5.4, center = rectCenter(b);
+export const atriumLandingPads = (b: Rect, lower: number, a: AtriumPlan, story = a.lower): AtriumLandingPad[] => {
+  const upper = lower + (a.owner - story) * 5.4, center = rectCenter(b);
   const desired = [{ x: b.minX + 1.5, z: center.z }];
-  if (a.stairs) desired.push(atriumCirculation(b, upper, a).exit);
+  if (a.stairs && story === a.lower) desired.push(atriumCirculation(b, upper, a).exit);
+  if (a.perimeter === 'stepped' && story < a.owner) for (const p of atriumRimPoints(b, a, story + 1)) desired.push({ x: p.x + p.dx * .95, z: p.z + p.dz * .95 });
   if (a.owner - a.lower > 1) for (const side of ['north', 'south', 'west', 'east']) {
     const alongX = side === 'east' || side === 'west', sign = side === 'north' || side === 'west' ? -1 : 1;
     const min = alongX ? b.minZ : b.minX, span = alongX ? rectDepth(b) : rectWidth(b);
@@ -79,7 +102,8 @@ export const atriumLandingPads = (b: Rect, lower: number, a: AtriumPlan): Atrium
         : { x: cross, z: sign < 0 ? b.minZ + 6.75 : b.maxZ - 6.75 });
     }
   }
-  const ground = atriumGround(b, lower, a).filter(p => rectWidth(p.bounds) >= 1.7 && rectDepth(p.bounds) >= 1.7);
+  const ground = (story === a.lower ? atriumGround(b, lower, a) : atriumFloorBounds(b, a, story).map(bounds => ({ bounds })))
+    .filter(p => rectWidth(p.bounds) >= 1.7 && rectDepth(p.bounds) >= 1.7);
   const pads: AtriumLandingPad[] = [];
   for (const at of desired) {
     const candidates = ground.map(p => ({ x: Math.max(p.bounds.minX + .85, Math.min(p.bounds.maxX - .85, at.x)),
@@ -92,8 +116,8 @@ export const atriumLandingPads = (b: Rect, lower: number, a: AtriumPlan): Atrium
   }
   return pads;
 };
-export const atriumArrival = (b: Rect, lower: number, a: AtriumPlan, x: number, z: number): AtriumLandingPad => {
-  const pads = atriumLandingPads(b, lower, a);
+export const atriumArrival = (b: Rect, lower: number, a: AtriumPlan, x: number, z: number, story = a.lower): AtriumLandingPad => {
+  const pads = atriumLandingPads(b, lower, a, story);
   return pads.sort((p, q) => Math.hypot(p.point.x - x, p.point.z - z) - Math.hypot(q.point.x - x, q.point.z - z))[0]!;
 };
 export const atriumGroundId = (id: string, b: Rect, lower: number, a: AtriumPlan, x: number, z: number): string =>

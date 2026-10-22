@@ -20,10 +20,12 @@ rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/
 
 ## Ordre du pipeline
 
-Le pipeline ordinaire (plan version 14, topologie/spatial version 2) est :
+Le pipeline ordinaire (plan version 15, topologie/spatial version 2) est :
 
 1. `RegionalPlan` choisit les districts mondiaux et leurs datums signés ;
-2. il réserve les atria et leur propriété sur deux ou trois adresses verticales ;
+2. il réserve les atria sur deux à quatre adresses verticales. Les galeries
+   classiques gardent leur phase historique ; les salles en gradins ont une
+   phase de six adresses pour accueillir trois ou quatre niveaux sans chevauchement ;
 3. `RegionalPlan.hasRegionalTransition` sélectionne les raccords isolés entre
    datums différents (au plus un par cellule, centres espacés d’au moins 49 m).
    `SpatialConnectors` et `TransitionLayout` déduisent les chambres, parcours,
@@ -42,6 +44,10 @@ Le pipeline ordinaire (plan version 14, topologie/spatial version 2) est :
 
 Voir [les contrats de transition](../TRANSITION_INTEGRATION.md) pour les plafonds
 continus, les salles de plusieurs cellules et la conservation des anciennes features.
+`AtriumEnvelope` partage les retraits successifs, passages et soubassements entre
+tous les propriétaires. `SteppedAtrium` matérialise les galeries intermédiaires
+et leurs chutes dirigées. Les parois des galeries classiques descendent aussi
+jusqu’au vrai bas ; les ouvertures sont soustraites en volume.
 
 La génération ne lit jamais un voisin déjà produit. Les interfaces viennent des
 mêmes cellules mondiales des deux côtés. Le pas d’adresse 5,4 m est une translation

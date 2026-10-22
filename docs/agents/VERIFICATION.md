@@ -87,7 +87,7 @@ modifier temporairement le code.
 Pour les changements de hauteur, `npm run test:vertical` couvre les plans
 régionaux ordinaires, les parcours Three/Rapier, les ouvertures monumentales,
 les deux modes de rendu, les sauvegardes et les cycles de montage/démontage.
-`npm run audit:vertical` vérifie 128 seeds et huit voisinages de 5×5 chunks avec
+`npm run audit:vertical` vérifie 256 seeds et huit voisinages de 5×5 chunks avec
 des objectifs de distribution déclarés avant le relevé. Les anciens tests BSP
 restent explicitement sur le générateur legacy utilisé par les monuments.
 `RegionalBsp.test.ts` mesure le vrai chemin ordinaire et contrôle 32 seeds de
@@ -113,3 +113,8 @@ la volée unique, les vrais appuis, les bandes verticales sans recouvrement,
 le dégagement raycasté dans la géométrie finale et les coins des diffuseurs.
 Le rapport [STAIR_FIX_VALIDATION.md](../validation/STAIR_FIX_VALIDATION.md)
 distingue les contrôles CPU du contrôle visuel WebGL.
+`AtriumEnvelope` vérifie les quatre niveaux, les parois porteuses, les tunnels
+d’entrée, leurs luminaires et les chutes entre terrasses. `SpatialVisibility`
+teste la priorité au regard, le budget et le cache des réponses worker ;
+`WorldPreview` vérifie la promotion des détails sans reconstruire l’architecture
+ou la lumière. Voir [ATRIUM_VALIDATION.md](../validation/ATRIUM_VALIDATION.md).

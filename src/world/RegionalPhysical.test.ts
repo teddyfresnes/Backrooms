@@ -16,7 +16,17 @@ import { surfaceY } from './WalkableTopology';
 const dt = 1 / 60, tuning = MOVEMENT_TUNING.locomotion;
 const samples = new Map<number, WorldPlan>();
 const sample = (kind: string) => {
-  for (let i = 0; i < 128; i++) {
+  for (let i = 0; i < 256; i++) {
+    if (kind.startsWith('escalier-') && kind !== 'escalier-regional' || kind.startsWith('galerie-') || kind === 'saut-passerelle') {
+      let candidate = false;
+      for (let z = 0; z < 4; z++) for (let x = 0; x < 4; x++) {
+        const a = regionalAtrium(`REGIONAL-AUDIT-${i}`, x, z, 0);
+        if (!a || a.owner !== 0 || a.perimeter !== 'gallery') continue;
+        candidate ||= kind === 'saut-passerelle' ? a.variant === 'L' && a.owner - a.lower > 1
+          : a.variant.toLowerCase() === kind.split('-')[1] && (!kind.startsWith('escalier-') || a.stairs);
+      }
+      if (!candidate) continue;
+    }
     const seed = `REGIONAL-AUDIT-${i}`, world = samples.get(i) ?? generateInfiniteChunk(seed, { x: 0, z: 0, story: 0 });
     samples.set(i, world);
     const landmark = world.spatial!.landmarks.find(l => l.kind === kind);
@@ -75,7 +85,7 @@ it('walks out of an actual high wall opening, lands in the real lower maze and c
       const result = physics.move({ x: p.x < drop.arrival!.x + 1 ? tuning.walkSpeed * dt : 0, y: vy * dt, z: 0 });
       p = { ...result.position }; if (result.grounded) vy = -.9;
     }
-    expect(p.y).toBeCloseTo(h - 5.4 + .865, 1);
+    expect(p.y).toBeCloseTo(drop.arrival!.y + .865, 1);
     vy = tuning.standingJumpSpeed; let maximum = p.y;
     for (let i = 0; i < 60; i++) {
       vy -= tuning.gravity * dt; p = { ...physics.move({ x: -tuning.walkSpeed * dt, y: vy * dt, z: 0 }).position }; maximum = Math.max(maximum, p.y);

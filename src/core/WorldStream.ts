@@ -1,4 +1,5 @@
 import type { ArchitectureDebugMode } from '../render/ArchitectureDebug';
+import { selectSpatialVisibleOwners } from './SpatialVisibility';
 import { cutRects, findSurface, surfaceY, TOPOLOGY_VERSION } from '../world/WalkableTopology';
 import { regionalOwnerAt } from '../world/RegionalPlan';
 import type { CharacterPit } from '../character/CharacterEnvironment';
@@ -232,6 +233,13 @@ export class WorldStream {
   }
   private readonly diagnosticsRaycaster = new THREE.Raycaster();
   private centerCoord: ChunkCoord = { x: 0, z: 0, story: 0 };
+  private readonly visibilityDirection = new THREE.Vector3();
+  private readonly selectedPosition = new THREE.Vector3(Infinity, Infinity, Infinity);
+  private readonly selectedDirection = new THREE.Vector3();
+  private mountRevision = 0;
+  private selectedRevision = -1;
+  private selectedCenter = '';
+  private selectedCoords: ChunkCoord[] = [];
   private pendingChunks = 0;
   private sourceCount = 0;
   private worker?: Worker;
@@ -274,7 +282,7 @@ export class WorldStream {
     const result: CharacterPit[] = [];
     for (const runtime of this.chunks.values()) {
       for (const c of runtime.plan.spatial?.cells ?? []) {
-        if (c.mode !== 'gallery' && c.mode !== 'void') continue;
+        if (c.mode !== 'gallery' && c.mode !== 'terrace' && c.mode !== 'void') continue;
         const cuts = runtime.plan.topology!.surfaces.filter(s => s.roomId?.startsWith(c.id + '/')).map(s => s.bounds);
         const depth = (runtime.coord.story - (c.atriumLower ?? (c.atriumOwner ?? runtime.coord.story) - 2)) * 5.4;
         for (const [i, b] of cutRects([c.bounds], cuts).entries()) result.push({ id: `${c.id}/pit-${i}`, minX: b.minX + runtime.offset.x, maxX: b.maxX + runtime.offset.x,
@@ -382,9 +390,11 @@ export class WorldStream {
     time: number,
     delta: number,
     playerPosition: THREE.Vector3,
+    lookDirection?: THREE.Vector3,
   ): void {
     if (!this.initialized || this.disposed) return;
     this.visibilityPosition.copy(playerPosition);
+    if (lookDirection) this.visibilityDirection.copy(lookDirection);
 
     const observedCenter = this.supportedCoordAt(playerPosition);
     const epicPinnedCoord = this.getEpicPinnedCoord(playerPosition);
@@ -422,6 +432,7 @@ export class WorldStream {
     // The destination is already prepared whenever workers are available. A
     // synchronous fallback remains only for environments without Worker.
     const centerKey = createChunkKey(this.centerCoord);
+    let mountedThisFrame = false;
     this.physics.batchChunkChanges(() => {
       if (storyChanged && !this.chunks.has(centerKey)) {
         const prepared = this.preparedChunks.get(centerKey);
@@ -432,6 +443,7 @@ export class WorldStream {
           prepared?.regionalLightData,
         );
         this.preparedChunks.delete(centerKey);
+        mountedThisFrame = true;
         sourcesChanged = true;
       }
 
@@ -444,11 +456,12 @@ export class WorldStream {
 
     let missing = desiredCoords.filter((coord) => !this.chunks.has(createChunkKey(coord)));
     const readyCoord = missing.find((coord) => this.preparedChunks.has(createChunkKey(coord)));
-    if (readyCoord) {
+    if (readyCoord && !mountedThisFrame) {
       const readyKey = createChunkKey(readyCoord);
       const ready = this.preparedChunks.get(readyKey)!;
       this.preparedChunks.delete(readyKey);
       this.mountChunk(ready.plan, readyCoord, ready.lightMaps, ready.regionalLightData);
+      mountedThisFrame = true;
       sourcesChanged = true;
       missing = desiredCoords.filter((coord) => !this.chunks.has(createChunkKey(coord)));
     }
@@ -510,11 +523,12 @@ export class WorldStream {
     const next = missing.find((coord) => createChunkKey(coord) !== this.workerInFlight?.key);
     if (next && !this.workerInFlight) {
       const key = createChunkKey(next);
-      if (!this.worker) {
+      if (!this.worker && !mountedThisFrame) {
         this.mountChunk(generateInfiniteChunk(this.seed, key), next);
+        mountedThisFrame = true;
         this.pendingChunks = Math.max(0, this.pendingChunks - 1);
         sourcesChanged = true;
-      } else {
+      } else if (this.worker) {
         const id = ++this.workerRequestId;
         this.workerInFlight = { id, key, coord: next, prefetch: false };
         this.worker.postMessage({ id, seed: this.seed, key, lightingMode: this.lightingMode });
@@ -522,6 +536,9 @@ export class WorldStream {
     }
 
     if (sourcesChanged) this.refreshLightSources();
+    const nearDetail = [...this.chunks.values()].find(r => r.coord.story === this.centerCoord.story && r.view.architectureOnly
+      && distanceToRect(playerPosition.x - r.offset.x, playerPosition.z - r.offset.z, { minX: -56, maxX: 56, minZ: -56, maxZ: 56 }) < 20);
+    if (nearDetail && !mountedThisFrame) void nearDetail.view.promoteDetails();
 
     for (const runtime of this.chunks.values()) {
       this.localPlayer.copy(playerPosition).sub(runtime.offset);
@@ -654,6 +671,7 @@ export class WorldStream {
   async prepareLocateTarget(target: LocateTarget): Promise<boolean> {
     if (!await this.prepareAndMountCoords(locateWarmupCoords(target))) return false;
     const runtime = this.chunks.get(target.chunkKey);
+    if (runtime) await runtime.view.promoteDetails();
     return !runtime || await this.prepareAndMountCoords(this.spatialVisibleCoords([runtime], target.position));
   }
 
@@ -661,6 +679,7 @@ export class WorldStream {
   async prepareSavedChunk(coord: ChunkCoord): Promise<boolean> {
     if (!await this.prepareAndMountCoords([coord])) return false;
     const runtime = this.chunks.get(createChunkKey(coord));
+    if (runtime) await runtime.view.promoteDetails();
     const targets = [...new Map((runtime?.plan.spatial?.dependencies ?? []).map(d => [createChunkKey(d.owner), d.owner])).values()];
     return this.prepareAndMountCoords(targets);
   }
@@ -1353,7 +1372,7 @@ export class WorldStream {
     const view = new WorldView(
       runtime.plan,
       this.materials[runtime.plan.visualBiome ?? 'yellow'],
-      { lightingMode: mode, bakedLightMaps: mode === 'legacy' ? lightMaps : undefined, regionalLightData: runtime.regionalLightData },
+      { lightingMode: mode, bakedLightMaps: mode === 'legacy' ? lightMaps : undefined, regionalLightData: runtime.regionalLightData, architectureOnly: runtime.view.architectureOnly },
     );
     view.group.position.copy(runtime.offset);
     view.setArchitectureDebug(this.architectureDebugMode);
@@ -1369,6 +1388,8 @@ export class WorldStream {
       return;
     }
     view.restoreDoorStates(runtime.view.getDoorStates());
+    if (!runtime.view.architectureOnly) await view.promoteDetails();
+    if (this.disposed || this.lightingRevision !== revision || this.chunks.get(runtime.key) !== runtime) { view.dispose(); return; }
     this.scene.add(view.group);
     runtime.view.dispose();
     runtime.view = view;
@@ -1396,10 +1417,11 @@ export class WorldStream {
     const lightMaps = this.lightingMode === 'legacy'
       ? suppliedLightMaps ?? bakeLightMapData(plan)
       : suppliedLightMaps;
+    const regionalLightData = suppliedRegionalLightData ?? (plan.spatial && this.lightingMode === 'modern' ? bakeRegionalLightData(plan) : undefined);
     const view = new WorldView(
       plan,
       this.materials[plan.visualBiome ?? 'yellow'],
-      { lightingMode: this.lightingMode, bakedLightMaps: lightMaps, regionalLightData: suppliedRegionalLightData },
+      { lightingMode: this.lightingMode, bakedLightMaps: lightMaps, regionalLightData, architectureOnly: !!plan.spatial && coord.story !== this.centerCoord.story },
     );
     view.group.position.copy(offset);
     view.setArchitectureDebug(this.architectureDebugMode);
@@ -1413,11 +1435,12 @@ export class WorldStream {
         coord,
         plan,
         lightMaps,
-        regionalLightData: suppliedRegionalLightData,
+        regionalLightData,
         lightingMode: this.lightingMode,
         view,
         offset,
       });
+      this.mountRevision++;
     } catch (error) {
       view.dispose();
       throw error;
@@ -1427,6 +1450,7 @@ export class WorldStream {
   private unmountChunk(key: ChunkKey): void {
     const runtime = this.chunks.get(key);
     if (!runtime) return;
+    if (!this.disposed) this.cachePreparedChunk(key, { plan: runtime.plan, lightMaps: runtime.lightMaps, regionalLightData: runtime.regionalLightData });
     if (!this.disposed && key === this.recoveryChunkKey) {
       // Retain CPU data only. Keeping the complete source WorldView mounted
       // would overlap epic1's stacked previews with the real lower stories.
@@ -1438,6 +1462,7 @@ export class WorldStream {
     this.physics.removeChunk(key);
     runtime.view.dispose();
     this.chunks.delete(key);
+    this.mountRevision++;
     this.characterPitsCache = null;
   }
 
@@ -1526,6 +1551,10 @@ export class WorldStream {
   }
 
   private desiredCoordsAroundCenter(): ChunkCoord[] {
+    const centerKey = createChunkKey(this.centerCoord);
+    if (this.selectedRevision === this.mountRevision && this.selectedCenter === centerKey
+      && this.selectedPosition.distanceToSquared(this.visibilityPosition) < 2.25
+      && this.selectedDirection.distanceToSquared(this.visibilityDirection) < .04) return this.selectedCoords;
     const coords = streamedCoordsAround(this.centerCoord);
     const center = this.chunks.get(createChunkKey(this.centerCoord));
     const ownsLongFissure = center?.plan.features.some(
@@ -1539,23 +1568,19 @@ export class WorldStream {
     if (ownsLongFissure) return streamedCoordsAroundLongitudinalEpic(this.centerCoord);
     const keys = new Set(coords.map(createChunkKey));
     const sources = [...this.chunks.values()].filter(r => keys.has(r.key));
-    for (const c of this.spatialVisibleCoords(sources)) if (!keys.has(createChunkKey(c))) { keys.add(createChunkKey(c)); coords.push(c); }
-    return coords;
+    const visible = this.spatialVisibleCoords(sources);
+    const result = [coords[0]!, ...visible.filter(c => !keys.has(createChunkKey(c))), ...coords.slice(1)];
+    this.selectedRevision = this.mountRevision; this.selectedCenter = centerKey;
+    this.selectedPosition.copy(this.visibilityPosition); this.selectedDirection.copy(this.visibilityDirection); this.selectedCoords = result;
+    return result;
   }
 
   /** Bound visible/landing dependencies to twelve additional source plans.
    * The same canonical atrium records are used before initial play and at runtime.
    */
   private spatialVisibleCoords(sources: readonly { coord: ChunkCoord; plan: WorldPlan }[], position: Vec3Data = this.visibilityPosition): ChunkCoord[] {
-    const targets = new Map<ChunkKey, { coord: ChunkCoord; distance: number }>();
-    for (const { coord, plan } of sources) for (const d of plan.spatial?.dependencies ?? []) {
-      const offset = getChunkWorldOffset(coord), x = position.x - offset.x, z = position.z - offset.z;
-      const distance = distanceToRect(x, z, d.bounds), y = position.y - offset.y;
-      if (distance > 36 || y < d.bottom - 12 || y > d.top + 12) continue;
-      const key = createChunkKey(d.owner), old = targets.get(key);
-      if (!old || distance < old.distance) targets.set(key, { coord: { ...d.owner }, distance });
-    }
-    return [...targets.values()].sort((a, b) => a.distance - b.distance || a.coord.story - b.coord.story).slice(0, 12).map(t => t.coord);
+    return selectSpatialVisibleOwners(sources, position, { direction: this.visibilityDirection, mounted: new Set(this.chunks.keys()),
+      base: new Set(streamedCoordsAround(this.centerCoord).map(createChunkKey)), limit: 12 });
   }
 
   private readonly onWorkerMessage = (event: MessageEvent<WorkerResponse>): void => {
@@ -1566,27 +1591,20 @@ export class WorldStream {
       this.disableWorker();
       return;
     }
-    const desired = new Set(this.desiredCoordsAroundCenter().map(createChunkKey));
-    if (!desired.has(request.key)) {
-      if (request.prefetch) {
-        this.preparedChunks.set(request.key, {
-          plan: event.data.plan,
-          lightMaps: event.data.lightMaps,
-          regionalLightData: event.data.regionalLightData,
-        });
-        if (this.preparedChunks.size > 12) {
-          const oldest = this.preparedChunks.keys().next().value;
-          if (oldest !== undefined) this.preparedChunks.delete(oldest);
-        }
-      }
-      this.pumpVerticalPrefetch();
-      return;
-    }
-    this.mountChunk(event.data.plan, request.coord, event.data.lightMaps, event.data.regionalLightData);
-    this.refreshLightSources();
-    this.pendingChunks = Math.max(0, this.pendingChunks - 1);
+    // A worker completion never constructs a Three view in the message event.
+    // update() admits one ready mount per frame, and a quick turn can reuse it.
+    this.cachePreparedChunk(request.key, { plan: event.data.plan, lightMaps: event.data.lightMaps, regionalLightData: event.data.regionalLightData });
     this.pumpVerticalPrefetch();
   };
+
+  private cachePreparedChunk(key: ChunkKey, prepared: PreparedChunk): void {
+    this.preparedChunks.delete(key); this.preparedChunks.set(key, prepared);
+    if (this.preparedChunks.size <= 12) return;
+    const wanted = new Set(this.selectedCoords.map(createChunkKey));
+    const oldest = [...this.preparedChunks.keys()].find(k => !wanted.has(k) && k !== this.pendingStoryKey)
+      ?? [...this.preparedChunks.keys()].find(k => k !== this.pendingStoryKey);
+    if (oldest) this.preparedChunks.delete(oldest);
+  }
 
   private readonly onWorkerError = (): void => {
     this.workerInFlight = undefined;

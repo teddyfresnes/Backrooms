@@ -1,6 +1,6 @@
 # Architecture régionale à plusieurs couches
 
-Le monde ordinaire utilise `WorldPlan.version = 14`, `topology.version = 2` et
+Le monde ordinaire utilise `WorldPlan.version = 15`, `topology.version = 2` et
 `spatial.version = 2`. Le pipeline complet v10 reste disponible explicitement dans
 `generateLegacyWorld` / `generateLegacyInfiniteChunk` pour les monuments,
 leurs résumés et les reproductions `RAW_LOCAL_`. Les plateaux ordinaires réutilisent
@@ -19,7 +19,7 @@ limitrophes ; les autres cellules gardent leur relief.
 L’adresse `(x,z,story)` possède des données locales. Son offset monde est
 `(112*x, 5.4*story, 112*z)`. Un datum local n’est pas cet offset. Les tranches
 ordinaires répètent la même géographie horizontale à ce pas d’adresse ; les
-atria remplacent deux ou trois tranches par un volume libre commun. Ce choix borné
+atria remplacent deux à quatre tranches par un volume libre commun. Ce choix borné
 n’est pas un partitionnement volumétrique arbitraire de tout l’espace 3D.
 
 Le pipeline est : districts → cellules/couches/atria → circulations → sols et
@@ -73,9 +73,10 @@ du dénivelé avec une contremarche maximale de 17,5 cm. Les datums intermédiai
 bifurcations et directions se poursuivent sur plusieurs cellules.
 
 Une à quatre cellules intérieures de district peuvent devenir un atrium de
-28 à 56 m. Une phase canonique par bande de quatre adresses lui donne un
-propriétaire haut, un bas jouable une ou deux adresses plus bas et, dans le
-second cas, une adresse intermédiaire vide. Les plans sont générables indépendamment. Le bas contient de vraies pièces,
+28 à 56 m. Les galeries classiques gardent leur phase canonique de quatre
+adresses et leur bas une ou deux adresses plus bas. Les salles en gradins
+emploient une phase de six adresses avec trois ou quatre niveaux jouables.
+Les plans sont générables indépendamment. Le bas contient de vraies pièces,
 cloisons, lumières et continuations vers le labyrinthe voisin.
 
 Le haut possède une galerie de 2,7 à 4,8 m longeant les murs, et selon la variante
@@ -85,8 +86,18 @@ passage inférieur sous un escalier n’existe que si son dégagement atteint 2,
 Les secteurs trop bas sont fermés par des solides visibles correspondants.
 Les poutres des lumières inférieures sont réellement ancrées aux cloisons.
 
-L’adresse intermédiaire contient des ouvertures hautes à seuil réel. Elles
-permettent de descendre de 5,4 m dans le bas, sans rampe ni retour direct par
+Une galerie classique peut avoir un escalier intérieur ou rester sans escalier.
+Les salles en gradins réservent cette absence : à chaque niveau inférieur,
+la circulation annulaire avance vers le centre, en laissant un bas d’au moins
+8 m de côté. Chaque anneau est porté jusqu’au sol réel par des soubassements
+massifs ; des bandes verticales contiguës évitent de les dupliquer entre owners.
+Les entrées de 4 m traversent ces masses sous un vrai linteau à 2,74 m.
+Les arrivées et passages sont réservés avant le BSP du bas. Des brèches dans
+les parapets permettent les chutes dirigées vers la terrasse immédiatement
+inférieure ; les relations référencent ses véritables paliers.
+
+Les adresses intermédiaires classiques contiennent des ouvertures hautes à seuil réel. Elles
+permettent de descendre vers le vrai bas, sans rampe ni retour direct par
 saut. Certaines passerelles ont une coupure de 1,4 m : le saut couru fonctionne
 dans les deux sens, la marche seule tombe, et le tour par la galerie reste possible.
 Les parapets restent entièrement sur leur dalle et s’interrompent aux passages.
@@ -125,8 +136,11 @@ le repère du plan source ; convertir avec les offsets avant d’interroger la c
 
 `WorldStream` choisit d’abord le propriétaire du support physique, puis celui du
 volume libre courant. `regionalOwnerAt` sert de repli sans support monté.
-Le 3×3 de base est complété par au plus 12 propriétaires de dépendances, dans
-une portée horizontale de 36 m et une enveloppe verticale élargie de 12 m.
+Le 3×3 de base est complété par au plus 12 propriétaires de dépendances.
+Les supports proches sont prioritaires ; les autres vues sont classées par
+distance et direction du regard (36 m structurels, 72 m pour les ouvertures,
+marge verticale de 20 m). Les portes des salles en bordure déclarent les
+colonnes voisines visibles, en plus des owners du même atrium.
 Le démarrage, la localisation et la restauration préparent ces destinations.
 Le personnage et les ragdolls conservent les réglages actuels et le même Rapier.
 

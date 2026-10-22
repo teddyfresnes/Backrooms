@@ -76,12 +76,14 @@ const distributionGoals = {
   regionalHeightRangeAtLeast: 12, zeroAreaFractionBelow: .1,
   plateauCellsAtLeast: 20, plateauChunkOwnersAtLeast: 3,
   eachFamilyInAtLeastSeeds: 3, ordinaryClearanceAtLeast: 2.498,
+  steppedRoomsInAtLeastSeeds: 8, fourLevelRoomsInAtLeastSeeds: 3,
   accidentalIsolation: 0, mismatchedSeams: 0,
 };
 const diversity = () => {
   const families: Record<string, Set<string>> = {}, kinds: Record<string, number> = {}, modes: Record<string, number> = {}, styles: Record<string, number> = {};
   const examples: any[] = [], errors: any[] = [], heights = new Map<number, number>(), runs = new Map<string, { min: number; max: number; length: number }>();
   const plans = new Map<string, WorldPlan>();
+  const steppedWorlds = new Set<string>(), fourLevelWorlds = new Set<string>();
   const get = (seed: string, coord: { x: number; z: number; story: number }) => {
     const key = `${seed}/${coord.x}/${coord.z}/${coord.story}`;
     if (!plans.has(key)) plans.set(key, generateInfiniteChunk(seed, coord));
@@ -97,6 +99,8 @@ const diversity = () => {
     const issues = validateWorldPlan(world); if (issues.length) errors.push({ seed, coord, issues });
     const offset = getChunkWorldOffset(coord), surfaces = new Map(world.topology!.surfaces.map(s => [s.id, s]));
     for (const c of world.spatial.cells) {
+      if (collectFamilies && c.atriumPerimeter === 'stepped') steppedWorlds.add(seed);
+      if (collectFamilies && c.atriumOwner !== undefined && c.atriumOwner - c.atriumLower! === 3) fourLevelWorlds.add(seed);
       modes[c.mode] = (modes[c.mode] ?? 0) + 1;
       const style = regionalStyle(seed, c.regionId).family; styles[style] = (styles[style] ?? 0) + 1;
       if (c.mode === 'gallery') {
@@ -140,8 +144,10 @@ const diversity = () => {
       destination: l.destination && { x: l.destination.x + offset.x, y: l.destination.y + offset.y, z: l.destination.z + offset.z }, destinationOwner: l.owner,
     });
   };
-  // Distribution: 128 ordinary global seeds at the same address, without forcing features.
-  for (let i = 0; i < 128; i++) scan(`VERTICAL-PROMPT-AUDIT-${i}`, { x: -1, z: 1, story: 0 }, true);
+  // Optional internal stairs are rarer in v15. Keep the family threshold and
+  // broaden the unforced sample instead of forcing stairs into more rooms.
+  const distributionSeeds = 256;
+  for (let i = 0; i < distributionSeeds; i++) scan(`VERTICAL-PROMPT-AUDIT-${i}`, { x: -1, z: 1, story: 0 }, true);
   // Extent and continuity: eight independent 5x5 neighborhoods (560m per side).
   const regions = new Map<string, { seed: string; id: string; y: number; cells: number; chunks: Set<string>; minX: number; maxX: number; minZ: number; maxZ: number }>();
   let seams = 0, nonzeroSeams = 0, seamErrors = 0;
@@ -166,14 +172,16 @@ const diversity = () => {
   }
   const regional = [...regions.values()].map(r => ({ ...r, chunks: [...r.chunks], width: (r.maxX - r.minX + 1) * 28, depth: (r.maxZ - r.minZ + 1) * 28, sampledArea: r.cells * 28 * 28 })).sort((a, b) => b.cells - a.cells);
   const ys = regional.map(r => r.y), familyCounts = Object.fromEntries(Object.entries(families).map(([k, v]) => [k, v.size]));
-  const required = ['escalier-l', 'escalier-u', 'escalier-bridge', 'ouverture-haute', 'saut-passerelle', 'galerie-l', 'galerie-u', 'galerie-bridge', 'rampe-regionale', 'escalier-regional'];
+  const required = ['escalier-l', 'escalier-u', 'escalier-bridge', 'ouverture-haute', 'saut-passerelle', 'galerie-l', 'galerie-u', 'galerie-bridge', 'galerie-en-gradins', 'rampe-regionale', 'escalier-regional'];
   const failures: string[] = [];
   if (Math.max(...ys) - Math.min(...ys) < distributionGoals.regionalHeightRangeAtLeast) failures.push('regional-height-range');
   if (zeroArea / area >= distributionGoals.zeroAreaFractionBelow) failures.push('privileged-zero');
   if (!regional.some(r => r.cells >= distributionGoals.plateauCellsAtLeast && r.chunks.length >= distributionGoals.plateauChunkOwnersAtLeast)) failures.push('regional-extent');
   for (const f of required) if ((familyCounts[f] ?? 0) < distributionGoals.eachFamilyInAtLeastSeeds) failures.push(`missing-normal-family:${f}`);
+  if (steppedWorlds.size < distributionGoals.steppedRoomsInAtLeastSeeds) failures.push('missing-stepped-rooms');
+  if (fourLevelWorlds.size < distributionGoals.fourLevelRoomsInAtLeastSeeds) failures.push('missing-four-level-rooms');
   if (low || accidentalIsolation || seamErrors || errors.length) failures.push('invalid-geometry-or-ownership');
-  return { goals: distributionGoals, failures, normalDistributionSeeds: 128, neighborhoodSeeds: 8, neighborhoodChunksPerSeed: 25, sampledOrdinaryPlans: ordinary, sampledMonuments: monuments,
+  return { goals: distributionGoals, failures, normalDistributionSeeds: distributionSeeds, steppedRoomWorlds: steppedWorlds.size, fourLevelRoomWorlds: fourLevelWorlds.size, neighborhoodSeeds: 8, neighborhoodChunksPerSeed: 25, sampledOrdinaryPlans: ordinary, sampledMonuments: monuments,
     familyWorldCounts: familyCounts, modes, styles, connectionCounts: kinds, oneWayLinks: oneWay, visibilityOnlyLinks: views, overlappingPlayableCells: overlappingCells,
     walkableArea: area, zeroAreaFraction: zeroArea / area, areaWeightedHeightBins: [...heights].sort((a, b) => a[0] - b[0]).map(([minY, area]) => ({ minY, maxY: minY + 1, area, fraction: area / [...heights.values()].reduce((a, b) => a + b, 0) })),
     regionalDatumRange: [Math.min(...ys), Math.max(...ys)], largestObservedRegions: regional.slice(0, 12),

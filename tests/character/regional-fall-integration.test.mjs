@@ -2,7 +2,7 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { createLab, THREE } from './support/headless-character.mjs';
-import { generateInfiniteChunk, getChunkWorldOffset } from '../../.character-test-dist/regional-world.js';
+import { generateInfiniteChunk, getChunkWorldOffset, regionalAtrium } from '../../.character-test-dist/regional-world.js';
 
 let lab, Ragdoll, Physics;
 before(async () => {
@@ -13,9 +13,15 @@ after(() => lab?.dispose());
 
 for (const shared of [false, true]) test(`the real ${shared ? 'shared' : 'player'} FBX ragdoll falls through three regional owners and lands on their actual lower maze`, async () => {
   let world, cell;
-  for (let i = 0; i < 32 && !cell; i++) {
+  for (let i = 0; i < 256 && !cell; i++) {
+    let candidate = false;
+    for (let z = 0; z < 4; z++) for (let x = 0; x < 4; x++) {
+      const a = regionalAtrium(`REGIONAL-AUDIT-${i}`, x, z, 0);
+      candidate ||= a?.perimeter === 'gallery' && a.owner === 0 && a.lower === -2;
+    }
+    if (!candidate) continue;
     world = generateInfiniteChunk(`REGIONAL-AUDIT-${i}`, { x: 0, z: 0, story: 0 });
-    cell = world.spatial.cells.find(c => c.mode === 'gallery' && c.atriumLower === -2);
+    cell = world.spatial.cells.find(c => c.mode === 'gallery' && c.atriumPerimeter === 'gallery' && c.atriumLower === -2);
   }
   assert.ok(cell);
   const physics = await Physics.create({ ...world, colliders: [] });

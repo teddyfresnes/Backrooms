@@ -18,9 +18,10 @@ export interface SpatialDependency {
 }
 export interface SpatialCellRecord {
   id: string; regionId: string; bounds: Rect; floorY: number;
-  mode: 'rooms' | 'gallery' | 'void' | 'lower-maze';
+  mode: 'rooms' | 'gallery' | 'terrace' | 'void' | 'lower-maze';
   atriumOwner?: number;
   atriumLower?: number;
+  atriumPerimeter?: 'gallery' | 'stepped';
 }
 export interface SpatialArchitecture {
   version: 2;

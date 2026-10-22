@@ -7,14 +7,25 @@ Le contrat commun des sols, couches et migrations est décrit dans
 
 `WorldStream` maintient les chunks actifs, les `WorldView` et les colliders
 associés. Le voisinage de base est un 3×3 autour du propriétaire du support.
-Les dépendances spatiales à 36 m (enveloppe verticale ±12 m) ajoutent au plus
-12 propriétaires, triés par distance. Elles préchargent les niveaux visibles et
+Les dépendances spatiales ajoutent au plus 12 propriétaires. `SpatialVisibility`
+priorise les supports proches, puis les ouvertures dans la direction du regard
+(36 m structurels, 72 m pour les vues, marge verticale de 20 m). Le voisinage
+de base est exclu de ce budget supplémentaire. Elles préchargent les niveaux visibles et
 les réceptions avant le franchissement. `supportedCoordAt` cherche d’abord un
 sol réel, puis le volume libre courant ; l’inverse régional ne sert qu’en repli.
 Les anciens aperçus ci-dessous concernent les monuments et le chemin legacy.
 
 - Au démarrage, jusqu’à trois workers temporaires préparent les voisins.
 - Ensuite, un worker persistant génère un chunk à la fois.
+- Sa réponse alimente un cache CPU de 12 plans, sans montage dans le callback.
+  Le runtime monte au plus une vue prête par frame. Les plans et données de
+  lumière récemment démontés rejoignent ce cache ; leurs ressources GPU sont libérées.
+- Les owners visibles hors de la story active utilisent `WorldView.architectureOnly` :
+  architecture, matériaux, lumière, luminaires, portes et collisions réels.
+  Les props, graffitis et dommages de plafond attendent l’approche. `promoteDetails`
+  les ajoute sans recréer les géométries structurelles ni les textures lumineuses.
+- La sélection des dépendances est réutilisée dans une marge de 1,5 m / environ
+  12° ; une mutation de montage ou un changement de centre l’invalide.
 - Les destinations verticales sont préchargées près des puits et escaliers.
 - Les volumes hauts de `epic2`, `epic3`, `epic4` et `epic5` épinglent leur
   story source au lieu de remonter tous les 5,4 m. Le runtime source est résolu

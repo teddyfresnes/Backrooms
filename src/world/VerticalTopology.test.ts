@@ -28,7 +28,7 @@ describe('integrated vertical topology', () => {
     }
     expect(nonzero).toBeGreaterThan(30); expect(corridor).toBeGreaterThan(0); expect(stairs).toBeGreaterThan(100);
     expect(drops).toBeGreaterThan(0); expect(jumps).toBeGreaterThan(0);
-    expect(families).toEqual(new Set(['galerie-l', 'galerie-u', 'galerie-bridge']));
+    expect(families).toEqual(new Set(['galerie-l', 'galerie-u', 'galerie-bridge', 'galerie-en-gradins']));
   });
 
   it('keeps the reported 1.64 m headroom seed safe at every slope corner and midpoint', () => {

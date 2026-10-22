@@ -1,4 +1,4 @@
-# Transitions et volumes intégrés — version 14
+# Transitions et volumes intégrés — version 15
 
 Les salles ordinaires conservent le BSP historique, ses murs épais et son
 éclairage. Les transitions et les salles à plusieurs hauteurs sont composées
@@ -44,7 +44,7 @@ avant leurs réservations ; leurs surfaces finales alimentent Three et Rapier.
 
 ## Contrats
 
-`WorldPlan.version` vaut 14. Les champs ajoutés à `SpatialArchitecture` sont
+`WorldPlan.version` vaut 15. Les champs ajoutés à `SpatialArchitecture` sont
 optionnels pour la lecture des anciens plans ; la topologie reste compatible
 avec la version 2. Les ancrages de sauvegarde sont recherchés puis vérifiés
 contre le corps réel, avec le repli sûr existant.
@@ -65,8 +65,14 @@ l’autostep, de la gravité ou du tick fixe.
 Les gabarits d’atrium réunissent une à quatre cellules : 28×28, 56×28, 28×56
 ou 56×56 m, à l’intérieur d’un chunk. Le BSP ordinaire conserve ses domaines de
 224 m et ses pièces traversant les chunks. Les couronnes font 2,7 à 4,8 m et les
-circulations 2,4 à 3,8 m. Les volumes occupent une ou deux différences d’adresse,
-avec des paliers intermédiaires variables. Une longue circulation peut être une
+circulations 2,4 à 3,8 m. Les volumes occupent une à trois différences d’adresse,
+avec deux à quatre niveaux. Les galeries classiques peuvent garder un escalier
+ou rester sans escalier ; les salles en gradins développent des anneaux successifs
+sans escalier intérieur imposé. Chaque niveau plus bas avance vers le centre.
+Les soubassements atteignent le vrai sol ; des passages de 4 m sous linteau les
+traversent aux entrées canoniques. Les coins enfermés entre deux rampes pleines
+et le soubassement sont comblés jusqu’au palier, sans faux sol utilisable dessous.
+Une longue circulation peut être une
 rampe droite ou en plusieurs tronçons. Les ponts sont placés avec un dégagement
 réel au-dessus des volées ; les galeries en L peu profondes gardent leur couronne
 sans ajouter un pont trop bas sur l’escalier.
@@ -106,7 +112,7 @@ partagée par les contrôleurs. Les corps, vitesses et réglages physiques sont 
 
 ## Conservation des familles historiques
 
-| Famille | Chemin ordinaire v14 | Conservation / adaptation |
+| Famille | Chemin ordinaire v15 | Conservation / adaptation |
 |---|---|---|
 | BSP, masses, niches, colonnes, portes | Présent | Helpers historiques, seuils et références de porte réconciliés |
 | `epic1` à `epic5` | Colonnes monumentales protégées | Générateur legacy et helpers géométriques conservés |
@@ -157,6 +163,8 @@ Les mesures, limites et reproductions sont dans
 [STAIR_FIX_VALIDATION.md](validation/STAIR_FIX_VALIDATION.md) ; les résultats
 v13 de `TRANSITION_VALIDATION.md` et v12 de `BSP_RESTORATION.md` restent des
 références historiques.
+Les salles à plusieurs anneaux et le streaming des aperçus sont vérifiés dans
+[ATRIUM_VALIDATION.md](validation/ATRIUM_VALIDATION.md).
 Le service de prévisualisation supervisée étant indisponible dans l’environnement
 de réalisation, le rendu WebGL, les shaders, les draw calls et l’aspect final des
 textures ne peuvent pas être déclarés vérifiés par ces tests CPU.

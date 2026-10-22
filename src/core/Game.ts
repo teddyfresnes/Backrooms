@@ -883,7 +883,8 @@ export class Game {
       if (partner && (partner.distanceTo(this.player.position) > 45 || Math.abs(partner.y - this.player.position.y) > 8)) {
         this.character?.setInteractionPartner(null);
       }
-      this.worldStream.update(this.elapsed, rawDelta, this.character?.getWorldPosition() ?? this.player.position);
+      this.player.getViewDirection(this.lookDirection);
+      this.worldStream.update(this.elapsed, rawDelta, this.character?.getWorldPosition() ?? this.player.position, this.lookDirection);
       const nextStory = this.worldStream.getCenterCoord().story;
       if (nextStory !== this.activeStory) {
         this.activeStory = nextStory;

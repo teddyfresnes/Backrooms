@@ -1399,12 +1399,17 @@ export interface WorldViewOptions {
   lightingMode?: LightingMode;
   bakedLightMaps?: BakedLightMapData;
   regionalLightData?: RegionalLightData;
+  architectureOnly?: boolean;
 }
 
 export class WorldView {
   readonly group = new THREE.Group();
   private architectureDebug?: ArchitectureDebug;
-  readonly ready: Promise<void>;
+  private readonly initialReady: Promise<void>;
+  private detailReady?: Promise<void>;
+  private previewOnly: boolean;
+  get ready(): Promise<void> { return this.detailReady ?? this.initialReady; }
+  get architectureOnly(): boolean { return this.previewOnly; }
   private readonly emitterMesh: THREE.InstancedMesh;
   private readonly fixtureSlots: LightSlot[];
   private readonly previewMaterials: Pick<
@@ -1427,7 +1432,7 @@ export class WorldView {
   private readonly graffitiMaterials: THREE.MeshBasicMaterial[] = [];
   private readonly regionalLightField?: RegionalLightField;
   private readonly surfaceStyle: SurfaceStyle;
-  private readonly propLayer: WorldPropLayer;
+  private propLayer: WorldPropLayer;
   private readonly doorLayer: WorldDoorLayer;
 
   constructor(
@@ -1435,6 +1440,7 @@ export class WorldView {
     sourceMaterials: MaterialSet,
     options: WorldViewOptions = {},
   ) {
+    this.previewOnly = options.architectureOnly ?? false;
     this.group.name = `world-${plan.seed}`;
     if (options.lightingMode === 'legacy') {
       this.bakedLightMaps = createBakedLightMaps(plan, options.bakedLightMaps);
@@ -1525,13 +1531,13 @@ export class WorldView {
     this.fixtureSlots = plan.lights;
     this.buildArchitecture();
     this.buildEpicStructures();
-    this.buildWallGraffiti();
+    if (!this.previewOnly) this.buildWallGraffiti();
     this.buildRaisedZones();
     this.buildLowPassages();
     this.emitterMesh = this.buildFixtures();
     this.buildPitFeatures();
     this.buildStairs();
-    this.buildCeilingDamage();
+    if (!this.previewOnly) this.buildCeilingDamage();
     this.buildImpossibleVista();
     if (this.bakedLightMaps) {
       this.group.traverse((object) => {
@@ -1542,9 +1548,21 @@ export class WorldView {
     }
     this.doorLayer = new WorldDoorLayer(plan, this.lightingContext ?? null);
     this.group.add(this.doorLayer.group);
-    this.propLayer = new WorldPropLayer(plan, this.lightingContext ?? null);
+    this.propLayer = new WorldPropLayer(this.previewOnly ? { ...plan, propPlacements: [] } : plan, this.lightingContext ?? null);
     this.group.add(this.propLayer.group);
-    this.ready = Promise.all([this.doorLayer.ready, this.propLayer.ready]).then(() => undefined);
+    this.initialReady = Promise.all([this.doorLayer.ready, this.propLayer.ready]).then(() => undefined);
+  }
+
+  /** Keep the existing architecture and lighting when the player approaches. */
+  promoteDetails(): Promise<void> {
+    if (!this.previewOnly) return this.ready;
+    this.previewOnly = false;
+    this.buildWallGraffiti(); this.buildCeilingDamage();
+    this.propLayer.dispose();
+    this.propLayer = new WorldPropLayer(this.plan, this.lightingContext ?? null);
+    this.group.add(this.propLayer.group);
+    this.detailReady = Promise.all([this.initialReady, this.propLayer.ready]).then(() => undefined);
+    return this.detailReady;
   }
 
   private buildWallGraffiti(): void {

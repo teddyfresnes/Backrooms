@@ -11,6 +11,7 @@ const quantiles = (values: number[]) => {
   return { min: s[0], median: s[Math.floor(s.length / 2)], p95: s[Math.ceil(s.length * .95) - 1], max: s.at(-1) };
 };
 const compositions: Record<string, number> = {}, moundAccess: Record<string, number> = {};
+const atriumRooms = { withStairs: 0, withoutStairs: 0, stepped: 0, levels: {} as Record<string, number>, footprints: {} as Record<string, number> };
 const errors: unknown[] = [], families: Record<string, number> = {}, examples: Record<string, unknown> = {};
 const lengths: number[] = [], widths: number[] = [], grades: number[] = [], rises: number[] = [], roomShapes = new Set<string>();
 let externalLinks = 0, sourceHoles = 0, ordinary = 0, hall = 0, reliefs = 0, uvTriangles = 0, voidSources = 0;
@@ -26,7 +27,15 @@ for (const [index, seed] of seeds.entries()) {
     const area = rectWidth(room.bounds) * rectDepth(room.bounds);
     if (room.kind === 'open-hall') hall += area; else ordinary += area;
   }
-  for (const cell of w.spatial!.cells.filter(c => c.mode === 'gallery')) roomShapes.add(`${rectWidth(cell.bounds)}x${rectDepth(cell.bounds)}x${(owner.story - cell.atriumLower!) * 5.4}`);
+  for (const cell of w.spatial!.cells.filter(c => c.mode === 'gallery')) {
+    roomShapes.add(`${rectWidth(cell.bounds)}x${rectDepth(cell.bounds)}x${(owner.story - cell.atriumLower!) * 5.4}`);
+    const stairs = w.topology!.surfaces.some(s => s.id.startsWith(cell.id + '/atrium-stairs/'));
+    atriumRooms[stairs ? 'withStairs' : 'withoutStairs']++;
+    if (cell.atriumPerimeter === 'stepped') atriumRooms.stepped++;
+    const levels = String(cell.atriumOwner! - cell.atriumLower! + 1), shape = `${rectWidth(cell.bounds)}x${rectDepth(cell.bounds)}`;
+    atriumRooms.levels[levels] = (atriumRooms.levels[levels] ?? 0) + 1;
+    atriumRooms.footprints[shape] = (atriumRooms.footprints[shape] ?? 0) + 1;
+  }
   for (const t of w.spatial!.transitions!) {
     compositions[t.composition] = (compositions[t.composition] ?? 0) + 1;
     const length = t.axis === 'x' ? rectWidth(t.run) : rectDepth(t.run);
@@ -68,9 +77,9 @@ for (const [index, seed] of seeds.entries()) {
   }
   geometry.dispose();
 }
-const report = { planVersion: 14, compositions, moundAccess, seeds, corpus: { fixed: 64, holdout: 32 }, families, examples, roomShapes: [...roomShapes].sort(),
+const report = { planVersion: 15, atriumRooms, compositions, moundAccess, seeds, corpus: { fixed: 64, holdout: 32 }, families, examples, roomShapes: [...roomShapes].sort(),
   transitionLength: quantiles(lengths), transitionWidth: quantiles(widths), transitionGrade: quantiles(grades), transitionRise: quantiles(rises),
   ordinaryBspRoomFootprintShare: ordinary / (ordinary + hall), externalLinks, sourceHoles, voidSources, reliefs, uvTriangles, errors };
-writeFileSync(process.argv[2] ?? 'docs/validation/stair-fix-integration.json', JSON.stringify(report, null, 2) + '\n');
+writeFileSync(process.argv[2] ?? 'docs/validation/atrium-integration.json', JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify({ seeds: seeds.length, externalLinks, sourceHoles, reliefs, uvTriangles, errors: errors.length }));
 if (errors.length) process.exitCode = 1;

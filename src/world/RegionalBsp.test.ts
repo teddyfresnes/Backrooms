@@ -3,6 +3,8 @@ import { generateInfiniteChunk } from './InfiniteWorld';
 import { regionalAtrium, regionalDatum } from './RegionalPlan';
 import { rectArea, rectDepth, rectWidth } from './types';
 import { lightPanelOverlapsRect } from './generateWorld';
+import * as THREE from 'three';
+import { ceilingFixturePose } from '../render/CeilingFixture';
 
 it('restores varied historical architecture in the actual ordinary entry point, with a majority of non-hall area', () => {
   let ordinaryArea = 0, hallArea = 0, thickLength = 0, wallLength = 0, crossCellRooms = 0, lights = 0;
@@ -10,7 +12,7 @@ it('restores varied historical architecture in the actual ordinary entry point, 
   for (let i = 0; i < 48; i++) {
     // The last 16 seeds are a holdout corpus distinct from the physical demos.
     const w = generateInfiniteChunk(`${i < 32 ? 'BSP-RESTORE' : 'BSP-HOLDOUT'}-${i}`, { x: 0, z: 0, story: 0 });
-    expect(w.version).toBe(14);
+    expect(w.version).toBe(15);
     expect(w.rooms.some(r => r.id.includes('/quarter-'))).toBe(false);
     const united = new Map<string, { minX: number; maxX: number; minZ: number; maxZ: number }>();
     for (const r of w.rooms.filter(r => r.id.includes('/bsp/') || r.id.endsWith('/hall'))) {
@@ -25,8 +27,11 @@ it('restores varied historical architecture in the actual ordinary entry point, 
     for (const l of w.lights) {
       lights++; expect(l.unstable).toBe(false);
       expect(l.intensity).toBeGreaterThanOrEqual(.98);
+      const position = new THREE.Vector3(), rotation = new THREE.Quaternion(); ceilingFixturePose(w, l, position, rotation);
+      const corners = [-1, 1].flatMap(x => [-1, 1].map(z => new THREE.Vector3(x * l.width / 2, 0, z * 1.16 / 2 * (l.width > 1.65 ? 1.08 : .86)).applyQuaternion(rotation).add(position)));
+      const panelLow = Math.min(...corners.map(p => p.y)), panelHigh = Math.max(...corners.map(p => p.y));
       for (const wall of w.walls) {
-        if (wall.bottom >= l.ceilingY + .12 || wall.bottom + wall.height <= l.ceilingY - .25) continue;
+        if (wall.bottom >= panelHigh || wall.bottom + wall.height <= panelLow) continue;
         const bounds = { minX: wall.x - (wall.orientation === 'x' ? wall.length : wall.thickness) / 2, maxX: wall.x + (wall.orientation === 'x' ? wall.length : wall.thickness) / 2,
           minZ: wall.z - (wall.orientation === 'z' ? wall.length : wall.thickness) / 2, maxZ: wall.z + (wall.orientation === 'z' ? wall.length : wall.thickness) / 2 };
         expect(lightPanelOverlapsRect(l, bounds), `${w.seed} ${l.id} through ${wall.id}`).toBe(false);
