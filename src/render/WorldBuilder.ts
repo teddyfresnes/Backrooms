@@ -1,9 +1,8 @@
 import { ArchitectureDebug, type ArchitectureDebugMode } from './ArchitectureDebug';
-import { prismExposure } from './PrismExposure';
+import { mountArchitectureBatch, prepareSpatialArchitecture, type SpatialArchitectureBuffers } from './SpatialArchitectureBuffers';
 import { ceilingFixturePose } from './CeilingFixture';
-import { createWalkableBatch, createWalkableGeometry } from './WalkableGeometry';
-import { applyRegionalLighting, createRegionalLightField, type RegionalLightData, type RegionalLightField } from './RegionalLighting';
-import { createSpatialPrismBatch } from './SpatialGeometry';
+import { createWalkableGeometry } from './WalkableGeometry';
+import { setRegionalLightNeighbor, createRegionalLightField, type RegionalLightData, type RegionalLightField } from './RegionalLighting';
 import { applySurfaceLighting } from './SurfaceLighting';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -1399,6 +1398,7 @@ export interface WorldViewOptions {
   lightingMode?: LightingMode;
   bakedLightMaps?: BakedLightMapData;
   regionalLightData?: RegionalLightData;
+  architectureData?: SpatialArchitectureBuffers;
   architectureOnly?: boolean;
 }
 
@@ -1442,22 +1442,21 @@ export class WorldView {
   ) {
     this.previewOnly = options.architectureOnly ?? false;
     this.group.name = `world-${plan.seed}`;
+    this.regionalLightField = plan.spatial && options.lightingMode !== 'legacy' ? createRegionalLightField(plan, options.regionalLightData) : undefined;
     if (options.lightingMode === 'legacy') {
       this.bakedLightMaps = createBakedLightMaps(plan, options.bakedLightMaps);
       const baked = createBakedMaterialSet(sourceMaterials, this.bakedLightMaps, plan.size);
       this.materials = baked.materials;
       this.ownedMaterials = baked.ownedMaterials;
     } else {
-      const zonal = createZonalMaterialSet(sourceMaterials, plan);
+      const zonal = createZonalMaterialSet(sourceMaterials, plan, this.regionalLightField);
       this.materials = zonal.materials;
       this.lightingContext = zonal.context;
       this.ownedMaterials = zonal.ownedMaterials;
     }
     this.surfaceStyle = plan.surfaceStyle ?? DEFAULT_SURFACE_STYLE;
-    this.regionalLightField = plan.spatial && this.lightingContext ? createRegionalLightField(plan, options.regionalLightData) : undefined;
-    if (this.lightingContext) this.lightingContext.regionalField = this.regionalLightField;
     for (const material of [this.materials.floor, this.materials.wall, this.materials.plaster, this.materials.ceiling, this.materials.baseboard]) {
-      if (this.regionalLightField) applyRegionalLighting(material, this.regionalLightField); else if (!plan.spatial) applySurfaceLighting(material, plan);
+      if (!plan.spatial) applySurfaceLighting(material, plan);
     }
     this.materials.wall.color.multiplyScalar(this.surfaceStyle.wallTint);
     this.materials.plaster.color.multiplyScalar(this.surfaceStyle.wallTint);
@@ -1529,7 +1528,7 @@ export class WorldView {
       ...Object.values(this.previewMaterials),
     );
     this.fixtureSlots = plan.lights;
-    this.buildArchitecture();
+    if (plan.spatial) this.buildSpatialArchitecture(options.architectureData); else this.buildArchitecture();
     this.buildEpicStructures();
     if (!this.previewOnly) this.buildWallGraffiti();
     this.buildRaisedZones();
@@ -1581,18 +1580,9 @@ export class WorldView {
     if (group.children.length > 0) this.group.add(group);
   }
 
-  private buildSpatialArchitecture(): void {
-    const spatial = this.plan.spatial!, surfaces = this.plan.topology!.surfaces;
-    const origin = { x: spatial.owner.x * 112, y: spatial.owner.story * 5.4, z: spatial.owner.z * 112 };
-    makeMesh(createWalkableBatch(surfaces, 'top', this.surfaceStyle.floorPatternScale, this.surfaceStyle.floorQuarterTurn, origin, true), this.materials.floor, 'regional-carpet-floors', this.group);
-    makeMesh(createWalkableBatch(surfaces, 'underside', this.surfaceStyle.ceilingPatternScale, false, origin, true), this.materials.ceiling, 'regional-floor-undersides', this.group);
-    makeMesh(createWalkableBatch(surfaces, 'sides', this.surfaceStyle.wallPatternScale, false, origin, true), this.materials.wall, 'regional-floor-chants', this.group);
-    for (const face of ['top', 'underside', 'sides'] as const) makeMesh(createWalkableBatch(spatial.ceilings, face, this.surfaceStyle.ceilingPatternScale, false, origin, true), this.materials.ceiling, `regional-ceilings-${face}`, this.group);
-    const exposedPrisms = prismExposure(spatial.prisms);
-    for (const material of ['wall', 'plaster', 'ceiling', 'baseboard'] as const) {
-      const prisms = spatial.prisms.filter(p => p.material === material);
-      if (prisms.length) makeMesh(createSpatialPrismBatch(prisms, material === 'ceiling' ? this.surfaceStyle.ceilingPatternScale : this.surfaceStyle.wallPatternScale, origin, exposedPrisms), this.materials[material], `regional-${material}-structures`, this.group);
-    }
+  private buildSpatialArchitecture(supplied?: SpatialArchitectureBuffers): void {
+    for (const batch of supplied ?? prepareSpatialArchitecture(this.plan))
+      makeMesh(mountArchitectureBatch(batch), this.materials[batch.material], batch.name, this.group);
   }
 
   private buildArchitecture(): void {
@@ -4146,6 +4136,10 @@ export class WorldView {
   setArchitectureDebug(mode: ArchitectureDebugMode): void {
     this.architectureDebug ??= new ArchitectureDebug(this.group, this.plan);
     this.architectureDebug.setMode(mode);
+  }
+
+  setLightNeighbor(dx: number, dz: number, data?: RegionalLightData, yOffset = 0): void {
+    if (this.regionalLightField) setRegionalLightNeighbor(this.regionalLightField, dx, dz, data, yOffset);
   }
 
   setWorldOffset(offset: Readonly<THREE.Vector3>): void {

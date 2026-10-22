@@ -4,6 +4,7 @@ import { generateInfiniteChunk } from './InfiniteWorld';
 import type { ChunkKey } from './InfiniteWorld';
 import type { BakedLightMapData } from '../render/BakedLighting';
 import type { RegionalLightData } from '../render/RegionalLighting';
+import { architectureTransferables, prepareSpatialArchitecture, type SpatialArchitectureBuffers } from '../render/SpatialArchitectureBuffers';
 import type { LightingMode } from '../render/LightingMode';
 
 interface GenerateRequest {
@@ -19,6 +20,7 @@ interface GenerateResponse {
   plan?: ReturnType<typeof generateInfiniteChunk>;
   lightMaps?: BakedLightMapData;
   regionalLightData?: RegionalLightData;
+  architectureData?: SpatialArchitectureBuffers;
   error?: string;
 }
 
@@ -33,17 +35,12 @@ scope.addEventListener('message', async (event: MessageEvent<GenerateRequest>) =
       : undefined;
     const regionalLightData = plan.spatial && event.data.lightingMode !== 'legacy'
       ? (await import('../render/RegionalLighting')).bakeRegionalLightData(plan) : undefined;
-    const response: GenerateResponse = { id, key, plan, lightMaps, regionalLightData };
-    if (lightMaps) {
-      scope.postMessage(response, [
-        lightMaps.general.buffer as ArrayBuffer,
-        lightMaps.ceiling.buffer as ArrayBuffer,
-      ]);
-    } else if (regionalLightData) {
-      scope.postMessage(response, [regionalLightData.bounds.buffer as ArrayBuffer, regionalLightData.lighting.buffer as ArrayBuffer]);
-    } else {
-      scope.postMessage(response);
-    }
+    const architectureData = plan.spatial ? prepareSpatialArchitecture(plan) : undefined;
+    const response: GenerateResponse = { id, key, plan, lightMaps, regionalLightData, architectureData };
+    const transfer = architectureData ? architectureTransferables(architectureData) : [];
+    if (lightMaps) transfer.push(lightMaps.general.buffer as ArrayBuffer, lightMaps.ceiling.buffer as ArrayBuffer);
+    if (regionalLightData) transfer.push(regionalLightData.bounds.buffer as ArrayBuffer, regionalLightData.lighting.buffer as ArrayBuffer);
+    scope.postMessage(response, transfer);
   } catch (error) {
     const response: GenerateResponse = {
       id,

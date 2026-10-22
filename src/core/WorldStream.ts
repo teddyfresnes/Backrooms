@@ -17,6 +17,7 @@ import type { LightingMode } from '../render/LightingMode';
 import type { BiomeMaterialSets } from '../render/MaterialLibrary';
 import { unlitZoneInfluence } from '../render/ZonalLighting';
 import { WorldView } from '../render/WorldBuilder';
+import { prepareSpatialArchitecture, type SpatialArchitectureBuffers } from '../render/SpatialArchitectureBuffers';
 import type { DoorWorldInteraction, WorldInteraction } from '../render/WorldBuilder';
 import {
   EPIC_STRUCTURE_DEFINITIONS,
@@ -58,6 +59,7 @@ interface ActiveChunk {
   plan: WorldPlan;
   lightMaps?: BakedLightMapData;
   regionalLightData?: RegionalLightData;
+  architectureData?: SpatialArchitectureBuffers;
   lightingMode: LightingMode;
   view: WorldView;
   offset: THREE.Vector3;
@@ -69,6 +71,7 @@ interface WorkerResponse {
   plan?: WorldPlan;
   lightMaps?: BakedLightMapData;
   regionalLightData?: RegionalLightData;
+  architectureData?: SpatialArchitectureBuffers;
   error?: string;
 }
 
@@ -83,6 +86,7 @@ interface PreparedChunk {
   plan: WorldPlan;
   lightMaps?: BakedLightMapData;
   regionalLightData?: RegionalLightData;
+  architectureData?: SpatialArchitectureBuffers;
 }
 
 export interface WorldLightingContext {
@@ -366,6 +370,7 @@ export class WorldStream {
             coord,
             key === originMetadata.key ? originLightMaps : ready?.lightMaps,
             key === originMetadata.key ? originRegionalLightData : ready?.regionalLightData,
+            ready?.architectureData,
           );
         }
       });
@@ -441,6 +446,7 @@ export class WorldStream {
           this.centerCoord,
           prepared?.lightMaps,
           prepared?.regionalLightData,
+          prepared?.architectureData,
         );
         this.preparedChunks.delete(centerKey);
         mountedThisFrame = true;
@@ -460,7 +466,7 @@ export class WorldStream {
       const readyKey = createChunkKey(readyCoord);
       const ready = this.preparedChunks.get(readyKey)!;
       this.preparedChunks.delete(readyKey);
-      this.mountChunk(ready.plan, readyCoord, ready.lightMaps, ready.regionalLightData);
+      this.mountChunk(ready.plan, readyCoord, ready.lightMaps, ready.regionalLightData, ready.architectureData);
       mountedThisFrame = true;
       sourcesChanged = true;
       missing = desiredCoords.filter((coord) => !this.chunks.has(createChunkKey(coord)));
@@ -698,7 +704,7 @@ export class WorldStream {
             const lightMaps = this.lightingMode === 'legacy'
               ? bakeLightMapData(plan)
               : undefined;
-            return { plan, lightMaps, regionalLightData: undefined };
+            return { plan, lightMaps, regionalLightData: undefined, architectureData: undefined };
           })();
       return { coord, key, prepared: generated };
     }));
@@ -706,7 +712,7 @@ export class WorldStream {
     this.physics.batchChunkChanges(() => {
       for (const ready of prepared) {
         if (!ready.prepared) continue;
-        this.mountChunk(ready.prepared.plan, ready.coord, ready.prepared.lightMaps, ready.prepared.regionalLightData);
+        this.mountChunk(ready.prepared.plan, ready.coord, ready.prepared.lightMaps, ready.prepared.regionalLightData, ready.prepared.architectureData);
       }
     });
     for (const ready of prepared) this.preparedChunks.delete(ready.key);
@@ -739,6 +745,7 @@ export class WorldStream {
           coord,
           this.recoveryChunk!.prepared.lightMaps,
           this.recoveryChunk!.prepared.regionalLightData,
+          this.recoveryChunk!.prepared.architectureData,
         );
       });
       this.refreshLightSources();
@@ -752,7 +759,7 @@ export class WorldStream {
     }
     this.physics.batchChunkChanges(() => {
       const plan = prepared?.plan ?? generateInfiniteChunk(this.seed, key);
-      this.mountChunk(plan, coord, prepared?.lightMaps, prepared?.regionalLightData);
+      this.mountChunk(plan, coord, prepared?.lightMaps, prepared?.regionalLightData, prepared?.architectureData);
     });
     this.preparedChunks.delete(key);
     this.refreshLightSources();
@@ -1369,10 +1376,11 @@ export class WorldStream {
     revision: number,
   ): Promise<void> {
     if (this.chunks.get(runtime.key) !== runtime) return;
+    if (mode === 'modern' && runtime.plan.spatial && !runtime.regionalLightData) runtime.regionalLightData = bakeRegionalLightData(runtime.plan);
     const view = new WorldView(
       runtime.plan,
       this.materials[runtime.plan.visualBiome ?? 'yellow'],
-      { lightingMode: mode, bakedLightMaps: mode === 'legacy' ? lightMaps : undefined, regionalLightData: runtime.regionalLightData, architectureOnly: runtime.view.architectureOnly },
+      { lightingMode: mode, bakedLightMaps: mode === 'legacy' ? lightMaps : undefined, regionalLightData: runtime.regionalLightData, architectureData: runtime.architectureData, architectureOnly: runtime.view.architectureOnly },
     );
     view.group.position.copy(runtime.offset);
     view.setArchitectureDebug(this.architectureDebugMode);
@@ -1393,6 +1401,7 @@ export class WorldStream {
     this.scene.add(view.group);
     runtime.view.dispose();
     runtime.view = view;
+    this.connectLightNeighbors(runtime.coord);
     runtime.lightingMode = mode;
     if (lightMaps) runtime.lightMaps = lightMaps;
   }
@@ -1402,6 +1411,7 @@ export class WorldStream {
     coordOverride?: Readonly<ChunkCoord>,
     suppliedLightMaps?: BakedLightMapData,
     suppliedRegionalLightData?: RegionalLightData,
+    suppliedArchitectureData?: SpatialArchitectureBuffers,
   ): void {
     let metadata = getInfiniteChunkMetadata(plan);
     if (!metadata && coordOverride) {
@@ -1418,10 +1428,15 @@ export class WorldStream {
       ? suppliedLightMaps ?? bakeLightMapData(plan)
       : suppliedLightMaps;
     const regionalLightData = suppliedRegionalLightData ?? (plan.spatial && this.lightingMode === 'modern' ? bakeRegionalLightData(plan) : undefined);
+    const architectureData = suppliedArchitectureData ?? (plan.spatial ? prepareSpatialArchitecture(plan) : undefined);
     const view = new WorldView(
       plan,
       this.materials[plan.visualBiome ?? 'yellow'],
-      { lightingMode: this.lightingMode, bakedLightMaps: lightMaps, regionalLightData, architectureOnly: !!plan.spatial && coord.story !== this.centerCoord.story },
+      { lightingMode: this.lightingMode, bakedLightMaps: lightMaps, regionalLightData, architectureData,
+        architectureOnly: !!plan.spatial && (coord.story !== this.centerCoord.story || distanceToRect(
+          this.visibilityPosition.x - offset.x, this.visibilityPosition.z - offset.z,
+          { minX: -56, maxX: 56, minZ: -56, maxZ: 56 },
+        ) >= 20) },
     );
     view.group.position.copy(offset);
     view.setArchitectureDebug(this.architectureDebugMode);
@@ -1436,32 +1451,45 @@ export class WorldStream {
         plan,
         lightMaps,
         regionalLightData,
+        architectureData,
         lightingMode: this.lightingMode,
         view,
         offset,
       });
       this.mountRevision++;
+      this.connectLightNeighbors(coord);
     } catch (error) {
       view.dispose();
       throw error;
     }
   }
 
+  private connectLightNeighbors(coord: Readonly<ChunkCoord>): void {
+    const own = this.chunks.get(createChunkKey(coord));
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dz) continue;
+      const neighbor = this.chunks.get(createChunkKey({ x: coord.x + dx, z: coord.z + dz, story: coord.story }));
+      own?.view.setLightNeighbor(dx, dz, neighbor?.regionalLightData);
+      neighbor?.view.setLightNeighbor(-dx, -dz, own?.regionalLightData);
+    }
+  }
+
   private unmountChunk(key: ChunkKey): void {
     const runtime = this.chunks.get(key);
     if (!runtime) return;
-    if (!this.disposed) this.cachePreparedChunk(key, { plan: runtime.plan, lightMaps: runtime.lightMaps, regionalLightData: runtime.regionalLightData });
+    if (!this.disposed) this.cachePreparedChunk(key, { plan: runtime.plan, lightMaps: runtime.lightMaps, regionalLightData: runtime.regionalLightData, architectureData: runtime.architectureData });
     if (!this.disposed && key === this.recoveryChunkKey) {
       // Retain CPU data only. Keeping the complete source WorldView mounted
       // would overlap epic1's stacked previews with the real lower stories.
       this.recoveryChunk = {
         key,
-        prepared: { plan: runtime.plan, lightMaps: runtime.lightMaps, regionalLightData: runtime.regionalLightData },
+        prepared: { plan: runtime.plan, lightMaps: runtime.lightMaps, regionalLightData: runtime.regionalLightData, architectureData: runtime.architectureData },
       };
     }
     this.physics.removeChunk(key);
     runtime.view.dispose();
     this.chunks.delete(key);
+    this.connectLightNeighbors(runtime.coord);
     this.mountRevision++;
     this.characterPitsCache = null;
   }
@@ -1593,7 +1621,7 @@ export class WorldStream {
     }
     // A worker completion never constructs a Three view in the message event.
     // update() admits one ready mount per frame, and a quick turn can reuse it.
-    this.cachePreparedChunk(request.key, { plan: event.data.plan, lightMaps: event.data.lightMaps, regionalLightData: event.data.regionalLightData });
+    this.cachePreparedChunk(request.key, { plan: event.data.plan, lightMaps: event.data.lightMaps, regionalLightData: event.data.regionalLightData, architectureData: event.data.architectureData });
     this.pumpVerticalPrefetch();
   };
 
@@ -1653,7 +1681,7 @@ export class WorldStream {
           if (response.error || !response.plan) {
             throw new Error(response.error ?? `Worker returned no plan for ${key}.`);
           }
-          prepared.set(key, { plan: response.plan, lightMaps: response.lightMaps, regionalLightData: response.regionalLightData });
+          prepared.set(key, { plan: response.plan, lightMaps: response.lightMaps, regionalLightData: response.regionalLightData, architectureData: response.architectureData });
         }
       } finally {
         worker.terminate();
@@ -1689,7 +1717,7 @@ export class WorldStream {
       if (response.error || !response.plan) {
         throw new Error(response.error ?? `Worker returned no plan for ${key}.`);
       }
-      return { plan: response.plan, lightMaps: response.lightMaps, regionalLightData: response.regionalLightData };
+      return { plan: response.plan, lightMaps: response.lightMaps, regionalLightData: response.regionalLightData, architectureData: response.architectureData };
     } finally {
       this.preparationWorkers.delete(worker);
       worker.terminate();

@@ -15,6 +15,7 @@ await build({ stdin: { contents: `
   import { generateInfiniteChunk, clearInfiniteWorldCaches } from './src/world/InfiniteWorld';
   import { bakeRegionalLightData } from './src/render/RegionalLighting';
   import { bakeLightMapData } from './src/render/BakedLighting';
+  import { prepareSpatialArchitecture, architectureTransferables } from './src/render/SpatialArchitectureBuffers';
   parentPort.postMessage({ ready: true });
   parentPort.on('message', ({ seed, warm, legacy, warmup }) => {
     if (!warm) clearInfiniteWorldCaches();
@@ -23,8 +24,12 @@ await build({ stdin: { contents: `
     const start = performance.now(), plan = generateInfiniteChunk(seed, coord);
     const generated = performance.now(), lightMaps = legacy ? bakeLightMapData(plan) : undefined;
     const regionalLightData = !legacy && plan.spatial ? bakeRegionalLightData(plan) : undefined;
-    parentPort.postMessage({ plan, lightMaps, regionalLightData, generationMs: generated - start,
-      bakeMs: performance.now() - generated, heapBytes: getHeapStatistics().used_heap_size }, regionalLightData ? [regionalLightData.bounds.buffer, regionalLightData.lighting.buffer] : lightMaps ? [lightMaps.general.buffer, lightMaps.ceiling.buffer] : []);
+    const baked = performance.now(), architectureData = plan.spatial ? prepareSpatialArchitecture(plan) : undefined;
+    const transfer = architectureData ? architectureTransferables(architectureData) : [];
+    if (regionalLightData) transfer.push(regionalLightData.bounds.buffer, regionalLightData.lighting.buffer);
+    if (lightMaps) transfer.push(lightMaps.general.buffer, lightMaps.ceiling.buffer);
+    parentPort.postMessage({ plan, lightMaps, regionalLightData, architectureData, geometryMs: performance.now() - baked, generationMs: generated - start,
+      bakeMs: baked - generated, heapBytes: getHeapStatistics().used_heap_size }, transfer);
   });
 `, resolveDir: process.cwd(), loader: 'ts' }, outfile: output, bundle: true, platform: 'node', format: 'esm', packages: 'external' });
 const started = performance.now(), worker = new Worker(output);
@@ -36,7 +41,9 @@ const receive = () => new Promise((resolve, reject) => {
 await receive();
 const startupMs = performance.now() - started;
 const summary = xs => { const a = [...xs].sort((a, b) => a - b); return { median: a[Math.floor(a.length / 2)], p95: a[Math.ceil(a.length * .95) - 1] }; };
-const seeds = Array.from({ length: 24 }, (_, i) => `VERTICAL-PROMPT-AUDIT-${i}`), modes = {};
+const sampleCount = Number(process.argv[2] ?? 24);
+if (!Number.isInteger(sampleCount) || sampleCount < 1 || sampleCount > 256) throw new Error('Sample count must be an integer from 1 to 256.');
+const seeds = Array.from({ length: sampleCount }, (_, i) => `VERTICAL-PROMPT-AUDIT-${i}`), modes = {};
 try {
   for (const mode of ['cold-modern', 'warm-modern', 'cold-legacy']) {
     const values = [];
@@ -47,8 +54,8 @@ try {
       const start = performance.now(), next = receive();
       worker.postMessage({ seed, warm: mode.startsWith('warm'), legacy: mode.endsWith('legacy') });
       const result = await next, roundTripMs = performance.now() - start;
-      values.push({ generationMs: result.generationMs, bakeMs: result.bakeMs, roundTripMs,
-        transferAndDispatchMs: roundTripMs - result.generationMs - result.bakeMs,
+      values.push({ generationMs: result.generationMs, bakeMs: result.bakeMs, geometryMs: result.geometryMs, roundTripMs,
+        transferAndDispatchMs: roundTripMs - result.generationMs - result.bakeMs - result.geometryMs,
         heapBytes: result.heapBytes, clonedBytes: Buffer.byteLength(JSON.stringify(result.plan)), lightBufferBytes: result.regionalLightData ? result.regionalLightData.bounds.byteLength + result.regionalLightData.lighting.byteLength : result.lightMaps ? result.lightMaps.general.byteLength + result.lightMaps.ceiling.byteLength : 0 });
     }
     modes[mode] = Object.fromEntries(Object.keys(values[0]).map(key => [key, summary(values.map(v => v[key]))]));

@@ -310,7 +310,7 @@ export const createFluorescentLightField = (plan: WorldPlan): THREE.DataTexture 
   return texture;
 };
 
-export const createZonalLightingContext = (plan: WorldPlan): ZonalLightingContext => {
+export const createZonalLightingContext = (plan: WorldPlan, regionalField?: RegionalLightField): ZonalLightingContext => {
   const biome = plan.visualBiome ?? 'yellow';
   const palette = BIOME_LIGHTING[biome];
   const zones = shaderUnlitZones(plan.unlitZones ?? []).map(
@@ -326,7 +326,11 @@ export const createZonalLightingContext = (plan: WorldPlan): ZonalLightingContex
     zoneMinY: plan.topology ? Math.min(0, ...plan.topology.surfaces.map(s => s.profile.kind === 'flat' ? s.profile.y : Math.min(s.profile.startY, s.profile.endY))) - .55 : -.55,
     zoneMaxY: plan.topology ? Math.max(plan.wallHeight, ...plan.topology.surfaces.map(s => s.ceilingY)) + .55 : plan.wallHeight + .55,
     worldOffset: new THREE.Vector3(),
-    lightField: createFluorescentLightField(plan),
+    // Regional materials sample their worker-prepared atlas instead. Keep an
+    // owned neutral placeholder for the common shader contract, without baking
+    // the unused 2D field again on the main thread.
+    lightField: regionalField ? new THREE.DataTexture(new Uint8Array([56, 0]), 1, 1, THREE.RGFormat) : createFluorescentLightField(plan),
+    regionalField,
     chunkSize: plan.size,
     lightPoolMin: biome === 'dim' ? DIM_LIGHT_POOL_MIN : STANDARD_LIGHT_POOL_MIN,
     lightPoolMax: biome === 'dim' ? DIM_LIGHT_POOL_MAX : STANDARD_LIGHT_POOL_MAX,
@@ -534,8 +538,9 @@ const withZonalLighting = <T extends THREE.MeshStandardMaterial>(
 export const createZonalMaterialSet = (
   source: MaterialSet,
   plan: WorldPlan,
+  regionalField?: RegionalLightField,
 ): ZonalMaterialSet => {
-  const context = createZonalLightingContext(plan);
+  const context = createZonalLightingContext(plan, regionalField);
   const dim = plan.visualBiome === 'dim';
   const chooseProfile = (
     standard: SurfaceLightingProfile,

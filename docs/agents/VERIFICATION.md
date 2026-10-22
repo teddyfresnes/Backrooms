@@ -93,7 +93,17 @@ restent explicitement sur le générateur legacy utilisé par les monuments.
 `RegionalBsp.test.ts` mesure le vrai chemin ordinaire et contrôle 32 seeds de
 connectivité physique des surfaces, sans assimiler les noms de familles à des formes.
 `RegionalLighting.test.ts` vérifie l’invariance par translation, plus de trois couches,
-le transfert des buffers worker et le nettoyage des deux textures modernes.
+le transfert des buffers worker et le nettoyage des deux textures modernes,
+les changements d'indice de couche et les raccords lumineux entre chunks.
+`ArchitectureSeams.test.ts` intersecte les triangles Float32 finaux de 16 seeds
+entre tous les matériaux ; ses essais synthétiques couvrent les joues inclinées
+et les interfaces internes. `SpatialArchitectureBuffers.test.ts` vérifie le
+transfert avec détachement, les bornes et la réutilisation des tableaux après
+promotion/démontage. `npm run benchmark:streaming` sépare préparation worker et
+montage sur 24 seeds et conserve un hash complet de chaque plan ; passer le
+chemin d'un ancien checkout pour employer exactement le même harnais.
+`npm run benchmark:worker -- 4` fait un smoke test réduit des vrais transferts
+Node dans les trois modes ; sans argument, le corpus reste de 24 seeds.
 
 `npm run benchmark:vertical` compare 24 seeds identiques : médiane/P95,
 clonage, JSON, architecture Three, montage Rapier et mémoire JS.
