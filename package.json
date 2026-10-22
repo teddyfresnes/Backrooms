@@ -14,7 +14,13 @@
     "assets:character": "node scripts/unpack-character-assets.mjs",
     "predev": "npm run assets:character",
     "prebuild": "npm run assets:character",
-    "pretest:character": "npm run assets:character"
+    "pretest:character": "npm run assets:character",
+    "test:vertical": "vitest run src/world/WalkableTopology.test.ts src/world/VerticalTopology.test.ts src/world/InfiniteVertical.test.ts src/world/RegionalArchitecture.test.ts src/world/RegionalBsp.test.ts src/world/RegionalPhysical.test.ts src/render/RegionalLighting.test.ts src/render/SpatialGeometry.test.ts src/core/WorldStreamVertical.test.ts src/core/SaveHistory.test.ts src/world/TransitionLayout.test.ts src/render/ArchitecturalUV.test.ts src/render/ArchitectureDebug.test.ts src/world/TransitionMount.test.ts src/world/SpatialFeaturesPhysical.test.ts src/world/TransitionIsolation.test.ts src/render/PrismExposure.test.ts src/world/AtriumEnvelope.test.ts src/core/SpatialVisibility.test.ts src/render/WorldPreview.test.ts src/render/ArchitectureSeams.test.ts src/render/SpatialArchitectureBuffers.test.ts",
+    "benchmark:vertical": "node scripts/run-vertical-audit.mjs",
+    "audit:vertical": "node scripts/run-vertical-audit.mjs --diversity",
+    "benchmark:worker": "node scripts/benchmark-worker.mjs",
+    "audit:transitions": "node scripts/run-transition-audit.mjs",
+    "benchmark:streaming": "node scripts/benchmark-streaming.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d": "0.19.3",

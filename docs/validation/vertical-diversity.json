@@ -1,0 +1,303 @@
+{
+  "seeds": 128,
+  "ordinaryChunks": 128,
+  "monumentChunks": 0,
+  "chunk": {
+    "x": -1,
+    "z": 1,
+    "story": 0
+  },
+  "familyWorldCounts": {
+    "sunken-district": 78,
+    "corridor-ramp": 128,
+    "nonzero-transition": 32,
+    "U": 2,
+    "balcony": 6,
+    "underpass": 7,
+    "L": 5,
+    "bridge": 1
+  },
+  "ordinarySurfaces": 22092,
+  "crouchSurfaces": 1170,
+  "crouchAreaFraction": 0.005438045470533813,
+  "ordinaryLowSurfaces": 0,
+  "unreachableKinds": {
+    "floor": 2086
+  },
+  "unreachableVertical": [],
+  "topologyErrors": [],
+  "landmarks": [
+    {
+      "family": "sunken-district",
+      "seed": "VERTICAL-PROMPT-AUDIT-0",
+      "chunk": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "surfaceId": "chunk--1:1:0/vertical/room/room-WTTRBR/0",
+      "profile": {
+        "kind": "flat",
+        "y": -0.45
+      },
+      "bounds": {
+        "minX": -15.3,
+        "minZ": -37,
+        "maxX": -10.2,
+        "maxZ": -22.5
+      },
+      "localCenter": {
+        "x": -12.75,
+        "z": -29.75
+      },
+      "worldCenter": {
+        "x": -124.75,
+        "z": 82.25
+      },
+      "heightRange": [
+        -0.45,
+        -0.45
+      ],
+      "clearance": 3.1900000000000004
+    },
+    {
+      "family": "corridor-ramp",
+      "seed": "VERTICAL-PROMPT-AUDIT-0",
+      "chunk": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "surfaceId": "chunk--1:1:0/vertical/ramp-0",
+      "profile": {
+        "kind": "linear",
+        "axis": "x",
+        "startY": -0.45,
+        "endY": 0
+      },
+      "bounds": {
+        "minX": -10.2,
+        "maxX": -7.8,
+        "minZ": -29.199999999999996,
+        "maxZ": -25.799999999999997
+      },
+      "localCenter": {
+        "x": -9,
+        "z": -27.499999999999996
+      },
+      "worldCenter": {
+        "x": -121,
+        "z": 84.5
+      },
+      "heightRange": [
+        -0.45,
+        0
+      ],
+      "clearance": 2.74
+    },
+    {
+      "family": "nonzero-transition",
+      "seed": "VERTICAL-PROMPT-AUDIT-1",
+      "chunk": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "surfaceId": "chunk--1:1:0/vertical/ramp-35",
+      "profile": {
+        "kind": "linear",
+        "axis": "x",
+        "startY": -0.8,
+        "endY": -0.45
+      },
+      "bounds": {
+        "minX": -15.7,
+        "maxX": -13.3,
+        "minZ": -25.150689668661215,
+        "maxZ": -22.349310331338785
+      },
+      "localCenter": {
+        "x": -14.5,
+        "z": -23.75
+      },
+      "worldCenter": {
+        "x": -126.5,
+        "z": 88.25
+      },
+      "heightRange": [
+        -0.8,
+        -0.45
+      ],
+      "clearance": 3.1900000000000004
+    },
+    {
+      "family": "U",
+      "seed": "VERTICAL-PROMPT-AUDIT-2",
+      "chunk": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "surfaceId": "chunk--1:1:0/vertical/gallery/room-EBLTT/return",
+      "profile": {
+        "kind": "linear",
+        "axis": "x",
+        "startY": 0.9,
+        "endY": 1.8
+      },
+      "bounds": {
+        "minX": 8.38,
+        "maxX": 11.38,
+        "minZ": 7.699999999999999,
+        "maxZ": 9.9
+      },
+      "localCenter": {
+        "x": 9.88,
+        "z": 8.8
+      },
+      "worldCenter": {
+        "x": -102.12,
+        "z": 120.8
+      },
+      "heightRange": [
+        0.9,
+        1.8
+      ],
+      "clearance": 2.5
+    },
+    {
+      "family": "balcony",
+      "seed": "VERTICAL-PROMPT-AUDIT-2",
+      "chunk": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "surfaceId": "chunk--1:1:0/vertical/gallery/room-EBLTT/balcony",
+      "profile": {
+        "kind": "flat",
+        "y": 1.8
+      },
+      "bounds": {
+        "minX": 11.38,
+        "maxX": 14.38,
+        "minZ": 7.699999999999999,
+        "maxZ": 9.9
+      },
+      "localCenter": {
+        "x": 12.88,
+        "z": 8.8
+      },
+      "worldCenter": {
+        "x": -99.12,
+        "z": 120.8
+      },
+      "heightRange": [
+        1.8,
+        1.8
+      ],
+      "clearance": 2.5
+    },
+    {
+      "family": "underpass",
+      "seed": "VERTICAL-PROMPT-AUDIT-2",
+      "chunk": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "surfaceId": "chunk--1:1:0/vertical/gallery/room-EBLTT/underpass",
+      "profile": {
+        "kind": "flat",
+        "y": -0.9
+      },
+      "bounds": {
+        "minX": 11.38,
+        "maxX": 14.38,
+        "minZ": 7.699999999999999,
+        "maxZ": 9.9
+      },
+      "localCenter": {
+        "x": 12.88,
+        "z": 8.8
+      },
+      "worldCenter": {
+        "x": -99.12,
+        "z": 120.8
+      },
+      "heightRange": [
+        -0.9,
+        -0.9
+      ],
+      "clearance": 2.54
+    },
+    {
+      "family": "L",
+      "seed": "VERTICAL-PROMPT-AUDIT-19",
+      "chunk": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "surfaceId": "chunk--1:1:0/vertical/gallery/room-SLT/ascending",
+      "profile": {
+        "kind": "linear",
+        "axis": "z",
+        "startY": 1.8,
+        "endY": 0.9
+      },
+      "bounds": {
+        "minX": -28.15,
+        "maxX": -25.95,
+        "minZ": 0.17999999999999972,
+        "maxZ": 3.1799999999999997
+      },
+      "localCenter": {
+        "x": -27.049999999999997,
+        "z": 1.6799999999999997
+      },
+      "worldCenter": {
+        "x": -139.05,
+        "z": 113.68
+      },
+      "heightRange": [
+        0.9,
+        1.8
+      ],
+      "clearance": 2.5
+    },
+    {
+      "family": "bridge",
+      "seed": "VERTICAL-PROMPT-AUDIT-41",
+      "chunk": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "surfaceId": "chunk--1:1:0/vertical/gallery/room-NBLL/bridge",
+      "profile": {
+        "kind": "flat",
+        "y": 1.8
+      },
+      "bounds": {
+        "minX": -33.4,
+        "maxX": -19.12,
+        "minZ": -9.02,
+        "maxZ": -6.82
+      },
+      "localCenter": {
+        "x": -26.259999999999998,
+        "z": -7.92
+      },
+      "worldCenter": {
+        "x": -138.26,
+        "z": 104.08
+      },
+      "heightRange": [
+        1.8,
+        1.8
+      ],
+      "clearance": 2.5
+    }
+  ]
+}

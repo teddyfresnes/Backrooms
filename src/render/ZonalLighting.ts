@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyRegionalLighting, type RegionalLightField } from './RegionalLighting';
 import type { MaterialSet } from './MaterialLibrary';
 import type { Rect, VisualBiome, WorldPlan } from '../world/types';
 
@@ -84,6 +85,7 @@ interface ZonalShaderUniforms {
 }
 
 export interface ZonalLightingContext {
+  regionalField?: RegionalLightField;
   readonly zoneCount: number;
   readonly zones: THREE.Vector4[];
   readonly fluorescentTint: THREE.Color;
@@ -193,7 +195,7 @@ export const createFluorescentLightField = (plan: WorldPlan): THREE.DataTexture 
 
   const structuralRects: Rect[] = [];
   for (const wall of plan.walls) {
-    if (wall.bottom > 0.12 || wall.bottom + wall.height < 0.2) continue;
+    if (!plan.spatial && (wall.bottom > 0.12 || wall.bottom + wall.height < 0.2)) continue;
     const halfLength = wall.length * 0.5;
     const halfThickness = Math.max(0.08, wall.thickness * 0.5);
     structuralRects.push(wall.orientation === 'x'
@@ -308,7 +310,7 @@ export const createFluorescentLightField = (plan: WorldPlan): THREE.DataTexture 
   return texture;
 };
 
-export const createZonalLightingContext = (plan: WorldPlan): ZonalLightingContext => {
+export const createZonalLightingContext = (plan: WorldPlan, regionalField?: RegionalLightField): ZonalLightingContext => {
   const biome = plan.visualBiome ?? 'yellow';
   const palette = BIOME_LIGHTING[biome];
   const zones = shaderUnlitZones(plan.unlitZones ?? []).map(
@@ -321,10 +323,14 @@ export const createZonalLightingContext = (plan: WorldPlan): ZonalLightingContex
     fluorescentTint: new THREE.Color(palette.fluorescentTint),
     darknessColor: new THREE.Color(palette.darknessColor),
     biomeMix: palette.biomeMix,
-    zoneMinY: -0.55,
-    zoneMaxY: plan.wallHeight + 0.55,
+    zoneMinY: plan.topology ? Math.min(0, ...plan.topology.surfaces.map(s => s.profile.kind === 'flat' ? s.profile.y : Math.min(s.profile.startY, s.profile.endY))) - .55 : -.55,
+    zoneMaxY: plan.topology ? Math.max(plan.wallHeight, ...plan.topology.surfaces.map(s => s.ceilingY)) + .55 : plan.wallHeight + .55,
     worldOffset: new THREE.Vector3(),
-    lightField: createFluorescentLightField(plan),
+    // Regional materials sample their worker-prepared atlas instead. Keep an
+    // owned neutral placeholder for the common shader contract, without baking
+    // the unused 2D field again on the main thread.
+    lightField: regionalField ? new THREE.DataTexture(new Uint8Array([56, 0]), 1, 1, THREE.RGFormat) : createFluorescentLightField(plan),
+    regionalField,
     chunkSize: plan.size,
     lightPoolMin: biome === 'dim' ? DIM_LIGHT_POOL_MIN : STANDARD_LIGHT_POOL_MIN,
     lightPoolMax: biome === 'dim' ? DIM_LIGHT_POOL_MAX : STANDARD_LIGHT_POOL_MAX,
@@ -480,6 +486,7 @@ export const applyZonalLighting = (
   material.customProgramCacheKey = () =>
     `zonal-fluorescent-lighting-v5-${supportsSurfaceNormal ? 'lit' : 'basic'}`;
   material.needsUpdate = true;
+  if (context.regionalField) applyRegionalLighting(material, context.regionalField);
 };
 
 /**
@@ -531,8 +538,9 @@ const withZonalLighting = <T extends THREE.MeshStandardMaterial>(
 export const createZonalMaterialSet = (
   source: MaterialSet,
   plan: WorldPlan,
+  regionalField?: RegionalLightField,
 ): ZonalMaterialSet => {
-  const context = createZonalLightingContext(plan);
+  const context = createZonalLightingContext(plan, regionalField);
   const dim = plan.visualBiome === 'dim';
   const chooseProfile = (
     standard: SurfaceLightingProfile,

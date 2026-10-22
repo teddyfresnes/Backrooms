@@ -1,3 +1,7 @@
+import type { SqueezeViewFeature } from './types';
+import { discoverVerticalPortals, planVerticalTopology, fitVerticalArchitecture, finalizeVerticalTopology } from './VerticalPlanner';
+import { validateTopology } from './WalkableTopology';
+import { generateSpatialWorld } from './SpatialWorld';
 import { createDefaultFeatureRegistry } from './FeatureRegistry';
 import {
   getPassageHoleAbyssBottom,
@@ -753,7 +757,7 @@ const splitWorldWithGrandHall = (
   }
 };
 
-const buildGridPit = (
+export const buildGridPit = (
   room: RoomRecord,
   rng: SeededRandom,
   lowerBounds: Rect,
@@ -1378,6 +1382,11 @@ const addCeilingVariations = (
     });
   }
 
+  buildUpperCeilingShells(plan, world, rootRng);
+};
+
+const buildUpperCeilingShells = (plan: MutablePlan, world: WorldPlan, rootRng: SeededRandom): void => {
+  const rng = rootRng.fork('ceiling-variations');
   interface UpperShellClaim {
     orientation: 'x' | 'z';
     fixed: number;
@@ -1439,7 +1448,7 @@ const addCeilingVariations = (
     const baseWalls = plan.walls.filter((wall) => {
       if (
         wall.orientation !== orientation ||
-        Math.abs(wall.bottom) > 0.02 ||
+        (wall.bottom > 0.02 || wall.bottom < -1.5) ||
         wall.bottom + wall.height < world.wallHeight - 0.08
       ) return false;
       const wallFixed = wall.orientation === 'x' ? wall.z : wall.x;
@@ -1510,6 +1519,16 @@ const addCeilingVariations = (
       shellIndex += 1;
     }
   }
+};
+
+export const rebuildVerticalCeilingShells = (world: WorldPlan): void => {
+  const removed = new Set(world.walls.filter(w => w.detail === 'upper-shell' || w.detail === 'upper-portal-lintel').map(w => w.id));
+  world.walls = world.walls.filter(w => !removed.has(w.id));
+  world.colliders = world.colliders.filter(c => !removed.has(c.id.replace(/^collider-/, '')));
+  const mutable: MutablePlan = { walls: world.walls, rooms: world.rooms, colliders: world.colliders, portals: [], wallIndex: 100000 };
+  buildUpperCeilingShells(mutable, world, new SeededRandom(`${world.seed}:v${world.version}`));
+  synchronizeUpperCeilingShells(mutable, world, new SeededRandom(`${world.seed}:v${world.version}`));
+  world.walls = mutable.walls; world.colliders = mutable.colliders;
 };
 
 const addRaisedZones = (
@@ -2156,6 +2175,7 @@ const assignRestrictedRooms = (
   );
   for (const room of restrictedRooms) {
     room.access = secretIds.has(room.id) ? 'secret' : 'sealed';
+    room.accessReason = 'intentional';
     room.detailDensity = 0;
     reservedRoomIds.add(room.id);
   }
@@ -4652,9 +4672,10 @@ const classifyInaccessibleRooms = (
       }
     }
     if (!reachable) {
+      room.accessReason ??= 'unreachable';
       room.access = 'sealed';
       room.detailDensity = 0;
-    } else if (room.access === 'sealed') {
+    } else if (room.access === 'sealed' && room.accessReason !== 'intentional') {
       room.access = world.features.some(
         (feature) =>
           feature.kind === 'squeeze-view' &&
@@ -4994,7 +5015,7 @@ const populateLightsAndDetails = (world: WorldPlan, rootRng: SeededRandom): void
       for (let attempt = 0; attempt < 8 && !position; attempt += 1) {
         const candidate = {
           x: rng.float(room.bounds.minX + 1.4, room.bounds.maxX - 1.4),
-          y: 0,
+          y: room.floorY ?? 0,
           z: rng.float(room.bounds.minZ + 1.4, room.bounds.maxZ - 1.4),
         };
         if (!world.solidMasses.some((mass) => pointInRect(candidate.x, candidate.z, mass.bounds, -0.55))) {
@@ -5018,6 +5039,13 @@ const populateLightsAndDetails = (world: WorldPlan, rootRng: SeededRandom): void
       });
     }
   }
+};
+
+export const populateVerticalRoomLighting = (world: WorldPlan): void => {
+  const newlyOpen = world.rooms.filter(r => r.level === 0 && r.access !== 'sealed' && !world.lights.some(l => l.roomId === r.id && l.level >= 0));
+  if (!newlyOpen.length) return;
+  const view = { ...world, rooms: newlyOpen, floorOpenings: [...(world.floorOpenings ?? []), ...(world.topology?.reservations ?? []).map(v => v.bounds)] };
+  populateLightsAndDetails(view, new SeededRandom(`${world.seed}:v${world.version}`).fork('vertical-topology:lighting-v1'));
 };
 
 const applyLightingZones = (world: WorldPlan, rootRng: SeededRandom): void => {
@@ -5150,7 +5178,54 @@ export const generateSurfaceStyle = (seed: string): SurfaceStyle => {
   };
 };
 
-export const generateWorld = (seed: string): WorldPlan => {
+/** Shared historical BSP, before any floor/vertical materialization. The regional
+ * path supplies its final datums and reservations; this is not a flat world
+ * translated after generation. A 224m template crosses source chunk boundaries. */
+/** Reuse the legacy room-network vocabulary as a pure proposal. Its old preview
+ * colliders/lights are deliberately not installed in the regional world. */
+export const proposeSpatialCrawl = (room: RoomRecord, seed: string, breach = false): { feature: SqueezeViewFeature; walls: WallSegment[] } | undefined => {
+  const world: WorldPlan = { version: 13, seed, size: 112, wallHeight: 2.74, rooms: [{ ...room, floorY: 0, ceilingHeight: 2.74, kind: 'office' }],
+    walls: [], colliders: [], columns: [], solidMasses: [], lights: [], missingCeilingTiles: [], features: [], detailSockets: [], floorRects: [], spawn: { x: 0, y: .865, z: 0 } };
+  const mutable: MutablePlan = { walls: [], rooms: world.rooms, colliders: [], portals: [], wallIndex: 0 };
+  if (breach) {
+    const b = room.bounds, x = (b.minX + b.maxX) / 2;
+    world.rooms = [{ ...world.rooms[0]!, id: `${room.id}/west`, bounds: { ...b, maxX: x } },
+      { ...world.rooms[0]!, id: `${room.id}/east`, bounds: { ...b, minX: x } }];
+    mutable.rooms = world.rooms;
+    mutable.walls.push({ id: 'breach-host', x, z: (b.minZ + b.maxZ) / 2, orientation: 'z', length: b.maxZ - b.minZ,
+      bottom: 0, height: 2.74, thickness: 1.2, tint: 1, collision: true, kind: 'wallpaper' });
+    addWallBreaches(mutable, world, new SeededRandom(seed));
+  } else addSqueezeViews(mutable, world, new Set(), new SeededRandom(seed));
+  const feature = world.features.find((f): f is SqueezeViewFeature => f.kind === 'squeeze-view');
+  return feature ? { feature, walls: mutable.walls } : undefined;
+};
+
+export const generateBspArchitecture = (seed: string): WorldPlan => {
+  const rng = new SeededRandom(seed).fork('historical-bsp');
+  const mutable: MutablePlan = { walls: [], rooms: [], colliders: [], portals: [], wallIndex: 0 };
+  const bounds = { minX: -112, maxX: 112, minZ: -112, maxZ: 112 };
+  if (rng.fork('hall-presence').chance(.65)) splitWorldWithGrandHall(bounds, rng.fork('topology'), mutable);
+  else splitPartitions(bounds, 0, 'root', rng.fork('topology'), mutable);
+  const world: WorldPlan = { version: 12, seed, size: 224, wallHeight: WALL_HEIGHT,
+    rooms: mutable.rooms, walls: mutable.walls, colliders: mutable.colliders, columns: [], solidMasses: [],
+    lights: [], missingCeilingTiles: [], features: [], detailSockets: [], floorRects: [], spawn: { x: 0, y: .865, z: 0 } };
+  selectArchitectureZones(world, rng);
+  addCeilingVariations(mutable, world, new Set(), rng);
+  // Address ownership still repeats at 5.4m. Keep ordinary roofs below the
+  // next owner's slab instead of importing the legacy nine-metre shells.
+  for (const room of world.rooms) room.ceilingHeight = Math.min(room.ceilingHeight, 4.35);
+  addColumnsAndPartialWalls(mutable, world, new Set(), rng);
+  enforcePortalClearances(mutable);
+  addInteractiveDoors(mutable, world, rng);
+  world.walls = mutable.walls; world.colliders = mutable.colliders;
+  addSolidMasses(world, new Set(), rng);
+  cleanWallJunctions(world);
+  populateLightsAndDetails(world, rng);
+  applyLightingZones(world, rng);
+  return world;
+};
+
+export const generateLegacyWorld = (seed: string, structuralOnly = false, verticalReservations: readonly Rect[] = [], subfloorReservations: readonly { bounds: Rect; top: number }[] = []): WorldPlan => {
   const rootRng = new SeededRandom(`${seed}:v${GENERATOR_VERSION}`);
   const surfaceStyle = generateSurfaceStyle(seed);
   const half = WORLD_SIZE * 0.5;
@@ -5294,7 +5369,35 @@ export const generateWorld = (seed: string): WorldPlan => {
   world.walls = mutable.walls;
   world.colliders = mutable.colliders;
   addSolidMasses(world, reservedRoomIds, rootRng);
+  world.floorOpenings = world.features.flatMap(f => f.kind === 'grid-pit' || f.kind === 'squeeze-view' ? (f.holes ?? []).map(h => ({ minX: h.minX, maxX: h.maxX, minZ: h.minZ, maxZ: h.maxZ })) : []);
+  if (structuralOnly) return world;
+  // Preserve proposal RNG/reservations above, then migrate away from the old
+  // additive islands before solving the authoritative floor graph.
+  const legacyIds = world.features.filter(f => f.kind === 'raised-zone').map(f => f.id);
+  const sealIds = new Set(world.walls.filter(w => w.detail === 'elevation-seal').map(w => w.id));
+  world.features = world.features.filter(f => f.kind !== 'raised-zone');
+  world.walls = world.walls.filter(w => !sealIds.has(w.id));
+  world.colliders = world.colliders.filter(c => !legacyIds.some(id => c.id.startsWith(`${id}-`)) && !sealIds.has(c.id.replace(/^collider-/, '')));
+  mutable.walls = world.walls; mutable.colliders = world.colliders;
   classifyInaccessibleRooms(mutable, world);
+  const verticalReserved = new Set<string>([spawnRoom.id]);
+  for (const f of world.features) {
+    if (f.kind === 'interactive-door') { verticalReserved.add(f.sourceRoomId); verticalReserved.add(f.targetRoomId); }
+    else if (f.kind !== 'impossible-vista') verticalReserved.add(f.roomId);
+  }
+  for (const r of world.rooms) if (verticalReservations.some(b => r.bounds.minX < b.maxX + .6 && r.bounds.maxX > b.minX - .6 && r.bounds.minZ < b.maxZ + .6 && r.bounds.maxZ > b.minZ - .6)) verticalReserved.add(r.id);
+  const verticalEdges = discoverVerticalPortals(world);
+  // Eligibility uses the same body-aware surface graph as the final plan. The
+  // old projected flood-fill can overestimate an isolated doorway by a cell.
+  world.topology = { version: 1, ownerStory: 0, surfaces: [], connections: [], volumes: [], diagnostics: [],
+    portals: verticalEdges.map(e => ({ ...e.portal, firstRoomId: e.firstRoom.id, secondRoomId: e.secondRoom.id })) };
+  finalizeVerticalTopology(world);
+  for (const r of world.rooms) if (!world.topology.surfaces.some(surface => surface.roomId === r.id && surface.reachable)) verticalReserved.add(r.id);
+  planVerticalTopology(world, verticalEdges, verticalReserved, rootRng, verticalReservations, subfloorReservations);
+  fitVerticalArchitecture(world);
+  rebuildVerticalCeilingShells(world);
+  fitVerticalArchitecture(world);
+  mutable.walls = world.walls; mutable.colliders = world.colliders;
   addInteractiveDoorColliders(world, interactiveDoors);
   rebuildSunkenArchitectureExtensions(world);
   populateLightsAndDetails(world, rootRng);
@@ -5337,14 +5440,26 @@ export const generateWorld = (seed: string): WorldPlan => {
     });
   });
   if (pit) addLowerLevel(world, pit, rootRng);
+  finalizeVerticalTopology(world);
 
   return world;
 };
+
+export const generateStructuralPlan = (seed: string): WorldPlan => generateWorld(seed, true);
+
+/** Ordinary worlds are materialized from the regional volume plan. The legacy
+ * generator remains explicit for monument templates and old save diagnostics. */
+export const generateWorld = (seed: string, structuralOnly = false, verticalReservations: readonly Rect[] = [], subfloorReservations: readonly { bounds: Rect; top: number }[] = []): WorldPlan =>
+  structuralOnly || verticalReservations.length > 0 || subfloorReservations.length > 0
+    ? generateLegacyWorld(seed, structuralOnly, verticalReservations, subfloorReservations)
+    : generateSpatialWorld(seed, { x: 0, z: 0, story: 0 }, generateSurfaceStyle(seed));
 
 export const fingerprintWorld = (world: WorldPlan): string => {
   const payload = [
     world.version,
     world.seed,
+    JSON.stringify(world.topology ?? null),
+    JSON.stringify(world.spatial ?? null),
     world.rooms
       .map((room) => `${room.id}:${room.kind}:${room.access ?? 'open'}:${rectArea(room.bounds).toFixed(2)}`)
       .join('|'),
@@ -5389,7 +5504,7 @@ export const fingerprintWorld = (world: WorldPlan): string => {
 };
 
 export const validateWorldPlan = (world: WorldPlan): string[] => {
-  const issues: string[] = [];
+  const issues: string[] = validateTopology(world);
   if (world.rooms.length < 5) issues.push('The topology contains too few rooms.');
   if (world.lights.length < 8) issues.push('The light field is too sparse.');
   if (!world.floorRects.some((rect) => pointInRect(world.spawn.x, world.spawn.z, rect))) {

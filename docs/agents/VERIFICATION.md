@@ -83,3 +83,48 @@ modifier temporairement le code.
 - Signaler clairement les tests exécutés et ceux qui ne l’ont pas été.
 - Ne pas corriger ou reformater les modifications utilisateur hors périmètre.
 
+
+Pour les changements de hauteur, `npm run test:vertical` couvre les plans
+régionaux ordinaires, les parcours Three/Rapier, les ouvertures monumentales,
+les deux modes de rendu, les sauvegardes et les cycles de montage/démontage.
+`npm run audit:vertical` vérifie 256 seeds et huit voisinages de 5×5 chunks avec
+des objectifs de distribution déclarés avant le relevé. Les anciens tests BSP
+restent explicitement sur le générateur legacy utilisé par les monuments.
+`RegionalBsp.test.ts` mesure le vrai chemin ordinaire et contrôle 32 seeds de
+connectivité physique des surfaces, sans assimiler les noms de familles à des formes.
+`RegionalLighting.test.ts` vérifie l’invariance par translation, plus de trois couches,
+le transfert des buffers worker et le nettoyage des deux textures modernes,
+les changements d'indice de couche et les raccords lumineux entre chunks.
+`ArchitectureSeams.test.ts` intersecte les triangles Float32 finaux de 16 seeds
+entre tous les matériaux ; ses essais synthétiques couvrent les joues inclinées
+et les interfaces internes. `SpatialArchitectureBuffers.test.ts` vérifie le
+transfert avec détachement, les bornes et la réutilisation des tableaux après
+promotion/démontage. `npm run benchmark:streaming` sépare préparation worker et
+montage sur 24 seeds et conserve un hash complet de chaque plan ; passer le
+chemin d'un ancien checkout pour employer exactement le même harnais.
+`npm run benchmark:worker -- 4` fait un smoke test réduit des vrais transferts
+Node dans les trois modes ; sans argument, le corpus reste de 24 seeds.
+
+`npm run benchmark:vertical` compare 24 seeds identiques : médiane/P95,
+clonage, JSON, architecture Three, montage Rapier et mémoire JS.
+`npm run benchmark:worker` mesure le même travail dans un worker Node avec
+transfert réel par clonage structuré et bake classique. Ce proxy ne mesure pas
+l’ordonnancement des Workers du navigateur. Aucun de ces benchmarks ne mesure
+GPU ou draw calls. Exécuter les mesures avant/après sans charge concurrente.
+Voir [TRANSITION_VALIDATION.md](../validation/TRANSITION_VALIDATION.md) pour v13
+et [REGIONAL_VALIDATION.md](../REGIONAL_VALIDATION.md) pour la référence antérieure.
+
+Les tests `TransitionLayout`, `TransitionMount`, `SpatialFeaturesPhysical`,
+`ArchitecturalUV` et `ArchitectureDebug` protègent les transitions v13, les
+trous réintégrés et les ressources des diagnostics. La séparation entre toit et
+étage supérieur se mesure au même point horizontal, y compris sur un toit incliné.
+`TransitionIsolation` et `PrismExposure` couvrent la sélection espacée v14,
+la volée unique, les vrais appuis, les bandes verticales sans recouvrement,
+le dégagement raycasté dans la géométrie finale et les coins des diffuseurs.
+Le rapport [STAIR_FIX_VALIDATION.md](../validation/STAIR_FIX_VALIDATION.md)
+distingue les contrôles CPU du contrôle visuel WebGL.
+`AtriumEnvelope` vérifie les quatre niveaux, les parois porteuses, les tunnels
+d’entrée, leurs luminaires et les chutes entre terrasses. `SpatialVisibility`
+teste la priorité au regard, le budget et le cache des réponses worker ;
+`WorldPreview` vérifie la promotion des détails sans reconstruire l’architecture
+ou la lumière. Voir [ATRIUM_VALIDATION.md](../validation/ATRIUM_VALIDATION.md).

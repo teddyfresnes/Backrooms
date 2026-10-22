@@ -281,7 +281,7 @@ export class Game {
       },
     });
     if (this.options.launch?.kind === 'load') {
-      const { chunk, localPosition, quaternion } = this.options.launch.save.payload;
+      const { chunk, localPosition, quaternion, surface } = this.options.launch.save.payload;
       const offset = getChunkWorldOffset(chunk);
       const restoredPosition = {
         x: offset.x + localPosition.x,
@@ -291,7 +291,7 @@ export class Game {
       const destinationReady = await this.worldStream.prepareSavedChunk(chunk);
       if (this.disposed) return;
       if (!destinationReady) throw new Error('Impossible de préparer la sauvegarde sélectionnée.');
-      this.player.teleport(restoredPosition);
+      this.player.teleport(this.worldStream.restoreSurfacePosition(restoredPosition, surface, chunk));
       this.player.setLookQuaternion(quaternion);
       this.playableSeconds = this.options.launch.save.playTimeSeconds;
     }
@@ -530,7 +530,7 @@ export class Game {
 
   private saveNow(kind: GameSaveKind): boolean {
     if (!this.storage || !this.player || !this.worldStream) return false;
-    const chunk = this.worldStream.getCenterCoord();
+    const chunk = this.worldStream.supportedCoordAt(this.lastSafePosition);
     const offset = getChunkWorldOffset(chunk);
     const look = this.player.getLookQuaternion();
     this.postFX?.render(0);
@@ -545,6 +545,7 @@ export class Game {
       payload: {
         seed: this.seed,
         chunk,
+        ...(this.worldStream.surfaceAnchorAt(this.lastSafePosition) ? { surface: this.worldStream.surfaceAnchorAt(this.lastSafePosition) } : {}),
         localPosition: {
           x: this.lastSafePosition.x - offset.x,
           y: this.lastSafePosition.y - offset.y,
@@ -571,7 +572,7 @@ export class Game {
     const pendingStory = this.pendingAutosaveStory;
     if (pendingStory === undefined || !this.worldStream) return;
     const center = this.worldStream.getCenterCoord();
-    const safeCoord = streamChunkCoordAt(this.lastSafePosition);
+    const safeCoord = this.worldStream?.supportedCoordAt(this.lastSafePosition) ?? streamChunkCoordAt(this.lastSafePosition);
     if (
       center.story !== pendingStory
       || safeCoord.story !== pendingStory
@@ -604,6 +605,7 @@ export class Game {
       { value: '/save', label: '/save', detail: 'SAUVEGARDE MAINTENANT' },
       VIEWMODEL_COMPLETION,
       { value: '/logs', label: '/logs', detail: 'AFFICHE OU MASQUE LE PANNEAU TECHNIQUE' },
+      { value: '/geometry ', label: '/geometry uv|volumes|off', detail: 'DIAGNOSTIC DES TEXTURES ET VOLUMES' },
       { value: '/noclip', label: '/noclip', detail: 'ACTIVE OU DESACTIVE LE VOL LIBRE' },
       { value: '/locate ', label: '/locate <cible>', detail: 'TÉLÉPORTE VERS UNE CIBLE CONNUE' },
     ];
@@ -669,7 +671,7 @@ export class Game {
         const feedback = 'SYNTAXE: /help';
         return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
       }
-      const feedback = '/viewmodel - première / troisième personne · /save - sauvegarder · /locate <cible> - teleportation · /noclip [on|off] - vol libre · /logs [on|off] - diagnostic';
+      const feedback = '/viewmodel - première / troisième personne · /save - sauvegarder · /locate <cible> - teleportation · /noclip [on|off] - vol libre · /logs [on|off] - diagnostic · /geometry uv|volumes|off - textures et volumes';
       return { close: false, feedback, messages: [echo, { kind: 'system', text: feedback }] };
     }
     if (normalizedCommand === 'save') {
@@ -680,6 +682,16 @@ export class Game {
         feedback,
         messages: [echo, { kind: saved ? 'system' : 'error', text: feedback }],
       };
+    }
+    if (normalizedCommand === 'geometry') {
+      const mode = args[0]?.toLowerCase();
+      if (args.length !== 1 || !['off', 'uv', 'volumes'].includes(mode ?? '')) {
+        const feedback = 'SYNTAXE: /geometry uv|volumes|off';
+        return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
+      }
+      this.worldStream?.setArchitectureDebug(mode as 'off' | 'uv' | 'volumes');
+      const feedback = `DIAGNOSTIC ARCHITECTURE : ${mode!.toUpperCase()}`;
+      return { close: true, feedback, messages: [echo, { kind: 'system', text: feedback }] };
     }
     if (normalizedCommand === 'logs') {
       const visible = resolveDiagnosticsVisibility(this.diagnosticsVisible, args);
@@ -871,7 +883,8 @@ export class Game {
       if (partner && (partner.distanceTo(this.player.position) > 45 || Math.abs(partner.y - this.player.position.y) > 8)) {
         this.character?.setInteractionPartner(null);
       }
-      this.worldStream.update(this.elapsed, rawDelta, this.character?.getWorldPosition() ?? this.player.position);
+      this.player.getViewDirection(this.lookDirection);
+      this.worldStream.update(this.elapsed, rawDelta, this.character?.getWorldPosition() ?? this.player.position, this.lookDirection);
       const nextStory = this.worldStream.getCenterCoord().story;
       if (nextStory !== this.activeStory) {
         this.activeStory = nextStory;

@@ -1,3 +1,7 @@
+import type { InfiniteEdgeGates } from './InfiniteWorld';
+import type { WalkableTopology } from './WalkableTopology';
+import type { SpatialArchitecture } from './SpatialTypes';
+
 export type RoomKind =
   | 'office'
   | 'corridor'
@@ -62,6 +66,10 @@ export interface StaticCollider {
   halfExtents: Vec3Data;
   kind: 'wall' | 'column' | 'floor' | 'step' | 'barrier';
   rotation?: QuaternionData;
+  /** Convex hull vertices relative to center, shared with rendered slabs. */
+  vertices?: number[];
+  /** Closed triangle mesh for a sheared structural wall with nonplanar caps. */
+  indices?: number[];
 }
 
 export type RoomAccess = 'open' | 'sealed' | 'secret';
@@ -72,9 +80,14 @@ export interface RoomRecord {
   kind: RoomKind;
   level: number;
   ceilingHeight: number;
+  /** Local absolute floor datum; level remains the historical room category. */
+  floorY?: number;
+  structuralCeilingY?: number;
   detailDensity: number;
   /** Restricted rooms are deliberately removed from the ordinary doorway graph. */
   access?: RoomAccess;
+  /** Distinguish deliberate restrictions from a provisional navigation result. */
+  accessReason?: 'intentional' | 'unreachable';
 }
 
 export interface ColumnSlot {
@@ -232,6 +245,9 @@ export interface StairSocketFeature {
   switchbackJoin?: 'joined' | 'divider';
   /** Local height of the first tread; inherited stairs start one story below. */
   baseY?: number;
+  /** Explicit endpoints for new stairs; absent fields retain the legacy 5.4m layout. */
+  rise?: number;
+  stepsPerFlight?: number;
   inherited?: boolean;
 }
 
@@ -388,6 +404,9 @@ export interface SurfaceStyle {
 
 export interface WorldPlan {
   version: number;
+  spatial?: SpatialArchitecture;
+  topology?: WalkableTopology;
+  edgeGates?: InfiniteEdgeGates;
   seed: string;
   size: number;
   wallHeight: number;
