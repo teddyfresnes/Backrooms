@@ -1,7 +1,8 @@
 # Lumière et préparation GPU
 
 `LightSlot` est une donnée de génération, pas une lumière Three.js. Les panneaux
-non morts restent des émetteurs visuels ; le rendu des surfaces utilise un champ
+non morts utilisent des diffuseurs HDR blancs neutres (radiance linéaire 2),
+indépendants de la teinte du papier peint. Ils restent lisibles sans bloom ; le rendu des surfaces utilise un champ
 fluorescent dans `ZonalLighting.ts`. Une clé directionnelle douce, sans shadow
 map, révèle les normales et les coins sans réintroduire les bandes du bake.
 Le chemin historique dérive des panneaux et volumes une texture RG8 de 96² :
@@ -126,6 +127,10 @@ thread principal quand ils sont disponibles. `WorldStream.setLightingMode()`
 reconstruit uniquement les `WorldView`, conserve plans, colliders et portes
 ouvertes, garde les données du bake actif et publie une progression
 `{ completed, total }` utilisable par le menu.
+
+La sous-face des toits inclinés est calculée avec `surfaceUndersideY` :
+l’épaisseur s’extrude le long de la normale. Le diffuseur reste parallèle à
+cette sous-face, 3,6 cm en dessous, et le profil prévu correspond au vrai vide.
 
 Les coordonnées de `LightSlot.ceilingY` sont absolues dans le plan local ;
 `WorldBuilder` applique ses petits offsets visuels une seule fois.

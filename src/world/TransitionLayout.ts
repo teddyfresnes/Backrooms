@@ -8,11 +8,12 @@ export type TransitionSide = 'north' | 'east' | 'south' | 'west';
 export interface TransitionLayout {
   id: string; roomId: string; bounds: Rect; axis: 'x' | 'z';
   startY: number; endY: number; width: number; wallThickness: number;
-  enclosure: 'chamber'; kind: 'ramp' | 'stairs';
+  enclosure: 'open' | 'wall' | 'chamber'; wallSide?: -1 | 1; kind: 'ramp' | 'stairs';
   /** Canonical full connection; its two clipped halves are one flight. */
   linkId: string; composition: 'single' | 'landing'; clearance: number;
   approach: { bounds: Rect; y: number }; landing: { bounds: Rect; y: number };
   run: Rect; profile: HeightProfile; roof: HeightProfile;
+  approachCeilingY: number; landingCeilingY: number;
 }
 
 /** The two halves share their width and landing datum. Length, pitch and
@@ -34,7 +35,7 @@ export const planRegionalTransition = (seed: string, gx: number, gz: number, _st
   const approachDepth = 2.2;
   const composition = difference > 5.5 || rng.fork('composition').chance(.8) ? 'single' : 'landing';
   const seamDepth = composition === 'single' ? 0 : 2.2;
-  const clearance = rng.fork('clearance').pick([3.8, 4.05]);
+  const clearance = 3.05;
   if (difference > 6) width = 4;
   const minimumRun = Math.max(2.6, difference / .94);
   const inner = Math.min(rng.float(3.6, 7.8), available - approachDepth - seamDepth - minimumRun);
@@ -51,9 +52,31 @@ export const planRegionalTransition = (seed: string, gx: number, gz: number, _st
   const profile: HeightProfile = { kind: 'linear', axis, startY, endY };
   return { id, roomId: `${id}/chamber`, bounds: rect(core, edge), axis, startY, endY, width,
     linkId: `transition/${pair}/${_story}`, composition, clearance,
-    wallThickness: rng.pick([.6, .8, 1.05]), enclosure: 'chamber', kind,
+    wallThickness: rng.pick([.6, .8, 1.05]), enclosure: 'open', kind,
     approach: { bounds: rect(core, first), y: floorY }, landing: { bounds: rect(last, edge), y: landingY },
-    run, profile, roof: offsetProfile(profile, clearance) };
+    run, profile, roof: offsetProfile(profile, clearance), approachCeilingY: floorY + clearance, landingCeilingY: landingY + clearance };
+};
+
+/** Match both endpoint rooms. The midpoint is shared by the two canonical
+ * halves; varying headroom does not change the flight footprint or its rise. */
+export const fitTransitionEnvironment = (t: TransitionLayout, sourceCeilingY: number, targetCeilingY: number, coverage: readonly number[]): void => {
+  const targetFloor = 2 * t.landing.y - t.approach.y;
+  const sourceHeadroom = Math.max(2.74, sourceCeilingY - t.approach.y), targetHeadroom = Math.max(2.74, targetCeilingY - targetFloor);
+  t.approachCeilingY = t.approach.y + sourceHeadroom;
+  t.landingCeilingY = t.landing.y + (sourceHeadroom + targetHeadroom) / 2;
+  const sourceAtMin = t.axis === 'x' ? t.approach.bounds.maxX <= t.run.minX + .001 : t.approach.bounds.maxZ <= t.run.minZ + .001;
+  t.roof = { kind: 'linear', axis: t.axis, startY: sourceAtMin ? t.approachCeilingY : t.landingCeilingY, endY: sourceAtMin ? t.landingCeilingY : t.approachCeilingY };
+  t.clearance = Math.min(sourceHeadroom, (sourceHeadroom + targetHeadroom) / 2);
+  t.enclosure = Math.min(...coverage) >= .5 ? 'chamber' : Math.max(...coverage) >= .35 ? 'wall' : 'open';
+  if (t.enclosure === 'wall') t.wallSide = coverage[0]! >= coverage[1]! ? -1 : 1; else delete t.wallSide;
+};
+
+/** A wall-backed flight reserves only that side's real wall thickness. */
+export const transitionRoofBounds = (t: TransitionLayout, bounds: Rect = t.bounds): Rect => {
+  const b = { ...bounds }, sides = t.enclosure === 'chamber' ? [-1, 1] : t.enclosure === 'wall' ? [t.wallSide!] : [];
+  for (const side of sides) if (t.axis === 'x') { if (side < 0) b.minZ -= t.wallThickness; else b.maxZ += t.wallThickness; }
+  else { if (side < 0) b.minX -= t.wallThickness; else b.maxX += t.wallThickness; }
+  return b;
 };
 
 export const restrictProfile = (bounds: Rect, profile: HeightProfile, part: Rect): HeightProfile => profile.kind === 'flat'

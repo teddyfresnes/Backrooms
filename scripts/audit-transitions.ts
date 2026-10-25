@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { generateInfiniteChunk, clearInfiniteWorldCaches } from '../src/world/InfiniteWorld';
-import { validateTopology, surfaceY } from '../src/world/WalkableTopology';
+import { validateTopology, surfaceY, surfaceUndersideY } from '../src/world/WalkableTopology';
 import { createSpatialPrismBatch } from '../src/render/SpatialGeometry';
 import { prismExposure } from '../src/render/PrismExposure';
 import { rectDepth, rectWidth } from '../src/world/types';
@@ -10,6 +10,7 @@ const quantiles = (values: number[]) => {
   const s = [...values].sort((a, b) => a - b);
   return { min: s[0], median: s[Math.floor(s.length / 2)], p95: s[Math.ceil(s.length * .95) - 1], max: s.at(-1) };
 };
+const enclosures: Record<string, number> = {}, headrooms: number[] = [];
 const compositions: Record<string, number> = {}, moundAccess: Record<string, number> = {};
 const atriumRooms = { withStairs: 0, withoutStairs: 0, stepped: 0, levels: {} as Record<string, number>, footprints: {} as Record<string, number> };
 const errors: unknown[] = [], families: Record<string, number> = {}, examples: Record<string, unknown> = {};
@@ -37,6 +38,13 @@ for (const [index, seed] of seeds.entries()) {
     atriumRooms.footprints[shape] = (atriumRooms.footprints[shape] ?? 0) + 1;
   }
   for (const t of w.spatial!.transitions!) {
+    enclosures[t.enclosure] = (enclosures[t.enclosure] ?? 0) + 1;
+    const roof = w.spatial!.ceilings.find(s => s.id === `${t.id}/roof`)!;
+    for (const step of w.topology!.surfaces.filter(s => s.id === t.id || s.id.startsWith(`${t.id}/step-`)))
+      for (const x of [step.bounds.minX, step.bounds.maxX]) for (const z of [step.bounds.minZ, step.bounds.maxZ]) {
+        const height = surfaceUndersideY(roof, x, z) - surfaceY(step, x, z); headrooms.push(height);
+        if (height < 2.5 - .0001) errors.push({ seed, issue: 'rendered flight headroom below standing contract', id: t.id, height });
+      }
     compositions[t.composition] = (compositions[t.composition] ?? 0) + 1;
     const length = t.axis === 'x' ? rectWidth(t.run) : rectDepth(t.run);
     lengths.push(length); widths.push(t.width); rises.push(Math.abs(t.endY - t.startY)); grades.push(Math.abs(t.endY - t.startY) / length);
@@ -77,9 +85,9 @@ for (const [index, seed] of seeds.entries()) {
   }
   geometry.dispose();
 }
-const report = { planVersion: 15, atriumRooms, compositions, moundAccess, seeds, corpus: { fixed: 64, holdout: 32 }, families, examples, roomShapes: [...roomShapes].sort(),
+const report = { planVersion: 16, enclosures, standingHeadroom: quantiles(headrooms), atriumRooms, compositions, moundAccess, seeds, corpus: { fixed: 64, holdout: 32 }, families, examples, roomShapes: [...roomShapes].sort(),
   transitionLength: quantiles(lengths), transitionWidth: quantiles(widths), transitionGrade: quantiles(grades), transitionRise: quantiles(rises),
   ordinaryBspRoomFootprintShare: ordinary / (ordinary + hall), externalLinks, sourceHoles, voidSources, reliefs, uvTriangles, errors };
-writeFileSync(process.argv[2] ?? 'docs/validation/atrium-integration.json', JSON.stringify(report, null, 2) + '\n');
+writeFileSync(process.argv[2] ?? 'docs/validation/ceiling-integration.json', JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify({ seeds: seeds.length, externalLinks, sourceHoles, reliefs, uvTriangles, errors: errors.length }));
 if (errors.length) process.exitCode = 1;

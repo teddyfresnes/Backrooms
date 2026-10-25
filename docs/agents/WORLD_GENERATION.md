@@ -20,7 +20,7 @@ rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/
 
 ## Ordre du pipeline
 
-Le pipeline ordinaire (plan version 15, topologie/spatial version 2) est :
+Le pipeline ordinaire (plan version 16, topologie/spatial version 2) est :
 
 1. `RegionalPlan` choisit les districts mondiaux et leurs datums signés ;
 2. il réserve les atria sur deux à quatre adresses verticales. Les galeries
@@ -28,8 +28,9 @@ Le pipeline ordinaire (plan version 15, topologie/spatial version 2) est :
    phase de six adresses pour accueillir trois ou quatre niveaux sans chevauchement ;
 3. `RegionalPlan.hasRegionalTransition` sélectionne les raccords isolés entre
    datums différents (au plus un par cellule, centres espacés d’au moins 49 m).
-   `SpatialConnectors` et `TransitionLayout` déduisent les chambres, parcours,
-   toits et paliers stables ; `SpatialFeatures` réserve les anciens trous et
+   `SpatialConnectors` et `TransitionLayout` déduisent les parcours et paliers
+   stables. `SpatialTemplates` résout les plafonds BSP réels aux deux extrémités
+   et les parois canoniques : volée ouverte, adossée ou chambre justifiée ; `SpatialFeatures` réserve les anciens trous et
    passages, avec leurs vrais propriétaires source/arrivée ;
 4. `SpatialWorld` réutilise `generateBspArchitecture` sur des domaines canoniques
    de 224 m (2×2 chunks), puis matérialise aux datums finaux les pièces historiques,
@@ -39,7 +40,8 @@ Le pipeline ordinaire (plan version 15, topologie/spatial version 2) est :
    découpe ; le graphe distingue les portes à ouvrir (`requiresDoorId`), les vues
    et les chutes. Les petits rectangles de dallage ne sont pas des obstacles.
    `StructuralSupports` réconcilie ensuite les coques et linteaux avec leurs
-   vrais appuis après les réservations et portes ;
+   vrais appuis après les réservations et portes. `CeilingEnvelope` ferme les
+   décrochements de plafond entre volumes de même datum, par bandes de propriétaire ;
 7. `generateInfiniteChunk` applique palette et props, préfixe les IDs et références.
 
 Voir [les contrats de transition](../TRANSITION_INTEGRATION.md) pour les plafonds
@@ -64,8 +66,8 @@ est vidé avec `clearInfiniteWorldCaches`.
 
 Les biomes visuels occupent des macro-zones 2×2 stables sur tous les étages.
 Le jaune ordinaire couvre 70 % des macro-zones ; rouge, blanc et jaune sombre
-en couvrent chacun 10 %. Le jaune sombre conserve les textures et couleurs de
-néons jaunes : seul son profil d’éclairage moderne est plus faible.
+en couvrent chacun 10 %. Le jaune sombre conserve les textures et l’ambiance chaude, avec les mêmes
+diffuseurs blancs neutres ; son profil d’éclairage moderne reste plus faible.
 
 ## Invariants
 

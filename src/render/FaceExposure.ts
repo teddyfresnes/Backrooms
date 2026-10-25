@@ -82,10 +82,18 @@ export const createFaceExposure = (solids: readonly { source: object; vertices: 
 };
 
 export const faceTriangles = (vertices: readonly number[], face: number, fragments?: readonly number[][]): number[] => {
-  if (!fragments) return SLAB_INDICES.slice(face * 6, face * 6 + 6).flatMap(i => [vertices[i * 3]!, vertices[i * 3 + 1]!, vertices[i * 3 + 2]!]);
-  return fragments.flatMap(p => {
+  const points = !fragments ? SLAB_INDICES.slice(face * 6, face * 6 + 6).flatMap(i => [vertices[i * 3]!, vertices[i * 3 + 1]!, vertices[i * 3 + 2]!]) : fragments.flatMap(p => {
     const triangles: number[] = [];
     for (let i = 3; i < p.length - 3; i += 3) triangles.push(...p.slice(0, 3), ...p.slice(i, i + 6));
     return triangles;
   });
+  // A clipped wedge can end at zero height; polygon clipping can also retain
+  // collinear corners. Neither should emit a zero-normal GPU triangle.
+  const result: number[] = [];
+  for (let i = 0; i < points.length; i += 9) {
+    const ux = points[i + 3]! - points[i]!, uy = points[i + 4]! - points[i + 1]!, uz = points[i + 5]! - points[i + 2]!;
+    const vx = points[i + 6]! - points[i]!, vy = points[i + 7]! - points[i + 1]!, vz = points[i + 8]! - points[i + 2]!;
+    if ((uy * vz - uz * vy) ** 2 + (uz * vx - ux * vz) ** 2 + (ux * vy - uy * vx) ** 2 > 1e-16) result.push(...points.slice(i, i + 9));
+  }
+  return result;
 };

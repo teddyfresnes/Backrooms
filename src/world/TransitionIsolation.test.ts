@@ -33,7 +33,7 @@ it('makes a single continuous straight flight across cell and owner cuts, and so
     const seed = `SINGLE-FLIGHT-${n}`, a = planRegionalTransition(seed, 3, -2, 0, 'east', spatialCellBounds(3, -2), -2, 4, 'a');
     const b = planRegionalTransition(seed, 4, -2, 0, 'west', spatialCellBounds(4, -2), 4, -2, 'b');
     kinds.add(a.composition); expect(a.linkId).toBe(b.linkId); expect(a.kind).toBe(b.kind); expect(a.clearance).toBe(b.clearance);
-    expect(a.clearance).toBeGreaterThanOrEqual(3.8);
+    expect(a.clearance).toBeGreaterThanOrEqual(2.74);
     if (a.composition === 'single') {
       expect(a.run.maxX).toBe(b.run.minX);
       expect(a.landing.bounds.maxX - a.landing.bounds.minX).toBe(0);
@@ -43,7 +43,7 @@ it('makes a single continuous straight flight across cell and owner cuts, and so
     for (const t of [a, b]) for (const step of transitionTreads(t)) {
       const x = (step.bounds.minX + step.bounds.maxX) / 2, z = (step.bounds.minZ + step.bounds.maxZ) / 2;
       const headroom = surfaceY({ bounds: t.run, profile: t.roof } as never, x, z) - surfaceY(step as never, x, z);
-      expect(headroom).toBeGreaterThan(3.6);
+      expect(headroom).toBeGreaterThan(2.5);
     }
   }
   expect([...kinds].sort()).toEqual(['landing', 'single']);
@@ -81,6 +81,8 @@ it('streams enough disjoint bearing-wall bands to enclose the entire flight acro
   for (let n = 0; n < 8; n++) {
     const w = generateInfiniteChunk(`REGIONAL-AUDIT-${n}`, { x: 0, z: 0, story: 0 }), plans = new Map([[0, w]]);
     for (const t of w.spatial!.transitions!) {
+      if (t.enclosure === 'open') continue;
+      const sign = t.enclosure === 'wall' ? t.wallSide! : -1;
       const stories = new Set([0, ...w.spatial!.dependencies.filter(d => d.reason === 'stairs' && d.bounds.minX <= t.bounds.minX && d.bounds.maxX >= t.bounds.maxX && d.bounds.minZ <= t.bounds.minZ && d.bounds.maxZ >= t.bounds.maxZ).map(d => d.owner.story)]);
       const bands: { min: number; max: number }[] = [];
       for (const story of stories) {
@@ -88,7 +90,7 @@ it('streams enough disjoint bearing-wall bands to enclose the entire flight acro
         const half = (id: string) => id.split('/cell/')[1]!.replace(/\/-?\d+\/(north|east|south|west)\/route$/, '/$1/route');
         const partner = plan.spatial!.transitions!.find(p => half(p.id) === half(t.id))!;
         expect(partner).toBeDefined(); expect(partner.bounds).toEqual(t.bounds);
-        const wall = plan.spatial!.prisms.find(p => p.id === `${partner.id}/run/side--1/0`)!;
+        const wall = plan.spatial!.prisms.find(p => p.id === `${partner.id}/run/side-${sign}/0`)!;
         expect(wall).toBeDefined();
         const ys = wall.vertices.filter((_, i) => i % 3 === 1).map(y => y + story * 5.4);
         bands.push({ min: Math.min(...ys), max: Math.max(...ys) });
@@ -96,8 +98,8 @@ it('streams enough disjoint bearing-wall bands to enclose the entire flight acro
       bands.sort((a, b) => a.min - b.min);
       for (let i = 1; i < bands.length; i++) expect(bands[i]!.min - bands[i - 1]!.max).toBeCloseTo(0, 7);
       expect(bands[0]!.min).toBeLessThanOrEqual(Math.min(t.startY, t.endY) - .16 + .00001);
-      expect(bands.at(-1)!.max).toBeGreaterThanOrEqual(Math.max(t.startY, t.endY) + t.clearance + .03 - .00001); checked++;
+      expect(bands.at(-1)!.max).toBeGreaterThanOrEqual(Math.max(t.approachCeilingY, t.landingCeilingY) + .03 - .00001); checked++;
     }
   }
-  expect(checked).toBeGreaterThan(5);
+  expect(checked).toBeGreaterThan(0);
 }, 30000);

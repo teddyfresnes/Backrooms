@@ -6,7 +6,7 @@ import { rectCenter, rectDepth, rectWidth, type Rect, type WorldPlan } from './t
 export interface SpatialReliefRecord {
   id: string; roomId: string; kind: 'mound' | 'terraces'; bounds: Rect; baseY: number; peakY: number; surfaceIds: string[]; access?: 'single' | 'opposed' | 'terraced';
 }
-export const applySpatialRelief = (w: WorldPlan, avoid: readonly Rect[], header: (id: string, b: Rect, bottom: number, top: number) => void): void => {
+export const applySpatialRelief = (w: WorldPlan, avoid: readonly Rect[]): void => {
   const spatial = w.spatial!, topology = w.topology!;
   spatial.reliefs = [];
   for (const cell of spatial.cells) {
@@ -67,18 +67,13 @@ export const applySpatialRelief = (w: WorldPlan, avoid: readonly Rect[], header:
       ? cutRects([s.bounds], [footprint]).map((bounds, i) => ({ ...s, id: `${s.id}/relief-cut-${i}`, bounds, ceilingY: roof, ceilingProfile: { kind: 'flat' as const, y: roof } })) : [s]);
     topology.surfaces.push(...made);
     if (ordinary) {
-      const oldRoof = floor.ceilingY;
-      for (const r of w.rooms) if (overlapRect(r.bounds, cell.bounds) && Math.abs((r.floorY ?? 0) - h) < .01) { r.ceilingHeight = roof; r.structuralCeilingY = roof; }
-      for (const sf of topology.surfaces) if (overlapRect(sf.bounds, cell.bounds) && surfaceRange(sf)[0] >= h - .01 && surfaceRange(sf)[1] <= h + peak + .01) {
+      for (const r of w.rooms) if (r.id === floor.roomId && Math.abs((r.floorY ?? 0) - h) < .01) { r.ceilingHeight = roof; r.structuralCeilingY = roof; }
+      for (const sf of topology.surfaces) if (sf.roomId === floor.roomId && surfaceRange(sf)[0] >= h - .01 && surfaceRange(sf)[1] <= h + peak + .01) {
         sf.ceilingY = roof; sf.ceilingProfile = { kind: 'flat', y: roof };
       }
-      for (const ceiling of spatial.ceilings) if (ceiling.roomId === floor.roomId) ceiling.profile = { kind: 'flat', y: roof + .03 };
-      // Close the raised roof against the neighbouring ordinary low ceiling.
-      for (const [side, b] of [['n', { ...cell.bounds, minZ: cell.bounds.minZ, maxZ: cell.bounds.minZ + .3 }],
-        ['s', { ...cell.bounds, minZ: cell.bounds.maxZ - .3, maxZ: cell.bounds.maxZ }],
-        ['w', { ...cell.bounds, minX: cell.bounds.minX, maxX: cell.bounds.minX + .3 }],
-        ['e', { ...cell.bounds, minX: cell.bounds.maxX - .3, maxX: cell.bounds.maxX }]] as const)
-        if (roof > oldRoof + .001) header(`${id}/roof-return-${side}`, b, oldRoof, roof + .03);
+      for (const ceiling of spatial.ceilings) if (ceiling.roomId === floor.roomId) {
+        ceiling.profile = { kind: 'flat', y: roof + ceiling.thickness }; ceiling.ceilingY = roof; ceiling.ceilingProfile = { kind: 'flat', y: roof };
+      }
       for (const column of w.walls.filter(wall => wall.id.startsWith(`${cell.id}/bsp/pillar-`))) {
         column.height = roof - column.bottom;
         const prism = spatial.prisms.find(p => p.id === column.id);

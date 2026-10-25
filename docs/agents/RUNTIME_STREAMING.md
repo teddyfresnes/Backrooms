@@ -23,6 +23,8 @@ Les anciens aperçus ci-dessous concernent les monuments et le chemin legacy.
 - La sélection des dépendances est réutilisée dans une marge de 1,5 m / environ
   12° ; une mutation de montage ou un changement de centre l’invalide.
 - Les destinations verticales sont préchargées près des puits et escaliers.
+  Les volées ouvertes ajoutent aussi une dépendance de vue vers le propriétaire
+  inférieur réellement visible, sans dalle factice dans la circulation.
 - Les volumes hauts de `epic2`, `epic3`, `epic4` et `epic5` épinglent leur
   story source au lieu de remonter tous les 5,4 m. Le runtime source est résolu
   depuis la position du joueur, y compris juste après une téléportation haute.

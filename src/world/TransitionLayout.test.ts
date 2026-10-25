@@ -43,13 +43,14 @@ it('constructs one roof per generated flight, closed risers and roof-bounded thi
       expect(route.length).toBeGreaterThan(0);
       for (const s of route) {
         const p = rectCenter(s.bounds), roofY = surfaceY({ ...roof[0]!, profile: t.roof, bounds: t.run }, p.x, p.z);
-        expect(roofY - surfaceY(s, p.x, p.z)).toBeGreaterThan(2.85);
+        expect(roofY - surfaceY(s, p.x, p.z)).toBeGreaterThan(2.5);
         if (s.role === 'stair') { stairs++; expect(s.thickness).toBeGreaterThan(.175); }
         else ramps++;
         expect(w.spatial!.ceilings.some(c => c.id.startsWith(`${s.id}/ceiling`))).toBe(false);
       }
       const panels = w.spatial!.prisms.filter(p => p.id.startsWith(`${t.id}/`) && p.id.includes('/side-'));
-      expect(panels.length).toBeGreaterThanOrEqual(8);
+      expect(panels.length).toBe((t.enclosure === 'chamber' ? 2 : t.enclosure === 'wall' ? 1 : 0) * (rectWidth(t.landing.bounds) > .005 && rectDepth(t.landing.bounds) > .005 ? 2 : 1));
+      expect(w.spatial!.prisms.some(p => p.id === `${t.id}/entry-lintel` || p.id.startsWith(`${t.id}/approach/side-`))).toBe(false);
       for (const p of panels) for (const y of p.vertices.filter((_, j) => j % 3 === 1)) expect(y).toBeLessThanOrEqual(t.approach.y + 5.24 + .000001);
     }
   }

@@ -1,11 +1,13 @@
+import { completeCeilingEnvelope } from './CeilingEnvelope';
+import { spatialTemplate, clearSpatialTemplates, transitionHost } from './SpatialTemplates';
 import { applySpatialRelief } from './SpatialRelief';
 import { reconcileStructuralSupports } from './StructuralSupports';
 import { atriumEntryLightPoints, atriumSection, atriumSupportBands } from './AtriumEnvelope';
 import { installSteppedAtrium } from './SteppedAtrium';
 import { clearSpatialFeatureCache, planSpatialFeature, installSpatialFeature, connectSpatialFeatures, type SpatialFeatureSlice } from './SpatialFeatures';
-import { planRegionalTransition, restrictProfile, transitionTreads } from './TransitionLayout';
+import { planRegionalTransition, fitTransitionEnvironment, transitionRoofBounds, restrictProfile, transitionTreads } from './TransitionLayout';
 import { stitchBspPartitions } from './BspConnectivity';
-import { generateBspArchitecture, lightPanelOverlapsRect } from './generateWorld';
+import { lightPanelOverlapsRect } from './generateWorld';
 import type { Rect, SurfaceStyle, WallSegment, WorldPlan } from './types';
 import { pointInRect, rectCenter, rectDepth, rectWidth } from './types';
 import { ADDRESS_PITCH, hasRegionalTransition, regionalAtrium, regionalCellId, regionalDatum, regionalStyle, SPATIAL_CLEARANCE, spatialCellBounds } from './RegionalPlan';
@@ -13,15 +15,14 @@ import type { SpatialAddress, SpatialPrism } from './SpatialTypes';
 import type { InfiniteEdgeGates } from './InfiniteWorld';
 import { atriumCirculation, atriumGround, atriumGroundId, atriumTreads, atriumStairPocket, enclosedAtriumLanding, legTreads, atriumLandingPads, atriumArrival } from './SpatialConnectors';
 import { endpointStairRun, offsetProfile, prismCollider, profilePrism, slabMeshCollider } from './SpatialGeometry';
-import { classifySurfaceAccess, cutRects, findSurface, overlapRect, surfaceCollider, surfaceRange, surfaceY, TOPOLOGY_VERSION,
+import { classifySurfaceAccess, cutRects, findSurface, overlapRect, surfaceCollider, surfaceRange, surfaceY, surfaceNormal, TOPOLOGY_VERSION,
   type HeightProfile, type SurfaceConnection, type WalkableSurface } from './WalkableTopology';
 
 const sides = ['north', 'east', 'south', 'west'] as const;
 type Side = typeof sides[number];
 const deltas: Record<Side, [number, number]> = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
 const flat = (y: number): HeightProfile => ({ kind: 'flat', y });
-const templates = new Map<string, WorldPlan>();
-export const clearBspArchitectureCache = (): void => { templates.clear(); clearSpatialFeatureCache(); };
+export const clearBspArchitectureCache = (): void => { clearSpatialTemplates(); clearSpatialFeatureCache(); };
 const intersect = (a: Rect, b: Rect): Rect | undefined => {
   const r = { minX: Math.max(a.minX, b.minX), maxX: Math.min(a.maxX, b.maxX), minZ: Math.max(a.minZ, b.minZ), maxZ: Math.min(a.maxZ, b.maxZ) };
   return rectWidth(r) > .005 && rectDepth(r) > .005 ? r : undefined;
@@ -34,16 +35,14 @@ const expand = (r: Rect, d: number): Rect => ({ minX: r.minX - d, maxX: r.maxX +
  */
 export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?: SurfaceStyle, boundaryGates?: InfiniteEdgeGates): WorldPlan => {
   const offset = { x: owner.x * 112, z: owner.z * 112 }, local = (b: Rect): Rect => ({ minX: b.minX - offset.x, maxX: b.maxX - offset.x, minZ: b.minZ - offset.z, maxZ: b.maxZ - offset.z });
-  const world: WorldPlan = { version: 15, seed, size: 112, wallHeight: 3.05, rooms: [], walls: [], columns: [], solidMasses: [], lights: [], missingCeilingTiles: [],
+  const world: WorldPlan = { version: 16, seed, size: 112, wallHeight: 3.05, rooms: [], walls: [], columns: [], solidMasses: [], lights: [], missingCeilingTiles: [],
     features: [], detailSockets: [], colliders: [], floorRects: [], floorOpenings: [], ceilingOpenings: [], stairCeilingOpenings: [], spawn: { x: 0, y: 0, z: 0 }, surfaceStyle: style, edgeGates: boundaryGates,
     topology: { version: TOPOLOGY_VERSION, ownerStory: owner.story, surfaces: [], connections: [], volumes: [], diagnostics: [] },
     spatial: { version: 2, owner: { ...owner }, cells: [], ceilings: [], prisms: [], dependencies: [], interfaces: [], landmarks: [], transitions: [] } };
   const topology = world.topology!, spatial = world.spatial!;
   const featureSlices: SpatialFeatureSlice[] = [];
   const mx = Math.floor(owner.x / 2), mz = Math.floor(owner.z / 2);
-  const templateKey = `${seed}:bsp-district:v1:${mx}:${mz}:${owner.story}`;
-  let template = templates.get(templateKey);
-  if (!template) { template = generateBspArchitecture(templateKey); templates.set(templateKey, template); if (templates.size > 32) templates.delete(templates.keys().next().value!); }
+  const template = spatialTemplate(seed, owner.x, owner.z, owner.story);
   // One canonical BSP spans 2x2 chunks. Cropping it never introduces a wall at
   // a 28m planning-cell edge or at the source chunk edge.
   const shift = { x: mx * 224 + 56 - offset.x, z: mz * 224 + 56 - offset.z };
@@ -212,60 +211,50 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
         const [dx, dz] = deltas[side], other = regionalDatum(seed, gx + dx, gz + dz);
         if (Math.abs(other.y - h) < .001 || !hasRegionalTransition(seed, gx, gz, side)) continue;
         const t = planRegionalTransition(seed, gx, gz, owner.story, side, b, h, other.y, `${id}/${side}/route`);
+        const opposite = { north: 'south', south: 'north', east: 'west', west: 'east' } as const;
+        const peer = planRegionalTransition(seed, gx + dx, gz + dz, owner.story, opposite[side], local(spatialCellBounds(gx + dx, gz + dz)), other.y, h, `${id}/peer`);
+        const host = transitionHost(seed, gx, gz, owner.story, t, offset), target = transitionHost(seed, gx + dx, gz + dz, owner.story, peer, offset);
+        fitTransitionEnvironment(t, host.ceilingY, target.ceilingY, host.walls.map((v, i) => Math.min(v, target.walls[i]!)));
         spatial.transitions!.push(t);
         branchCuts.push(t.bounds);
         routeReservations.push(expand(t.bounds, t.wallThickness + .9));
-        world.rooms.push({ id: t.roomId, bounds: expand(t.bounds, t.wallThickness), kind: 'corridor', level: 0,
-          floorY: Math.min(t.startY, t.endY), ceilingHeight: Math.max(t.startY, t.endY) + t.clearance + .03,
-          structuralCeilingY: Math.max(t.startY, t.endY) + t.clearance + .03, detailDensity: .1, access: 'open' });
-        addSurface(`${t.id}/approach`, t.roomId, t.approach.bounds, flat(t.approach.y), 'landing', true, t.approach.y + t.clearance);
+        world.rooms.push({ id: t.roomId, bounds: transitionRoofBounds(t), kind: 'corridor', level: 0,
+          floorY: Math.min(t.startY, t.endY), ceilingHeight: Math.max(t.approachCeilingY, t.landingCeilingY),
+          structuralCeilingY: Math.max(t.approachCeilingY, t.landingCeilingY), detailDensity: .1, access: 'open' });
+        addSurface(`${t.id}/approach`, t.roomId, t.approach.bounds, flat(t.approach.y), 'landing', true, t.approachCeilingY);
         const route = transitionTreads(t).map(step => {
           const sf = addSurface(t.kind === 'ramp' ? t.id : `${t.id}/step-${step.index}`, t.roomId,
             step.bounds, step.profile, t.kind === 'ramp' ? 'ramp' : 'stair', false);
           sf.ceilingProfile = restrictProfile(t.run, t.roof, step.bounds);
-          sf.ceilingY = Math.max(t.startY, t.endY) + t.clearance;
+          sf.ceilingY = Math.max(t.approachCeilingY, t.landingCeilingY);
           if (t.kind === 'stairs') sf.thickness = .27;
           return sf;
         });
-        spatial.ceilings.push({ ...route[0]!, id: `${t.id}/roof`, bounds: t.run, profile: offsetProfile(t.roof, .03),
+        spatial.ceilings.push({ ...route[0]!, id: `${t.id}/roof`, bounds: t.run, profile: offsetProfile(t.roof, .03 / surfaceNormal({ ...route[0]!, bounds: t.run, profile: t.roof }).y),
           ceilingProfile: undefined, thickness: .03, role: 'floor', support: 'slab', access: 'sealed' });
         if (rectWidth(t.landing.bounds) > .005 && rectDepth(t.landing.bounds) > .005)
-          addSurface(`${t.id}/landing`, t.roomId, t.landing.bounds, flat(t.landing.y), 'landing', true, t.landing.y + t.clearance);
+          addSurface(`${t.id}/landing`, t.roomId, t.landing.bounds, flat(t.landing.y), 'landing', true, t.landingCeilingY);
         // Vertical piers and full-height side walls bear on the host floor or
         // the lower flight. No diagonal bottom leaves a hanging outer corner.
-        for (const [name, bounds] of [['approach', t.approach.bounds],
-          ['run', t.run], ['landing', t.landing.bounds]] as const) {
+        for (const [name, bounds] of [['run', t.run], ['landing', t.landing.bounds]] as const) {
           if (rectWidth(bounds) < .005 || rectDepth(bounds) < .005) continue;
-          for (const sign of [-1, 1]) {
+          for (const sign of t.enclosure === 'chamber' ? [-1, 1] : t.enclosure === 'wall' ? [t.wallSide!] : []) {
             const alongX = t.axis === 'x', width = t.wallThickness;
             const sideBounds = alongX ? { ...bounds, minZ: sign < 0 ? bounds.minZ - width : bounds.maxZ, maxZ: sign < 0 ? bounds.minZ : bounds.maxZ + width }
               : { ...bounds, minX: sign < 0 ? bounds.minX - width : bounds.maxX, maxX: sign < 0 ? bounds.minX : bounds.maxX + width };
-            const lo = alongX ? bounds.minX : bounds.minZ, hi = alongX ? bounds.maxX : bounds.maxZ;
-            const intervals = name === 'approach' ? [[lo, lo + .3], [lo + .3, hi - .3], [hi - .3, hi]] : [[lo, hi]];
-            for (const [part, [min, max]] of intervals.entries()) {
-              const r = alongX ? { ...sideBounds, minX: min!, maxX: max! } : { ...sideBounds, minZ: min!, maxZ: max! };
-              const corners = [[r.minX, r.minZ], [r.minX, r.maxZ], [r.maxX, r.maxZ], [r.maxX, r.minZ]];
-              const doorway = name === 'approach' && part === 1;
-              const vertices = [true, false].flatMap(top => corners.flatMap(([x, z]) => {
-                // Each vertical owner contributes one non-overlapping band of
-                // this continuous wall. Dependencies supply the bands needed
-                // by a flight crossing several datums.
-                const y = top ? h + ADDRESS_PITCH - .16 : doorway ? h + 2.74 : h - .16;
-                return [x!, y, z!];
-              }));
-              addPrism({ id: `${t.id}/${name}/side-${sign}/${part}`, vertices, material: 'wall', collision: true });
-            }
+            const r = sideBounds, corners = [[r.minX, r.minZ], [r.minX, r.maxZ], [r.maxX, r.maxZ], [r.maxX, r.minZ]];
+            // A supported wall is a column, shared by disjoint owner bands.
+            // The approach stays in the host room, without separate piers.
+            const vertices = [true, false].flatMap(top => corners.flatMap(([x, z]) => [x!, top ? h + ADDRESS_PITCH - .16 : h - .16, z!]));
+            addPrism({ id: `${t.id}/${name}/side-${sign}/0`, vertices, material: 'wall', collision: true });
           }
         }
-        // Close the change from the ordinary room ceiling to the taller cage.
-        // This lintel joins the two floor-bearing entrance piers.
-        const entrance = t.approach.bounds, reverse = side === 'north' || side === 'west';
-        const lip = t.axis === 'x' ? { ...entrance, minX: reverse ? entrance.maxX - .3 : entrance.minX, maxX: reverse ? entrance.maxX : entrance.minX + .3 }
-          : { ...entrance, minZ: reverse ? entrance.maxZ - .3 : entrance.minZ, maxZ: reverse ? entrance.maxZ : entrance.minZ + .3 };
-        addPrism(profilePrism(`${t.id}/entry-lintel`, lip, flat(h + 2.74), flat(h + t.clearance + .03)));
-        const low = Math.min(t.startY, t.endY), high = Math.max(t.startY, t.endY) + t.clearance;
+        const low = Math.min(t.startY, t.endY), high = Math.max(t.approachCeilingY, t.landingCeilingY);
         for (let delta = Math.floor((low - h) / ADDRESS_PITCH); delta <= Math.floor((high - h + .19) / ADDRESS_PITCH); delta++)
           dependency(owner.story + delta, expand(t.bounds, t.wallThickness), low - .16, high + .03, 'stairs');
+        // An open side reveals the real flight/rooms below. Keep their owner
+        // available rather than adding a fake floor across the vertical route.
+        if (t.enclosure !== 'chamber') dependency(owner.story - 1, expand(t.bounds, .6), low - ADDRESS_PITCH - .16, high - ADDRESS_PITCH, 'view');
         const center = rectCenter(t.run), roof = surfaceY({ bounds: t.run, profile: t.roof } as WalkableSurface, center.x, center.z);
         world.lights.push({ id: `${t.id}/light`, x: center.x, z: center.z, roomId: t.roomId, ceilingY: roof,
           width: 1.55, rotation: t.axis === 'x' ? 0 : Math.PI / 2, intensity: 1.08, color: 0xffffe4,
@@ -402,7 +391,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     prism: addPrism, wall,
   });
 
-  applySpatialRelief(world, featureSlices.map(s => s.reservation), wall);
+  applySpatialRelief(world, featureSlices.map(s => s.reservation));
 
   const carve = (source: typeof world.walls[number], aperture: Rect) => {
     if (!world.walls.includes(source)) return;
@@ -445,9 +434,8 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     const p = rectCenter(surface.bounds), room = world.rooms.find(r => pointInRect(p.x, p.z, r.bounds, -.001) && Math.abs((r.floorY ?? 0) - surfaceRange(surface)[0]) < 12);
     if (room) surface.roomId = room.id;
   }
-  const chamberCuts = spatial.transitions!.map(t => ({ room: t.roomId, bounds: t.axis === 'x'
-    ? { ...t.bounds, minZ: t.bounds.minZ - t.wallThickness, maxZ: t.bounds.maxZ + t.wallThickness }
-    : { ...t.bounds, minX: t.bounds.minX - t.wallThickness, maxX: t.bounds.maxX + t.wallThickness } }));
+  const chamberCuts = spatial.transitions!.flatMap(t => [t.approach.bounds, transitionRoofBounds(t, t.run),
+    ...(rectWidth(t.landing.bounds) > .005 && rectDepth(t.landing.bounds) > .005 ? [transitionRoofBounds(t, t.landing.bounds)] : [])].map(bounds => ({ room: t.roomId, bounds })));
   spatial.ceilings = spatial.ceilings.flatMap(s => {
     const cuts = chamberCuts.filter(c => c.room !== s.roomId && overlapRect(c.bounds, s.bounds));
     if (!cuts.length) return [s];
@@ -466,6 +454,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
   stitchBspPartitions(world, rebuildFloors, () => connectSpatialSurfaces(world), carve);
   rebuildFloors();
   reconcileStructuralSupports(world, wall);
+  completeCeilingEnvelope(world, addPrism);
 
   world.unlitZones = [];
   for (const zone of template.unlitZones ?? []) {

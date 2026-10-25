@@ -121,6 +121,12 @@ trous réintégrés et les ressources des diagnostics. La séparation entre toit
 `TransitionIsolation` et `PrismExposure` couvrent la sélection espacée v14,
 la volée unique, les vrais appuis, les bandes verticales sans recouvrement,
 le dégagement raycasté dans la géométrie finale et les coins des diffuseurs.
+`CeilingEnvelope.test.ts` reproduit le plafond de `LATE-OFFICE-1950` avec
+raycasts Three et contacts Rapier, vérifie les bandes et la portée des reliefs.
+`TransitionEnvelope.test.ts` protège les raccords aux plafonds BSP, l'enveloppe
+canonique et le dégagement sous les quatre coins des diffuseurs.
+`FluorescentFixture.test.ts` vérifie la neutralité HDR et le débit lumineux CPU,
+avec les valeurs blackout inchangées ; cela ne remplace pas une mesure WebGL.
 Le rapport [STAIR_FIX_VALIDATION.md](../validation/STAIR_FIX_VALIDATION.md)
 distingue les contrôles CPU du contrôle visuel WebGL.
 `AtriumEnvelope` vérifie les quatre niveaux, les parois porteuses, les tunnels

@@ -1,0 +1,798 @@
+{
+  "goals": {
+    "regionalHeightRangeAtLeast": 12,
+    "zeroAreaFractionBelow": 0.1,
+    "plateauCellsAtLeast": 20,
+    "plateauChunkOwnersAtLeast": 3,
+    "eachFamilyInAtLeastSeeds": 3,
+    "ordinaryClearanceAtLeast": 2.498,
+    "steppedRoomsInAtLeastSeeds": 8,
+    "fourLevelRoomsInAtLeastSeeds": 3,
+    "accidentalIsolation": 0,
+    "mismatchedSeams": 0
+  },
+  "failures": [],
+  "normalDistributionSeeds": 256,
+  "steppedRoomWorlds": 70,
+  "fourLevelRoomWorlds": 43,
+  "neighborhoodSeeds": 8,
+  "neighborhoodChunksPerSeed": 25,
+  "sampledOrdinaryPlans": 456,
+  "sampledMonuments": 0,
+  "familyWorldCounts": {
+    "nonzero-ramp": 158,
+    "escalier-regional": 184,
+    "rampe-regionale": 128,
+    "monticule-massif": 52,
+    "salle-en-gradins": 46,
+    "galerie-en-gradins": 51,
+    "passage-mural": 29,
+    "passage-accroupi": 28,
+    "ouverture-haute": 27,
+    "saut-passerelle": 7,
+    "escalier-l": 3,
+    "galerie-l": 9,
+    "trous-historiques": 12,
+    "galerie-bridge": 6,
+    "escalier-u": 3,
+    "galerie-u": 6,
+    "escalier-bridge": 3
+  },
+  "modes": {
+    "rooms": 6886,
+    "lower-maze": 74,
+    "gallery": 82,
+    "terrace": 66,
+    "void": 35
+  },
+  "styles": {
+    "maze": 6181,
+    "pillars": 335,
+    "hall": 627
+  },
+  "connectionCounts": {
+    "walk": 269348,
+    "stairs": 17487,
+    "ramp": 3147,
+    "drop": 819,
+    "crouch": 850,
+    "jump": 9,
+    "view": 41
+  },
+  "oneWayLinks": 819,
+  "visibilityOnlyLinks": 41,
+  "overlappingPlayableCells": 82,
+  "walkableArea": 4704342.363143758,
+  "zeroAreaFraction": 0.0015908406806989525,
+  "areaWeightedHeightBins": [
+    {
+      "minY": -19,
+      "maxY": -18,
+      "area": 1.9978789978870115,
+      "fraction": 4.2468826536509103e-07
+    },
+    {
+      "minY": -18,
+      "maxY": -17,
+      "area": 11.987273987322078,
+      "fraction": 2.548129592190548e-06
+    },
+    {
+      "minY": -17,
+      "maxY": -16,
+      "area": 11.987273987322089,
+      "fraction": 2.5481295921905502e-06
+    },
+    {
+      "minY": -16,
+      "maxY": -15,
+      "area": 150.78013730895606,
+      "fraction": 3.205126788608056e-05
+    },
+    {
+      "minY": -15,
+      "maxY": -14,
+      "area": 15.701839907816828,
+      "fraction": 3.337733246379626e-06
+    },
+    {
+      "minY": -14,
+      "maxY": -13,
+      "area": 31.84629767097529,
+      "fraction": 6.769553576813622e-06
+    },
+    {
+      "minY": -13,
+      "maxY": -12,
+      "area": 159.14027067657398,
+      "fraction": 3.382837778205999e-05
+    },
+    {
+      "minY": -12,
+      "maxY": -11,
+      "area": 30.06685312445451,
+      "fraction": 6.391297827304002e-06
+    },
+    {
+      "minY": -11,
+      "maxY": -10,
+      "area": 137.37841118221385,
+      "fraction": 2.9202468820830043e-05
+    },
+    {
+      "minY": -10,
+      "maxY": -9,
+      "area": 185.552773925443,
+      "fraction": 3.944287205352257e-05
+    },
+    {
+      "minY": -9,
+      "maxY": -8,
+      "area": 43.88846284833002,
+      "fraction": 9.329351365278042e-06
+    },
+    {
+      "minY": -8,
+      "maxY": -7,
+      "area": 172758.0730607091,
+      "fraction": 0.03672310808290378
+    },
+    {
+      "minY": -7,
+      "maxY": -6,
+      "area": 225534.3417843754,
+      "fraction": 0.04794173645849638
+    },
+    {
+      "minY": -6,
+      "maxY": -5,
+      "area": 336593.2214698987,
+      "fraction": 0.07154947397258914
+    },
+    {
+      "minY": -5,
+      "maxY": -4,
+      "area": 350235.2022557976,
+      "fraction": 0.07444934386572814
+    },
+    {
+      "minY": -4,
+      "maxY": -3,
+      "area": 429371.80866235204,
+      "fraction": 0.09127137770122286
+    },
+    {
+      "minY": -3,
+      "maxY": -2,
+      "area": 349681.3724064223,
+      "fraction": 0.07433161649670962
+    },
+    {
+      "minY": -2,
+      "maxY": -1,
+      "area": 202615.26275037928,
+      "fraction": 0.04306983784551356
+    },
+    {
+      "minY": -1,
+      "maxY": 0,
+      "area": 411740.76486398344,
+      "fraction": 0.08752355442702847
+    },
+    {
+      "minY": 0,
+      "maxY": 1,
+      "area": 322994.04145105445,
+      "fraction": 0.06865870221979593
+    },
+    {
+      "minY": 1,
+      "maxY": 2,
+      "area": 357619.33773488225,
+      "fraction": 0.07601898631712282
+    },
+    {
+      "minY": 2,
+      "maxY": 3,
+      "area": 430536.51545350545,
+      "fraction": 0.09151895891475832
+    },
+    {
+      "minY": 3,
+      "maxY": 4,
+      "area": 150567.43830113974,
+      "fraction": 0.0320060545509537
+    },
+    {
+      "minY": 4,
+      "maxY": 5,
+      "area": 158523.5288343344,
+      "fraction": 0.03369727723821534
+    },
+    {
+      "minY": 5,
+      "maxY": 6,
+      "area": 323725.00792063115,
+      "fraction": 0.06881408344274932
+    },
+    {
+      "minY": 6,
+      "maxY": 7,
+      "area": 356984.2845449203,
+      "fraction": 0.07588399333809619
+    },
+    {
+      "minY": 7,
+      "maxY": 8,
+      "area": 123425.59872200915,
+      "fraction": 0.026236525574539468
+    },
+    {
+      "minY": 8,
+      "maxY": 9,
+      "area": 656.2354536894584,
+      "fraction": 0.00013949568356902615
+    }
+  ],
+  "regionalDatumRange": [
+    -7.5,
+    7.35
+  ],
+  "largestObservedRegions": [
+    {
+      "seed": "REGIONAL-AUDIT-0",
+      "id": "district/-1/0",
+      "y": -3.2,
+      "cells": 53,
+      "chunks": [
+        "-2:-1",
+        "-1:-1",
+        "-2:0",
+        "-1:0",
+        "-2:1",
+        "-1:1"
+      ],
+      "minX": -7,
+      "maxX": -1,
+      "minZ": -2,
+      "maxZ": 5,
+      "width": 196,
+      "depth": 224,
+      "sampledArea": 41552
+    },
+    {
+      "seed": "REGIONAL-AUDIT-4",
+      "id": "district/-1/0",
+      "y": 2.95,
+      "cells": 53,
+      "chunks": [
+        "-2:0",
+        "-1:0",
+        "0:0",
+        "-2:1",
+        "-1:1",
+        "0:1"
+      ],
+      "minX": -8,
+      "maxX": 0,
+      "minZ": 0,
+      "maxZ": 6,
+      "width": 252,
+      "depth": 196,
+      "sampledArea": 41552
+    },
+    {
+      "seed": "REGIONAL-AUDIT-0",
+      "id": "district/0/0",
+      "y": 1.65,
+      "cells": 49,
+      "chunks": [
+        "0:-1",
+        "1:-1",
+        "0:0",
+        "1:0",
+        "0:1",
+        "1:1"
+      ],
+      "minX": 0,
+      "maxX": 7,
+      "minZ": -1,
+      "maxZ": 6,
+      "width": 224,
+      "depth": 224,
+      "sampledArea": 38416
+    },
+    {
+      "seed": "REGIONAL-AUDIT-4",
+      "id": "district/0/-1",
+      "y": -0.8,
+      "cells": 49,
+      "chunks": [
+        "0:-2",
+        "1:-2",
+        "-1:-1",
+        "0:-1",
+        "1:-1",
+        "0:0",
+        "1:0"
+      ],
+      "minX": -1,
+      "maxX": 6,
+      "minZ": -7,
+      "maxZ": 0,
+      "width": 224,
+      "depth": 224,
+      "sampledArea": 38416
+    },
+    {
+      "seed": "REGIONAL-AUDIT-2",
+      "id": "district/0/-1",
+      "y": 2.1,
+      "cells": 47,
+      "chunks": [
+        "0:-2",
+        "1:-2",
+        "0:-1",
+        "1:-1",
+        "0:0",
+        "1:0",
+        "2:0"
+      ],
+      "minX": 2,
+      "maxX": 8,
+      "minZ": -7,
+      "maxZ": 1,
+      "width": 196,
+      "depth": 252,
+      "sampledArea": 36848
+    },
+    {
+      "seed": "REGIONAL-AUDIT-6",
+      "id": "district/-1/-1",
+      "y": 6.4,
+      "cells": 45,
+      "chunks": [
+        "-2:-2",
+        "-1:-2",
+        "-2:-1",
+        "-1:-1",
+        "-2:0",
+        "-1:0"
+      ],
+      "minX": -8,
+      "maxX": -1,
+      "minZ": -6,
+      "maxZ": 0,
+      "width": 224,
+      "depth": 196,
+      "sampledArea": 35280
+    },
+    {
+      "seed": "REGIONAL-AUDIT-7",
+      "id": "district/0/1",
+      "y": -4.25,
+      "cells": 44,
+      "chunks": [
+        "0:1",
+        "1:1",
+        "0:2",
+        "1:2"
+      ],
+      "minX": 0,
+      "maxX": 6,
+      "minZ": 5,
+      "maxZ": 11,
+      "width": 196,
+      "depth": 196,
+      "sampledArea": 34496
+    },
+    {
+      "seed": "REGIONAL-AUDIT-3",
+      "id": "district/0/0",
+      "y": -5.25,
+      "cells": 43,
+      "chunks": [
+        "0:-1",
+        "-1:0",
+        "0:0",
+        "1:0",
+        "0:1",
+        "1:1"
+      ],
+      "minX": -1,
+      "maxX": 6,
+      "minZ": -1,
+      "maxZ": 6,
+      "width": 224,
+      "depth": 224,
+      "sampledArea": 33712
+    },
+    {
+      "seed": "REGIONAL-AUDIT-3",
+      "id": "district/1/0",
+      "y": -0.4,
+      "cells": 43,
+      "chunks": [
+        "1:-1",
+        "2:-1",
+        "1:0",
+        "2:0",
+        "1:1",
+        "2:1"
+      ],
+      "minX": 5,
+      "maxX": 11,
+      "minZ": -3,
+      "maxZ": 5,
+      "width": 196,
+      "depth": 252,
+      "sampledArea": 33712
+    },
+    {
+      "seed": "REGIONAL-AUDIT-0",
+      "id": "district/1/1",
+      "y": -0.8,
+      "cells": 42,
+      "chunks": [
+        "1:1",
+        "2:1",
+        "1:2",
+        "2:2"
+      ],
+      "minX": 4,
+      "maxX": 11,
+      "minZ": 5,
+      "maxZ": 11,
+      "width": 224,
+      "depth": 196,
+      "sampledArea": 32928
+    },
+    {
+      "seed": "REGIONAL-AUDIT-1",
+      "id": "district/-1/0",
+      "y": -5.75,
+      "cells": 42,
+      "chunks": [
+        "-2:0",
+        "-1:0",
+        "-2:1",
+        "-1:1"
+      ],
+      "minX": -8,
+      "maxX": -1,
+      "minZ": 0,
+      "maxZ": 6,
+      "width": 224,
+      "depth": 196,
+      "sampledArea": 32928
+    },
+    {
+      "seed": "REGIONAL-AUDIT-6",
+      "id": "district/1/-1",
+      "y": -5.15,
+      "cells": 41,
+      "chunks": [
+        "1:-2",
+        "2:-2",
+        "1:-1",
+        "2:-1",
+        "1:0",
+        "2:0"
+      ],
+      "minX": 5,
+      "maxX": 11,
+      "minZ": -7,
+      "maxZ": 1,
+      "width": 196,
+      "depth": 252,
+      "sampledArea": 32144
+    }
+  ],
+  "stairRuns": 729,
+  "stairHeightSpans": {
+    "median": 3.126315789473684,
+    "p95": 6.227027027027027
+  },
+  "graphCenterlineLength": 1226440.5756558261,
+  "clearanceViolations": 0,
+  "accidentalIsolation": 0,
+  "checkedSeamPortals": 1086,
+  "nonzeroSeamFraction": 1,
+  "seamErrors": 0,
+  "topologyErrors": [],
+  "generationFallbacks": {
+    "ordinaryRegionalPlan": 0,
+    "note": "Constructive ordinary planner has no flattening fallback; monuments and RAW_LOCAL use the explicit legacy path."
+  },
+  "landmarks": [
+    {
+      "family": "nonzero-ramp",
+      "seed": "VERTICAL-PROMPT-AUDIT-0",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -115.82498772970867,
+        "y": 1.0775000000000001,
+        "z": 154
+      },
+      "profile": {
+        "kind": "linear",
+        "axis": "x",
+        "startY": 1.55,
+        "endY": -1.125
+      }
+    },
+    {
+      "family": "escalier-regional",
+      "seed": "VERTICAL-PROMPT-AUDIT-0",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -154,
+        "y": 6.390000000000001,
+        "z": 81.51727059944533
+      }
+    },
+    {
+      "family": "rampe-regionale",
+      "seed": "VERTICAL-PROMPT-AUDIT-0",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -115.82498772970867,
+        "y": 1.0775000000000001,
+        "z": 154
+      }
+    },
+    {
+      "family": "monticule-massif",
+      "seed": "VERTICAL-PROMPT-AUDIT-3",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -146.41,
+        "y": -3.0876035840623084,
+        "z": 98
+      }
+    },
+    {
+      "family": "salle-en-gradins",
+      "seed": "VERTICAL-PROMPT-AUDIT-3",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -163.58333333333331,
+        "y": -3.5182409696032604,
+        "z": 126
+      }
+    },
+    {
+      "family": "galerie-en-gradins",
+      "seed": "VERTICAL-PROMPT-AUDIT-5",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -110.8,
+        "y": -4.484999999999999,
+        "z": 140
+      }
+    },
+    {
+      "family": "passage-mural",
+      "seed": "VERTICAL-PROMPT-AUDIT-11",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -106.4047422206495,
+        "y": 2.165,
+        "z": 154
+      }
+    },
+    {
+      "family": "passage-accroupi",
+      "seed": "VERTICAL-PROMPT-AUDIT-19",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -135.81578768678008,
+        "y": 4.815,
+        "z": 70
+      }
+    },
+    {
+      "family": "ouverture-haute",
+      "seed": "VERTICAL-PROMPT-AUDIT-23",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -154,
+        "y": -6.635,
+        "z": 142.77564640557392
+      },
+      "destination": {
+        "x": -154,
+        "y": -12.035,
+        "z": 146.75
+      },
+      "destinationOwner": {
+        "x": -1,
+        "z": 1,
+        "story": -1
+      }
+    },
+    {
+      "family": "saut-passerelle",
+      "seed": "VERTICAL-PROMPT-AUDIT-25",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -95.38,
+        "y": -6.585,
+        "z": 159.13321452144066
+      },
+      "destination": {
+        "x": -92.78,
+        "y": -6.585,
+        "z": 159.13321452144066
+      }
+    },
+    {
+      "family": "escalier-l",
+      "seed": "VERTICAL-PROMPT-AUDIT-25",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -61.16710388849024,
+        "y": -6.585,
+        "z": 143.1255698926281
+      },
+      "destination": {
+        "x": -109.22443010737189,
+        "y": -17.385,
+        "z": 162.83289611150977
+      },
+      "destinationOwner": {
+        "x": -1,
+        "z": 1,
+        "story": -2
+      }
+    },
+    {
+      "family": "galerie-l",
+      "seed": "VERTICAL-PROMPT-AUDIT-25",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -84,
+        "y": -6.585,
+        "z": 141.5
+      }
+    },
+    {
+      "family": "trous-historiques",
+      "seed": "VERTICAL-PROMPT-AUDIT-26",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -134.89352056293282,
+        "y": 1.015,
+        "z": 154
+      }
+    },
+    {
+      "family": "galerie-bridge",
+      "seed": "VERTICAL-PROMPT-AUDIT-69",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -70,
+        "y": 4.465,
+        "z": 85.5
+      }
+    },
+    {
+      "family": "escalier-u",
+      "seed": "VERTICAL-PROMPT-AUDIT-74",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -145.8281055367319,
+        "y": 6.615,
+        "z": 115.81124076265841
+      },
+      "destination": {
+        "x": -149.26183508487884,
+        "y": -4.1850000000000005,
+        "z": 115.46124076265842
+      },
+      "destinationOwner": {
+        "x": -1,
+        "z": 1,
+        "story": -2
+      }
+    },
+    {
+      "family": "galerie-u",
+      "seed": "VERTICAL-PROMPT-AUDIT-74",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -154,
+        "y": 6.615,
+        "z": 113.5
+      }
+    },
+    {
+      "family": "escalier-bridge",
+      "seed": "VERTICAL-PROMPT-AUDIT-136",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -89.5816364049213,
+        "y": -0.585,
+        "z": 115.26918904304038
+      },
+      "destination": {
+        "x": -89.5816364049213,
+        "y": -11.385,
+        "z": 165.08081095695962
+      },
+      "destinationOwner": {
+        "x": -1,
+        "z": 1,
+        "story": -2
+      }
+    }
+  ]
+}

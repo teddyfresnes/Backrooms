@@ -67,6 +67,13 @@ Chercher la méthode `build…` correspondant à la feature. Ne pas lire tout
 `WorldBuilder.ts`. Les helpers du début du fichier gèrent notamment les caps et
 la soustraction de rectangles.
 
+Les plafonds BSP bas gardent leurs vraies hauteurs. `CeilingEnvelope` ferme
+leurs chants exposés jusqu'au toit haut voisin, avec un solide en plâtre et son
+collider. Les retours s'arrêtent sur les murs existants ; ils ne remplissent ni
+les puits ni les passages hérités. Leurs bandes verticales ne se recouvrent pas.
+Les coins colinéaires des polygones découpés et les extrémités de wedges à
+hauteur nulle n'émettent pas de triangles GPU dégénérés.
+
 ### Diagnostic visuel
 
 Dans les retours du projet, **blinking** signifie **z-fighting** : deux faces

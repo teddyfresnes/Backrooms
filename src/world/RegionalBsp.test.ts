@@ -12,7 +12,7 @@ it('restores varied historical architecture in the actual ordinary entry point, 
   for (let i = 0; i < 48; i++) {
     // The last 16 seeds are a holdout corpus distinct from the physical demos.
     const w = generateInfiniteChunk(`${i < 32 ? 'BSP-RESTORE' : 'BSP-HOLDOUT'}-${i}`, { x: 0, z: 0, story: 0 });
-    expect(w.version).toBe(15);
+    expect(w.version).toBe(16);
     expect(w.rooms.some(r => r.id.includes('/quarter-'))).toBe(false);
     const united = new Map<string, { minX: number; maxX: number; minZ: number; maxZ: number }>();
     for (const r of w.rooms.filter(r => r.id.includes('/bsp/') || r.id.endsWith('/hall'))) {

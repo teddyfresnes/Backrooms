@@ -84,6 +84,11 @@ export const slabVertices = (s: WalkableSurface): number[] => {
   }
   return result;
 };
+/** Height of the actual underside plane at an x/z coordinate. Normal
+ * extrusion is not a vertical thickness on a sloping slab. */
+export const surfaceUndersideY = (s: WalkableSurface, x: number, z: number): number => s.support === 'solid'
+  ? s.supportBottom ?? surfaceRange(s)[0] - s.thickness
+  : surfaceY(s, x, z) - s.thickness / surfaceNormal(s).y;
 export const SLAB_INDICES = [0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 0, 4, 5, 0, 5, 1, 1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0];
 export const surfaceCollider = (s: WalkableSurface): StaticCollider => {
   const points = slabVertices(s), xs = points.filter((_, i) => i % 3 === 0), ys = points.filter((_, i) => i % 3 === 1), zs = points.filter((_, i) => i % 3 === 2);

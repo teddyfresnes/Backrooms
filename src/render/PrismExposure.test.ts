@@ -1,3 +1,4 @@
+import { auditAxisPlaneTriangles } from '../../tests/support/geometry-audit';
 import { expect, it } from 'vitest';
 import * as THREE from 'three';
 import { profilePrism } from '../world/SpatialGeometry';
@@ -57,7 +58,7 @@ it('keeps the final rendered ceiling above the entire useful width of isolated f
           expect(floor, `${w.seed}/${t.id}`).toBeDefined();
           const foot = surfaceY(floor, x, z), hits = new THREE.Raycaster(new THREE.Vector3(x, foot + .01, z), new THREE.Vector3(0, 1, 0), 0, 6).intersectObjects(meshes);
           expect(hits[0], `${w.seed}/${t.id} ${along}/${across}`).toBeDefined();
-          expect(hits[0]!.point.y - foot, `${w.seed}/${t.id}`).toBeGreaterThan(3.6); samples++;
+          expect(hits[0]!.point.y - foot, `${w.seed}/${t.id}`).toBeGreaterThan(2.5); samples++;
         }
       } finally { geometries.forEach(g => g.dispose()); }
     }
@@ -65,25 +66,13 @@ it('keeps the final rendered ceiling above the entire useful width of isolated f
   expect(samples).toBeGreaterThan(100);
 }, 30000);
 
-it('emits no overlapping coplanar rectangular faces in complete BSP/facade/trim batches', () => {
+it('emits no overlapping coplanar faces in complete BSP/facade/trim batches, including clipped wedges', () => {
+  let triangles = 0;
   for (let n = 0; n < 8; n++) {
     const w = generateInfiniteChunk(`REGIONAL-AUDIT-${n}`, { x: 0, z: 0, story: 0 });
-    const g = createSpatialPrismBatch(w.spatial!.prisms, 1, { x: 0, y: 0, z: 0 }, prismExposure(w.spatial!.prisms));
-    const p = g.getAttribute('position'), normals = g.getAttribute('normal'), bins = new Map<string, number[][]>(), duplicates: string[] = [];
-    try {
-      for (let i = 0; i < p.count; i += 6) {
-        const coords = [0, 1, 2].map(axis => Array.from({ length: 6 }, (_, j) => p.getComponent(i + j, axis)));
-        const fixed = coords.findIndex(a => Math.max(...a) - Math.min(...a) < .000001); if (fixed < 0) continue;
-        const axes = [0, 1, 2].filter(a => a !== fixed), [a, b] = axes.map(axis => ({ min: Math.min(...coords[axis]!), max: Math.max(...coords[axis]!) }));
-        if (a!.max - a!.min < .0001 || b!.max - b!.min < .0001 || coords.some((c, axis) => axis !== fixed && c.some(v => Math.min(Math.abs(v - Math.min(...c)), Math.abs(v - Math.max(...c))) > .00001))) continue;
-        const key = `${fixed}/${Math.sign(normals.getComponent(i, fixed))}/${Math.round(coords[fixed]![0]! * 100000)}`, r = [a!.min, a!.max, b!.min, b!.max], previous = bins.get(key) ?? [];
-        for (const q of previous) {
-          const dx = Math.min(r[1]!, q[1]!) - Math.max(r[0]!, q[0]!), dz = Math.min(r[3]!, q[3]!) - Math.max(r[2]!, q[2]!);
-          if (dx > .0001 && dz > .0001) duplicates.push(`${w.seed}/${key} ${r} / ${q}`);
-        }
-        previous.push(r); bins.set(key, previous);
-      }
-      expect(duplicates).toEqual([]);
-    } finally { g.dispose(); }
+    const geometry = createSpatialPrismBatch(w.spatial!.prisms, 1, { x: 0, y: 0, z: 0 }, prismExposure(w.spatial!.prisms));
+    try { const audit = auditAxisPlaneTriangles([{ name: w.seed, geometry }]); triangles += audit.triangleCount; expect(audit.errors).toEqual([]); }
+    finally { geometry.dispose(); }
   }
+  expect(triangles).toBeGreaterThan(20000);
 }, 30000);
