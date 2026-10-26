@@ -14,6 +14,7 @@ import {
   BACKROOMS_LEGACY_ATMOSPHERE as LEGACY_ATMOSPHERE,
 } from '../render/BackroomsAtmosphere';
 import { MODERN_BACKROOMS_RIG } from '../render/FluorescentFixture';
+import { resolveLightingBrightness } from '../render/LightingBrightness';
 import { MaterialLibrary } from '../render/MaterialLibrary';
 import { PostFX } from '../render/PostFX';
 import { ExperienceUI } from '../ui/ExperienceUI';
@@ -103,6 +104,7 @@ export class Game {
   private readonly systemDiagnostics: SystemDiagnostics;
   private readonly renderScale: RenderScaleLimits;
   private settings: GameSettings;
+  private brightnessProfile = resolveLightingBrightness();
   private readonly storage: GameSaveStorage | null;
   private materials?: MaterialLibrary;
   private worldStream?: WorldStream;
@@ -136,6 +138,7 @@ export class Game {
     private readonly options: GameOptions = {},
   ) {
     this.settings = loadGameSettings();
+    this.brightnessProfile = resolveLightingBrightness(this.settings.brightness);
     try {
       this.storage = window.localStorage;
     } catch {
@@ -245,6 +248,7 @@ export class Game {
       this.materials.materialSets,
       this.physics,
       this.settings.lighting,
+      this.settings.brightness,
     );
     await this.worldStream.initialize();
     if (this.disposed) return;
@@ -384,15 +388,15 @@ export class Game {
     const darknessBlend = 1 - Math.exp(-Math.max(0, delta) * darknessRate);
     this.darkness = THREE.MathUtils.lerp(this.darkness, context.darkness, darknessBlend);
     if (legacy) {
-      this.hemisphere.intensity = 0.17;
-      this.ambientFill.intensity = 0.018;
-      this.directionalKey.intensity = 0.07;
+      this.hemisphere.intensity = 0.17 * this.brightnessProfile.relativeGain;
+      this.ambientFill.intensity = 0.018 * this.brightnessProfile.relativeGain;
+      this.directionalKey.intensity = 0.07 * this.brightnessProfile.relativeGain;
       this.postFX?.setDarkness(0);
       return;
     }
-    this.hemisphere.intensity = THREE.MathUtils.lerp(MODERN_BACKROOMS_RIG.hemisphere.lit, MODERN_BACKROOMS_RIG.hemisphere.dark, this.darkness);
-    this.ambientFill.intensity = THREE.MathUtils.lerp(MODERN_BACKROOMS_RIG.ambient.lit, MODERN_BACKROOMS_RIG.ambient.dark, this.darkness);
-    this.directionalKey.intensity = THREE.MathUtils.lerp(MODERN_BACKROOMS_RIG.key.lit, MODERN_BACKROOMS_RIG.key.dark, this.darkness);
+    this.hemisphere.intensity = THREE.MathUtils.lerp(this.brightnessProfile.rig.hemisphere, MODERN_BACKROOMS_RIG.hemisphere.dark, this.darkness);
+    this.ambientFill.intensity = THREE.MathUtils.lerp(this.brightnessProfile.rig.ambient, MODERN_BACKROOMS_RIG.ambient.dark, this.darkness);
+    this.directionalKey.intensity = THREE.MathUtils.lerp(this.brightnessProfile.rig.key, MODERN_BACKROOMS_RIG.key.dark, this.darkness);
     this.postFX?.setDarkness(this.darkness);
   }
 
@@ -411,13 +415,13 @@ export class Game {
     this.fog.density = legacy ? 0.0042 : 0.0015;
     this.directionalKey.position.set(legacy ? 3.5 : 4.5, legacy ? 8 : 7.5, legacy ? 2.5 : 3.2);
     if (legacy) {
-      this.hemisphere.intensity = 0.17;
-      this.ambientFill.intensity = 0.018;
-      this.directionalKey.intensity = 0.07;
+      this.hemisphere.intensity = 0.17 * this.brightnessProfile.relativeGain;
+      this.ambientFill.intensity = 0.018 * this.brightnessProfile.relativeGain;
+      this.directionalKey.intensity = 0.07 * this.brightnessProfile.relativeGain;
     } else {
-      this.hemisphere.intensity = THREE.MathUtils.lerp(MODERN_BACKROOMS_RIG.hemisphere.lit, MODERN_BACKROOMS_RIG.hemisphere.dark, this.darkness);
-      this.ambientFill.intensity = THREE.MathUtils.lerp(MODERN_BACKROOMS_RIG.ambient.lit, MODERN_BACKROOMS_RIG.ambient.dark, this.darkness);
-      this.directionalKey.intensity = THREE.MathUtils.lerp(MODERN_BACKROOMS_RIG.key.lit, MODERN_BACKROOMS_RIG.key.dark, this.darkness);
+      this.hemisphere.intensity = THREE.MathUtils.lerp(this.brightnessProfile.rig.hemisphere, MODERN_BACKROOMS_RIG.hemisphere.dark, this.darkness);
+      this.ambientFill.intensity = THREE.MathUtils.lerp(this.brightnessProfile.rig.ambient, MODERN_BACKROOMS_RIG.ambient.dark, this.darkness);
+      this.directionalKey.intensity = THREE.MathUtils.lerp(this.brightnessProfile.rig.key, MODERN_BACKROOMS_RIG.key.dark, this.darkness);
     }
   }
 
@@ -430,6 +434,8 @@ export class Game {
   private async applySettings(next: GameSettings): Promise<void> {
     const previousLighting = this.settings.lighting;
     this.settings = { ...next };
+    this.brightnessProfile = resolveLightingBrightness(next.brightness);
+    this.worldStream?.setBrightness(next.brightness);
     this.camera.fov = next.fieldOfView;
     this.camera.updateProjectionMatrix();
     this.player?.setFieldOfView(next.fieldOfView);

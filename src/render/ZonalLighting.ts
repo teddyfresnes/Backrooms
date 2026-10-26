@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { resolveLightingBrightness } from './LightingBrightness';
 import { applyRegionalLighting, type RegionalLightField } from './RegionalLighting';
 import type { MaterialSet } from './MaterialLibrary';
 import type { Rect, VisualBiome, WorldPlan } from '../world/types';
@@ -96,8 +97,10 @@ export interface ZonalLightingContext {
   readonly worldOffset: THREE.Vector3;
   readonly lightField: THREE.DataTexture;
   readonly chunkSize: number;
-  readonly lightPoolMin: number;
-  readonly lightPoolMax: number;
+  lightPoolMin: number;
+  lightPoolMax: number;
+  readonly dimProfile: boolean;
+  readonly poolUniforms: { min: THREE.IUniform<number>; max: THREE.IUniform<number> };
 }
 
 export interface ZonalMaterialSet {
@@ -334,7 +337,22 @@ export const createZonalLightingContext = (plan: WorldPlan, regionalField?: Regi
     chunkSize: plan.size,
     lightPoolMin: biome === 'dim' ? DIM_LIGHT_POOL_MIN : STANDARD_LIGHT_POOL_MIN,
     lightPoolMax: biome === 'dim' ? DIM_LIGHT_POOL_MAX : STANDARD_LIGHT_POOL_MAX,
+    dimProfile: biome === 'dim',
+    poolUniforms: {
+      min: { value: biome === 'dim' ? DIM_LIGHT_POOL_MIN : STANDARD_LIGHT_POOL_MIN },
+      max: { value: biome === 'dim' ? DIM_LIGHT_POOL_MAX : STANDARD_LIGHT_POOL_MAX },
+    },
   };
+};
+
+/** All existing shaders and asynchronous decor share the same uniform holders.
+ * Brightness never changes baked field data or recompiles a material. */
+export const setZonalBrightness = (context: ZonalLightingContext, value: number): void => {
+  const pool = resolveLightingBrightness(value).pool;
+  context.lightPoolMin = context.dimProfile ? DIM_LIGHT_POOL_MIN : pool.min;
+  context.lightPoolMax = context.dimProfile ? DIM_LIGHT_POOL_MAX : pool.max;
+  context.poolUniforms.min.value = context.lightPoolMin;
+  context.poolUniforms.max.value = context.lightPoolMax;
 };
 
 const makeUniforms = (
@@ -361,8 +379,8 @@ const makeUniforms = (
     chunkSize: { value: context.chunkSize },
     proximityOcclusion: { value: profile.proximityOcclusion },
     verticalRelief: { value: profile.verticalRelief },
-    lightPoolMin: { value: context.lightPoolMin },
-    lightPoolMax: { value: context.lightPoolMax },
+    lightPoolMin: context.poolUniforms.min,
+    lightPoolMax: context.poolUniforms.max,
   };
 };
 

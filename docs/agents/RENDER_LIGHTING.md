@@ -47,8 +47,9 @@ Les contacts sol/mur/plafond restent renforcés pour éviter un rendu uniformém
 bloom historiques ; le composer est reconstruit lors de la bascule.
 
 `RussianStairwellGame` conserve le rig global et le `PostFX` nocturnes. Les
-plafonniers et appliques pilotent un pool constant de quatre lumières locales,
-repositionnées entre les étages sans changer le nombre de lumières du shader.
+quatre plafonniers et trois appliques possèdent sept sources fixes sans ombres
+locales. Leur position et leur contribution ne dépendent jamais de la caméra ;
+le nombre de lumières du shader reste constant pendant les déplacements.
 Le profil moderne a des sources plus concentrées ; le classique reste plus
 chaud et plus large. Les deux shadow maps extérieures sont calculées une fois,
 puis invalidées uniquement lors d'une réactivation des ombres. En qualité
@@ -127,6 +128,35 @@ thread principal quand ils sont disponibles. `WorldStream.setLightingMode()`
 reconstruit uniquement les `WorldView`, conserve plans, colliders et portes
 ouvertes, garde les données du bake actif et publie une progression
 `{ completed, total }` utilisable par le menu.
+
+`GameSettings.brightness` est un nombre entre 0 et 100, par défaut 50, persistant
+sous la clé existante. Une ancienne sauvegarde de paramètres sans ce champ garde
+ses préférences et reçoit 50 ; zéro est valide. `LightingBrightness` centralise
+la courbe : dans les Backrooms modernes, 0 reprend le rig et les pools de 7317222,
+100 ceux de 687c5eb, et 50 interpole leurs paramètres. Les cibles de blackout et
+les pools spécifiques à `dim` ne changent pas. Le mode Classique et le Stairwell
+conservent leurs sources/palettes propres : 100 garde leurs intensités de
+référence ; les valeurs inférieures appliquent le gain relatif combiné du rig
+et des pools modernes. Il s'agit d'une convention commune d'atténuation, pas
+d'un passage automatique en mode historique. Le rig russe n'avait pas reçu la
+hausse v17 des Backrooms. L'extérieur garde lune et réverbère ; l'interrupteur de
+l'appartement reste prioritaire sur son gain de source. Les diffuseurs restent
+indépendants du curseur.
+
+`WorldStream.setBrightness` met à jour les vues existantes, les prochains
+montages et les remplacements asynchrones. `ZonalLightingContext.poolUniforms`
+partage ses holders avec les shaders présents et les décors chargés ensuite.
+Les champs CPU/worker et textures GPU restent identiques ; aucune recompilation
+ni reconstruction de composer n'est nécessaire. Le bake classique conserve ses
+données ; les intensités de lightmap/émission des matériaux détenus sont ajustées
+depuis leurs valeurs de base, sans accumulation entre réglages.
+
+Les surfaces sèches optent pour `MatteSurface`, après leurs décorateurs de
+lumière. Il remappe la rugosité effective après lecture de la texture, entre
+0,82 et 0,98, tout en gardant ses variations. Le marqueur sérialisable suit les
+clones ; le hook doit être réappliqué au clone final, car Three ne copie pas
+`onBeforeCompile`. Verre, métaux et diffuseurs ne sont pas concernés. Les pixels
+des textures partagées, l'albédo, les normales et le bloom restent inchangés.
 
 La sous-face des toits inclinés est calculée avec `surfaceUndersideY` :
 l’épaisseur s’extrude le long de la normale. Le diffuseur reste parallèle à

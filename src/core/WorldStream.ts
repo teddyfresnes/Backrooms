@@ -4,6 +4,7 @@ import { cutRects, findSurface, surfaceY, TOPOLOGY_VERSION } from '../world/Walk
 import { regionalOwnerAt } from '../world/RegionalPlan';
 import type { CharacterPit } from '../character/CharacterEnvironment';
 import * as THREE from 'three';
+import { DEFAULT_BRIGHTNESS, normalizeBrightness } from '../render/LightingBrightness';
 import type {
   LookTargetDiagnostics,
   StreamingDiagnostics,
@@ -273,6 +274,7 @@ export class WorldStream {
     private readonly materials: BiomeMaterialSets,
     private readonly physics: PhysicsWorld,
     private lightingMode: LightingMode = 'modern',
+    private brightness: number = DEFAULT_BRIGHTNESS,
   ) {
     if (typeof Worker !== 'undefined') {
       this.worker = new Worker(new URL('../world/infinite.worker.ts', import.meta.url), { type: 'module' });
@@ -603,6 +605,11 @@ export class WorldStream {
 
   getLightingMode(): LightingMode {
     return this.lightingMode;
+  }
+
+  setBrightness(value: number): void {
+    this.brightness = normalizeBrightness(value);
+    for (const runtime of this.chunks.values()) runtime.view.setBrightness(this.brightness);
   }
 
   getCenterCoord(): Readonly<ChunkCoord> {
@@ -1380,7 +1387,7 @@ export class WorldStream {
     const view = new WorldView(
       runtime.plan,
       this.materials[runtime.plan.visualBiome ?? 'yellow'],
-      { lightingMode: mode, bakedLightMaps: mode === 'legacy' ? lightMaps : undefined, regionalLightData: runtime.regionalLightData, architectureData: runtime.architectureData, architectureOnly: runtime.view.architectureOnly },
+      { lightingMode: mode, brightness: this.brightness, bakedLightMaps: mode === 'legacy' ? lightMaps : undefined, regionalLightData: runtime.regionalLightData, architectureData: runtime.architectureData, architectureOnly: runtime.view.architectureOnly },
     );
     view.group.position.copy(runtime.offset);
     view.setArchitectureDebug(this.architectureDebugMode);
@@ -1398,6 +1405,8 @@ export class WorldStream {
     view.restoreDoorStates(runtime.view.getDoorStates());
     if (!runtime.view.architectureOnly) await view.promoteDetails();
     if (this.disposed || this.lightingRevision !== revision || this.chunks.get(runtime.key) !== runtime) { view.dispose(); return; }
+    // A slider change may have happened while this replacement awaited assets.
+    view.setBrightness(this.brightness);
     this.scene.add(view.group);
     runtime.view.dispose();
     runtime.view = view;
@@ -1432,7 +1441,7 @@ export class WorldStream {
     const view = new WorldView(
       plan,
       this.materials[plan.visualBiome ?? 'yellow'],
-      { lightingMode: this.lightingMode, bakedLightMaps: lightMaps, regionalLightData, architectureData,
+      { lightingMode: this.lightingMode, brightness: this.brightness, bakedLightMaps: lightMaps, regionalLightData, architectureData,
         architectureOnly: !!plan.spatial && (coord.story !== this.centerCoord.story || distanceToRect(
           this.visibilityPosition.x - offset.x, this.visibilityPosition.z - offset.z,
           { minX: -56, maxX: 56, minZ: -56, maxZ: 56 },

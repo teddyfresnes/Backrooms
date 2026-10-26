@@ -127,6 +127,12 @@ raycasts Three et contacts Rapier, vérifie les bandes et la portée des reliefs
 canonique et le dégagement sous les quatre coins des diffuseurs.
 `FluorescentFixture.test.ts` vérifie la neutralité HDR et le débit lumineux CPU,
 avec les valeurs blackout inchangées ; cela ne remplace pas une mesure WebGL.
+`LightingBrightness`, `WorldBrightness` et `settings.brightness` vérifient les
+bornes, le véritable curseur DOM, les holders de shader et les montages futurs,
+y compris une modification pendant une bascule de mode asynchrone. Les tests
+`StairwellRendering` sondent les sept paliers pendant les changements de hauteur
+de l'observateur. `ApartmentBrightness` protège la priorité de l'interrupteur.
+Ces sondes CPU ne prouvent ni l'apparence du bloom ni le coût GPU des sept sources.
 Le rapport [STAIR_FIX_VALIDATION.md](../validation/STAIR_FIX_VALIDATION.md)
 distingue les contrôles CPU du contrôle visuel WebGL.
 `AtriumEnvelope` vérifie les quatre niveaux, les parois porteuses, les tunnels

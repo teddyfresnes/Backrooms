@@ -62,7 +62,7 @@ describe('stairwell surfaces and complete procedural scene budget', () => {
     }
   });
 
-  it('uses four fixed local lights and cached exterior shadows, with bounded static geometry', () => {
+  it('uses seven stationary shadowless local lights and cached exterior shadows, with bounded static geometry', () => {
     const env = create(); let pointLights = 0, triangles = 0, meshes = 0;
     env.group.traverse(object => {
       if (object instanceof THREE.PointLight) pointLights++;
@@ -73,9 +73,11 @@ describe('stairwell surfaces and complete procedural scene budget', () => {
         meshes++; triangles += (object.geometry.index?.count ?? object.geometry.getAttribute('position').count) / 3;
       }
     });
-    expect(pointLights).toBe(4); expect(meshes).toBeLessThan(160); expect(triangles).toBeLessThan(100_000);
+    expect(pointLights).toBe(7); expect(meshes).toBeLessThan(160); expect(triangles).toBeLessThan(100_000);
+    const lights = env.group.children.filter((o): o is THREE.PointLight => o instanceof THREE.PointLight);
+    const original = lights.map(o => [o.uuid, ...o.position.toArray(), o.intensity]);
     for (let height = 1; height < 11; height += .2) env.update(height / 2, height);
-    expect(env.group.children.filter(o => o instanceof THREE.PointLight)).toHaveLength(4);
+    expect(lights.map(o => [o.uuid, ...o.position.toArray(), o.intensity])).toEqual(original);
   });
 
   it('keeps wall texture coordinates identical across shell segment joins', () => {
@@ -93,15 +95,34 @@ describe('stairwell surfaces and complete procedural scene budget', () => {
     a.geometry.dispose(); b.geometry.dispose(); material.dispose();
   });
 
-  it('retains the same light objects while following floors and changing lighting style', () => {
+  it('retains every fixture and its world position through brightness and lighting style changes', () => {
     const pool = new StairwellLightPool(STAIRWELL_LIGHTING_PROFILES.modern), ids = pool.lights.map(light => light.uuid);
-    for (const height of [1.6, 4.4, 7.2, 10.2]) {
-      pool.update(height);
+    const positions = pool.lights.map(light => light.position.toArray());
+    for (const value of [0, 50, 100, 0, 100]) {
+      pool.setBrightness(value);
       expect(pool.lights.map(light => light.uuid)).toEqual(ids);
-      expect(pool.lights.some(light => Math.abs(light.position.y - height) < 2)).toBe(true);
+      expect(pool.lights.map(light => light.position.toArray())).toEqual(positions);
       expect(pool.lights.every(light => !light.castShadow && light.intensity > 0)).toBe(true);
     }
     pool.setProfile(STAIRWELL_LIGHTING_PROFILES.legacy);
     expect(pool.lights.map(light => light.uuid)).toEqual(ids);
+  });
+
+  it('keeps irradiance at all seven landings invariant while the observer crosses floor thresholds', () => {
+    const env = create();
+    const points = Array.from({ length: STAIRWELL_LEVEL_COUNT }, (_, i) => new THREE.Vector3(0, floorY(i) + .01, -2.35));
+    for (let i = 0; i < STAIRWELL_LEVEL_COUNT - 1; i++) points.push(new THREE.Vector3(0, midLandingY(i) + .01, 3));
+    const lights = env.group.children.filter((o): o is THREE.PointLight => o instanceof THREE.PointLight);
+    const sample = () => points.map(p => lights.reduce((sum, light) => {
+      const d = light.position.distanceTo(p), cosine = Math.max(0, (light.position.y - p.y) / d);
+      return sum + light.intensity * cosine / Math.max(.01, d * d) * Math.max(0, 1 - (d / light.distance) ** 4) ** 2;
+    }, 0));
+    for (const mode of ['modern', 'legacy'] as const) for (const brightness of [0, 50, 100]) {
+      env.setLightingMode(mode); env.setBrightness(brightness);
+      const before = sample(); expect(before.every(n => n > .01)).toBe(true);
+      for (const height of [1.6, 2.87, 2.89, 4.4, 5.75, 7.2, 10.2, 1.6]) {
+        env.update(height, height); expect(sample()).toEqual(before);
+      }
+    }
   });
 });

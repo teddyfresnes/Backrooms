@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyMatteSurface } from '../render/MatteSurface';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { StairwellMaterialSet } from './StairwellMaterials';
 import { StairwellDetails } from './StairwellDetails';
@@ -216,6 +217,7 @@ export class StairwellEnvironment {
     this.shellMaterial.roughnessMap = null;
     this.shellMaterial.color.setHex(0xffffff);
     this.shellMaterial.roughness = .94;
+    applyMatteSurface(this.shellMaterial);
     this.extraMaterials.push(this.shellMaterial);
     this.buildLandingsAndStairs();
     this.buildShell();
@@ -1775,6 +1777,10 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     this.localLighting.setProfile(profile);
   }
 
+  setBrightness(value: number): void {
+    this.localLighting.setBrightness(value);
+  }
+
   private configureExteriorShadowCasters(): void {
     const casterMaterials = new Set([
       'exterior-facade',
@@ -1836,10 +1842,9 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     );
   }
 
-  update(elapsed: number, viewerHeight?: number): void {
+  update(elapsed: number, _viewerHeight?: number): void {
     const delta = Math.min(.05, Math.max(0, elapsed - this.previousRainTime));
     this.previousRainTime = elapsed;
-    if (viewerHeight !== undefined) this.localLighting.update(viewerHeight);
     for (const cloud of this.cloudGroups) {
       cloud.group.position.x = cloud.baseX + Math.sin(elapsed * cloud.drift + cloud.phase) * 2.2;
     }

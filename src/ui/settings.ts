@@ -1,4 +1,5 @@
 import type { LightingMode } from '../render/LightingMode';
+import { DEFAULT_BRIGHTNESS, normalizeBrightness } from '../render/LightingBrightness';
 import {
   defaultControlBindings,
   sanitizeControlBindings,
@@ -10,6 +11,7 @@ export type RenderQualityPreference = 'auto' | 'performance' | 'quality';
 
 export interface GameSettings {
   lighting: LightingPreference;
+  brightness: number;
   renderQuality: RenderQualityPreference;
   fieldOfView: number;
   lookSensitivity: number;
@@ -27,6 +29,7 @@ const clamp = (value: number, min: number, max: number): number =>
 
 export const defaultGameSettings = (): GameSettings => ({
   lighting: 'modern',
+  brightness: DEFAULT_BRIGHTNESS,
   renderQuality: 'auto',
   fieldOfView: 72,
   lookSensitivity: 1,
@@ -48,6 +51,7 @@ export const loadGameSettings = (): GameSettings => {
     const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? '{}') as Partial<GameSettings>;
     return {
       lighting: stored.lighting === 'legacy' ? 'legacy' : 'modern',
+      brightness: normalizeBrightness(stored.brightness),
       renderQuality: ['auto', 'performance', 'quality'].includes(stored.renderQuality ?? '')
         ? stored.renderQuality as RenderQualityPreference
         : defaults.renderQuality,

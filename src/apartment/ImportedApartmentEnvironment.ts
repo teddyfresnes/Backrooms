@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { resolveLightingBrightness } from '../render/LightingBrightness';
 import { isApartmentInteriorVisible } from './ApartmentVisibility';
 import { optimizeApartmentSmallProps } from './SmallPropGeometry';
 import { batchStaticMeshes } from '../stairwell/geometry';
@@ -673,6 +674,7 @@ export class ImportedApartmentEnvironment {
   private readonly lightSwitchIndicator: THREE.MeshBasicMaterial;
   private readonly doorLockBolt: THREE.Mesh;
   private interiorLightsEnabled = false;
+  private interiorBrightnessGain = 1;
 
   private constructor(private readonly model: THREE.Object3D) {
     this.group.name = 'imported-sketchfab-apartment-runtime';
@@ -947,10 +949,15 @@ export class ImportedApartmentEnvironment {
     return this.interiorLightsEnabled;
   }
 
+  setBrightness(value: number): void {
+    this.interiorBrightnessGain = resolveLightingBrightness(value).relativeGain;
+    this.setInteriorLightsEnabled(this.interiorLightsEnabled);
+  }
+
   setInteriorLightsEnabled(enabled: boolean): void {
     this.interiorLightsEnabled = enabled;
     this.interiorLights.forEach(({ light, intensity }) => {
-      light.intensity = enabled ? intensity : 0;
+      light.intensity = enabled ? intensity * this.interiorBrightnessGain : 0;
     });
     const surfaceFactor = enabled ? 1 : APARTMENT_LIGHTS_OFF_SURFACE_FACTOR;
     const emissiveFactor = enabled ? 1 : APARTMENT_LIGHTS_OFF_EMISSIVE_FACTOR;

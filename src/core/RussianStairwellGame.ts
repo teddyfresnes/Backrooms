@@ -27,6 +27,7 @@ import {
   BACKROOMS_LEGACY_ATMOSPHERE,
 } from '../render/BackroomsAtmosphere';
 import { PostFX } from '../render/PostFX';
+import { resolveLightingBrightness } from '../render/LightingBrightness';
 import { compactSceneDataMaps, restoreSceneDataMaps, warmSceneForPlay } from '../render/SceneWarmup';
 import { HallExitInteraction } from '../stairwell/HallExitInteraction';
 import { StairwellEnvironment } from '../stairwell/StairwellEnvironment';
@@ -218,6 +219,8 @@ export class RussianStairwellGame {
       return;
     }
     environment.setLightingMode(this.settings.lighting);
+    environment.setBrightness(this.settings.brightness);
+    apartment.setBrightness(this.settings.brightness);
     this.environment = environment;
     setVisualProgress(0.52);
     this.scene.add(environment.group, apartment.group);
@@ -494,8 +497,10 @@ export class RussianStairwellGame {
     if (previousLighting !== settings.lighting) {
       this.postFX?.setLightingMode(settings.lighting);
       this.environment?.setLightingMode(settings.lighting);
-      this.applyBackroomsLighting();
     }
+    this.environment?.setBrightness(settings.brightness);
+    this.apartment?.setBrightness(settings.brightness);
+    this.applyBackroomsLighting();
   }
 
   private configureBackroomsLighting(): void {
@@ -517,9 +522,10 @@ export class RussianStairwellGame {
     // This runtime is nocturnal. It reuses the Backrooms colour rig and
     // post-processing modes, but relies on local fixtures for readable spaces
     // instead of globally filling the exterior and the apartment.
-    this.hemisphere.intensity = legacy ? 0.04 : 0.1;
-    this.ambientFill.intensity = legacy ? 0.004 : 0.016;
-    this.directionalKey.intensity = legacy ? 0.025 : 0.09;
+    const gain = resolveLightingBrightness(this.settings.brightness).relativeGain;
+    this.hemisphere.intensity = (legacy ? 0.04 : 0.1) * gain;
+    this.ambientFill.intensity = (legacy ? 0.004 : 0.016) * gain;
+    this.directionalKey.intensity = (legacy ? 0.025 : 0.09) * gain;
     this.directionalKey.position.set(legacy ? 3.5 : 4.5, legacy ? 8 : 7.5, legacy ? 2.5 : 3.2);
   }
 
@@ -616,7 +622,7 @@ export class RussianStairwellGame {
       this.autosaveElapsed += delta;
       if (this.autosaveElapsed >= AUTOSAVE_INTERVAL_SECONDS) this.saveNow('autosave');
       this.character?.update(delta);
-      this.environment.update(this.elapsed, this.camera.position.y);
+      this.environment.update(this.elapsed);
       this.apartment?.updateVisibility(this.camera.position);
       this.player.getViewDirection(this.viewDirection);
       this.door.update(0, this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);

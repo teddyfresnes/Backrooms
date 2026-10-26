@@ -299,6 +299,12 @@ export class MaterialLibrary {
       void: voidMaterial,
     };
 
+    // Dry architecture opts in. Texture pixels remain shared and untouched;
+    // actual cloned materials apply the remap after their lighting decorators.
+    for (const set of [yellowMaterials, redMaterials, whiteMaterials]) {
+      for (const name of ['wall', 'plaster', 'floor', 'ceiling', 'baseboard', 'pitWall', 'pitBottom'] as const)
+        set[name].userData.matteRoughness = [.82, .98];
+    }
     return new MaterialLibrary(
       {
         yellow: yellowMaterials,

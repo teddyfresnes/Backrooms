@@ -5,6 +5,8 @@ import { createWalkableGeometry } from './WalkableGeometry';
 import { setRegionalLightNeighbor, createRegionalLightField, type RegionalLightData, type RegionalLightField } from './RegionalLighting';
 import { applySurfaceLighting } from './SurfaceLighting';
 import * as THREE from 'three';
+import { DEFAULT_BRIGHTNESS, resolveLightingBrightness } from './LightingBrightness';
+import { applyMatteSurface } from './MatteSurface';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { MaterialSet } from './MaterialLibrary';
 import {
@@ -20,6 +22,7 @@ import {
   applyZonalLighting,
   createZonalMaterialSet,
   pinZonalLightingStoryHeight,
+  setZonalBrightness,
 } from './ZonalLighting';
 import type { ZonalLightingContext } from './ZonalLighting';
 import { createGraffitiMesh, selectWallGraffiti } from './WallGraffiti';
@@ -1396,6 +1399,7 @@ const DEFAULT_SURFACE_STYLE: SurfaceStyle = {
 
 export interface WorldViewOptions {
   lightingMode?: LightingMode;
+  brightness?: number;
   bakedLightMaps?: BakedLightMapData;
   regionalLightData?: RegionalLightData;
   architectureData?: SpatialArchitectureBuffers;
@@ -1425,6 +1429,7 @@ export class WorldView {
   private readonly distantCeilingMaterial: THREE.MeshStandardMaterial;
   private readonly previewFixtureGlowMaterial: THREE.MeshBasicMaterial;
   private readonly lightingContext?: ZonalLightingContext;
+  private readonly legacyBrightnessDefaults = new Map<THREE.MeshStandardMaterial, { lightMap: number; emissive: number }>();
   private readonly bakedLightMaps?: BakedLightMaps;
   private readonly ownedMaterials: THREE.Material[];
   private readonly animatedFogMaterials: THREE.ShaderMaterial[] = [];
@@ -1549,6 +1554,11 @@ export class WorldView {
     this.group.add(this.doorLayer.group);
     this.propLayer = new WorldPropLayer(this.previewOnly ? { ...plan, propPlacements: [] } : plan, this.lightingContext ?? null);
     this.group.add(this.propLayer.group);
+    for (const material of this.ownedMaterials) if (material instanceof THREE.MeshStandardMaterial) {
+      applyMatteSurface(material);
+      if (!this.lightingContext) this.legacyBrightnessDefaults.set(material, { lightMap: material.lightMapIntensity, emissive: material.emissiveIntensity });
+    }
+    this.setBrightness(options.brightness ?? DEFAULT_BRIGHTNESS);
     this.initialReady = Promise.all([this.doorLayer.ready, this.propLayer.ready]).then(() => undefined);
   }
 
@@ -4147,6 +4157,17 @@ export class WorldView {
     this.regionalLightField?.offset.copy(offset);
   }
 
+  setBrightness(value: number): void {
+    if (this.lightingContext) setZonalBrightness(this.lightingContext, value);
+    else {
+      const gain = resolveLightingBrightness(value).relativeGain;
+      for (const [material, baseline] of this.legacyBrightnessDefaults) {
+        material.lightMapIntensity = baseline.lightMap * gain;
+        material.emissiveIntensity = baseline.emissive * gain;
+      }
+    }
+  }
+
   getInteraction(
     playerPosition: THREE.Vector3,
     lookDirection: THREE.Vector3,
@@ -4226,6 +4247,7 @@ export class WorldView {
       if (object instanceof THREE.Mesh || object instanceof THREE.InstancedMesh) object.geometry.dispose();
     });
     this.ownedMaterials.forEach((material) => material.dispose());
+    this.legacyBrightnessDefaults.clear();
     this.graffitiMaterials.forEach((material) => material.dispose());
     this.graffitiTextures.forEach((texture) => texture.dispose());
     this.lightingContext?.lightField.dispose();
