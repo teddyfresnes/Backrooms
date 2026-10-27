@@ -1,0 +1,38 @@
+{
+  "unit": {
+    "command": "npx vitest run --maxWorkers=2",
+    "files": 81,
+    "tests": 637,
+    "passed": 636,
+    "failed": 1,
+    "failure": "Pre-existing imported apartment root object name mismatch"
+  },
+  "characterBeforeWorkspaceReset": {
+    "tests": 639,
+    "passed": 638,
+    "failed": 1,
+    "failure": "Intermittent first-person crouch cadence at 120Hz",
+    "failedFileRerun": {
+      "tests": 21,
+      "passed": 21
+    }
+  },
+  "apartmentSourceSha256": "1b1864ff763676e6fa4bc0b66e0ae2d854a7bf9ef3e61990d2c9f6fce7067dda",
+  "webglVerified": false,
+  "mainBuildPassed": true,
+  "siteBuildPassed": true,
+  "finalLPhysicalTestsPassed": 4,
+  "hosting": {
+    "staticFiles": 3075,
+    "totalBytes": 264234587,
+    "maxFileBytes": 16777216,
+    "apartmentOriginalBytes": 349270200,
+    "apartmentLossless": true,
+    "entryAssetsPresent": true
+  },
+  "wardrobe": {
+    "wardrobeObjectsVerified": 148,
+    "clothingFilesLossless": 148,
+    "manifestAssetsPresent": true
+  }
+}
