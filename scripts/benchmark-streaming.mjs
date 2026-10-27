@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { generateInfiniteChunk, clearInfiniteWorldCaches } from ${file('src/world/InfiniteWorld.ts')};
 import { bakeRegionalLightData } from ${file('src/render/RegionalLighting.ts')};
 import { WorldView } from ${file('src/render/WorldBuilder.ts')};
+import { PhysicsWorld } from ${file('src/physics/PhysicsWorld.ts')};
 ${prepared ? `import { prepareSpatialArchitecture } from ${file('src/render/SpatialArchitectureBuffers.ts')};` : 'const prepareSpatialArchitecture = () => undefined;'}
 const results = [], seeds = Array.from({ length: 24 }, (_, i) => 'VERTICAL-PROMPT-AUDIT-' + i);
 const materials = Object.fromEntries(['wall','plaster','floor','ceiling','baseboard','pitWall','pitBottom','metal','fixtureFrame','fixtureGlow','void']
@@ -28,17 +29,20 @@ for (const seed of seeds) {
   const workerGeometryMs = performance.now() - prepareStart, mountStart = performance.now();
   const view = new WorldView({ ...plan, propPlacements: [] }, materials, { regionalLightData, architectureData, architectureOnly: true });
   await view.ready; const mainThreadMountMs = performance.now() - mountStart;
+  const physicsStart = performance.now(), physics = await PhysicsWorld.create({ ...plan, propPlacements: [] });
+  const physicsMountMs = performance.now() - physicsStart;
   let triangles=0,batches=0,architectureBytes=0;
   view.group.traverse(o=> { if(o instanceof THREE.Mesh){ const n=o.geometry.index?.count??o.geometry.getAttribute('position')?.count??0;
     triangles+=n/3*(o instanceof THREE.InstancedMesh?o.count:1);if(n)batches++; }});
   for(const b of architectureData??[]) for(const name of ['position','normal','uv','color']) architectureBytes+=b[name].byteLength;
-  results.push({seed,hash,generationMs,lightBakeMs,workerGeometryMs,mainThreadMountMs,triangles,batches,architectureBytes,colliders:plan.colliders.length});
-  view.dispose(); globalThis.gc?.();
+  results.push({seed,hash,generationMs,lightBakeMs,workerGeometryMs,mainThreadMountMs,physicsMountMs,triangles,batches,architectureBytes,colliders:plan.colliders.length});
+  physics.dispose(); view.dispose(); globalThis.gc?.();
 }
 Object.values(materials).forEach(m=>m.dispose());
 const summary = values => { const a=[...values].sort((a,b)=>a-b);return {median:a[Math.floor(a.length/2)],p95:a[Math.ceil(a.length*.95)-1]};};
 console.log(JSON.stringify({preparedGeometry:${prepared},sourceRoot:${JSON.stringify(sourceRoot)},node:process.version,
-  summary:Object.fromEntries(['generationMs','lightBakeMs','workerGeometryMs','mainThreadMountMs','triangles','batches','architectureBytes','colliders'].map(k=>[k,summary(results.map(r=>r[k]))])),results,
+  summary:Object.fromEntries(['generationMs','lightBakeMs','workerGeometryMs','mainThreadMountMs','physicsMountMs','triangles','batches','architectureBytes','colliders'].map(k=>[k,summary(results.map(r=>r[k]))])),results,
   limitation:'CPU proxy: no browser scheduling, real asset textures/props, GPU uploads, shader compilation or FPS measurement. Geometry preparation is timed separately as work executed by infinite.worker in production.'},null,2));
-`, resolveDir: sourceRoot, loader: 'ts' }, outfile: output, bundle: true, platform: 'node', format: 'esm', packages: 'external' });
+`, resolveDir: sourceRoot, loader: 'ts' }, outfile: output, bundle: true, platform: 'node', format: 'esm', packages: 'external',
+  plugins: [{ name: 'headless-rapier', setup(b) { b.onResolve({ filter: /^@dimforge\/rapier3d$/ }, () => ({ path: resolve('tests/character/support/rapier-headless.mjs') })); } }] });
 const child=spawnSync(process.execPath,['--expose-gc',output],{stdio:'inherit'});process.exitCode=child.status??1;

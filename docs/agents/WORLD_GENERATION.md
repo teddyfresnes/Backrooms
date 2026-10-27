@@ -20,7 +20,7 @@ rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/
 
 ## Ordre du pipeline
 
-Le pipeline ordinaire (plan version 16, topologie/spatial version 2) est :
+Le pipeline ordinaire (plan version 17, topologie/spatial version 2) est :
 
 1. `RegionalPlan` choisit les districts mondiaux et leurs datums signés ;
 2. il réserve les atria sur deux à quatre adresses verticales. Les galeries
@@ -43,7 +43,10 @@ Le pipeline ordinaire (plan version 16, topologie/spatial version 2) est :
    portes, avant la reconstruction des sols. `StructuralSupports` réconcilie les coques et linteaux avec leurs
    vrais appuis après les réservations et portes. `CeilingEnvelope` ferme les
    décrochements de plafond entre volumes de même datum, par bandes de propriétaire ;
-7. `generateInfiniteChunk` applique palette et props, préfixe les IDs et références.
+7. `LiminalArchitecture` ajoute les rares parois percées après les réparations BSP,
+   puis les sols et finitions sont recalculés ; `generateInfiniteChunk` applique palette,
+   props et préfixes. Voir [le vocabulaire liminal](LIMINAL_ARCHITECTURE.md) pour
+   les arches, galeries partielles et nouvelles fosses.
 
 Voir [les contrats de transition](../TRANSITION_INTEGRATION.md) pour les plafonds
 continus, les salles de plusieurs cellules et la conservation des anciennes features.

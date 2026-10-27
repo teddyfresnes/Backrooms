@@ -144,3 +144,7 @@ d’entrée, leurs luminaires et les chutes entre terrasses. `SpatialVisibility`
 teste la priorité au regard, le budget et le cache des réponses worker ;
 `WorldPreview` vérifie la promotion des détails sans reconstruire l’architecture
 ou la lumière. Voir [ATRIUM_VALIDATION.md](../validation/ATRIUM_VALIDATION.md).
+
+Les arches et galeries ordinaires sont couvertes par `ArchitecturalOpenings.test.ts`
+et `LiminalGeneration.test.ts`. Leurs audits sont décrits dans
+[LIMINAL_ARCHITECTURE.md](LIMINAL_ARCHITECTURE.md).
