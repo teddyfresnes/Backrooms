@@ -120,6 +120,18 @@ redondante, pas de lui appliquer un décalage arbitraire.
   `baseboardlessZone` ne retire que la portion de plinthe située sur la face du
   mur qui regarde réellement dans cette zone ; un simple contact d’extrémité ou
   la pièce située de l’autre côté du mur ne doivent jamais perdre leur plinthe.
+- `SpatialBaseboards` construit les bandes sur les faces verticales exposées des
+  solides finaux, au profil du vrai sol et de l’union de ses fragments. Les rampes
+  utilisent leur plan affine, même loin de l’origine. La finition vient de la pièce canonique,
+  avec exclusions partielles par face via `BaseboardZones`, partagé avec le rendu
+  historique. Les angles compatibles ont une coupe d'onglet ; aucune rallonge
+  arbitraire n'est ajoutée aux extrémités historiques. Les plinthes restent sans
+  collision et regroupées dans le même lot de matériau.
+- `SpatialPrism.openFaces` omet les contacts mur/sol et les onglets internes des
+  plinthes, ainsi que leurs caps de coupe sur les coutures de propriétaire.
+  `FaceExposure` et le builder respectent ces faces omises : aucune soustraction
+  ni émission de triangles pour ces contacts déjà connus. Les extrémités visibles
+  restent fermées ; les vrais chants de dalle et autres volumes sont inchangés.
 - La sous-face rendue d’un `upper-portal-lintel` rejoint exactement le plafond
   bas. Elle prolonge le matériau et les UV du plafond lorsqu’une pièce adjacente
   reste basse ; entre deux pièces hautes, elle conserve le papier peint du mur.

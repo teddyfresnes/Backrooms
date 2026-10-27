@@ -38,9 +38,10 @@ const subtract = (p: number[], cut: Face): number[][] => {
 /** One ownership pass across floors, ceilings and walls, before material
  * batching. Shared internal faces disappear on both sides; coincident outward
  * faces retain the first material. No depth offset or collision change. */
-export const createFaceExposure = (solids: readonly { source: object; vertices: readonly number[] }[]): FaceExposure => {
+export const createFaceExposure = (solids: readonly { source: object; vertices: readonly number[]; openFaces?: readonly number[] }[]): FaceExposure => {
   const planes = new Map<string, Face[]>(), result = new Map<object, Map<number, number[][]>>();
-  for (const { source, vertices: v } of solids) for (const [index, ids] of corners.entries()) {
+  for (const { source, vertices: v, openFaces } of solids) for (const [index, ids] of corners.entries()) {
+    if (openFaces?.includes(index)) continue;
     const polygon = ids.flatMap(i => [v[i * 3]!, v[i * 3 + 1]!, v[i * 3 + 2]!]);
     const u = [0, 1, 2].map(i => polygon[i + 3]! - polygon[i]!), w = [0, 1, 2].map(i => polygon[i + 6]! - polygon[i]!);
     const n = [u[1]! * w[2]! - u[2]! * w[1]!, u[2]! * w[0]! - u[0]! * w[2]!, u[0]! * w[1]! - u[1]! * w[0]!], length = Math.hypot(...n);
@@ -91,8 +92,12 @@ export const faceTriangles = (vertices: readonly number[], face: number, fragmen
   // collinear corners. Neither should emit a zero-normal GPU triangle.
   const result: number[] = [];
   for (let i = 0; i < points.length; i += 9) {
-    const ux = points[i + 3]! - points[i]!, uy = points[i + 4]! - points[i + 1]!, uz = points[i + 5]! - points[i + 2]!;
-    const vx = points[i + 6]! - points[i]!, vy = points[i + 7]! - points[i + 1]!, vz = points[i + 8]! - points[i + 2]!;
+    // Test the coordinates actually uploaded to the GPU. Distinct Float64
+    // corners can collapse after Float32 conversion and otherwise emit a zero
+    // normal along a thin wall/ceiling seam.
+    const x = Math.fround(points[i]!), y = Math.fround(points[i + 1]!), z = Math.fround(points[i + 2]!);
+    const ux = Math.fround(points[i + 3]!) - x, uy = Math.fround(points[i + 4]!) - y, uz = Math.fround(points[i + 5]!) - z;
+    const vx = Math.fround(points[i + 6]!) - x, vy = Math.fround(points[i + 7]!) - y, vz = Math.fround(points[i + 8]!) - z;
     if ((uy * vz - uz * vy) ** 2 + (uz * vx - ux * vz) ** 2 + (ux * vy - uy * vx) ** 2 > 1e-16) result.push(...points.slice(i, i + 9));
   }
   return result;

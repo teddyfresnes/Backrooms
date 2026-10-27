@@ -133,6 +133,10 @@ y compris une modification pendant une bascule de mode asynchrone. Les tests
 `StairwellRendering` sondent les sept paliers pendant les changements de hauteur
 de l'observateur. `ApartmentBrightness` protège la priorité de l'interrupteur.
 Ces sondes CPU ne prouvent ni l'apparence du bloom ni le coût GPU des sept sources.
+`SpatialBaseboards.test.ts` raycaste les bandes finales aux angles, exclusions,
+sols inclinés et coutures ; il couvre aussi les résidus post-découpe et leurs
+colliders. `node scripts/audit-wall-finishes.mjs [ancien-checkout]` contrôle 24
+seeds, les triangles et la conservation des features, sans prétendre mesurer le GPU.
 Le rapport [STAIR_FIX_VALIDATION.md](../validation/STAIR_FIX_VALIDATION.md)
 distingue les contrôles CPU du contrôle visuel WebGL.
 `AtriumEnvelope` vérifie les quatre niveaux, les parois porteuses, les tunnels

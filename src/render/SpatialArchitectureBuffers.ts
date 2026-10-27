@@ -22,7 +22,7 @@ export const prepareSpatialArchitecture = (plan: WorldPlan): SpatialArchitecture
   const exposure = createFaceExposure([
     ...floors.map(source => ({ source, vertices: slabVertices(source) })),
     ...ceilings.map(source => ({ source, vertices: slabVertices(source) })),
-    ...spatial.prisms.map(source => ({ source, vertices: source.vertices })),
+    ...spatial.prisms.map(source => ({ source, vertices: source.vertices, openFaces: source.openFaces })),
   ]);
   const batches: SpatialArchitectureBuffers = [];
   const add = (name: string, material: ArchitectureBatch['material'], geometry: THREE.BufferGeometry) => {

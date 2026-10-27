@@ -1,4 +1,6 @@
 import { completeCeilingEnvelope } from './CeilingEnvelope';
+import { createSpatialBaseboards } from './SpatialBaseboards';
+import { cleanSpatialWallJunctions } from './SpatialWallJunctions';
 import { spatialTemplate, clearSpatialTemplates, transitionHost } from './SpatialTemplates';
 import { applySpatialRelief } from './SpatialRelief';
 import { reconcileStructuralSupports } from './StructuralSupports';
@@ -102,7 +104,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     const roomId = `${id}/room`;
     spatial.cells.push({ id, regionId: datum.id, bounds: b, floorY: h, mode, ...(atrium ? { atriumOwner: atrium.owner, atriumLower: atrium.lower, atriumPerimeter: atrium.perimeter } : {}) });
     world.rooms.push({ id: roomId, bounds: b, kind: mode === 'lower-maze' ? 'lower-maze' : mode === 'gallery' ? 'pit-gallery' : family === 'maze' ? 'corridor' : 'open-hall', level: 0,
-      floorY: h, ceilingHeight: roofY, structuralCeilingY: roofY, detailDensity: mode === 'void' ? 0 : .25, access: 'open' });
+      floorY: h, ceilingHeight: roofY, structuralCeilingY: roofY, baseboards: true, detailDensity: mode === 'void' ? 0 : .25, access: 'open' });
     const heritage = !atrium ? planSpatialFeature(seed, gx, gz, owner.story, b) : undefined;
     if (heritage) featureSlices.push(heritage);
     const routeReservations: Rect[] = heritage ? [expand(heritage.reservation, .8)] : [];
@@ -287,7 +289,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
         : [{ source: { ...world.rooms.find(r => r.id === roomId)!, kind: 'open-hall' as const, ceilingHeight: 2.74, id: 'hall' }, bounds: b, id: `${id}/hall` }];
       world.rooms = world.rooms.filter(r => r.id !== roomId);
       for (const part of parts) world.rooms.push({ ...part.source, id: part.id, bounds: part.bounds, floorY: h,
-        ceilingHeight: mode === 'lower-maze' ? roofY : h + part.source.ceilingHeight, structuralCeilingY: mode === 'lower-maze' ? roofY : h + part.source.ceilingHeight, access: 'open' });
+        ceilingHeight: mode === 'lower-maze' ? roofY : h + part.source.ceilingHeight, structuralCeilingY: mode === 'lower-maze' ? roofY : h + part.source.ceilingHeight, baseboards: part.source.baseboards ?? true, access: 'open' });
       const roomAt = (x: number, z: number) => parts.find(r => pointInRect(x, z, r.bounds, -.001));
       const addArchitecture = (name: string, bounds: Rect, height: number, bottom = 0, tint = 1, detail?: WallSegment['detail']) => {
         for (const [i, piece] of cutRects([bounds], protectedRoutes).entries()) wall(`${id}/bsp/${name}/${i}`, piece, h + bottom, h + height, tint, detail);
@@ -441,6 +443,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     if (!cuts.length) return [s];
     return cutRects([s.bounds], cuts.map(c => c.bounds)).map((bounds, i) => ({ ...s, id: `${s.id}/cage-cut-${i}`, bounds, profile: restrictProfile(s.bounds, s.profile, bounds) }));
   });
+  cleanSpatialWallJunctions(world);
   const rawSurfaces = topology.surfaces;
   const rebuildFloors = () => {
     const doors = new Set(world.features.filter(f => f.kind === 'interactive-door').map(f => f.colliderId));
@@ -463,18 +466,9 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
   }
   for (const light of world.lights) if (world.unlitZones.some(r => pointInRect(light.x, light.z, r))) light.dead = true;
 
-  world.baseboardlessZones = (template.baseboardlessZones ?? []).map(move);
-  for (const w of world.walls.filter(w => w.id.includes('/bsp/') && w.height > 1.8)) {
-    const room = world.rooms.find(r => pointInRect(w.x, w.z, r.bounds, -.001));
-    if (!room || w.bottom > (room.floorY ?? 0) + .05 || world.baseboardlessZones.some(z => pointInRect(w.x, w.z, z))) continue;
-    const alongX = w.orientation === 'x', y = room.floorY ?? w.bottom;
-    for (const side of [-1, 1]) {
-      const cross = (alongX ? w.z : w.x) + side * (w.thickness / 2 + .015);
-      const bounds = alongX ? { minX: w.x - w.length / 2, maxX: w.x + w.length / 2, minZ: cross - .015, maxZ: cross + .015 }
-        : { minZ: w.z - w.length / 2, maxZ: w.z + w.length / 2, minX: cross - .015, maxX: cross + .015 };
-      addPrism({ ...profilePrism(`${w.id}/baseboard-${side}`, bounds, flat(y), flat(y + .12), 'baseboard'), collision: false, tint: w.tint });
-    }
-  }
+  // Room policy comes from the canonical BSP room, including its fragments on
+  // neighbouring cells/chunks. Open halls and atria keep their coherent trim.
+  world.baseboardlessZones = world.rooms.filter(r => r.baseboards === false).map(r => ({ ...r.bounds, floorY: r.floorY ?? 0 }));
 
   world.lights = world.lights.filter(light => !world.walls.some(w => w.bottom < light.ceilingY - .02 && w.bottom + w.height > light.ceilingY - .25
     && lightPanelOverlapsRect(light, { minX: w.x - (w.orientation === 'x' ? w.length : w.thickness) / 2, maxX: w.x + (w.orientation === 'x' ? w.length : w.thickness) / 2,
@@ -502,6 +496,11 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
         : { minZ: g.min, maxZ: g.max, minX: rail - .06, maxX: rail + .06 }, y, y + 1.05));
     }
   }
+
+  // Supports and gallery parapets can bury a last ordinary fragment. Resolve
+  // those final solids before their finish, and rebuild the physical floor.
+  if (cleanSpatialWallJunctions(world)) rebuildFloors();
+  spatial.prisms.push(...createSpatialBaseboards(world));
 
   for (const s of topology.surfaces) {
     const roofs = topology.surfaces.filter(o => (o.role === 'bridge' || o.role === 'balcony') && o !== s && overlapRect(o.bounds, s.bounds) && surfaceRange(o)[0] > surfaceRange(s)[1] + .2);

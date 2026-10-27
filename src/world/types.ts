@@ -20,6 +20,11 @@ export interface Rect {
   maxZ: number;
 }
 
+export interface BaseboardlessZone extends Rect {
+  /** Spatial finish ownership; omitted on historical two-dimensional zones. */
+  floorY?: number;
+}
+
 export interface Vec3Data {
   x: number;
   y: number;
@@ -83,6 +88,8 @@ export interface RoomRecord {
   /** Local absolute floor datum; level remains the historical room category. */
   floorY?: number;
   structuralCeilingY?: number;
+  /** Whole-room finish inherited from its canonical architectural source. */
+  baseboards?: boolean;
   detailDensity: number;
   /** Restricted rooms are deliberately removed from the ordinary doorway graph. */
   access?: RoomAccess;
@@ -433,7 +440,7 @@ export interface WorldPlan {
   /** Rare contiguous room bounds whose ceiling circuit is intentionally absent. */
   unlitZones?: Rect[];
   /** Coherent districts where wall and column trims are intentionally absent. */
-  baseboardlessZones?: Rect[];
+  baseboardlessZones?: BaseboardlessZone[];
   /** Rooms reserved for strict mirrored architecture rather than generic clutter. */
   symmetryZones?: Rect[];
   /** Small coherent districts that replace wallpaper with bare plaster. */

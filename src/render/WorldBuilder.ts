@@ -1,4 +1,5 @@
 import { ArchitectureDebug, type ArchitectureDebugMode } from './ArchitectureDebug';
+import { baseboardExclusions } from '../world/BaseboardZones';
 import { mountArchitectureBatch, prepareSpatialArchitecture, type SpatialArchitectureBuffers } from './SpatialArchitectureBuffers';
 import { ceilingFixturePose } from './CeilingFixture';
 import { createWalkableGeometry } from './WalkableGeometry';
@@ -1673,38 +1674,9 @@ export class WorldView {
       const wallMin = alongCenter - wall.length * 0.5;
       const wallMax = alongCenter + wall.length * 0.5;
       const sampleOffset = wall.thickness * 0.5 + 0.04;
-      const claims = baseboardlessZones.flatMap((zone) => {
-        const crossMin = wall.orientation === 'x' ? zone.minZ : zone.minX;
-        const crossMax = wall.orientation === 'x' ? zone.maxZ : zone.maxX;
-        const min = Math.max(
-          wallMin,
-          wall.orientation === 'x' ? zone.minX : zone.minZ,
-        );
-        const max = Math.min(
-          wallMax,
-          wall.orientation === 'x' ? zone.maxX : zone.maxZ,
-        );
-        if (max - min <= 0.02) return [];
-        return ([-1, 1] as const).flatMap((side) => {
-          const sampleFixed = fixed + side * sampleOffset;
-          if (sampleFixed < crossMin + 0.02 || sampleFixed > crossMax - 0.02) return [];
-          return [{ min, max, side }];
-        });
-      }).sort((left, right) => left.side - right.side || left.min - right.min);
-      const merged: Array<{ min: number; max: number; side: -1 | 1 }> = [];
-      for (const claim of claims) {
-        const previous = merged[merged.length - 1];
-        if (
-          previous &&
-          previous.side === claim.side &&
-          claim.min <= previous.max + 0.02
-        ) {
-          previous.max = Math.max(previous.max, claim.max);
-        } else {
-          merged.push({ ...claim });
-        }
-      }
-      return merged;
+      return ([-1, 1] as const).flatMap(side => baseboardExclusions(
+        baseboardlessZones, wall.orientation, fixed + side * sampleOffset, wallMin, wallMax, .02,
+      ).map(claim => ({ ...claim, side })));
     };
     const elevationClaimsForWall = (
       wall: WallSegment,
@@ -1852,9 +1824,9 @@ export class WorldView {
           const alongCenter = (min + max) * 0.5;
           const trimDepth = side === undefined ? wall.thickness + 0.055 : 0.055;
           const trim = new THREE.BoxGeometry(
-            alongX ? length + 0.025 : trimDepth,
+            alongX ? length : trimDepth,
             0.115,
-            alongX ? trimDepth : length + 0.025,
+            alongX ? trimDepth : length,
           );
           trim.translate(
             alongX

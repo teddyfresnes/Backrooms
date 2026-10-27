@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { generateInfiniteChunk } from '../world/InfiniteWorld';
 import { profilePrism } from '../world/SpatialGeometry';
 import { slabVertices, type WalkableSurface } from '../world/WalkableTopology';
-import { createFaceExposure } from './FaceExposure';
+import { createFaceExposure, faceTriangles } from './FaceExposure';
 import { createWalkableBatch } from './WalkableGeometry';
 import { createSpatialPrismBatch } from './SpatialGeometry';
 import { mountArchitectureBatch, prepareSpatialArchitecture } from './SpatialArchitectureBuffers';
@@ -12,6 +12,11 @@ import { mountArchitectureBatch, prepareSpatialArchitecture } from './SpatialArc
 const flat = (y: number) => ({ kind: 'flat' as const, y });
 const slab: WalkableSurface = { id: 'slab', ownerStory: 0, layer: 'room', role: 'floor', bounds: { minX: 0, maxX: 6, minZ: 0, maxZ: 4 },
   profile: flat(3), ceilingY: 6, thickness: .16, support: 'slab', access: 'open', edges: 'architecture' };
+
+it('discards seam triangles whose distinct double-precision corners collapse in the GPU buffer', () => {
+  const triangle = [-49.7791557, 6.69, -16.4, -49.7783126, 6.72, -16.4, -49.7783125, 6.72, -16.4];
+  expect(faceTriangles([], 0, [triangle])).toEqual([]);
+});
 
 it('owns the floor/lintel seam once and removes the internal wall/slab interface without opening a hole', () => {
   const lintel = profilePrism('lintel', { minX: 4, maxX: 7, minZ: 0, maxZ: 4 }, flat(2), flat(3));

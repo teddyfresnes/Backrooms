@@ -15,6 +15,7 @@ export const createSpatialPrismBatch = (prisms: readonly SpatialPrism[], scale =
   for (const prism of prisms) {
     const v = prism.vertices;
     for (let face = 0; face < 6; face++) {
+      if (prism.openFaces?.includes(face)) continue;
       const points = faceTriangles(v, face, exposure?.(prism, face));
       const projection = face < 2 ? 'y' : faceProjection(v, SLAB_INDICES.slice(face * 6, face * 6 + 3));
       for (let i = 0; i < points.length; i += 3) {

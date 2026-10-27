@@ -2198,6 +2198,7 @@ const selectArchitectureZones = (
   );
   if (candidates.length === 0) {
     world.baseboardlessZones = [];
+    for (const room of world.rooms) room.baseboards = true;
     world.plasterZones = [];
     return;
   }
@@ -2215,6 +2216,8 @@ const selectArchitectureZones = (
     })
     .slice(0, baseboardCount);
   world.baseboardlessZones = baseboardRooms.map((room) => ({ ...room.bounds }));
+  const bareRoomIds = new Set(baseboardRooms.map(room => room.id));
+  for (const room of world.rooms) room.baseboards = !bareRoomIds.has(room.id);
   // Level 0 keeps the wallpaper skin throughout. The old plaster districts
   // appeared as isolated, untextured grey walls inside otherwise yellow rooms.
   world.plasterZones = [];
