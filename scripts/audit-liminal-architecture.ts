@@ -69,7 +69,10 @@ for (const [corpus, count] of [['ORDINARY', n], ['HOLDOUT', Math.ceil(n / 2)]] a
                   .map(s => { const p = rectCenter(s.bounds); return { x: p.x + address.x * 112, z: p.z + address.z * 112, y: surfaceY(s, p.x, p.z) + story * 5.4 + .865 }; }) };
               const issues = validateWorldPlan(slice); if (issues.length) errors.push({ seed, story, reason: 'vertical slice', issues });
               geometryAudit(slice);
-              if (story === a.lower) (examples[key] as Record<string, unknown>).lowerPosition = { x: center.x + address.x * 112, z: center.z + address.z * 112, y: floor + story * 5.4 + .865 };
+              if (story === a.lower && (examples[key] as { id: string }).id === f.id) {
+                (examples[key] as Record<string, unknown>).lowerPosition = { x: center.x + address.x * 112, z: center.z + address.z * 112, y: floor + story * 5.4 + .865 };
+                (examples[key] as Record<string, unknown>).lowerOwner = { ...address, story };
+              }
             }
           }
         }

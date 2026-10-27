@@ -23,11 +23,16 @@ export const liminalGallerySides = (a: AtriumPlan): Side[] => {
   return [sides[l.side]!, ...(l.layout === 'opposed' ? [sides[(l.side + 2) % 4]!] : l.layout === 'corner' ? [sides[(l.side + 1) % 4]!] : [])];
 };
 export const liminalGalleryPresent = (a: AtriumPlan, story: number) => story > a.lower && (story === a.owner || a.liminal!.midGallery);
+const cornerTowardMax = (a: AtriumPlan, side: Side): boolean => {
+  const other = liminalGallerySides(a).find(s => s !== side);
+  return side === 'north' || side === 'south' ? other === 'east' : other === 'south';
+};
 export const liminalPlatform = (b: Rect, a: AtriumPlan, story: number, side: Side): Rect => {
   const inner = insetAtrium(b, a.ringWidth), l = a.liminal!, alongX = side === 'north' || side === 'south';
   const min = alongX ? inner.minX : inner.minZ, max = alongX ? inner.maxX : inner.maxZ;
   const fraction = l.layout === 'end' ? .94 : side === sides[l.side] ? l.length : Math.max(.44, 1.12 - l.length);
-  const span = (max - min) * fraction, offset = l.layout === 'corner' ? side === sides[l.side] ? .4 : .6 : .5;
+  const span = Math.min(max - min, Math.max((max - min) * fraction, l.layout === 'corner' ? 10.8 : 0));
+  const offset = l.layout === 'corner' ? cornerTowardMax(a, side) ? 1 : 0 : .5;
   const start = min + (max - min - span) * offset;
   return sideRect(inner, side, start, start + span, 0, (l.layout === 'end' ? 3.2 : 2.2) + (a.owner - story) * 2.4);
 };
@@ -51,9 +56,16 @@ export const installLiminalAtrium = (w: WorldPlan, id: string, roomId: string, b
   const addWall = (wall: OpeningWall) => { appendOpeningWall(w, wall); feature.walls.push(wall); };
   const rows = (s: number, side: Side): ArchitecturalOpening[] => {
     const y = h + (s - story) * 5.4, p = liminalPlatform(b, a, s, side), alongX = side === 'north' || side === 'south';
-    const min = (alongX ? p.minX : p.minZ) + .65, max = (alongX ? p.maxX : p.maxZ) - .65;
-    return passageRow(root.fork(`row/${s}/${side}`), min, max, y, y + 2.74,
-      root.fork(`rhythm/${side}`).pick(['single', 'rhythm', 'right-cluster', 'mixed', 'rect-rhythm', 'wide-and-small'] as const));
+    let min = (alongX ? p.minX : p.minZ) + .65, max = (alongX ? p.maxX : p.maxZ) - .65;
+    if (l.layout === 'corner') {
+      // Keep actual doorways and their lower landing pads outside the solid
+      // support of the perpendicular arm. The visible L itself stays joined.
+      const margin = frontDepth(a, s) + .95;
+      if (cornerTowardMax(a, side)) max = Math.min(max, (alongX ? inner.maxX : inner.maxZ) - margin);
+      else min = Math.max(min, (alongX ? inner.minX : inner.minZ) + margin);
+    }
+    const pattern = root.fork(`rhythm/${side}`).pick(['single', 'rhythm', 'right-cluster', 'mixed', 'rect-rhythm', 'wide-and-small'] as const);
+    return passageRow(root.fork(`row/${s}/${side}`), min, max, y, y + 2.74, max - min < 7 ? 'single' : pattern);
   };
   const destination = (s: number, side: Side, index: number, along: number) => {
     const target = targetStory(a, s), point = sidePoint(inner, side, along, frontDepth(a, s) + .95);

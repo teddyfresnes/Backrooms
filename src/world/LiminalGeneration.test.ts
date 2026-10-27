@@ -4,6 +4,7 @@ import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { generateInfiniteChunk, clearInfiniteWorldCaches, getChunkWorldOffset, getCanonicalEdgeGates } from './InfiniteWorld';
 import { regionalAtrium } from './RegionalPlan';
 import { liminalGalleryPresent } from './LiminalAtrium';
+import { insetAtrium } from './AtriumEnvelope';
 import { findSurface, surfaceY, validateTopology } from './WalkableTopology';
 import { pointInRect, rectCenter, type WorldPlan } from './types';
 
@@ -27,6 +28,16 @@ it('constructs partial galleries, real tunnels and canonical lower destinations 
       expect(feature.stairCount).toBeLessThanOrEqual(1); partial++;
       const physics = await PhysicsWorld.create(w);
       try {
+        const entry = { x: feature.bounds.minX + 14, z: feature.bounds.minZ + .8 }, h = feature.floorLevels[0]!;
+        expect(findSurface(w, { ...entry, referenceY: h, maxAbove: .05, maxBelow: .05 })).toBeDefined();
+        expect(physics.canStandAt({ ...entry, y: h + .865 }), `${seed}/${s} canonical entry`).toBe(true);
+        if (layout === 'corner' && liminalGalleryPresent(a, s)) {
+          const inner = insetAtrium(feature.bounds, a.ringWidth), offset = (a.owner - s) * 2.4 + .8;
+          const corner = { x: feature.visibleSides.includes('east') ? inner.maxX - offset : inner.minX + offset,
+            z: feature.visibleSides.includes('south') ? inner.maxZ - offset : inner.minZ + offset };
+          expect(findSurface(w, { ...corner, referenceY: h, maxAbove: .05, maxBelow: .05 }), 'continuous visible L').toBeDefined();
+          expect(physics.canStandAt({ ...corner, y: h + .865 })).toBe(true);
+        }
         for (const wall of feature.walls.filter(w => w.id.includes('/inner-'))) for (const opening of wall.openings) {
           const along = (opening.min + opening.max) / 2, alongX = wall.axis === 'x', floor = feature.floorLevels[0]!;
           for (const sign of [-1, 1]) {
