@@ -1,6 +1,7 @@
 import type { InfiniteEdgeGates } from './InfiniteWorld';
 import type { WalkableTopology } from './WalkableTopology';
 import type { SpatialArchitecture } from './SpatialTypes';
+import type { LiminalArchitectureFeature } from './ArchitecturalOpenings';
 
 export type RoomKind =
   | 'office'
@@ -50,6 +51,7 @@ export interface WallSegment {
   collision: boolean;
   kind: 'wallpaper' | 'plaster' | 'vista-frame';
   detail?:
+    | 'architectural-opening'
     | 'recess'
     | 'ceiling-drop'
     | 'upper-shell'
@@ -163,6 +165,11 @@ export interface GridPitFeature {
   lowerBounds: Rect;
   lowerFloorY: number;
   lowerCeilingY: number;
+}
+
+export interface LiminalPitFeature extends Omit<GridPitFeature, 'kind' | 'pattern'> {
+  kind: 'liminal-pit';
+  family: 'offset-well' | 'fault' | 'paired-wells' | 'sunken-court';
 }
 
 export interface VistaFeature {
@@ -356,6 +363,8 @@ export interface CeilingZone {
 }
 
 export type WorldFeature =
+  | LiminalArchitectureFeature
+  | LiminalPitFeature
   | GridPitFeature
   | VistaFeature
   | EpicStructureFeature

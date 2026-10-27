@@ -1,4 +1,6 @@
 import { completeCeilingEnvelope } from './CeilingEnvelope';
+import { installLiminalAtrium } from './LiminalAtrium';
+import { installOrdinaryArchitecture, connectArchitecturalOpenings } from './LiminalArchitecture';
 import { createSpatialBaseboards } from './SpatialBaseboards';
 import { cleanSpatialWallJunctions } from './SpatialWallJunctions';
 import { spatialTemplate, clearSpatialTemplates, transitionHost } from './SpatialTemplates';
@@ -37,7 +39,7 @@ const expand = (r: Rect, d: number): Rect => ({ minX: r.minX - d, maxX: r.maxX +
  */
 export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?: SurfaceStyle, boundaryGates?: InfiniteEdgeGates): WorldPlan => {
   const offset = { x: owner.x * 112, z: owner.z * 112 }, local = (b: Rect): Rect => ({ minX: b.minX - offset.x, maxX: b.maxX - offset.x, minZ: b.minZ - offset.z, maxZ: b.maxZ - offset.z });
-  const world: WorldPlan = { version: 16, seed, size: 112, wallHeight: 3.05, rooms: [], walls: [], columns: [], solidMasses: [], lights: [], missingCeilingTiles: [],
+  const world: WorldPlan = { version: 17, seed, size: 112, wallHeight: 3.05, rooms: [], walls: [], columns: [], solidMasses: [], lights: [], missingCeilingTiles: [],
     features: [], detailSockets: [], colliders: [], floorRects: [], floorOpenings: [], ceilingOpenings: [], stairCeilingOpenings: [], spawn: { x: 0, y: 0, z: 0 }, surfaceStyle: style, edgeGates: boundaryGates,
     topology: { version: TOPOLOGY_VERSION, ownerStory: owner.story, surfaces: [], connections: [], volumes: [], diagnostics: [] },
     spatial: { version: 2, owner: { ...owner }, cells: [], ceilings: [], prisms: [], dependencies: [], interfaces: [], landmarks: [], transitions: [] } };
@@ -108,7 +110,9 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     const heritage = !atrium ? planSpatialFeature(seed, gx, gz, owner.story, b) : undefined;
     if (heritage) featureSlices.push(heritage);
     const routeReservations: Rect[] = heritage ? [expand(heritage.reservation, .8)] : [];
-    if (atrium) {
+    if (atrium?.liminal) {
+      installLiminalAtrium(world, id, roomId, b, atrium, h, (name, bounds, profile, role, ceiling) => addSurface(name, roomId, bounds, profile, role, false, ceiling));
+    } else if (atrium) {
       for (let story = atrium.lower; story <= atrium.owner; story++) dependency(story, b, h + (atrium.lower - owner.story) * 5.4, roofY, 'atrium');
       const hole = atriumSection(b, atrium, owner.story).hole;
       const pockets = owner.story === atrium.lower ? atriumStairPocket(b, h + (atrium.owner - owner.story) * 5.4, atrium) : [];
@@ -269,7 +273,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
 
     // Restore the actual BSP shapes, opening distributions and architectural
     // details. The regional plan supplies final datums and protected routes.
-    if (mode === 'rooms' || mode === 'lower-maze') {
+    if ((mode === 'rooms' || mode === 'lower-maze') && !atrium?.liminal) {
       const protectedRoutes: Rect[] = [];
       if (mode === 'lower-maze') {
         for (let x = b.minX + 14; x < b.maxX; x += 28) protectedRoutes.push({ ...b, minX: x - 2.2, maxX: x + 2.2 });
@@ -346,11 +350,11 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
           for (const sx of [-1, 1]) { const x = p.x + sx * 8, z = p.z + sz * 8, room = roomAt(x, z); if (room && !lightBlocked(x, z)) world.lights.push({ id: `${id}/lower-light-${sx}-${sz}`, x, z, roomId: room.id, ceilingY: h + 2.74, width: 1.55, rotation: 0, intensity: 1.08, color: 0xffffe4, dead: false, unstable: false, phase: 0, level: 0 }); }
         }
       }
-    } else if (mode === 'gallery') {
+    } else if (mode === 'gallery' && !atrium?.liminal) {
       for (const x of [b.minX + 1.5, b.maxX - 1.5]) for (const z of [b.minZ + 1.5, b.maxZ - 1.5])
         world.lights.push({ id: `${id}/high-light/${x}/${z}`, x, z, ceilingY: roofY, width: 1.55, rotation: 0, intensity: 1.08, color: 0xffffe4, dead: false, unstable: false, phase: 0, roomId, level: 0 });
     }
-    if (atrium && mode !== 'gallery') for (const [i, point] of atriumEntryLightPoints(b, atrium).entries()) {
+    if (atrium && !atrium.liminal && mode !== 'gallery') for (const [i, point] of atriumEntryLightPoints(b, atrium).entries()) {
       const room = world.rooms.find(r => pointInRect(point.x, point.z, r.bounds, -.001) && Math.abs((r.floorY ?? 0) - h) < .01);
       world.lights.push({ id: `${id}/entry-light/${i}`, ...point, ceilingY: h + 2.74, roomId: room?.id ?? roomId, width: 1.55, rotation: 0,
         intensity: 1.08, color: 0xffffe4, dead: false, unstable: false, phase: 0, level: 0 });
@@ -458,6 +462,9 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
   rebuildFloors();
   reconcileStructuralSupports(world, wall);
   completeCeilingEnvelope(world, addPrism);
+  const wallCount = world.walls.length;
+  installOrdinaryArchitecture(world, featureSlices.map(s => s.reservation));
+  if (world.walls.length !== wallCount) rebuildFloors();
 
   world.unlitZones = [];
   for (const zone of template.unlitZones ?? []) {
@@ -519,6 +526,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
   }
   connectSpatialFeatures(world, featureSlices);
   connectSpatialSurfaces(world);
+  connectArchitecturalOpenings(world);
   world.colliders.push(...topology.surfaces.map(s => s.role === 'floor' ? slabMeshCollider(s) : surfaceCollider(s)), ...spatial.ceilings.map(s => ({ ...surfaceCollider(s), id: s.id, kind: 'barrier' as const })));
   topology.volumes = topology.surfaces.flatMap(s => [{ id: `${s.id}/clearance`, surfaceId: s.id, bounds: s.bounds, bottom: surfaceRange(s)[0], top: s.ceilingY, purpose: 'clearance' as const, ownerStory: owner.story },
     { id: `${s.id}/structure`, surfaceId: s.id, bounds: s.bounds, bottom: s.support === 'solid' ? s.supportBottom ?? surfaceRange(s)[0] - .16 : surfaceRange(s)[0] - .16, top: surfaceRange(s)[1], purpose: 'structure' as const, ownerStory: owner.story }]);
@@ -572,7 +580,8 @@ export const connectSpatialSurfaces = (world: WorldPlan): void => {
     }
   }
   for (const door of world.features) if (door.kind === 'interactive-door') {
-    const alongX = door.orientation === 'x', d = (alongX ? door.bounds.maxZ - door.bounds.minZ : door.bounds.maxX - door.bounds.minX) / 2 + .4;
+    // Link the actual threshold halves on their common door plane.
+    const alongX = door.orientation === 'x', d = .04;
     const ends = [-1, 1].map(sign => findSurface(world, { x: door.position.x + (alongX ? 0 : sign * d), z: door.position.z + (alongX ? sign * d : 0), referenceY: door.position.y, maxAbove: .05, maxBelow: .05 }));
     if (ends[0] && ends[1] && ends[0] !== ends[1]) links.push({ id: `join/door/${door.id}`, from: ends[0].id, to: ends[1].id,
       at: { x: door.position.x, z: door.position.z }, width: door.width, kind: 'walk', direction: 'both', access: 'open', requiresDoorId: door.id });

@@ -13,6 +13,7 @@ export const applySpatialRelief = (w: WorldPlan, avoid: readonly Rect[]): void =
     if (!['rooms', 'lower-maze'].includes(cell.mode)) continue;
     const match = /cell\/(-?\d+)\/(-?\d+)\//.exec(cell.id)!;
     const gx = Number(match[1]), gz = Number(match[2]), atrium = regionalAtrium(w.seed, gx, gz, spatial.owner.story);
+    if (atrium?.liminal) continue;
     const rng = new SeededRandom(`${w.seed}:solid-relief:v1:${gx}:${gz}:${spatial.owner.story}`);
     const ordinary = cell.mode === 'rooms';
     if (ordinary ? regionalStyle(w.seed, cell.regionId).family === 'maze' || !rng.chance(.65)

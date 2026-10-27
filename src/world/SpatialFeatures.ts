@@ -1,16 +1,17 @@
 import { restrictProfile } from './TransitionLayout';
+import { proposeLiminalPit } from './LiminalPits';
 import { buildGridPit, proposeSpatialCrawl } from './generateWorld';
 import { SeededRandom } from './SeededRandom';
 import { regionalAtrium, regionalCellId, regionalDatum } from './RegionalPlan';
 import { profilePrism, offsetProfile } from './SpatialGeometry';
 import { cutRects, findSurface, overlapRect, surfaceRange, type WalkableSurface } from './WalkableTopology';
-import { rectCenter, rectDepth, type GridPitFeature, type Rect, type SqueezeViewFeature, type WallSegment, type WorldPlan } from './types';
+import { rectCenter, rectDepth, type GridPitFeature, type LiminalPitFeature, type Rect, type SqueezeViewFeature, type WallSegment, type WorldPlan } from './types';
 import type { SpatialPrism } from './SpatialTypes';
 
 export interface SpatialFeatureSlice {
   id: string; sourceStory: number; targetStory: number; phase: 'source' | 'through' | 'landing';
   reservation: Rect; holes: Rect[]; void: boolean;
-  feature: GridPitFeature | SqueezeViewFeature; walls: WallSegment[]; floorY: number;
+  feature: GridPitFeature | SqueezeViewFeature | LiminalPitFeature; walls: WallSegment[]; floorY: number;
 }
 const flat = (y: number) => ({ kind: 'flat' as const, y });
 const memo = new Map<string, SpatialFeatureSlice | undefined>();
@@ -54,6 +55,24 @@ export const planSpatialFeature = (seed: string, gx: number, gz: number, story: 
         }
       }
     }
+    // Fallback only: historical grids and passages keep their exact proposals.
+    if (!proposal && stable) {
+      const extra = new SeededRandom(`${key}:liminal-shaft:v1`);
+      if (extra.chance(.45)) {
+        const p = rectCenter(b), reservation = { minX: p.x - 9.4, maxX: p.x + 9.4, minZ: p.z - 9.4, maxZ: p.z + 9.4 };
+        const id = `${regionalCellId(gx, gz, sourceStory)}/liminal-pit`, feature = proposeLiminalPit(key, id, reservation, datum.y);
+        const isVoid = extra.fork('void').chance(.08), reach = isVoid ? 10 : extra.fork('depth').weighted([
+          { value: 1, weight: .35 }, { value: 2, weight: .3 }, { value: 3, weight: .2 }, { value: 5, weight: .15 }]);
+        if (Array.from({ length: reach + 1 }, (_, i) => sourceStory - i).every(s => !regionalAtrium(seed, gx, gz, s))) {
+          for (const hole of feature.holes) { hole.kind = isVoid ? 'void' : 'drop'; hole.stories = reach; hole.depth = reach * 5.4; }
+          feature.depth = reach * 5.4;
+          feature.lowerFloorY = datum.y - reach * 5.4; feature.lowerCeilingY = feature.lowerFloorY + 2.74;
+          proposal = { id, sourceStory, targetStory: sourceStory - reach, phase: 'source', reservation,
+            holes: feature.holes.map(({ minX, maxX, minZ, maxZ }) => ({ minX, maxX, minZ, maxZ })),
+            void: isVoid, feature, walls: [], floorY: datum.y };
+        }
+      }
+    }
     memo.set(key, proposal); if (memo.size > 256) memo.delete(memo.keys().next().value!);
   }
   if (!proposal || story < proposal.targetStory || story > proposal.sourceStory) return;
@@ -71,7 +90,7 @@ export const installSpatialFeature = (w: WorldPlan, p: SpatialFeatureSlice, hook
   const t = w.topology!, spatial = w.spatial!, owner = spatial.owner, h = p.floorY;
   const rid = `${p.id}/room/${owner.story}`, delta = (p.sourceStory - owner.story) * 5.4;
   w.rooms.push({ id: rid, bounds: p.reservation, floorY: h, ceilingHeight: h + 2.74, structuralCeilingY: h + 2.74,
-    kind: p.feature.kind === 'grid-pit' ? 'pit-gallery' : 'office', level: 0, access: 'open', detailDensity: .1 });
+    kind: p.feature.kind !== 'squeeze-view' ? 'pit-gallery' : 'office', level: 0, access: 'open', detailDensity: .1 });
   const cut = (surfaces: WalkableSurface[], cuts: readonly Rect[], label: string) => surfaces.flatMap(s => {
     if (Math.abs(surfaceRange(s)[0] - h) > .001 || s.profile.kind !== 'flat' || !cuts.some(b => overlapRect(b, s.bounds))) return [s];
     return cutRects([s.bounds], cuts).map((bounds, i) => ({ ...s, id: `${s.id}/${label}-${i}`, bounds }));
@@ -122,7 +141,7 @@ export const installSpatialFeature = (w: WorldPlan, p: SpatialFeatureSlice, hook
         }));
       }
     }
-    spatial.landmarks.push({ kind: p.feature.kind === 'grid-pit' ? 'trous-historiques' : p.feature.passageStyle === 'wall-breach' ? 'passage-mural' : 'passage-accroupi',
+    spatial.landmarks.push({ kind: p.feature.kind === 'grid-pit' ? 'trous-historiques' : p.feature.kind === 'liminal-pit' ? `fosse-${p.feature.family}` : p.feature.passageStyle === 'wall-breach' ? 'passage-mural' : 'passage-accroupi',
       position: { x: p.reservation.minX + .8, y: h + .865, z: rectCenter(p.reservation).z } });
   }
   // Remove walls' footprints from the source/arrival floor too; crawl lintels

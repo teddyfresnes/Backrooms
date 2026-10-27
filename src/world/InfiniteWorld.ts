@@ -2117,6 +2117,10 @@ const emitBiomeBoundarySkin = (
 };
 
 const prefixFeature = (feature: WorldFeature, prefix: string): WorldFeature => {
+  if (feature.kind === 'liminal-architecture') return { ...feature, id: prefix + feature.id, roomId: prefix + feature.roomId,
+    walls: feature.walls.map(w => ({ ...w, id: prefix + w.id, openings: w.openings.map(o => ({ ...o, ...(o.destination ? { destination: { ...o.destination,
+      surfaceId: `chunk-${o.destination.owner.x}:${o.destination.owner.z}:${o.destination.owner.story}/` + o.destination.surfaceId } } : {}) })) })) };
+  if (feature.kind === 'liminal-pit') return { ...feature, id: prefix + feature.id, roomId: prefix + feature.roomId };
   if (feature.kind === 'grid-pit' || feature.kind === 'epic-structure') {
     return { ...feature, id: `${prefix}${feature.id}`, roomId: `${prefix}${feature.roomId}` };
   }
@@ -2462,7 +2466,7 @@ export const isInfiniteChunkPlan = (plan: WorldPlan): boolean => metadataByPlan.
 export const getFloorOpenings = (plan: WorldPlan): readonly Readonly<Rect>[] =>
   freezeRects(
     plan.floorOpenings ?? plan.features.flatMap((feature): Rect[] =>
-      feature.kind === 'grid-pit'
+      feature.kind === 'grid-pit' || feature.kind === 'liminal-pit'
         ? (feature as GridPitFeature).holes.map(cloneRect)
         : [],
     ),

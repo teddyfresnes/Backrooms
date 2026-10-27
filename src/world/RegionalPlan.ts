@@ -83,6 +83,7 @@ export interface AtriumPlan {
   routeKind: 'ramp' | 'stairs'; openLower: boolean;
   composition: 'gallery' | 'terraces' | 'mounds';
   perimeter: 'gallery' | 'stepped'; terraceWidth: number;
+  liminal?: { layout: 'side' | 'opposed' | 'corner' | 'end'; side: number; length: number; midGallery: boolean; terrace: number; terraceStairs: boolean };
 }
 /** Canonical 2x2 planning domains choose one 1..4-cell room. Domains align
  * with chunk boundaries; its clipped BSP neighbours need no generated state. */
@@ -111,9 +112,16 @@ export const regionalAtrium = (seed: string, x: number, z: number, story: number
   const perimeter = stepped ? 'stepped' : 'gallery';
   const stairs = rng.chance(.5), ringWidth = rng.float(2.7, 4.8);
   const terraceWidth = Math.min(rng.fork('terrace-width').float(2.4, 4.8), (Math.min(cellsX, cellsZ) * 14 - 4 - ringWidth) / Math.max(1, depth - 1));
+  const extra = rng.fork('liminal-composition:v1');
+  const variant = rng.fork('circulation-variant').pick(['L', 'U', 'bridge'] as const);
+  // Preserve the historical split L bridge and its intentional jump route.
+  const liminal = perimeter === 'gallery' && !stairs && !(variant === 'L' && depth > 1) && extra.chance(.48) ? {
+    layout: extra.pick(['side', 'opposed', 'corner', 'end'] as const), side: extra.int(0, 3), length: extra.float(.48, .86),
+    midGallery: extra.chance(.55), terrace: extra.chance(.6) ? extra.float(.8, 2.2) : 0, terraceStairs: extra.chance(.32),
+  } : undefined;
   return { owner, lower: owner - depth, anchorX, anchorZ, cellsX, cellsZ,
-    variant: rng.fork('circulation-variant').pick(['L', 'U', 'bridge'] as const), stairs: perimeter === 'gallery' && stairs,
-    ringWidth, terraceWidth, perimeter, routeWidth: rng.float(2.4, 3.8), midFraction: rng.float(.4, .6),
+    variant, stairs: perimeter === 'gallery' && stairs,
+    ringWidth: liminal ? extra.fork('service-width').float(4.2, 5.2) : ringWidth, terraceWidth, perimeter, ...(liminal ? { liminal } : {}), routeWidth: rng.float(2.4, 3.8), midFraction: rng.float(.4, .6),
     routeKind: rng.chance(.55) ? 'ramp' : 'stairs', openLower: rng.chance(.6) || perimeter === 'stepped',
     composition: rng.weighted([{ value: 'gallery' as const, weight: .55 }, { value: 'terraces' as const, weight: .25 }, { value: 'mounds' as const, weight: .2 }]) };
 };
