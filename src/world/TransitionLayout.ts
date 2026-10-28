@@ -81,7 +81,7 @@ export const fitTransitionEnvironment = (t: TransitionLayout, sourceCeilingY: nu
     t.approachCeilingY = t.landingCeilingY = sourceCeilingY;
     t.roof = { kind: 'flat', y: sourceCeilingY };
     t.clearance = sourceCeilingY - Math.max(t.startY, t.endY);
-    if (Math.abs(sourceCeilingY - targetCeilingY) > .001)
+    if (Math.abs(sourceCeilingY - targetCeilingY) > .031)
       t.roomRoofJoin = { bottom: Math.min(sourceCeilingY, targetCeilingY) + .03, top: Math.max(sourceCeilingY, targetCeilingY) };
   } else {
     // Open through the actual next slab, not a separate diagonal ceiling tile.

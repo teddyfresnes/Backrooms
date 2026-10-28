@@ -9,7 +9,7 @@ import { reconcileStructuralSupports } from './StructuralSupports';
 import { atriumEntryLightPoints, atriumSection, atriumSupportBands } from './AtriumEnvelope';
 import { installSteppedAtrium } from './SteppedAtrium';
 import { clearSpatialFeatureCache, planSpatialFeature, installSpatialFeature, connectSpatialFeatures, type SpatialFeatureSlice } from './SpatialFeatures';
-import { planRegionalTransition, fitTransitionEnvironment, transitionRoofBounds, restrictProfile, transitionTreads } from './TransitionLayout';
+import { planRegionalTransition, fitTransitionEnvironment, transitionRoofBounds, restrictProfile } from './TransitionLayout';
 import { completeOpenTransitionEnvelope } from './OpenTransitionEnvelope';
 import { transitionSurfaces } from './TransitionSurfaces';
 import { stitchBspPartitions } from './BspConnectivity';
@@ -21,7 +21,7 @@ import type { SpatialAddress, SpatialPrism } from './SpatialTypes';
 import type { InfiniteEdgeGates } from './InfiniteWorld';
 import { atriumCirculation, atriumGround, atriumGroundId, atriumTreads, atriumStairPocket, enclosedAtriumLanding, legTreads, atriumLandingPads, atriumArrival } from './SpatialConnectors';
 import { endpointStairRun, offsetProfile, prismCollider, profilePrism, slabMeshCollider } from './SpatialGeometry';
-import { classifySurfaceAccess, cutRects, findSurface, overlapRect, surfaceCollider, surfaceRange, surfaceY, surfaceNormal, TOPOLOGY_VERSION,
+import { classifySurfaceAccess, cutRects, findSurface, overlapRect, surfaceCollider, surfaceRange, surfaceY, TOPOLOGY_VERSION,
   type HeightProfile, type SurfaceConnection, type WalkableSurface } from './WalkableTopology';
 
 const sides = ['north', 'east', 'south', 'west'] as const;

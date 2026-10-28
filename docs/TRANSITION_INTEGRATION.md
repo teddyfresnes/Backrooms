@@ -1,4 +1,4 @@
-# Transitions et volumes intégrés — version 16
+# Transitions et volumes intégrés — version 18
 
 Les salles ordinaires conservent le BSP historique, ses murs épais et ses
 matériaux. Les coordonnées de story restent des adresses, pas un sol par défaut.
@@ -9,13 +9,30 @@ matériaux. Les coordonnées de story restent des adresses, pas un sol par défa
 5,6 m, volée unique majoritaire ou vrai palier, dénivelés partiels. Les centres
 restent espacés d'au moins 49 m, avec au plus une transition sélectionnée par
 cellule. Les deux moitiés partagent leur `linkId`, dimensions et datum médian.
+Une grande salle ouverte partage une composition canonique sur tout son district :
+un seul relief proposé, au plus deux accès distants d'au moins 98 m. Ce budget
+précède les réservations, s'applique des deux côtés et ne modifie pas le BSP.
 
 `SpatialTemplates` interroge les mêmes domaines BSP de 224 m que la génération,
-y compris à travers un chunk. Le plafond d'approche suit les vraies pièces
-recoupées ; le toit rejoint la moyenne canonique des deux plafonds à la couture.
-Le dégagement minimum de calcul est 2,74 m, laissant plus de 2,50 m sur les
-marches et sous les panneaux. Les toits n'imposent plus 3,8 ou 4,05 m partout.
-L'épaisseur normale des dalles est prise en compte dans leur vraie sous-face.
+y compris à travers un chunk. `TransitionLayout.roofPolicy` choisit avant
+matérialisation une des trois enveloppes, appliquée par `TransitionSurfaces` :
+
+- `room` conserve le vrai plafond plat, seulement si les pièces recoupées ont
+  un plafond uniforme et assez de dégagement sur les deux moitiés. Les chants
+  entre deux plafonds différents sont fermés au-dessus du passage.
+- `upper-slab` perce le plafond local. La sous-face du vrai sol du propriétaire
+  supérieur couvre la volée. Aucun toit indépendant n'est rendu ou simulé ici.
+  La dépendance physique supérieure est explicite ; `OpenTransitionEnvelope`
+  ferme le plénum de la dalle de pièce, sans remplir le vide de la circulation.
+- `flight` conserve un toit propre pour une transition réellement encloisonnée.
+  Il raccorde les vrais plafonds aux extrémités et leur moyenne canonique au joint.
+
+Le dégagement minimum reste 2,74 m, plus de 2,50 m sur marches et luminaires.
+La sous-face réelle tient compte de l'épaisseur normale de chaque dalle.
+Les marches sous une dalle supérieure en marches gardent un profil de plafond
+par marche ; leur luminaire se place sous l'approche plate. Les rampes ouvertes
+gardent un panneau parallèle à la vraie sous-face supérieure. Métadonnées,
+éclairage, collisions et rendu ne doivent pas dépendre d'un toit supprimé.
 
 La couverture des murs parallèles des deux extrémités décide si la volée est
 ouverte, adossée à un seul côté ou réellement encloisonnée. Elle vient du BSP

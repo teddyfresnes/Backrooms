@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import * as THREE from 'three';
+import RAPIER from '@dimforge/rapier3d';
 vi.mock('@dimforge/rapier3d', async () => import('../../node_modules/@dimforge/rapier3d/rapier.js'));
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { generateWorld } from '../world/generateWorld';
@@ -9,6 +10,44 @@ import { generateInfiniteChunk, getChunkWorldOffset, createChunkKey } from '../w
 import type { BiomeMaterialSets, MaterialSet } from '../render/MaterialLibrary';
 import type { ChunkCoord } from '../world/InfiniteWorld';
 import type { WorldPlan } from '../world/types';
+import { predictFallOwners } from './FallPrefetch';
+
+it('mounts prepared real fall owners one per frame before their landing is reached', async () => {
+  const plan=generateInfiniteChunk('REGIONAL-AUDIT-2',{x:0,z:0,story:0});
+  const cell=plan.spatial!.cells.find(c=>c.mode==='gallery'&&c.atriumLower===-2)!;
+  const position=new THREE.Vector3((cell.bounds.minX+cell.bounds.maxX)/2,cell.floorY+.865,(cell.bounds.minZ+cell.bounds.maxZ)/2-5),velocity=new THREE.Vector3(0,-22,0);
+  const forecast=predictFallOwners(plan.seed,position,velocity);expect(forecast).toContainEqual({x:0,z:0,story:-2});
+  const material=Object.fromEntries(['wall','plaster','floor','ceiling','baseboard','pitWall','pitBottom','metal','fixtureFrame','fixtureGlow','void']
+    .map(name=>[name,name==='fixtureGlow'||name==='void'?new THREE.MeshBasicMaterial():new THREE.MeshStandardMaterial()])) as unknown as MaterialSet;
+  const sets=Object.fromEntries(['yellow','red','white','dim'].map(k=>[k,material])) as BiomeMaterialSets;
+  const physics=await PhysicsWorld.create({...plan,colliders:[]}),retained=physics.world.colliders.len();
+  const stream=new WorldStream(plan.seed,plan,new THREE.Scene(),sets,physics);
+  type Probe={initialized:boolean;worker:unknown;workerInFlight:unknown;mountChunk(plan:WorldPlan,coord:ChunkCoord):void;clearMountedChunks():void;
+    preparedChunks:Map<string,{plan:WorldPlan}>;verticalPrefetchQueue:ChunkCoord[];enqueueVerticalPrefetch(c:ChunkCoord,priority:boolean):void};
+  const probe=stream as unknown as Probe;probe.initialized=true;
+  probe.mountChunk(plan,{x:0,z:0,story:0});
+  for(const coord of forecast)probe.preparedChunks.set(createChunkKey(coord),{plan:generateInfiniteChunk(plan.seed,coord)});
+  probe.worker={postMessage(){}};
+  const mount=vi.spyOn(probe,'mountChunk');
+  try {
+    for(let i=0;i<forecast.length;i++){
+      mount.mockClear();stream.update(i/60,1/60,position,new THREE.Vector3(0,-1,0),velocity);
+      expect(mount.mock.calls.length).toBeLessThanOrEqual(1);
+    }
+    const target=generateInfiniteChunk(plan.seed,{x:0,z:0,story:-2}),offset=getChunkWorldOffset({x:0,z:0,story:-2});
+    const surface=target.topology!.surfaces.find(s=>s.role==='floor'&&s.profile.kind==='flat'&&Math.abs(s.profile.y-cell.floorY)<.01&&s.bounds.minX>=cell.bounds.minX&&s.bounds.maxX<=cell.bounds.maxX&&s.bounds.minZ>=cell.bounds.minZ&&s.bounds.maxZ<=cell.bounds.maxZ)!;
+    expect(surface).toBeDefined();const arrival={x:(surface.bounds.minX+surface.bounds.maxX)/2,y:cell.floorY+offset.y,z:(surface.bounds.minZ+surface.bounds.maxZ)/2};
+    const hit=physics.world.castRay(new RAPIER.Ray({x:arrival.x,y:arrival.y+.5,z:arrival.z},{x:0,y:-1,z:0}),1,true,
+      undefined,undefined,undefined,undefined,c=>physics.isEnvironmentCollider(c)&&physics.getEnvironmentKind(c)==='floor');
+    expect(hit?.timeOfImpact).toBeCloseTo(.5,3);expect(offset.y).toBe(-10.8);
+    expect(position.y-arrival.y).toBeGreaterThan(8);expect(stream.getDebugCounts().chunks).toBeLessThanOrEqual(21);
+    probe.workerInFlight={};for(let i=1;i<40;i++)probe.enqueueVerticalPrefetch({x:0,z:0,story:-i},true);
+    expect(probe.verticalPrefetchQueue.length).toBeLessThanOrEqual(8);
+  } finally {
+    probe.worker=undefined;probe.workerInFlight=undefined;probe.clearMountedChunks();
+    expect(physics.world.colliders.len()).toBe(retained);physics.dispose();Object.values(material).forEach(m=>m.dispose());
+  }
+},30000);
 
 it('keeps raised support in its owner story, restores both layers and releases an unsupported fall', async () => {
   const plan = generateWorld('VERTICAL-STREAM-SAVE');

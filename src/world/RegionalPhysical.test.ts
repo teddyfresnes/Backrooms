@@ -244,11 +244,24 @@ it('physically completes a multi-chunk loop through several regional datums in b
     for (const p of w.spatial!.interfaces) ports.set(p.id, [...(ports.get(p.id) ?? []), { surfaceId: p.surfaceId, at: { x: p.position.x + o.x, z: p.position.z + o.z, y: p.position.y + o.y + .865 } }]);
   }
   for (const values of ports.values()) for (const a of values) for (const b of values) if (a !== b) link(a.surfaceId, b.surfaceId, a.at);
+  // A coarse cell component can enter a different BSP pocket at the edge of
+  // this finite nine-chunk fixture. Select one actual connected surface network
+  // containing all three requested datums before choosing its standing points.
+  const unvisited = new Set(nodes.keys()), components: Set<string>[] = [];
+  while (unvisited.size) {
+    const first=unvisited.values().next().value!,queue=[first],seen=new Set([first]);unvisited.delete(first);
+    for(let i=0;i<queue.length;i++)for(const edge of graph.get(queue[i]!)??[])if(!seen.has(edge.to)){seen.add(edge.to);unvisited.delete(edge.to);queue.push(edge.to);}
+    components.push(seen);
+  }
+  const network=components.sort((a,b)=>b.size-a.size).find(component=>cells.every(c=>[...component].some(id=>{
+    const n=nodes.get(id)!;return n.s.role==='floor'&&Math.abs(surfaceY(n.s,rectCenter(n.s.bounds).x,rectCenter(n.s.bounds).z)+n.offset.y-regionalDatum(seed,c.x,c.z).y)<.05;
+  })));
+  expect(network,'no actual surface network spans the three datums').toBeDefined();
   const points = cells.map(c => {
     const desired = { x: c.x * 28 - 42, z: c.z * 28 - 42 }, y = regionalDatum(seed, c.x, c.z).y;
     const candidates = [...nodes].flatMap(([id, n]) => {
       const p = rectCenter(n.s.bounds), at = { x: p.x + n.offset.x, z: p.z + n.offset.z, y: surfaceY(n.s, p.x, p.z) + n.offset.y + .865 };
-      return n.s.role === 'floor' && Math.abs(at.y - y - .865) < .05 && physics.canStandAt(at) ? [{ id, at, distance: Math.hypot(at.x - desired.x, at.z - desired.z) }] : [];
+      return network!.has(id) && n.s.role === 'floor' && Math.abs(at.y - y - .865) < .05 && physics.canStandAt(at) ? [{ id, at, distance: Math.hypot(at.x - desired.x, at.z - desired.z) }] : [];
     }).sort((a, b) => a.distance - b.distance);
     expect(candidates[0]).toBeDefined(); return candidates[0]!;
   });

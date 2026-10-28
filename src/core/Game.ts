@@ -341,7 +341,10 @@ export class Game {
     this.postFX = new PostFX(this.renderer, this.scene, this.camera, this.settings.lighting);
     this.resize();
     await this.postFX.waitUntilReady();
-    await this.renderer.compileAsync(this.scene, this.camera);
+    const characterWarmup = this.character?.renderWarmupRoots.map(root => ({ root, visible: root.visible })) ?? [];
+    for (const { root } of characterWarmup) root.visible = true;
+    try { await this.renderer.compileAsync(this.scene, this.camera); }
+    finally { for (const { root, visible } of characterWarmup) root.visible = visible; }
     if (this.disposed) return;
     setVisualProgress(0.92);
     // Warm every composer target behind the opaque loading overlay. The

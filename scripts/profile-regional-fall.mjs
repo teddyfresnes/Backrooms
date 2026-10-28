@@ -3,8 +3,12 @@
 import { writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { getHeapStatistics } from 'node:v8';
+import { createHash } from 'node:crypto';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createLab, stepLab, THREE } from '../tests/character/support/headless-character.mjs';
-import { generateInfiniteChunk, getChunkWorldOffset } from '../.character-test-dist/regional-world.js';
+const { generateInfiniteChunk, getChunkWorldOffset } = await import(process.env.FALL_PROFILE_WORLD
+  ? pathToFileURL(resolve(process.env.FALL_PROFILE_WORLD)).href : '../.character-test-dist/regional-world.js');
 
 const seed = 'REGIONAL-AUDIT-2';
 const plans = [0, -1, -2].map(story => generateInfiniteChunk(seed, { x: 0, z: 0, story }));
@@ -27,6 +31,7 @@ for (const fps of [30, 60, 120]) {
   const lab = await createLab(); lab.setInteractionPartner(null);
   const physics = lab.physics, world = physics.world;
   const mounts = [];
+  const mountBegan = performance.now();
   physics.batchChunkChanges(() => {
     physics.removeChunk('origin');
     for (const [index, plan] of plans.entries()) {
@@ -35,6 +40,7 @@ for (const fps of [30, 60, 120]) {
       mounts.push(performance.now() - t);
     }
   });
+  const mountAndSynchronizationCPU = performance.now() - mountBegan;
   lab.player.teleport(start);
   lab.avatarAnchor.position.set(start.x, start.y - .865, start.z);
   lab.avatarAnchor.updateMatrixWorld(true);
@@ -53,10 +59,18 @@ for (const fps of [30, 60, 120]) {
   for (const name of ['castRay', 'castRayAndGetNormal', 'castShape', 'intersectionsWithShape', 'intersectionWithShape']) if (typeof world[name] === 'function') wrap(world, name, 'queries');
   wrap(lab, 'resolveRagdollImpactSurface', 'impactSearch');
   wrap(lab, 'refreshRecoveryAvailability', 'recoverySearch');
+  wrap(lab.bloodDecals, 'update', 'effects');
+  const nearby = lab.environment.nearbyBoxes.bind(lab.environment);
+  lab.environment.nearbyBoxes = (...args) => {
+    const result = nearby(...args);
+    if (current) current.colliderRecords = (current.colliderRecords ?? 0) + result.length;
+    return result;
+  };
   current = {};
   const memoryBefore = getHeapStatistics().used_heap_size, t = performance.now();
   lab.startRagdoll({ fatal: false, addedVelocity: new THREE.Vector3(0, -1, 0) });
   const activation = { cpu: performance.now() - t, ...current };
+  wrap(lab.ragdoll, 'syncSkeleton', 'skeleton');
   const frames = [];
   let reachedLowerAt = Infinity, touched = false, maxAwake = 0, maxContacts = 0;
   for (let i = 0; i < fps * 6; i++) {
@@ -79,13 +93,15 @@ for (const fps of [30, 60, 120]) {
   }
   const phases = Object.fromEntries(['fall', 'impact', 'rest'].map(phase => {
     const f = frames.filter(f => f.phase === phase);
-    return [phase, Object.fromEntries(['cpu', 'physics', 'physicsCalls', 'queries', 'queriesCalls', 'impactSearch', 'impactSearchCalls', 'recoverySearch', 'recoverySearchCalls'].map(k => [k, stats(f.map(f => f[k] ?? 0))]))];
+    return [phase, Object.fromEntries(['cpu', 'physics', 'physicsCalls', 'queries', 'queriesCalls', 'impactSearch', 'impactSearchCalls', 'recoverySearch', 'recoverySearchCalls', 'colliderRecords', 'skeleton', 'effects'].map(k => [k, stats(f.map(f => f[k] ?? 0))]))];
   }));
-  runs.push({ fps, activation, mounts, lowerY, reachedLowerAt, touched, maxAwake, maxContacts,
+  runs.push({ fps, activation, mounts, mountAndSynchronizationCPU, lowerY, reachedLowerAt, touched, maxAwake, maxContacts,
     finalPelvis: lab.ragdoll?.getPelvisPosition(new THREE.Vector3()).toArray(),
     heapDeltaBytes: getHeapStatistics().used_heap_size - memoryBefore, phases, frames });
   lab.dispose();
 }
 const output = process.argv[2] ?? '.fall-audit/regional-profile.json';
-writeFileSync(output, JSON.stringify({ schema: 1, seed, start, owners: [0, -1, -2], seconds: 6, renderer: 'none', node: process.version, runs }, null, 2));
+writeFileSync(output, JSON.stringify({ schema: 1, seed, start, owners: [0, -1, -2], seconds: 6,
+  worldHash: createHash('sha256').update(JSON.stringify(plans)).digest('hex'), colliders: plans.map(p=>p.colliders.length),
+  renderer: 'none', node: process.version, runs }, null, 2));
 console.log(JSON.stringify({ output, runs: runs.map(({ frames, phases, ...r }) => ({ ...r, phases })) }));

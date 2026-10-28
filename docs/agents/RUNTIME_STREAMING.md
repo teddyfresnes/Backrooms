@@ -2,7 +2,7 @@
 
 `WorldStream` maintient les chunks actifs, les `WorldView` et les colliders
 associés. Le voisinage de base est un 3×3 autour du propriétaire du support.
-Les dépendances spatiales ajoutent au plus 12 propriétaires. `SpatialVisibility`
+Les dépendances spatiales et la trajectoire ajoutent au plus 12 propriétaires. `SpatialVisibility`
 priorise les supports proches, puis les ouvertures dans la direction du regard
 (36 m structurels, 72 m pour les vues, marge verticale de 20 m). Le voisinage
 de base est exclu de ce budget supplémentaire. Elles préchargent les niveaux visibles et
@@ -23,8 +23,11 @@ Les anciens aperçus ci-dessous concernent les monuments et le chemin legacy.
 - La sélection des dépendances est réutilisée dans une marge de 1,5 m / environ
   12° ; une mutation de montage ou un changement de centre l’invalide.
 - Les destinations verticales sont préchargées près des puits et escaliers.
+  `FallPrefetch` utilise la vitesse physique du bassin pour anticiper jusqu'à
+  trois propriétaires sur 0,6 s ; ils entrent dans ce même budget de 12.
+  La file d'attente reste bornée à huit demandes, prioritaires en chute.
   Les volées ouvertes ajoutent aussi une dépendance de vue vers le propriétaire
-  inférieur réellement visible, sans dalle factice dans la circulation.
+  inférieur et, si percées, vers la vraie dalle supérieure. Aucun sol factice.
 - Les volumes hauts de `epic2`, `epic3`, `epic4` et `epic5` épinglent leur
   story source au lieu de remonter tous les 5,4 m. Le runtime source est résolu
   depuis la position du joueur, y compris juste après une téléportation haute.

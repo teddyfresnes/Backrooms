@@ -16,6 +16,7 @@ it('retains a fitting high room, opens the real slab otherwise, and reserves a p
   const high = make(); fitTransitionEnvironment(high, 4, 5, [0, 0]);
   expect(high.roofPolicy).toBe('room'); expect(high.roof).toEqual({kind:'flat',y:4});
   expect(high.roomRoofJoin).toEqual({bottom:4.03,top:5});
+  const overlapping = make();fitTransitionEnvironment(overlapping,4,4.02,[0,0]);expect(overlapping.roomRoofJoin).toBeUndefined();
   const low = make(); fitTransitionEnvironment(low, 2.74, 3.74, [0, 0]);
   expect(low.roofPolicy).toBe('upper-slab'); expect(low.enclosure).toBe('open'); expect(low.clearance).toBeGreaterThan(5);
   const enclosed = make(); fitTransitionEnvironment(enclosed, 2.74, 3.74, [.8, .8]);

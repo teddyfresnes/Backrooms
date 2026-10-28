@@ -272,10 +272,20 @@ export class RagdollSystem {
   private readonly links: JointLink[] = [];
   private readonly gravityReleases: GravityRelease[] = [];
   private readonly ownedBodies: RAPIER.RigidBody[] = [];
+  private readonly ownedJoints: RAPIER.ImpulseJoint[] = [];
   private readonly jointFrameBodies: RAPIER.RigidBody[] = [];
   private readonly impactEvents: RagdollImpactEvent[] = [];
   private readonly flightQuery = new RAPIER.Cuboid(1, 1, 1);
   private readonly flightQueryCenter = new THREE.Vector3();
+  private sharedWorldActive = false;
+  private readonly markSharedWorldActive = (body: RAPIER.RigidBody): void => {
+    if (this.sharedWorldActive || !body.isEnabled()) return;
+    if (body.isDynamic()) { this.sharedWorldActive = !body.isSleeping(); return; }
+    if (!body.isKinematic()) return;
+    if (body.isMoving()) { this.sharedWorldActive = true; return; }
+    const p=body.translation(),next=body.nextTranslation(),q=body.rotation(),r=body.nextRotation();
+    this.sharedWorldActive = p.x!==next.x || p.y!==next.y || p.z!==next.z || q.x!==r.x || q.y!==r.y || q.z!==r.z || q.w!==r.w;
+  };
   private combatKnockoutStartedAt = -Infinity;
   private combatKnockoutCurl = 0;
   private combatKnockoutSide = 0;
@@ -478,7 +488,12 @@ export class RagdollSystem {
       // This ragdoll is the shared world's driver, even while its own island
       // sleeps. NPCs and previous corpses must still advance exactly once.
       if (this.ownedBodies.every(body => !body.isValid() || body.isSleeping())) {
-        this.physics.stepDynamics(safeDelta);
+        this.sharedWorldActive = false;
+        // Rapier's active-island iterator is refreshed by step(), so it omits
+        // a newly created/woken actor until that first step. Inspect the small
+        // body set (not the thousands of static colliders) and pending kinematics.
+        this.physics.world.forEachRigidBody(this.markSharedWorldActive);
+        if (this.sharedWorldActive) this.physics.stepDynamics(safeDelta);
         return;
       }
       // Removing a support or another physical body hitting the island may wake
@@ -1035,27 +1050,30 @@ export class RagdollSystem {
    * Rapier's `World.removeRigidBody()` walks all attached impulse joints through
    * a generated wasm callback. With @dimforge/rapier3d 0.19.3 under Vite that
    * removal path can fail with `wasm is undefined` while dismantling an active
-   * articulated ragdoll. Recovery does not need to destroy the physics objects:
-   * disabling every owned rigid body also disables all attached colliders and
-   * removes the rig from simulation. The world itself reclaims the disabled raw
-   * objects on `World.free()`. This avoids touching the faulty removal callback
-   * during gameplay and lets the same visual skeleton be animated immediately.
+   * articulated ragdoll. Unlink our explicitly owned joints first: the faulty
+   * attached-joint callback is never entered when removing the now-unlinked
+   * bodies. No disabled physics allocations accumulate after repeated get-ups.
    */
   suspendForRecovery(): void {
-    this.disableOwnedBodies();
-    this.releaseRuntimeReferences();
+    this.dispose();
   }
 
   dispose(): void {
-    // Use the same wasm-safe quarantine path for NPC resets / HMR teardown.
-    // Disabled bodies and their colliders are inert; PhysicsWorld.world.free()
-    // reclaims the raw Rapier allocations when the lab itself is disposed.
     this.disableOwnedBodies();
+    for (const joint of this.ownedJoints) if (joint.isValid()) this.physics.world.removeImpulseJoint(joint, false);
+    this.ownedJoints.length = 0;
+    for (const body of this.ownedBodies) if (body.isValid()) this.physics.world.removeRigidBody(body);
+    if (this.traversalBody?.isValid()) this.physics.world.removeRigidBody(this.traversalBody);
     this.releaseRuntimeReferences();
   }
 
+  private createOwnedJoint(data: RAPIER.JointData, parent: RAPIER.RigidBody, child: RAPIER.RigidBody, wakeUp: boolean): RAPIER.ImpulseJoint {
+    const joint = this.physics.world.createImpulseJoint(data, parent, child, wakeUp);
+    this.ownedJoints.push(joint); return joint;
+  }
+
   private disableOwnedBodies(): void {
-    this.traversalBody?.setEnabled(false);
+    if (this.traversalBody?.isValid()) this.traversalBody.setEnabled(false);
     const zero = { x: 0, y: 0, z: 0 };
     for (const body of this.ownedBodies) {
       if (!body.isValid()) continue;
@@ -1756,7 +1774,7 @@ export class RagdollSystem {
     // This preserves the exact evaluated death pose with zero first-tick snap.
     const frame1 = new THREE.Quaternion();
     const frame2 = childRotation.clone().invert().multiply(parentRotation).normalize();
-    const joint = this.physics.world.createImpulseJoint(
+    const joint = this.createOwnedJoint(
       RAPIER.JointData.fixed(
         { x: anchor1.x, y: anchor1.y, z: anchor1.z },
         { x: frame1.x, y: frame1.y, z: frame1.z, w: frame1.w },
@@ -1834,7 +1852,7 @@ export class RagdollSystem {
     const parentAnchor = this.worldPointToBodyLocal(parent, worldAnchor, new THREE.Vector3());
     const parentFrame = parentRotation.clone().invert().multiply(childRotation).normalize();
     const identity = new THREE.Quaternion();
-    const fixed = this.physics.world.createImpulseJoint(
+    const fixed = this.createOwnedJoint(
       RAPIER.JointData.fixed(
         { x: parentAnchor.x, y: parentAnchor.y, z: parentAnchor.z },
         { x: parentFrame.x, y: parentFrame.y, z: parentFrame.z, w: parentFrame.w },
@@ -1851,7 +1869,7 @@ export class RagdollSystem {
     // swing directions gravity needs while their long-axis twist stays locked.
     // The neck alone adds a bounded yaw stage below.
     const axis1 = firstAxisLocal.clone().normalize();
-    const first = this.physics.world.createImpulseJoint(
+    const first = this.createOwnedJoint(
       RAPIER.JointData.revolute(
         { x: 0, y: 0, z: 0 },
         { x: 0, y: 0, z: 0 },
@@ -1869,7 +1887,7 @@ export class RagdollSystem {
 
     const childAnchor = this.worldPointToBodyLocal(child, worldAnchor, new THREE.Vector3());
     const axis2 = secondAxisLocal.clone().normalize();
-    const second = this.physics.world.createImpulseJoint(
+    const second = this.createOwnedJoint(
       RAPIER.JointData.revolute(
         { x: 0, y: 0, z: 0 },
         twistFrame ? { x: 0, y: 0, z: 0 } : { x: childAnchor.x, y: childAnchor.y, z: childAnchor.z },
@@ -1887,7 +1905,7 @@ export class RagdollSystem {
     if (twistFrame) {
       // Cervical yaw is real articulation, separate from pitch and lateral
       // flexion. Shoulders and hips retain their existing two-axis frames.
-      const twist = this.physics.world.createImpulseJoint(
+      const twist = this.createOwnedJoint(
         RAPIER.JointData.revolute({ x: 0, y: 0, z: 0 },
           { x: childAnchor.x, y: childAnchor.y, z: childAnchor.z }, { x: 0, y: 1, z: 0 }),
         twistFrame, child.body, true,
@@ -1953,7 +1971,7 @@ export class RagdollSystem {
   ): void {
     const anchor1 = this.worldPointToBodyLocal(parent, worldAnchor, new THREE.Vector3());
     const anchor2 = this.worldPointToBodyLocal(child, worldAnchor, new THREE.Vector3());
-    const joint = this.physics.world.createImpulseJoint(
+    const joint = this.createOwnedJoint(
       RAPIER.JointData.spherical(
         { x: anchor1.x, y: anchor1.y, z: anchor1.z },
         { x: anchor2.x, y: anchor2.y, z: anchor2.z },
@@ -1987,7 +2005,7 @@ export class RagdollSystem {
   ): void {
     const anchor1 = this.worldPointToBodyLocal(parent, worldAnchor, new THREE.Vector3());
     const anchor2 = this.worldPointToBodyLocal(child, worldAnchor, new THREE.Vector3());
-    const joint = this.physics.world.createImpulseJoint(
+    const joint = this.createOwnedJoint(
       RAPIER.JointData.revolute(
         { x: anchor1.x, y: anchor1.y, z: anchor1.z },
         { x: anchor2.x, y: anchor2.y, z: anchor2.z },

@@ -7,7 +7,7 @@ import { PhysicsWorld } from '../physics/PhysicsWorld';
 import { prepareSpatialArchitecture, mountArchitectureBatch } from '../render/SpatialArchitectureBuffers';
 import { completeCeilingEnvelope, ownedProfilePrisms } from './CeilingEnvelope';
 import { applySpatialRelief } from './SpatialRelief';
-import { regionalStyle } from './RegionalPlan';
+import { regionalStyle, openRoomComposition } from './RegionalPlan';
 import { surfaceY, type WalkableSurface } from './WalkableTopology';
 import type { WorldPlan } from './types';
 
@@ -52,12 +52,13 @@ it('keeps intentional datum boundaries and isolated ceilings open instead of inv
 it('raises only a relief host room and keeps every associated roof and light at the same physical altitude', () => {
   let checked=false;
   for(let n=0;n<256&&!checked;n++) {
-    const seed=`RELIEF-SCOPE-${n}`;if(regionalStyle(seed,'fixture').family==='maze')continue;
+    const seed=`RELIEF-SCOPE-${n}`,region='district/0/0';if(regionalStyle(seed,region).family==='maze')continue;
+    const proposal=openRoomComposition(seed,region).relief;if(!proposal)continue;
     const host:WalkableSurface={id:'host-floor',roomId:'host',ownerStory:0,layer:'fixture',role:'floor',bounds:{minX:0,maxX:28,minZ:0,maxZ:15},profile:{kind:'flat',y:0},ceilingY:2.74,ceilingProfile:{kind:'flat',y:2.74},thickness:.16,support:'slab',access:'open',edges:'architecture'};
     const other={...host,id:'other-floor',roomId:'other',bounds:{minX:0,maxX:28,minZ:15,maxZ:28},ceilingY:4.35,ceilingProfile:{kind:'flat' as const,y:4.35}};
     const w={seed,walls:[],colliders:[],features:[],lights:[{roomId:'host',ceilingY:2.74},{roomId:'other',ceilingY:4.35}],
       rooms:[{id:'host',bounds:host.bounds,floorY:0,ceilingHeight:2.74,structuralCeilingY:2.74},{id:'other',bounds:other.bounds,floorY:0,ceilingHeight:4.35,structuralCeilingY:4.35}],
-      topology:{surfaces:[host,other]},spatial:{owner:{x:0,z:0,story:0},cells:[{id:'cell/0/0/0',regionId:'fixture',mode:'rooms',bounds:{minX:0,maxX:28,minZ:0,maxZ:28},floorY:0}],transitions:[],landmarks:[],ceilings:[{...host,id:'host-roof',profile:{kind:'flat',y:2.77}},{...other,id:'other-roof',profile:{kind:'flat',y:4.38}}]}} as unknown as WorldPlan;
+      topology:{surfaces:[host,other]},spatial:{owner:{x:0,z:0,story:0},cells:[{id:`cell/${proposal.x}/${proposal.z}/0`,regionId:region,mode:'rooms',bounds:{minX:0,maxX:28,minZ:0,maxZ:28},floorY:0}],transitions:[],landmarks:[],ceilings:[{...host,id:'host-roof',profile:{kind:'flat',y:2.77}},{...other,id:'other-roof',profile:{kind:'flat',y:4.38}}]}} as unknown as WorldPlan;
     applySpatialRelief(w,[]);if(!w.spatial!.reliefs!.length)continue;
     checked=true;const roof=w.rooms[0]!.ceilingHeight;
     expect(roof).toBeGreaterThan(2.74);expect(w.rooms[1]!.ceilingHeight).toBe(4.35);expect(w.lights[1]!.ceilingY).toBe(4.35);

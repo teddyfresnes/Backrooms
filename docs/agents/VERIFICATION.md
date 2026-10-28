@@ -83,6 +83,14 @@ modifier temporairement le code.
 - Signaler clairement les tests exécutés et ceux qui ne l’ont pas été.
 - Ne pas corriger ou reformater les modifications utilisateur hors périmètre.
 
+Pour les volumes de transition, `node scripts/audit-transition-volumes.mjs 64
+chemin.json` compare les vrais triangles worker et colliders Rapier sur 64 seeds
+ordinaires et 32 de réserve, avec les propriétaires supérieurs réellement montés.
+Après compilation headless par `scripts/test-character.mjs`,
+`node scripts/profile-regional-fall.mjs chemin.json` mesure la chute FBX régionale
+à 30/60/120 Hz. `FALL_PROFILE_WORLD` peut fixer le même module monde entre deux
+sources ; le hash complet des plans doit alors être identique. Ces mesures sont CPU.
+
 
 Pour les changements de hauteur, `npm run test:vertical` couvre les plans
 régionaux ordinaires, les parcours Three/Rapier, les ouvertures monumentales,

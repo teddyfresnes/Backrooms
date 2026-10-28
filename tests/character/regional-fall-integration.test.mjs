@@ -65,8 +65,8 @@ for (const shared of [false, true]) test(`the real ${shared ? 'shared' : 'player
   } finally {
     ragdoll.dispose();
     for (const story of [0, -1, -2]) physics.removeChunk(String(story));
-    // Existing ragdoll disposal quarantines disabled Rapier bodies until
-    // world.free(), avoiding its active-joint WASM removal bug.
+    // Owned joints are unlinked before bodies, avoiding the active-joint
+    // WASM callback without retaining quarantined physics allocations.
     physics.world.colliders.forEach(collider => assert.equal(collider.isEnabled(), false));
     physics.dispose();
   }

@@ -615,6 +615,20 @@ describe('PhysicsWorld chunk ownership', () => {
     expect(Number.isFinite(body.linvel().y)).toBe(true);
   });
 
+  it('unlinks native impulse joints before reclaiming a retired articulated actor', async () => {
+    const physics=await createPhysics(),initial={bodies:physics.world.bodies.len(),colliders:physics.world.colliders.len(),joints:physics.world.impulseJoints.len()};
+    for(let cycle=0;cycle<20;cycle++){
+      const bodies=Array.from({length:4},(_,i)=>{const b=physics.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(i*.3,4,0));physics.world.createCollider(RAPIER.ColliderDesc.ball(.12),b);return b;});
+      const joints=bodies.slice(1).map((body,i)=>physics.world.createImpulseJoint(RAPIER.JointData.spherical({x:.15,y:0,z:0},{x:-.15,y:0,z:0}),bodies[i]!,body,true));
+      physics.stepDynamics(1/60);
+      for(const body of bodies)body.setEnabled(false);
+      for(const joint of joints)physics.world.removeImpulseJoint(joint,false);
+      for(const body of bodies)physics.world.removeRigidBody(body);
+      physics.stepDynamics(1/60);
+      expect({bodies:physics.world.bodies.len(),colliders:physics.world.colliders.len(),joints:physics.world.impulseJoints.len()}).toEqual(initial);
+    }
+  });
+
   it('treats collider centers as local coordinates when setting a chunk offset', async () => {
     const physics = await createPhysics();
     physics.addChunk('offset-floor', [floorCollider('local-floor')], { x: 4, y: -3, z: 0 });

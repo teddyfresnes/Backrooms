@@ -1,7 +1,7 @@
 # Vocabulaire liminal ordinaire
 
 Les familles enrichissent `generateInfiniteChunk`. Le BSP de 224 m, ses tirages,
-datums et murs épais restent la base. Plan version 17 ; topologie et spatial
+datums et murs épais restent la base. Plan version 18 ; topologie et spatial
 version 2. Les sauvegardes gardent leur format de pose et d'ancrage de surface ;
 le repli de `restoreSurfacePosition` retrouve un sol si un ancien ID disparaît.
 

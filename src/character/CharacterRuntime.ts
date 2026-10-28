@@ -246,6 +246,7 @@ const DEAD_CAMERA_FACE_SAFE_FORWARD = 0.225;
 const DEAD_CAMERA_NEAR_CLIP = 0.04;
 const PLAYER_RESPAWN_CENTER_Y = 0.865;
 const MAX_HEALTH = 100;
+const MAX_PERSISTENT_CORPSES = 4;
 const HEALTH_REGEN_DELAY_SECONDS = 5.5;
 const HEALTH_REGEN_PER_SECOND = 5.0;
 const DAMAGE_OVERLAY_DECAY = 2.7;
@@ -1583,6 +1584,7 @@ export class CharacterRuntime {
   private readonly deadCameraRelative = new THREE.Vector3();
   private readonly deadCameraGuard = new EnvironmentCameraGuard();
   private readonly deadCameraCollisionAnchor = new THREE.Vector3();
+  private readonly headMaskWarmup = { value: 0 };
   private recoveryProbeAt = -Infinity;
   private recoveryProbeWide = false;
   private readonly recoveryProbeAnchor = new THREE.Vector3();
@@ -1906,6 +1908,13 @@ export class CharacterRuntime {
 
 
     prepareRagdollHeadMask(character);
+    // Warm the same skinned shader variant used by the corpse while loading.
+    // Its uniform stays zero on the live avatar and the NPC.
+    character.traverse(object => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.geometry.hasAttribute('ragdollHeadMask')) return;
+      for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) installRagdollHeadMask(material, this.headMaskWarmup);
+    });
     firstPersonCharacter.traverse((object) => {
       const normalizedName = object.name.toLowerCase().replace(/[^a-z0-9]/g, '');
       const bone = object as THREE.Bone;
@@ -9561,14 +9570,17 @@ export class CharacterRuntime {
 
   private disposeTransientCorpse(root: THREE.Group): void {
     this.scene.remove(root);
+    const skeletons = new Set<THREE.Skeleton>();
     root.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh) return;
+      if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) skeletons.add((mesh as THREE.SkinnedMesh).skeleton);
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       // The clone shares geometry/textures with the reusable player. Only the
       // materials made for this transient corpse are owned by it.
       for (const material of materials) material.dispose();
     });
+    for (const skeleton of skeletons) skeleton.dispose();
   }
 
   private startGetUp(preparationSeconds = 0, waitForAssistGrip = false): void {
@@ -9996,6 +10008,10 @@ export class CharacterRuntime {
     // dynamic obstacle eligible for autostep instead of a waist-high blocker.
     this.ragdoll.setPlayerTraversalEnabled(true);
     this.corpses.push({ root: this.activeCorpseRoot, ragdoll: this.ragdoll });
+    while (this.corpses.length > MAX_PERSISTENT_CORPSES) {
+      const retired = this.corpses.shift()!;
+      retired.ragdoll.dispose(); this.disposeTransientCorpse(retired.root);
+    }
     if (this.activeCorpseHeadMask) this.activeCorpseHeadMask.value = 0;
     this.activeCorpseHeadMask = undefined;
     this.ragdoll = undefined;

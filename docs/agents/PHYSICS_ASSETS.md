@@ -65,7 +65,30 @@ par `PlayerController`.
 
 `PhysicsWorld` possède un personnage cinématique Rapier et des lots de colliders
 indexés par clé de chunk. Les mutations groupées passent par
-`batchChunkChanges()` pour limiter les synchronisations.
+`batchChunkChanges()` pour limiter les synchronisations. Leur `world.step()` de
+rafraîchissement utilise un timestep nul, restauré ensuite : monter un chunk
+ne doit pas faire avancer les corps d'un tick supplémentaire.
+
+Le ragdoll actif conduit le monde partagé ; les anciens corps et le NPC passent
+par `passiveUpdate()`, y compris pendant une nouvelle chute. Un conducteur endormi
+doit encore avancer les autres acteurs éveillés ; un monde entièrement endormi
+ne fait aucun solve. Le hand-off et les volumes proches du
+décor gardent cinq sous-pas ; une boîte balayée englobant tous les membres permet
+deux sous-pas uniquement en vol libre après 0,4 s. CCD et solveur restent actifs.
+Les impacts utilisent le point et la normale d'un vrai manifold du décor,
+sans recherche de boîtes/rayons après une impulsion interne aux articulations.
+Le relevé est sondé au plus toutes les 120 ms, avec sondage immédiat pour l'aide.
+
+`EnvironmentCameraGuard` s'applique après lissage, rotation et offset du visage,
+pendant la chute et le relevé. Sa sphère couvre le plan proche entier ; balayages
+et dépénétration interrogent seulement le décor Rapier. Le décor prime sur la
+contrainte du visage. `RagdollHeadMask`, préparé au chargement, masque seulement
+la tête du corps actif en première personne, sans changer les os ni la physique.
+Les quatre corps persistants les plus récents restent physiques. Au relevé ou
+au retrait d'un ancien corps, toutes ses articulations détenues sont détachées
+avant les rigid bodies : cela évite le callback Rapier défectueux sans accumuler
+de corps désactivés. Les matériaux clonés et textures de squelette sont libérés ;
+géométries et textures de peau partagées restent détenues par l'avatar source.
 
 Une porte interactive garde son collider fermé au début de l’animation.
 `WorldDoorLayer` signale à `WorldStream` quand l’ouverture devient praticable,

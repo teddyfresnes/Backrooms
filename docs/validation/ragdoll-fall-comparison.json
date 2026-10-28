@@ -1,0 +1,216 @@
+{
+  "schema": 1,
+  "worldHash": "ebd610180e643faa30b1971760b35bb0d693759b9639e1b071a040eb6d48613c",
+  "colliders": [
+    918,
+    919,
+    1113
+  ],
+  "renderer": "none",
+  "fps": {
+    "30": {
+      "fall": {
+        "before": {
+          "frames": 78,
+          "medianCPU": 7.920831,
+          "p95CPU": 10.908934,
+          "maxCPU": 13.467027,
+          "physicsCPU": 494.651509,
+          "steps": 780,
+          "queryCalls": 2031,
+          "colliderRecords": 0
+        },
+        "after": {
+          "frames": 80,
+          "medianCPU": 3.5165575000000002,
+          "p95CPU": 8.8866,
+          "maxCPU": 10.579267,
+          "physicsCPU": 289.290108,
+          "steps": 472,
+          "queryCalls": 430,
+          "colliderRecords": 0
+        }
+      },
+      "impact": {
+        "before": {
+          "frames": 42,
+          "medianCPU": 7.557895,
+          "p95CPU": 9.320961,
+          "maxCPU": 14.044226,
+          "physicsCPU": 260.256724,
+          "steps": 420,
+          "queryCalls": 160,
+          "colliderRecords": 20
+        },
+        "after": {
+          "frames": 42,
+          "medianCPU": 7.387721,
+          "p95CPU": 11.176576,
+          "maxCPU": 13.04282,
+          "physicsCPU": 259.862838,
+          "steps": 430,
+          "queryCalls": 178,
+          "colliderRecords": 0
+        }
+      },
+      "rest": {
+        "before": {
+          "frames": 240,
+          "medianCPU": 0.1376595,
+          "p95CPU": 8.81591,
+          "maxCPU": 11.925606,
+          "physicsCPU": 467.755634,
+          "steps": 730,
+          "queryCalls": 132,
+          "colliderRecords": 10
+        },
+        "after": {
+          "frames": 238,
+          "medianCPU": 0.1949905,
+          "p95CPU": 8.035954,
+          "maxCPU": 14.16387,
+          "physicsCPU": 446.517695,
+          "steps": 730,
+          "queryCalls": 1010,
+          "colliderRecords": 0
+        }
+      }
+    },
+    "60": {
+      "fall": {
+        "before": {
+          "frames": 158,
+          "medianCPU": 3.8128849999999996,
+          "p95CPU": 5.186095,
+          "maxCPU": 7.815872,
+          "physicsCPU": 487.585743,
+          "steps": 780,
+          "queryCalls": 4154,
+          "colliderRecords": 0
+        },
+        "after": {
+          "frames": 158,
+          "medianCPU": 1.8938925,
+          "p95CPU": 4.611491,
+          "maxCPU": 5.236462,
+          "physicsCPU": 293.47012,
+          "steps": 462,
+          "queryCalls": 740,
+          "colliderRecords": 0
+        }
+      },
+      "impact": {
+        "before": {
+          "frames": 84,
+          "medianCPU": 3.585464,
+          "p95CPU": 5.439051,
+          "maxCPU": 6.039132,
+          "physicsCPU": 256.991983,
+          "steps": 420,
+          "queryCalls": 174,
+          "colliderRecords": 20
+        },
+        "after": {
+          "frames": 84,
+          "medianCPU": 3.660771,
+          "p95CPU": 4.737588,
+          "maxCPU": 6.423666,
+          "physicsCPU": 253.725653,
+          "steps": 420,
+          "queryCalls": 340,
+          "colliderRecords": 0
+        }
+      },
+      "rest": {
+        "before": {
+          "frames": 478,
+          "medianCPU": 0.1254565,
+          "p95CPU": 4.061534,
+          "maxCPU": 7.136173,
+          "physicsCPU": 448.425032,
+          "steps": 730,
+          "queryCalls": 132,
+          "colliderRecords": 10
+        },
+        "after": {
+          "frames": 478,
+          "medianCPU": 0.162416,
+          "p95CPU": 4.366245,
+          "maxCPU": 6.862307,
+          "physicsCPU": 469.856876,
+          "steps": 750,
+          "queryCalls": 1978,
+          "colliderRecords": 0
+        }
+      }
+    },
+    "120": {
+      "fall": {
+        "before": {
+          "frames": 314,
+          "medianCPU": 0.9413095,
+          "p95CPU": 3.931665,
+          "maxCPU": 6.94276,
+          "physicsCPU": 455.817553,
+          "steps": 780,
+          "queryCalls": 8294,
+          "colliderRecords": 0
+        },
+        "after": {
+          "frames": 314,
+          "medianCPU": 1.068544,
+          "p95CPU": 3.885701,
+          "maxCPU": 5.006778,
+          "physicsCPU": 288.407074,
+          "steps": 462,
+          "queryCalls": 1364,
+          "colliderRecords": 0
+        }
+      },
+      "impact": {
+        "before": {
+          "frames": 168,
+          "medianCPU": 1.7193559999999999,
+          "p95CPU": 3.741036,
+          "maxCPU": 5.32086,
+          "physicsCPU": 243.73583200000002,
+          "steps": 420,
+          "queryCalls": 202,
+          "colliderRecords": 20
+        },
+        "after": {
+          "frames": 168,
+          "medianCPU": 1.742883,
+          "p95CPU": 4.095662,
+          "maxCPU": 5.401355,
+          "physicsCPU": 255.664974,
+          "steps": 420,
+          "queryCalls": 676,
+          "colliderRecords": 0
+        }
+      },
+      "rest": {
+        "before": {
+          "frames": 958,
+          "medianCPU": 0.0663535,
+          "p95CPU": 3.606475,
+          "maxCPU": 6.195276,
+          "physicsCPU": 436.114943,
+          "steps": 730,
+          "queryCalls": 132,
+          "colliderRecords": 10
+        },
+        "after": {
+          "frames": 958,
+          "medianCPU": 0.0893925,
+          "p95CPU": 3.797189,
+          "maxCPU": 6.341954,
+          "physicsCPU": 461.38996,
+          "steps": 750,
+          "queryCalls": 3898,
+          "colliderRecords": 0
+        }
+      }
+    }
+  }
+}
