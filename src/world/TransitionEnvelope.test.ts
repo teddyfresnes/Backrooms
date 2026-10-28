@@ -10,7 +10,7 @@ it('joins the actual two endpoint roofs at the same canonical midpoint in all di
   for (const [side,dx,dz,opposite] of [['east',1,0,'west'],['west',-1,0,'east'],['north',0,-1,'south'],['south',0,1,'north']] as const) {
     const a=planRegionalTransition('ROOF-ENDPOINTS',0,0,0,side,spatialCellBounds(0,0),-3.7,2.4,'a');
     const b=planRegionalTransition('ROOF-ENDPOINTS',dx,dz,0,opposite,spatialCellBounds(dx,dz),2.4,-3.7,'b');
-    fitTransitionEnvironment(a,-3.7+2.74,2.4+4.35,[0,0]);fitTransitionEnvironment(b,2.4+4.35,-3.7+2.74,[0,0]);
+    fitTransitionEnvironment(a,-3.7+2.74,2.4+4.35,[.7,.7]);fitTransitionEnvironment(b,2.4+4.35,-3.7+2.74,[.7,.7]);
     expect(a.approachCeilingY).toBeCloseTo(-.96,7);expect(b.approachCeilingY).toBeCloseTo(6.75,7);expect(a.landingCeilingY).toBeCloseTo(b.landingCeilingY,7);
     const p=rectCenter(a.landing.bounds),q=rectCenter(b.landing.bounds);
     expect(surfaceY({bounds:a.run,profile:a.roof} as never,p.x,p.z)).toBeCloseTo(a.landingCeilingY,7);
@@ -35,7 +35,7 @@ it('samples real canonical BSP ceilings and keeps enclosure columns stable throu
     for(const t of w.spatial!.transitions!) {
       const cell=w.spatial!.cells.find(c=>t.roomId.startsWith(c.id+'/'))!,m=/cell\/(-?\d+)\/(-?\d+)\//.exec(cell.id)!;
       const host=transitionHost(w.seed,+m[1]!,+m[2]!,0,t,{x:0,z:0});
-      expect(t.approachCeilingY).toBeCloseTo(Math.max(host.ceilingY,cell.floorY+2.74),7);
+      expect(t.approachCeilingY).toBeCloseTo(t.roofPolicy === 'upper-slab' ? t.approach.y + 5.24 : Math.max(host.ceilingY,cell.floorY+2.74),7);
       if(t.enclosure==='open')open++;else backed++;flights++;
       const upper=generateInfiniteChunk(w.seed,{x:0,z:0,story:1});
       const other=upper.spatial!.transitions!.find(p=>p.bounds.minX===t.bounds.minX&&p.bounds.minZ===t.bounds.minZ&&p.axis===t.axis)!;
@@ -54,7 +54,7 @@ it('leaves the real stair treads and sloping fixtures below the resolved roof wi
       const p=new THREE.Vector3(),q=new THREE.Quaternion();ceilingFixturePose(w,slot,p,q);
       for(const x of [-slot.width/2,slot.width/2])for(const z of [-.5,.5]) {
         const corner=new THREE.Vector3(x,0,z).applyQuaternion(q).add(p);
-        const floor=w.topology!.surfaces.find(s=>(s.id===t.id||s.id.startsWith(`${t.id}/step-`))&&corner.x>=s.bounds.minX&&corner.x<=s.bounds.maxX&&corner.z>=s.bounds.minZ&&corner.z<=s.bounds.maxZ)!;
+        const floor=w.topology!.surfaces.find(s=>s.roomId===t.roomId&&corner.x>=s.bounds.minX&&corner.x<=s.bounds.maxX&&corner.z>=s.bounds.minZ&&corner.z<=s.bounds.maxZ)!;
         expect(floor).toBeDefined();expect(corner.y-surfaceY(floor,corner.x,corner.z),`${w.seed}/${t.id}`).toBeGreaterThanOrEqual(2.5);checked++;
       }
       if(t.enclosure!=='chamber')expect(w.spatial!.dependencies.some(d=>d.owner.story===-1&&d.reason==='view'&&d.bounds.minX<=t.bounds.minX&&d.bounds.maxX>=t.bounds.maxX)).toBe(true);

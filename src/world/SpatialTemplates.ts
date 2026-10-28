@@ -19,10 +19,11 @@ export const transitionHost = (seed: string, gx: number, gz: number, story: numb
   const chunkX = Math.floor(gx / 4), chunkZ = Math.floor(gz / 4), floor = regionalDatum(seed, gx, gz).y;
   const shift = { x: Math.floor(chunkX / 2) * 224 + 56 - origin.x, z: Math.floor(chunkZ / 2) * 224 + 56 - origin.z };
   const move = (r: Rect): Rect => ({ minX: r.minX + shift.x, maxX: r.maxX + shift.x, minZ: r.minZ + shift.z, maxZ: r.maxZ + shift.z });
-  if (regionalStyle(seed, regionalDatum(seed, gx, gz).id).family !== 'maze') return { ceilingY: floor + 2.74, walls: [0, 0] as [number, number] };
+  if (regionalStyle(seed, regionalDatum(seed, gx, gz).id).family !== 'maze') return { ceilingY: floor + 2.74, uniformRoof: true, walls: [0, 0] as [number, number] };
   const template = spatialTemplate(seed, chunkX, chunkZ, story);
-  const rooms = template.rooms.filter(r => overlapRect(move(r.bounds), t.approach.bounds));
+  const rooms = template.rooms.filter(r => overlapRect(move(r.bounds), t.bounds));
   const ceilingY = floor + Math.min(...(rooms.length ? rooms.map(r => r.ceilingHeight) : [3.05]));
+  const uniformRoof = new Set(rooms.map(r => r.ceilingHeight)).size <= 1;
   // Enclosures are a column decision: inspect canonical structural walls at
   // story zero so adjacent vertical owners never invent different side walls.
   const structure = story === 0 ? template : spatialTemplate(seed, chunkX, chunkZ, 0);
@@ -38,5 +39,5 @@ export const transitionHost = (seed: string, gx: number, gz: number, story: numb
     for (const r of intervals) { length += Math.max(0, r.hi - Math.max(end, r.lo)); end = Math.max(end, r.hi); }
     return Math.min(1, length / Math.max(.01, hi - lo));
   };
-  return { ceilingY, walls: [coverage(-1), coverage(1)] as [number, number] };
+  return { ceilingY, uniformRoof, walls: [coverage(-1), coverage(1)] as [number, number] };
 };

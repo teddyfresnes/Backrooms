@@ -537,7 +537,13 @@ export class PhysicsWorld {
         this.world.colliders.forEach(c => { const enabled = c.isEnabled(); if (enabled) { c.setEnabled(false); c.setEnabled(true); } });
       }
     }
-    this.world.step();
+    // Rapier refreshes its query BVH during step(). A stream mount is not a
+    // gameplay tick: advancing 1/60 here accelerated every active ragdoll once
+    // more whenever a layer appeared. A zero-time synchronization only updates
+    // the collision structures; the fixed-step driver owns elapsed time.
+    const previousTimestep = this.world.timestep;
+    try { this.world.timestep = 0; this.world.step(); }
+    finally { this.world.timestep = previousTimestep; }
   }
   private requestChunkSynchronization(): void {
     if (this.chunkMutationDepth > 0) { this.chunkSynchronizationPending = true; return; }

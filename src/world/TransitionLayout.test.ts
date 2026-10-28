@@ -32,17 +32,17 @@ it('ends every stair exactly at its destination without making oversized risers'
   }
 });
 
-it('constructs one roof per generated flight, closed risers and roof-bounded thick side walls', () => {
+it('constructs a roof only for enclosed flights, closed risers and bearing side walls', () => {
   let stairs = 0, ramps = 0;
   for (let i = 0; i < 12; i++) {
     const w = generateInfiniteChunk(`REGIONAL-AUDIT-${i}`, { x: 0, z: 0, story: 0 });
     expect(validateTopology(w)).toEqual([]);
     for (const t of w.spatial!.transitions!) {
-      const roof = w.spatial!.ceilings.filter(s => s.id === `${t.id}/roof`); expect(roof).toHaveLength(1);
+      const roof = w.spatial!.ceilings.filter(s => s.id === `${t.id}/roof`); expect(roof).toHaveLength(t.roofPolicy === 'flight' ? 1 : 0);
       const route = w.topology!.surfaces.filter(s => s.id === t.id || s.id.startsWith(`${t.id}/step-`));
       expect(route.length).toBeGreaterThan(0);
       for (const s of route) {
-        const p = rectCenter(s.bounds), roofY = surfaceY({ ...roof[0]!, profile: t.roof, bounds: t.run }, p.x, p.z);
+        const p = rectCenter(s.bounds), roofY = surfaceY({ ...s, profile: s.ceilingProfile! }, p.x, p.z);
         expect(roofY - surfaceY(s, p.x, p.z)).toBeGreaterThan(2.5);
         if (s.role === 'stair') { stairs++; expect(s.thickness).toBeGreaterThan(.175); }
         else ramps++;
@@ -83,8 +83,11 @@ it('preserves real legacy holes and their canonical arrival floors through struc
 
 it('anchors every raised relief to the real lower floor and keeps its references valid', () => {
   const kinds = new Set<string>(); let count = 0;
-  for (let i = 0; i < 24; i++) {
-    const w = generateInfiniteChunk(`REGIONAL-AUDIT-${i}`, { x: 0, z: 0, story: 0 });
+  const cases = [...Array.from({length:24},(_,i)=>({ seed:`REGIONAL-AUDIT-${i}`, x:0,z:0 })),
+    {seed:'REGIONAL-AUDIT-12',x:-1,z:-1},{seed:'REGIONAL-AUDIT-12',x:1,z:0},{seed:'REGIONAL-AUDIT-23',x:1,z:1},
+    {seed:'REGIONAL-AUDIT-29',x:1,z:0},{seed:'REGIONAL-AUDIT-47',x:0,z:-2}];
+  for (const c of cases) {
+    const w = generateInfiniteChunk(c.seed, { x: c.x, z: c.z, story: 0 });
     for (const r of w.spatial!.reliefs ?? []) {
       count++; kinds.add(r.kind); expect(w.rooms.some(room => room.id === r.roomId)).toBe(true); expect(r.peakY - r.baseY).toBeGreaterThan(.3);
       for (const id of r.surfaceIds) {

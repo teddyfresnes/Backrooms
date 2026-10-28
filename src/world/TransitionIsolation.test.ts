@@ -65,15 +65,17 @@ it('keeps upper piers entirely on actual bearing walls after the final reservati
 
 it('sometimes gives a solid mound one access ramp and sometimes an opposed, symmetrical pair', () => {
   const access = new Set<string>(); let count = 0;
-  for (let n = 0; n < 48; n++) {
-    const w = generateInfiniteChunk(`REGIONAL-AUDIT-${n}`, { x: 0, z: 0, story: 0 });
+  // A whole hall now owns one relief, so fixtures include its canonical owner
+  // rather than requiring every origin viewport to contain many copies.
+  for (const [n,x,z] of [[12,-1,-1],[12,1,0],[23,1,1],[47,0,-2]]) {
+    const w = generateInfiniteChunk(`REGIONAL-AUDIT-${n}`, { x:x!, z:z!, story: 0 });
     for (const relief of w.spatial!.reliefs ?? []) if (relief.kind === 'mound') {
       const ramps = w.topology!.surfaces.filter(s => relief.surfaceIds.includes(s.id) && s.profile.kind === 'linear');
       expect(ramps).toHaveLength(relief.access === 'single' ? 1 : 2); access.add(relief.access!); count++;
       for (const ramp of ramps) expect(ramp.supportBottom).toBeCloseTo(relief.baseY - .16, 8);
     }
   }
-  expect(count).toBeGreaterThan(5); expect([...access].sort()).toEqual(['opposed', 'single']);
+  expect(count).toBe(4); expect([...access].sort()).toEqual(['opposed', 'single']);
 }, 30000);
 
 it('streams enough disjoint bearing-wall bands to enclose the entire flight across vertical owners', () => {

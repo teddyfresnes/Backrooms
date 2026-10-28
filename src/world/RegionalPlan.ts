@@ -52,6 +52,47 @@ export const regionalStyle = (seed: string, regionId: string) => {
     wallHalf: rng.weighted([{ value: .12, weight: .12 }, { value: .6, weight: .58 }, { value: 1.2, weight: .3 }]) };
 };
 const transitionCache = new Map<string, boolean>();
+interface TransitionCandidate { x: number; z: number; rank: number; id: string }
+const transitionCandidate = (seed: string, gx: number, gz: number, a: 'x' | 'z'): TransitionCandidate | undefined => {
+  if (Math.abs(regionalDatum(seed, gx, gz).y - regionalDatum(seed, gx + Number(a === 'x'), gz + Number(a === 'z')).y) < .001) return;
+  return { x: gx + (a === 'x' ? 1 : .5), z: gz + (a === 'z' ? 1 : .5),
+    rank: new SeededRandom(`${seed}:isolated-transition:v1:${gx}:${gz}:${a}`).float(0, 1), id: `${gx}/${gz}/${a}` };
+};
+const locallySelectedTransition = (seed: string, ax: number, az: number, own: TransitionCandidate): boolean => {
+  for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) for (const a of ['x', 'z'] as const) {
+    const other = transitionCandidate(seed, ax + dx, az + dz, a);
+    if (!other || other.id === own.id || Math.hypot(own.x - other.x, own.z - other.z) >= 1.75) continue;
+    if (other.rank < own.rank || other.rank === own.rank && other.id < own.id) return false;
+  }
+  return true;
+};
+const openRoomCache = new Map<string, { relief?: { x: number; z: number }; links: string[] }>();
+/** A hall spans a connected Voronoi district, not a 28 m planning cell. One
+ * relief and at most two distant access compositions belong to that real
+ * space, with the same decision on both sides of every chunk boundary. */
+export const openRoomComposition = (seed: string, region: string) => {
+  const key = `${seed}/${region}`, cached = openRoomCache.get(key); if (cached) return cached;
+  const match = /^district\/(-?\d+)\/(-?\d+)$/.exec(region);
+  if (!match || regionalStyle(seed, region).family === 'maze') return { links: [] as string[], relief: undefined };
+  const rx = +match[1]!, rz = +match[2]!, cells: { x: number; z: number; rank: number }[] = [], edges = new Map<string, TransitionCandidate>();
+  for (let z = (rz - 1) * REGION_CELLS; z < (rz + 2) * REGION_CELLS; z++) for (let x = (rx - 1) * REGION_CELLS; x < (rx + 2) * REGION_CELLS; x++) {
+    if (regionalDatum(seed, x, z).id !== region) continue;
+    cells.push({ x, z, rank: new SeededRandom(`${seed}:room-relief:${x}:${z}`).float(0, 1) });
+    for (const [ax, az, axis] of [[x, z, 'x'], [x - 1, z, 'x'], [x, z, 'z'], [x, z - 1, 'z']] as const) {
+      const edge = transitionCandidate(seed, ax, az, axis);
+      if (edge && locallySelectedTransition(seed, ax, az, edge)) edges.set(edge.id, edge);
+    }
+  }
+  const selected: TransitionCandidate[] = [];
+  for (const edge of [...edges.values()].sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id))) {
+    if (selected.some(p => Math.hypot(p.x - edge.x, p.z - edge.z) < 3.5)) continue;
+    selected.push(edge); if (selected.length >= (cells.length >= 36 ? 2 : 1)) break;
+  }
+  const relief = cells.sort((a, b) => a.rank - b.rank).find(c => selected.every(e => Math.hypot(c.x + .5 - e.x, c.z + .5 - e.z) >= 1.75));
+  const result = { relief, links: selected.map(e => e.id) };
+  openRoomCache.set(key, result); if (openRoomCache.size > 128) openRoomCache.delete(openRoomCache.keys().next().value!);
+  return result;
+};
 /** One isolated connection wins a bounded neighbourhood. Both endpoints and
  * every vertical owner derive the same decision without reading a chunk. */
 export const hasRegionalTransition = (seed: string, x: number, z: number, side: 'north' | 'east' | 'south' | 'west'): boolean => {
@@ -59,21 +100,13 @@ export const hasRegionalTransition = (seed: string, x: number, z: number, side: 
   const ax = x - Number(side === 'west'), az = z - Number(side === 'north');
   const key = `${seed}/${ax}/${az}/${axis}`, cached = transitionCache.get(key);
   if (cached !== undefined) return cached;
-  const candidate = (gx: number, gz: number, a: 'x' | 'z') => {
-    if (Math.abs(regionalDatum(seed, gx, gz).y - regionalDatum(seed, gx + Number(a === 'x'), gz + Number(a === 'z')).y) < .001) return;
-    return { x: gx + (a === 'x' ? 1 : .5), z: gz + (a === 'z' ? 1 : .5),
-      rank: new SeededRandom(`${seed}:isolated-transition:v1:${gx}:${gz}:${a}`).float(0, 1), id: `${gx}/${gz}/${a}` };
-  };
-  const own = candidate(ax, az, axis); let selected = own !== undefined;
-  if (own) for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) for (const a of ['x', 'z'] as const) {
-    const other = candidate(ax + dx, az + dz, a);
-    if (!other || other.id === own.id || Math.hypot(own.x - other.x, own.z - other.z) >= 1.75) continue;
-    if (other.rank < own.rank || other.rank === own.rank && other.id < own.id) selected = false;
-  }
+  const own = transitionCandidate(seed, ax, az, axis); let selected = !!own && locallySelectedTransition(seed, ax, az, own);
+  if (selected && own) for (const datum of [regionalDatum(seed, ax, az), regionalDatum(seed, ax + Number(axis === 'x'), az + Number(axis === 'z'))])
+    if (datum.id.startsWith('district/') && regionalStyle(seed, datum.id).family !== 'maze' && !openRoomComposition(seed, datum.id).links.includes(own.id)) selected = false;
   transitionCache.set(key, selected); if (transitionCache.size > 2048) transitionCache.delete(transitionCache.keys().next().value!);
   return selected;
 };
-export const clearRegionalPlanCache = () => { datumCache.clear(); transitionCache.clear(); };
+export const clearRegionalPlanCache = () => { datumCache.clear(); transitionCache.clear(); openRoomCache.clear(); };
 export const regionalCellId = (x: number, z: number, story: number) => `cell/${x}/${z}/${story}`;
 
 export interface AtriumPlan {

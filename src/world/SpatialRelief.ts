@@ -1,5 +1,5 @@
 import { SeededRandom } from './SeededRandom';
-import { regionalAtrium, regionalStyle } from './RegionalPlan';
+import { openRoomComposition, regionalAtrium, regionalStyle } from './RegionalPlan';
 import { cutRects, overlapRect, surfaceRange, type HeightProfile, type WalkableSurface } from './WalkableTopology';
 import { rectCenter, rectDepth, rectWidth, type Rect, type WorldPlan } from './types';
 
@@ -16,6 +16,10 @@ export const applySpatialRelief = (w: WorldPlan, avoid: readonly Rect[]): void =
     if (atrium?.liminal) continue;
     const rng = new SeededRandom(`${w.seed}:solid-relief:v1:${gx}:${gz}:${spatial.owner.story}`);
     const ordinary = cell.mode === 'rooms';
+    if (ordinary) {
+      const proposal = openRoomComposition(w.seed, cell.regionId).relief;
+      if (!proposal || proposal.x !== gx || proposal.z !== gz) continue;
+    }
     if (ordinary ? regionalStyle(w.seed, cell.regionId).family === 'maze' || !rng.chance(.65)
       : !atrium?.openLower || atrium.composition === 'gallery') continue;
     if (spatial.transitions?.some(t => overlapRect(t.bounds, cell.bounds)) || avoid.some(b => overlapRect(b, cell.bounds))) continue;

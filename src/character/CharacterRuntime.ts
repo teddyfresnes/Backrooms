@@ -1163,6 +1163,10 @@ export class CharacterRuntime {
     if (this.ragdoll) return this.ragdoll.getPelvisPosition(this.worldPosition);
     return this.worldPosition.copy(this.player!.position);
   }
+  getWorldVelocity(target: THREE.Vector3): THREE.Vector3 {
+    if (this.ragdoll) return this.ragdoll.getVelocity(target);
+    return this.recovery ? target.set(0, 0, 0) : target.copy(this.player!.getDebugState().velocity);
+  }
   /** The game owns spawn/streaming; this actor uses the same rig and interactions. */
   setInteractionPartner(position: THREE.Vector3 | null, combat = false): void {
     this.cancelPairInteraction(); this.partnerEnabled = !!position;

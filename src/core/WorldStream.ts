@@ -1,5 +1,6 @@
 import type { ArchitectureDebugMode } from '../render/ArchitectureDebug';
 import { selectSpatialVisibleOwners } from './SpatialVisibility';
+import { predictFallOwners } from './FallPrefetch';
 import { cutRects, findSurface, surfaceY, TOPOLOGY_VERSION } from '../world/WalkableTopology';
 import { regionalOwnerAt } from '../world/RegionalPlan';
 import type { CharacterPit } from '../character/CharacterEnvironment';
@@ -245,6 +246,8 @@ export class WorldStream {
   private selectedRevision = -1;
   private selectedCenter = '';
   private selectedCoords: ChunkCoord[] = [];
+  private predictedFallCoords: ChunkCoord[] = [];
+  private predictedFallKey = '';
   private pendingChunks = 0;
   private sourceCount = 0;
   private worker?: Worker;
@@ -398,6 +401,7 @@ export class WorldStream {
     delta: number,
     playerPosition: THREE.Vector3,
     lookDirection?: THREE.Vector3,
+    velocity?: Vec3Data,
   ): void {
     if (!this.initialized || this.disposed) return;
     this.visibilityPosition.copy(playerPosition);
@@ -406,6 +410,12 @@ export class WorldStream {
     const observedCenter = this.supportedCoordAt(playerPosition);
     const epicPinnedCoord = this.getEpicPinnedCoord(playerPosition);
     const epicStoryPinned = epicPinnedCoord !== undefined;
+    const predicted = !epicStoryPinned && this.originPlan.spatial ? predictFallOwners(this.seed, playerPosition, velocity) : [];
+    const predictedKey = predicted.map(createChunkKey).join('/');
+    if (predictedKey !== this.predictedFallKey) {
+      this.predictedFallKey = predictedKey; this.predictedFallCoords = predicted; this.selectedRevision = -1;
+    }
+    for (const coord of [...predicted].reverse()) this.enqueueVerticalPrefetch(coord, true);
     let nextCenter = observedCenter;
     const observedKey = createChunkKey(observedCenter);
     if (epicStoryPinned) {
@@ -420,7 +430,7 @@ export class WorldStream {
       this.chunks.has(observedKey) || this.preparedChunks.has(observedKey),
       this.worker !== undefined,
     )) {
-      // Keep the compact preview and its colliders alive while the worker
+      // Keep the mounted real owners and their colliders alive while the worker
       // completes the destination. This turns a former synchronous 10 s
       // freeze into a normal background transition at the landing.
       this.pendingStoryKey = observedKey;
@@ -1606,7 +1616,9 @@ export class WorldStream {
     const keys = new Set(coords.map(createChunkKey));
     const sources = [...this.chunks.values()].filter(r => keys.has(r.key));
     const visible = this.spatialVisibleCoords(sources);
-    const result = [coords[0]!, ...visible.filter(c => !keys.has(createChunkKey(c))), ...coords.slice(1)];
+    const extra = new Map<ChunkKey, ChunkCoord>();
+    for (const c of [...this.predictedFallCoords, ...visible]) if (!keys.has(createChunkKey(c))) extra.set(createChunkKey(c), c);
+    const result = [coords[0]!, ...[...extra.values()].slice(0, 12), ...coords.slice(1)];
     this.selectedRevision = this.mountRevision; this.selectedCenter = centerKey;
     this.selectedPosition.copy(this.visibilityPosition); this.selectedDirection.copy(this.visibilityDirection); this.selectedCoords = result;
     return result;
@@ -1756,6 +1768,10 @@ export class WorldStream {
       this.verticalPrefetchQueue.unshift(coord);
     } else {
       this.verticalPrefetchQueue.push(coord);
+    }
+    while (this.verticalPrefetchQueue.length > 8) {
+      const dropped = this.verticalPrefetchQueue.pop()!;
+      this.priorityVerticalPrefetchKeys.delete(createChunkKey(dropped));
     }
   }
 

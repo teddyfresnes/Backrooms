@@ -95,6 +95,7 @@ export class Game {
   private readonly ui: ExperienceUI;
   private readonly audio = new AudioSystem();
   private readonly lookDirection = new THREE.Vector3();
+  private readonly streamingVelocity = new THREE.Vector3();
   private readonly lastSafePosition = new THREE.Vector3();
   private readonly drawingBufferSize = new THREE.Vector2();
   private readonly cinematicPosition = new THREE.Vector3();
@@ -891,7 +892,8 @@ export class Game {
         this.character?.setInteractionPartner(null);
       }
       this.player.getViewDirection(this.lookDirection);
-      this.worldStream.update(this.elapsed, rawDelta, this.character?.getWorldPosition() ?? this.player.position, this.lookDirection);
+      this.worldStream.update(this.elapsed, rawDelta, this.character?.getWorldPosition() ?? this.player.position, this.lookDirection,
+        this.character?.getWorldVelocity(this.streamingVelocity));
       const nextStory = this.worldStream.getCenterCoord().story;
       if (nextStory !== this.activeStory) {
         this.activeStory = nextStory;
