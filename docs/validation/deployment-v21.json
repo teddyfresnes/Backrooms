@@ -1,0 +1,22 @@
+{
+  "version": 21,
+  "url": "https://backrooms-integre.teddykoeh.chatgpt.site",
+  "status": "succeeded",
+  "project_id": "appgprj_6ad38cbd518c81918ef345d5a1eb55fc",
+  "version_id": "appgprj_6ad38cbd518c81918ef345d5a1eb55fc~appgver_20015a3cf27481919b71a5070b46a49d",
+  "deployment_id": "appgdep_6ae1c9a9b9e881918f96a993ba121447",
+  "site_source_commit": "0dc364eb96757be9cf1c40d6693cff12ccf487e6",
+  "github_code_commit": "49de4325481bb62f8623374a5af083f217adf62c",
+  "updated_at": "2026-10-28T10:09:08.549569+00:00",
+  "static_files": 3075,
+  "static_bytes": 264168440,
+  "static_budget_bytes": 264241152,
+  "max_file_bytes": 16777216,
+  "apartment_original_bytes": 349270200,
+  "apartment_lossless": true,
+  "wardrobe_obj_topologies_verified": 148,
+  "clothing_files_lossless": 148,
+  "character_tests_passed": 650,
+  "volume_worlds_audited": 96,
+  "webgl_qa": "unverified: managed preview unavailable"
+}

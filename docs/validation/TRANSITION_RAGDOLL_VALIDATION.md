@@ -194,3 +194,10 @@ GPU, shader-compile observée ou garantie de FPS n'est revendiquée. Le test de 
 racine de l'asset appartement est déjà en échec sur la référence : nom embarqué
 `russian_cigarette_pack(1).glb` au lieu de `ImportedApartmentScene_v1.19.2`.
 Cet asset et son contenu ne sont pas modifiés ici.
+
+La version 21 est publiée sur https://backrooms-integre.teddykoeh.chatgpt.site.
+`deployment-v21.json` conserve les références vérifiées. Le déploiement réussi
+utilise une archive locale validée : 3075 fichiers statiques, 264168440 octets,
+appartement et 148 fichiers MHClO conservés sans perte, 148 topologies OBJ vérifiées.
+Les métadonnées glTF sont compactées avec égalité des objets JSON ; leurs buffers
+binaires et les crédits sont conservés. Les accès existants du Site sont inchangés.
