@@ -5,6 +5,8 @@ import { advanceStrikeClock, CombatImpactAudio } from './CombatFeel';
 import { createCombatPushClip, applyCombatPushPose, combatPushEnvelope, sampleCombatPalm, transferCombatStance } from './CombatPushMotion';
 import { FirstPersonCombatPose, offsetFirstPersonUpperBody } from './FirstPersonCombatPose';
 import { FirstPersonObstaclePose } from './FirstPersonObstaclePose';
+import { EnvironmentCameraGuard } from './EnvironmentCameraGuard';
+import { prepareRagdollHeadMask, installRagdollHeadMask } from './RagdollHeadMask';
 import { capFirstPersonMask } from './FirstPersonMeshCaps';
 import { ClinchAttackVariation, createCombatHeadbuttClip, headbuttContactDamage } from './CombatHeadbutt';
 import { sweepCombatContact, combatChainReady, CombatBalance, stepCombatSpring } from './CombatContact';
@@ -1187,6 +1189,7 @@ export class CharacterRuntime {
     this.presentCamera();
   }
   private presentCamera(): void {
+    if (this.activeCorpseHeadMask) this.activeCorpseHeadMask.value = this.viewMode === 'first-person' && (this.ragdoll || this.recovery) ? 1 : 0;
     const camera = this.viewMode === 'first-person' ? this.firstPersonCamera : this.thirdPersonCamera;
     const output = this.host.renderCamera;
     output.position.copy(camera.position); output.quaternion.copy(camera.quaternion);
@@ -1489,6 +1492,7 @@ export class CharacterRuntime {
   private activePitEdge: PitEdgeAnalysis | null = null;
   private readonly pitRagdollExtraVelocity = new THREE.Vector3();
   private activeCorpseRoot?: THREE.Group;
+  private activeCorpseHeadMask?: { value: number };
   private readonly corpses: PersistentCorpse[] = [];
   private respawnElapsed = 0;
   private idleNpcAnchor?: THREE.Group;
@@ -1573,6 +1577,11 @@ export class CharacterRuntime {
   private readonly deadCameraFaceForwardLocal = new THREE.Vector3();
   private readonly deadCameraFaceForwardWorld = new THREE.Vector3();
   private readonly deadCameraRelative = new THREE.Vector3();
+  private readonly deadCameraGuard = new EnvironmentCameraGuard();
+  private readonly deadCameraCollisionAnchor = new THREE.Vector3();
+  private recoveryProbeAt = -Infinity;
+  private recoveryProbeWide = false;
+  private readonly recoveryProbeAnchor = new THREE.Vector3();
   private deadAimYaw = 0;
   private deadAimPitch = 0;
   private killButton?: HTMLButtonElement;
@@ -1892,6 +1901,7 @@ export class CharacterRuntime {
     });
 
 
+    prepareRagdollHeadMask(character);
     firstPersonCharacter.traverse((object) => {
       const normalizedName = object.name.toLowerCase().replace(/[^a-z0-9]/g, '');
       const bone = object as THREE.Bone;
@@ -9185,6 +9195,8 @@ export class CharacterRuntime {
     normal: THREE.Vector3;
     surface: RagdollImpactSurface;
   } | null {
+    if (event.normal && event.contactKind) return { position: event.position, normal: event.normal,
+      surface: event.contactKind === 'step' ? 'step' : event.normal.y > .56 ? 'floor' : 'wall' };
     let bestDistance = 0.50;
     let best: {
       position: THREE.Vector3;
@@ -9459,7 +9471,17 @@ export class CharacterRuntime {
     this.setStatus(`AU SOL · -${damage} HP · ${this.ragdollFallDistance.toFixed(1)} m`);
   }
 
-  private refreshRecoveryAvailability(wideSearch = false): void {
+  private refreshRecoveryAvailability(wideSearch = false, immediate = wideSearch): void {
+    const anchor = this.recovery?.getPelvisPosition(this.cameraTarget) ?? this.ragdoll?.getPelvisPosition(this.cameraTarget);
+    if (!immediate && this.combatClock < this.recoveryProbeAt && (!wideSearch || this.recoveryProbeWide)) {
+      if (anchor && anchor.distanceToSquared(this.recoveryProbeAnchor) > .0625) {
+        this.recoveryStandPosition = null; this.recoveryGroundAvailable = false;
+      }
+      this.updateRecoveryPrompt(); return;
+    }
+    this.recoveryProbeAt = this.combatClock + .12;
+    this.recoveryProbeWide = wideSearch;
+    if (anchor) this.recoveryProbeAnchor.copy(anchor);
     this.recoveryStandPosition = null;
     this.recoveryGroundAvailable = false;
     if (this.recovery?.isHolding && this.health > 0 && this.physics) {
@@ -9477,6 +9499,9 @@ export class CharacterRuntime {
       this.updateRecoveryPrompt();
       return;
     }
+    // A standing-space search cannot permit a get-up during the hand-off or
+    // an unsupported fast fall. Explicit assistance/input can still probe now.
+    if (!immediate && !wideSearch && !this.ragdoll.isRecoveryReady) { this.updateRecoveryPrompt(); return; }
     const pelvis = this.ragdoll.getPelvisPosition(new THREE.Vector3());
     const ignoredBodies = this.ragdoll.getOwnedBodyHandles();
     this.recoveryStandPosition = this.physics.findStandingRecoveryPosition(
@@ -9807,6 +9832,7 @@ export class CharacterRuntime {
     corpseRoot.quaternion.copy(this.avatarAnchor.quaternion);
     corpseRoot.scale.copy(this.avatarAnchor.scale);
     const corpseCharacter = cloneSkeleton(this.character) as THREE.Group;
+    const headMask = { value: 0 };
     corpseCharacter.name = `CharacterCorpse_${this.corpses.length + 1}`;
     corpseCharacter.traverse((object) => {
       const mesh = object as THREE.Mesh;
@@ -9823,6 +9849,7 @@ export class CharacterRuntime {
         material.depthTest = true;
         material.depthWrite = true;
         material.needsUpdate = true;
+        if (mesh.geometry.hasAttribute('ragdollHeadMask')) installRagdollHeadMask(material, headMask);
       }
       mesh.material = Array.isArray(mesh.material) ? corpseMaterials : corpseMaterials[0]!;
     });
@@ -9860,6 +9887,7 @@ export class CharacterRuntime {
         );
       }
       this.activeCorpseRoot = corpseRoot;
+      this.activeCorpseHeadMask = headMask;
       this.ragdollMode = options.fatal ? 'dead' : 'pit-fall';
       this.recoveryStandPosition = null;
       this.recoveryGroundAvailable = false;
@@ -9871,6 +9899,7 @@ export class CharacterRuntime {
       this.ragdollFallPeakY = pelvis.y;
       this.ragdollFallDistance = 0;
       this.ragdollElapsed = 0;
+      this.recoveryProbeAt = -Infinity;
       this.bloodDecalCooldown = 0;
       this.bloodImpactGate.reset();
     } catch (error) {
@@ -9932,6 +9961,7 @@ export class CharacterRuntime {
       .addScaledVector(this.deadCameraUp, DEAD_CAMERA_FACE_UP)
       .applyQuaternion(inverseHead);
     this.firstPersonCamera.near = DEAD_CAMERA_NEAR_CLIP;
+    this.deadCameraGuard.reset();
     this.firstPersonCamera.updateProjectionMatrix();
     this.deadAimYaw = this.player.getContinuousAimYawRadians();
     this.deadAimPitch = state.view.pitch;
@@ -9962,6 +9992,8 @@ export class CharacterRuntime {
     // dynamic obstacle eligible for autostep instead of a waist-high blocker.
     this.ragdoll.setPlayerTraversalEnabled(true);
     this.corpses.push({ root: this.activeCorpseRoot, ragdoll: this.ragdoll });
+    if (this.activeCorpseHeadMask) this.activeCorpseHeadMask.value = 0;
+    this.activeCorpseHeadMask = undefined;
     this.ragdoll = undefined;
     this.ragdollMode = null;
     this.ragdollElapsed = 0;
@@ -10100,6 +10132,10 @@ export class CharacterRuntime {
       this.firstPersonCamera.fov = nextFov;
       this.firstPersonCamera.updateProjectionMatrix();
     }
+    // The world wins over the face offset when the skull faces the floor. This
+    // final volume query also runs throughout the animated get-up hand-off.
+    const anchor = this.ragdoll?.getHeadCollisionCenter(this.deadCameraCollisionAnchor) ?? headPose.position;
+    this.deadCameraGuard.constrain(this.firstPersonCamera, anchor, this.environment);
   }
 
   private readonly onCombatMouseDown = (event: MouseEvent, fromEmotePicker = false): void => {
@@ -10375,7 +10411,7 @@ export class CharacterRuntime {
       }
       this.recovery.update(rawDelta);
       if (this.recovery.isHolding) {
-        this.refreshRecoveryAvailability(this.recoveryRequested);
+        this.refreshRecoveryAvailability(this.recoveryRequested, false);
         if (this.recoveryRequested && this.canStartRecovery()) this.startGetUp();
       } else if (this.recovery.isFinished) this.finishGetUp();
       if (this.recovery) {
@@ -10396,12 +10432,13 @@ export class CharacterRuntime {
         this.host.beforePhysicsStep?.(FIXED_DELTA);
         this.ragdoll.fixedUpdate(FIXED_DELTA);
         this.processRagdollImpactEvents(FIXED_DELTA);
+        for (const corpse of this.corpses) corpse.ragdoll.passiveUpdate(FIXED_DELTA);
         this.npcRagdoll?.passiveUpdate(FIXED_DELTA);
         this.accumulator -= FIXED_DELTA;
       }
       this.ragdollElapsed += rawDelta;
       this.updateRagdollFallDamage();
-      this.refreshRecoveryAvailability(this.recoveryRequested);
+      this.refreshRecoveryAvailability(this.recoveryRequested, false);
       if (this.recoveryRequested && this.canStartRecovery()) this.startGetUp();
       if (this.viewMode === 'first-person') this.updateDeadFirstPersonCamera(rawDelta);
       else this.updateThirdPersonCamera(rawDelta);

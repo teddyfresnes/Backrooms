@@ -1,0 +1,1051 @@
+{
+  "schema": 1,
+  "seed": "REGIONAL-AUDIT-2",
+  "start": {
+    "x": 14,
+    "y": 2.7649999999999997,
+    "z": 9
+  },
+  "owners": [
+    0,
+    -1,
+    -2
+  ],
+  "seconds": 6,
+  "renderer": "none",
+  "node": "v24.22.1",
+  "runs": [
+    {
+      "fps": 30,
+      "activation": {
+        "cpu": 6.8672349999997095
+      },
+      "mounts": [
+        16.18280600000071,
+        8.435026000001017,
+        9.854073999998946
+      ],
+      "lowerY": -8.9,
+      "reachedLowerAt": 1.3,
+      "touched": true,
+      "maxAwake": 10,
+      "maxContacts": 15,
+      "finalPelvis": [
+        15.413707733154297,
+        -8.792972564697266,
+        8.948862075805664
+      ],
+      "heapDeltaBytes": 34261224,
+      "phases": {
+        "fall": {
+          "cpu": {
+            "n": 39,
+            "median": 7.470812999999907,
+            "p95": 8.523757999999361,
+            "p99": 11.472501000000193,
+            "max": 11.472501000000193,
+            "total": 296.150408000005
+          },
+          "physics": {
+            "n": 39,
+            "median": 5.923862999998164,
+            "p95": 6.73065399999723,
+            "p99": 9.270535999998174,
+            "max": 9.270535999998174,
+            "total": 234.30285499999627
+          },
+          "physicsCalls": {
+            "n": 39,
+            "median": 10,
+            "p95": 10,
+            "p99": 15,
+            "max": 15,
+            "total": 390
+          },
+          "queries": {
+            "n": 39,
+            "median": 0.03460100000120292,
+            "p95": 0.20301200000176323,
+            "p99": 0.29487699999663164,
+            "max": 0.29487699999663164,
+            "total": 2.2983199999926
+          },
+          "queriesCalls": {
+            "n": 39,
+            "median": 17,
+            "p95": 46,
+            "p99": 46,
+            "max": 46,
+            "total": 1030
+          },
+          "impactSearch": {
+            "n": 39,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "total": 0
+          },
+          "impactSearchCalls": {
+            "n": 39,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "total": 0
+          },
+          "recoverySearch": {
+            "n": 39,
+            "median": 0.16412400000081107,
+            "p95": 0.47935200000029,
+            "p99": 0.5441489999993792,
+            "max": 0.5441489999993792,
+            "total": 7.4646280000015395
+          },
+          "recoverySearchCalls": {
+            "n": 39,
+            "median": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "total": 39
+          }
+        },
+        "impact": {
+          "cpu": {
+            "n": 21,
+            "median": 7.329513000000588,
+            "p95": 9.001116999999795,
+            "p99": 14.324498999998468,
+            "max": 14.324498999998468,
+            "total": 162.8723929999942
+          },
+          "physics": {
+            "n": 21,
+            "median": 6.070871000003535,
+            "p95": 6.548542999995334,
+            "p99": 6.58727799999906,
+            "max": 6.58727799999906,
+            "total": 126.69197700000223
+          },
+          "physicsCalls": {
+            "n": 21,
+            "median": 10,
+            "p95": 10,
+            "p99": 10,
+            "max": 10,
+            "total": 210
+          },
+          "queries": {
+            "n": 21,
+            "median": 0,
+            "p95": 0,
+            "p99": 1.611985999999888,
+            "max": 1.611985999999888,
+            "total": 1.611985999999888
+          },
+          "queriesCalls": {
+            "n": 21,
+            "median": 0,
+            "p95": 0,
+            "p99": 80,
+            "max": 80,
+            "total": 80
+          },
+          "impactSearch": {
+            "n": 21,
+            "median": 0,
+            "p95": 0,
+            "p99": 2.9471300000041083,
+            "max": 2.9471300000041083,
+            "total": 2.9471300000041083
+          },
+          "impactSearchCalls": {
+            "n": 21,
+            "median": 0,
+            "p95": 0,
+            "p99": 10,
+            "max": 10,
+            "total": 10
+          },
+          "recoverySearch": {
+            "n": 21,
+            "median": 0.08499599999959173,
+            "p95": 0.12603800000033516,
+            "p99": 0.16468499999973574,
+            "max": 0.16468499999973574,
+            "total": 1.8544090000032156
+          },
+          "recoverySearchCalls": {
+            "n": 21,
+            "median": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "total": 21
+          }
+        },
+        "rest": {
+          "cpu": {
+            "n": 120,
+            "median": 0.11939800000072864,
+            "p95": 8.601103000000876,
+            "p99": 9.456143999999767,
+            "max": 11.02222299999994,
+            "total": 292.0695919999944
+          },
+          "physics": {
+            "n": 120,
+            "median": 0,
+            "p95": 6.838461000001189,
+            "p99": 7.1085129999992205,
+            "max": 7.561425000001691,
+            "total": 227.49211400000058
+          },
+          "physicsCalls": {
+            "n": 120,
+            "median": 0,
+            "p95": 10,
+            "p99": 10,
+            "max": 10,
+            "total": 365
+          },
+          "queries": {
+            "n": 120,
+            "median": 0,
+            "p95": 0.020329999999376014,
+            "p99": 0.20533599999907892,
+            "max": 0.21419699999933073,
+            "total": 0.7907929999910266
+          },
+          "queriesCalls": {
+            "n": 120,
+            "median": 0,
+            "p95": 2,
+            "p99": 10,
+            "max": 18,
+            "total": 66
+          },
+          "impactSearch": {
+            "n": 120,
+            "median": 0,
+            "p95": 0,
+            "p99": 0.28204899999764166,
+            "max": 2.9184500000010303,
+            "total": 3.437912999999753
+          },
+          "impactSearchCalls": {
+            "n": 120,
+            "median": 0,
+            "p95": 0,
+            "p99": 1,
+            "max": 2,
+            "total": 5
+          },
+          "recoverySearch": {
+            "n": 120,
+            "median": 0.021902999998928863,
+            "p95": 0.09725500000058673,
+            "p99": 0.14088900000024296,
+            "max": 0.14329299999917566,
+            "total": 4.8933539999870845
+          },
+          "recoverySearchCalls": {
+            "n": 120,
+            "median": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "total": 120
+          }
+        }
+      },
+      "worstFrames": [
+        {
+          "phase": "impact",
+          "physics": 6.58727799999906,
+          "physicsCalls": 10,
+          "queries": 1.611985999999888,
+          "queriesCalls": 80,
+          "impactSearch": 2.9471300000041083,
+          "impactSearchCalls": 10,
+          "recoverySearch": 0.09737500000119326,
+          "recoverySearchCalls": 1,
+          "cpu": 14.324498999998468
+        },
+        {
+          "phase": "fall",
+          "physics": 9.270535999998174,
+          "physicsCalls": 15,
+          "queries": 0.026077999998960877,
+          "queriesCalls": 17,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.14267199999994773,
+          "recoverySearchCalls": 1,
+          "cpu": 11.472501000000193
+        },
+        {
+          "phase": "rest",
+          "physics": 6.555792000002839,
+          "physicsCalls": 10,
+          "queries": 0.20533599999907892,
+          "queriesCalls": 10,
+          "impactSearch": 2.9184500000010303,
+          "impactSearchCalls": 1,
+          "recoverySearch": 0.1294319999997242,
+          "recoverySearchCalls": 1,
+          "cpu": 11.02222299999994
+        },
+        {
+          "phase": "rest",
+          "physics": 7.561425000001691,
+          "physicsCalls": 10,
+          "queries": 0.025858999999400112,
+          "queriesCalls": 2,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.09557200000017474,
+          "recoverySearchCalls": 1,
+          "cpu": 9.456143999999767
+        },
+        {
+          "phase": "rest",
+          "physics": 6.9950040000003355,
+          "physicsCalls": 10,
+          "queries": 0.01948899999842979,
+          "queriesCalls": 2,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.08838099999957194,
+          "recoverySearchCalls": 1,
+          "cpu": 9.079492999999275
+        },
+        {
+          "phase": "impact",
+          "physics": 6.548542999995334,
+          "physicsCalls": 10,
+          "queries": 0,
+          "queriesCalls": 0,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.16468499999973574,
+          "recoverySearchCalls": 1,
+          "cpu": 9.001116999999795
+        },
+        {
+          "phase": "rest",
+          "physics": 6.838461000001189,
+          "physicsCalls": 10,
+          "queries": 0,
+          "queriesCalls": 0,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.07248699999945529,
+          "recoverySearchCalls": 1,
+          "cpu": 8.744155000000319
+        },
+        {
+          "phase": "rest",
+          "physics": 6.937608000000182,
+          "physicsCalls": 10,
+          "queries": 0.09431799999583745,
+          "queriesCalls": 10,
+          "impactSearch": 0.12396500000068045,
+          "impactSearchCalls": 1,
+          "recoverySearch": 0.08371400000032736,
+          "recoverySearchCalls": 1,
+          "cpu": 8.693590000000768
+        }
+      ]
+    },
+    {
+      "fps": 60,
+      "activation": {
+        "cpu": 5.31748399999924
+      },
+      "mounts": [
+        8.070886000001337,
+        6.53461199999947,
+        8.623716999998578
+      ],
+      "lowerY": -8.9,
+      "reachedLowerAt": 1.3166666666666667,
+      "touched": true,
+      "maxAwake": 10,
+      "maxContacts": 15,
+      "finalPelvis": [
+        15.413707733154297,
+        -8.792972564697266,
+        8.948862075805664
+      ],
+      "heapDeltaBytes": -15165848,
+      "phases": {
+        "fall": {
+          "cpu": {
+            "n": 79,
+            "median": 4.105812999998307,
+            "p95": 5.763586000000942,
+            "p99": 6.730192999999417,
+            "max": 6.730192999999417,
+            "total": 333.5163719999982
+          },
+          "physics": {
+            "n": 79,
+            "median": 3.160826999996061,
+            "p95": 4.283166000001074,
+            "p99": 5.056346000001213,
+            "max": 5.056346000001213,
+            "total": 254.18151699999726
+          },
+          "physicsCalls": {
+            "n": 79,
+            "median": 5,
+            "p95": 5,
+            "p99": 5,
+            "max": 5,
+            "total": 390
+          },
+          "queries": {
+            "n": 79,
+            "median": 0.028302000002440764,
+            "p95": 0.0974140000071202,
+            "p99": 0.11434100000769831,
+            "max": 0.11434100000769831,
+            "total": 3.3819080000030226
+          },
+          "queriesCalls": {
+            "n": 79,
+            "median": 17,
+            "p95": 46,
+            "p99": 46,
+            "max": 46,
+            "total": 2077
+          },
+          "impactSearch": {
+            "n": 79,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "total": 0
+          },
+          "impactSearchCalls": {
+            "n": 79,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "total": 0
+          },
+          "recoverySearch": {
+            "n": 79,
+            "median": 0.1398879999978817,
+            "p95": 0.25371699999959674,
+            "p99": 0.3769709999978659,
+            "max": 0.3769709999978659,
+            "total": 11.672268999962398
+          },
+          "recoverySearchCalls": {
+            "n": 79,
+            "median": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "total": 79
+          }
+        },
+        "impact": {
+          "cpu": {
+            "n": 42,
+            "median": 3.9210280000006605,
+            "p95": 5.826450000000477,
+            "p99": 7.5822599999992235,
+            "max": 7.5822599999992235,
+            "total": 174.65008499999385
+          },
+          "physics": {
+            "n": 42,
+            "median": 3.181949000005261,
+            "p95": 4.6566410000014,
+            "p99": 5.224786999995558,
+            "max": 5.224786999995558,
+            "total": 140.73982600001182
+          },
+          "physicsCalls": {
+            "n": 42,
+            "median": 5,
+            "p95": 5,
+            "p99": 5,
+            "max": 5,
+            "total": 210
+          },
+          "queries": {
+            "n": 42,
+            "median": 0,
+            "p95": 0,
+            "p99": 0.8309130000125151,
+            "max": 0.8309130000125151,
+            "total": 0.9190640000124404
+          },
+          "queriesCalls": {
+            "n": 42,
+            "median": 0,
+            "p95": 0,
+            "p99": 80,
+            "max": 80,
+            "total": 87
+          },
+          "impactSearch": {
+            "n": 42,
+            "median": 0,
+            "p95": 0,
+            "p99": 0.9873570000017935,
+            "max": 0.9873570000017935,
+            "total": 0.9873570000017935
+          },
+          "impactSearchCalls": {
+            "n": 42,
+            "median": 0,
+            "p95": 0,
+            "p99": 10,
+            "max": 10,
+            "total": 10
+          },
+          "recoverySearch": {
+            "n": 42,
+            "median": 0.054541000001336215,
+            "p95": 0.15540099999998347,
+            "p99": 0.16311200000200188,
+            "max": 0.16311200000200188,
+            "total": 2.8422710000013467
+          },
+          "recoverySearchCalls": {
+            "n": 42,
+            "median": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "total": 42
+          }
+        },
+        "rest": {
+          "cpu": {
+            "n": 239,
+            "median": 0.14955300000292482,
+            "p95": 5.198377000000619,
+            "p99": 7.562910999997257,
+            "max": 8.869512999997823,
+            "total": 354.3885370000171
+          },
+          "physics": {
+            "n": 239,
+            "median": 0,
+            "p95": 3.854519000000437,
+            "p99": 6.635421999995742,
+            "max": 7.924467000000732,
+            "total": 262.7425370000019
+          },
+          "physicsCalls": {
+            "n": 239,
+            "median": 0,
+            "p95": 5,
+            "p99": 5,
+            "max": 5,
+            "total": 365
+          },
+          "queries": {
+            "n": 239,
+            "median": 0,
+            "p95": 0.012828999999328516,
+            "p99": 0.15839599999890197,
+            "max": 0.30953000000226893,
+            "total": 0.9673009999933129
+          },
+          "queriesCalls": {
+            "n": 239,
+            "median": 0,
+            "p95": 1,
+            "p99": 9,
+            "max": 18,
+            "total": 66
+          },
+          "impactSearch": {
+            "n": 239,
+            "median": 0,
+            "p95": 0,
+            "p99": 0.18501499999911175,
+            "max": 0.3426389999985986,
+            "total": 0.8240839999962191
+          },
+          "impactSearchCalls": {
+            "n": 239,
+            "median": 0,
+            "p95": 0,
+            "p99": 1,
+            "max": 2,
+            "total": 5
+          },
+          "recoverySearch": {
+            "n": 239,
+            "median": 0.021531999998842366,
+            "p95": 0.10701899999912712,
+            "p99": 0.27188400000159163,
+            "max": 1.5165340000021388,
+            "total": 11.064453000020876
+          },
+          "recoverySearchCalls": {
+            "n": 239,
+            "median": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "total": 239
+          }
+        }
+      },
+      "worstFrames": [
+        {
+          "phase": "rest",
+          "physics": 7.924467000000732,
+          "physicsCalls": 5,
+          "queries": 0,
+          "queriesCalls": 0,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.10701899999912712,
+          "recoverySearchCalls": 1,
+          "cpu": 8.869512999997823
+        },
+        {
+          "phase": "rest",
+          "physics": 6.635421999995742,
+          "physicsCalls": 5,
+          "queries": 0,
+          "queriesCalls": 0,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.10001800000100047,
+          "recoverySearchCalls": 1,
+          "cpu": 7.582430000002205
+        },
+        {
+          "phase": "impact",
+          "physics": 4.5443529999975,
+          "physicsCalls": 5,
+          "queries": 0.8309130000125151,
+          "queriesCalls": 80,
+          "impactSearch": 0.9873570000017935,
+          "impactSearchCalls": 10,
+          "recoverySearch": 0.12057899999854271,
+          "recoverySearchCalls": 1,
+          "cpu": 7.5822599999992235
+        },
+        {
+          "phase": "rest",
+          "physics": 6.7835820000073,
+          "physicsCalls": 5,
+          "queries": 0.013249999999970896,
+          "queriesCalls": 1,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.07522199999948498,
+          "recoverySearchCalls": 1,
+          "cpu": 7.562910999997257
+        },
+        {
+          "phase": "rest",
+          "physics": 5.805260000000999,
+          "physicsCalls": 5,
+          "queries": 0.012369000000035157,
+          "queriesCalls": 1,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.06615900000178954,
+          "recoverySearchCalls": 1,
+          "cpu": 6.776763000001665
+        },
+        {
+          "phase": "fall",
+          "physics": 3.1297109999977692,
+          "physicsCalls": 5,
+          "queries": 0.025696999997308012,
+          "queriesCalls": 17,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.14042800000243005,
+          "recoverySearchCalls": 1,
+          "cpu": 6.730192999999417
+        },
+        {
+          "phase": "fall",
+          "physics": 5.056346000001213,
+          "physicsCalls": 5,
+          "queries": 0.029371999993600184,
+          "queriesCalls": 17,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.23435799999788287,
+          "recoverySearchCalls": 1,
+          "cpu": 6.723082000000431
+        },
+        {
+          "phase": "fall",
+          "physics": 5.024766000005911,
+          "physicsCalls": 5,
+          "queries": 0.029995000004419126,
+          "queriesCalls": 17,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.18065800000113086,
+          "recoverySearchCalls": 1,
+          "cpu": 6.2598740000030375
+        }
+      ]
+    },
+    {
+      "fps": 120,
+      "activation": {
+        "cpu": 5.1625569999996515
+      },
+      "mounts": [
+        7.361497000001691,
+        6.205657999998948,
+        8.476905999999872
+      ],
+      "lowerY": -8.9,
+      "reachedLowerAt": 1.3083333333333333,
+      "touched": true,
+      "maxAwake": 10,
+      "maxContacts": 15,
+      "finalPelvis": [
+        15.413707733154297,
+        -8.792972564697266,
+        8.948862075805664
+      ],
+      "heapDeltaBytes": 13109600,
+      "phases": {
+        "fall": {
+          "cpu": {
+            "n": 157,
+            "median": 0.9874579999996058,
+            "p95": 4.130202000000281,
+            "p99": 6.05354300000181,
+            "max": 7.276099999999133,
+            "total": 304.90711400001965
+          },
+          "physics": {
+            "n": 157,
+            "median": 0,
+            "p95": 3.246227000003273,
+            "p99": 4.192474999996193,
+            "max": 6.513805000005959,
+            "total": 234.5191659999764
+          },
+          "physicsCalls": {
+            "n": 157,
+            "median": 0,
+            "p95": 5,
+            "p99": 5,
+            "max": 5,
+            "total": 390
+          },
+          "queries": {
+            "n": 157,
+            "median": 0.024157999996532453,
+            "p95": 0.06732700001521152,
+            "p99": 0.11575200001243502,
+            "max": 0.3172230000127456,
+            "total": 6.03186000007554
+          },
+          "queriesCalls": {
+            "n": 157,
+            "median": 17,
+            "p95": 46,
+            "p99": 46,
+            "max": 46,
+            "total": 4147
+          },
+          "impactSearch": {
+            "n": 157,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "total": 0
+          },
+          "impactSearchCalls": {
+            "n": 157,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0,
+            "total": 0
+          },
+          "recoverySearch": {
+            "n": 157,
+            "median": 0.0837150000006659,
+            "p95": 0.14709899999797926,
+            "p99": 0.2257359999966866,
+            "max": 0.3689489999997022,
+            "total": 14.440064999991591
+          },
+          "recoverySearchCalls": {
+            "n": 157,
+            "median": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "total": 157
+          }
+        },
+        "impact": {
+          "cpu": {
+            "n": 84,
+            "median": 3.165087000001222,
+            "p95": 3.787291999997251,
+            "p99": 5.793465999999171,
+            "max": 5.793465999999171,
+            "total": 153.92855699999564
+          },
+          "physics": {
+            "n": 84,
+            "median": 2.6804860000011104,
+            "p95": 3.183976000003895,
+            "p99": 3.391274000001431,
+            "max": 3.391274000001431,
+            "total": 124.05532399997901
+          },
+          "physicsCalls": {
+            "n": 84,
+            "median": 5,
+            "p95": 5,
+            "p99": 5,
+            "max": 5,
+            "total": 210
+          },
+          "queries": {
+            "n": 84,
+            "median": 0,
+            "p95": 0,
+            "p99": 0.5018929999969259,
+            "max": 0.5018929999969259,
+            "total": 0.614540999991732
+          },
+          "queriesCalls": {
+            "n": 84,
+            "median": 0,
+            "p95": 0,
+            "p99": 80,
+            "max": 80,
+            "total": 101
+          },
+          "impactSearch": {
+            "n": 84,
+            "median": 0,
+            "p95": 0,
+            "p99": 0.6360360000071523,
+            "max": 0.6360360000071523,
+            "total": 0.6360360000071523
+          },
+          "impactSearchCalls": {
+            "n": 84,
+            "median": 0,
+            "p95": 0,
+            "p99": 10,
+            "max": 10,
+            "total": 10
+          },
+          "recoverySearch": {
+            "n": 84,
+            "median": 0.03409100000135368,
+            "p95": 0.0682809999998426,
+            "p99": 0.13223700000162353,
+            "max": 0.13223700000162353,
+            "total": 2.8692840000258
+          },
+          "recoverySearchCalls": {
+            "n": 84,
+            "median": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "total": 84
+          }
+        },
+        "rest": {
+          "cpu": {
+            "n": 479,
+            "median": 0.0645860000004177,
+            "p95": 3.9053579999999783,
+            "p99": 5.147433999998611,
+            "max": 8.04161799999929,
+            "total": 317.0921669999989
+          },
+          "physics": {
+            "n": 479,
+            "median": 0,
+            "p95": 3.208682000004046,
+            "p99": 4.032336000000214,
+            "max": 6.829896000002918,
+            "total": 235.1700320000491
+          },
+          "physicsCalls": {
+            "n": 479,
+            "median": 0,
+            "p95": 5,
+            "p99": 5,
+            "max": 5,
+            "total": 365
+          },
+          "queries": {
+            "n": 479,
+            "median": 0,
+            "p95": 0.008241999999881955,
+            "p99": 0.014081000001169741,
+            "max": 0.15357899999798974,
+            "total": 0.6306799999983923
+          },
+          "queriesCalls": {
+            "n": 479,
+            "median": 0,
+            "p95": 1,
+            "p99": 1,
+            "max": 18,
+            "total": 66
+          },
+          "impactSearch": {
+            "n": 479,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0.18898099999933038,
+            "total": 0.5271539999994275
+          },
+          "impactSearchCalls": {
+            "n": 479,
+            "median": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 2,
+            "total": 5
+          },
+          "recoverySearch": {
+            "n": 479,
+            "median": 0.00897400000030757,
+            "p95": 0.05559300000095391,
+            "p99": 0.12104999999792199,
+            "max": 0.680051999999705,
+            "total": 9.262128999998822
+          },
+          "recoverySearchCalls": {
+            "n": 479,
+            "median": 1,
+            "p95": 1,
+            "p99": 1,
+            "max": 1,
+            "total": 479
+          }
+        }
+      },
+      "worstFrames": [
+        {
+          "phase": "rest",
+          "physics": 6.829896000002918,
+          "physicsCalls": 5,
+          "queries": 0,
+          "queriesCalls": 0,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.11985799999820301,
+          "recoverySearchCalls": 1,
+          "cpu": 8.04161799999929
+        },
+        {
+          "phase": "fall",
+          "physics": 6.513805000005959,
+          "physicsCalls": 5,
+          "queries": 0.024157999996532453,
+          "queriesCalls": 17,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.11543199999869103,
+          "recoverySearchCalls": 1,
+          "cpu": 7.276099999999133
+        },
+        {
+          "phase": "rest",
+          "physics": 3.2056770000017423,
+          "physicsCalls": 5,
+          "queries": 0,
+          "queriesCalls": 0,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.08458600000085426,
+          "recoverySearchCalls": 1,
+          "cpu": 6.091748999999254
+        },
+        {
+          "phase": "fall",
+          "physics": 2.914192999993247,
+          "physicsCalls": 5,
+          "queries": 0.026157999993301928,
+          "queriesCalls": 17,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.1349709999994957,
+          "recoverySearchCalls": 1,
+          "cpu": 6.05354300000181
+        },
+        {
+          "phase": "impact",
+          "physics": 3.350572999996075,
+          "physicsCalls": 5,
+          "queries": 0.5018929999969259,
+          "queriesCalls": 80,
+          "impactSearch": 0.6360360000071523,
+          "impactSearchCalls": 10,
+          "recoverySearch": 0.05106599999999162,
+          "recoverySearchCalls": 1,
+          "cpu": 5.793465999999171
+        },
+        {
+          "phase": "rest",
+          "physics": 4.438048000003619,
+          "physicsCalls": 5,
+          "queries": 0,
+          "queriesCalls": 0,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.12104999999792199,
+          "recoverySearchCalls": 1,
+          "cpu": 5.511074999998527
+        },
+        {
+          "phase": "fall",
+          "physics": 4.13406799999575,
+          "physicsCalls": 5,
+          "queries": 0.03823799998644972,
+          "queriesCalls": 17,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.12012899999899673,
+          "recoverySearchCalls": 1,
+          "cpu": 5.437706000000617
+        },
+        {
+          "phase": "rest",
+          "physics": 4.314374999998108,
+          "physicsCalls": 5,
+          "queries": 0,
+          "queriesCalls": 0,
+          "impactSearch": 0,
+          "impactSearchCalls": 0,
+          "recoverySearch": 0.07812600000033854,
+          "recoverySearchCalls": 1,
+          "cpu": 5.324988000000303
+        }
+      ]
+    }
+  ]
+}

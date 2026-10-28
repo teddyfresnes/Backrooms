@@ -6,6 +6,7 @@ import { PhysicsWorld } from './PhysicsWorld';
 import type { GroundKickVolume } from './GroundKickContact';
 import { activeRagdollAnimationCarry, activeRagdollEnvelope, activeRagdollProfile } from './ActiveRagdollMotion';
 import type { ActiveRagdollProfile } from './ActiveRagdollMotion';
+import type { StaticCollider } from '../world/types';
 import {
   FINAL_SETTLE_RELEASE_THRESHOLD,
   FATAL_FALL_TERMINAL_REST_HOLD_SECONDS,
@@ -43,6 +44,7 @@ const MIN_SETTLE_TIME = 1.75;
 const SELF_COLLISION_DELAY = 0.24;
 const COHERENCE_DURATION = 0.30;
 const RAGDOLL_SUBSTEPS = 5;
+const BALLISTIC_SUBSTEPS = 2;
 const ANATOMY_SOFT_ZONE = 0.72;
 // Animation inertia is intentionally a little under 1:1. It should make a
 // swinging arm / stepping leg continue naturally into physics, but malformed
@@ -213,6 +215,9 @@ export interface RagdollImpactEvent {
   readonly velocityBefore: THREE.Vector3;
   readonly velocityAfter: THREE.Vector3;
   readonly velocityChange: number;
+  /** Actual fixed-world contact; absent only for externally authored events. */
+  readonly normal?: THREE.Vector3;
+  readonly contactKind?: StaticCollider['kind'];
 }
 
 export interface RagdollBoneMotion {
@@ -269,6 +274,8 @@ export class RagdollSystem {
   private readonly ownedBodies: RAPIER.RigidBody[] = [];
   private readonly jointFrameBodies: RAPIER.RigidBody[] = [];
   private readonly impactEvents: RagdollImpactEvent[] = [];
+  private readonly flightQuery = new RAPIER.Cuboid(1, 1, 1);
+  private readonly flightQueryCenter = new THREE.Vector3();
   private combatKnockoutStartedAt = -Infinity;
   private combatKnockoutCurl = 0;
   private combatKnockoutSide = 0;
@@ -465,15 +472,20 @@ export class RagdollSystem {
   }
 
   fixedUpdate(delta: number): void {
+    const safeDelta = Math.max(0, delta);
+    if (safeDelta <= 0) return;
     if (this.settled) {
-      if (this.ownedBodies.every(body => !body.isValid() || body.isSleeping())) return;
+      // This ragdoll is the shared world's driver, even while its own island
+      // sleeps. NPCs and previous corpses must still advance exactly once.
+      if (this.ownedBodies.every(body => !body.isValid() || body.isSleeping())) {
+        this.physics.stepDynamics(safeDelta);
+        return;
+      }
       // Removing a support or another physical body hitting the island may wake
       // it without going through a gameplay impulse. Resume the physical fall.
       this.settled = false;
       this.resetGroundRestAfterImpact();
     }
-    const safeDelta = Math.max(0, delta);
-    if (safeDelta <= 0) return;
     this.elapsed += safeDelta;
     if (this.fatalFallImpactElapsed >= 0) this.fatalFallImpactElapsed += safeDelta;
 
@@ -485,10 +497,11 @@ export class RagdollSystem {
     // destabilise than one large 60 Hz solve. The world timestep is restored
     // immediately afterwards so the live PlayerController keeps its contract.
     const previousTimestep = this.physics.world.timestep;
-    const substep = safeDelta / RAGDOLL_SUBSTEPS;
+    const substeps = this.ballisticStepIsClear(safeDelta) ? BALLISTIC_SUBSTEPS : RAGDOLL_SUBSTEPS;
+    const substep = safeDelta / substeps;
     try {
       this.physics.world.timestep = substep;
-      for (let index = 0; index < RAGDOLL_SUBSTEPS; index += 1) {
+      for (let index = 0; index < substeps; index += 1) {
         // At the start of a death, damp only *relative* angular motion. This
         // keeps the silhouette coherent without forcing it toward an animation.
         this.applyEarlyCoherence();
@@ -522,6 +535,27 @@ export class RagdollSystem {
     if (!rested) this.updateSettling();
   }
 
+  /** Conservatively bound every limb and its possible travel this tick. The
+   * hand-off, self-collision activation and all nearby contacts keep 300 Hz.
+   * Only an empty swept volume uses 120 Hz; CCD/solver settings stay intact. */
+  private ballisticStepIsClear(delta: number): boolean {
+    if (this.elapsed < .4 || this.fatalFallImpactElapsed >= 0 || this.groundRestCandidate) return false;
+    let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity, speed = 0;
+    for (const part of this.bodies.values()) {
+      const p = part.body.translation(), v = part.body.linvel();
+      minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); minZ = Math.min(minZ, p.z);
+      maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); maxZ = Math.max(maxZ, p.z);
+      speed = Math.max(speed, Math.hypot(v.x, v.y, v.z));
+    }
+    const margin = .6 + speed * delta + 12 * delta * delta;
+    this.flightQueryCenter.set((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2);
+    this.flightQuery.halfExtents.x = (maxX - minX) / 2 + margin;
+    this.flightQuery.halfExtents.y = (maxY - minY) / 2 + margin;
+    this.flightQuery.halfExtents.z = (maxZ - minZ) / 2 + margin;
+    return !this.physics.world.intersectionWithShape(this.flightQueryCenter, { x: 0, y: 0, z: 0, w: 1 }, this.flightQuery,
+      undefined, undefined, undefined, undefined, this.physics.isEnvironmentCollider);
+  }
+
   private captureImpactPreStep(delta: number): void {
     for (const ragdollBody of this.bodies.values()) {
       ragdollBody.impactCooldown = Math.max(0, ragdollBody.impactCooldown - delta);
@@ -545,10 +579,29 @@ export class RagdollSystem {
       const changeZ = before.z - afterZ;
       const velocityChange = Math.hypot(changeX, changeY, changeZ);
       if (velocityChange < 1.15) continue;
-      const positionRaw = ragdollBody.body.translation();
+      // Joint impulses and self contacts are not impacts against architecture.
+      // Keep the strongest real manifold instead of guessing nearby AABBs and
+      // raycasting seven directions again in CharacterRuntime.
+      let incoming = 0, point: RAPIER.Vector | undefined, normal: THREE.Vector3 | undefined, contactKind: StaticCollider['kind'] | undefined;
+      for (const collider of ragdollBody.colliders) this.physics.world.contactPairsWith(collider, other => {
+        if (!this.physics.isEnvironmentCollider(other)) return;
+        this.physics.world.contactPair(collider, other, (manifold, flipped) => {
+          const n = manifold.normal(), sign = flipped ? 1 : -1;
+          const approach = -(before.x * n.x + before.y * n.y + before.z * n.z) * sign;
+          if (approach <= incoming) return;
+          for (let i = 0; i < manifold.numSolverContacts(); i++) {
+            if (manifold.solverContactDist(i) > .03) continue;
+            incoming = approach; point = manifold.solverContactPoint(i);
+            normal = new THREE.Vector3(n.x * sign, n.y * sign, n.z * sign);
+            contactKind = this.physics.getEnvironmentKind(other);
+            break;
+          }
+        });
+      });
+      if (!point || !normal || incoming < 2.4) continue;
       this.impactEvents.push({
         bodyId: ragdollBody.id,
-        position: new THREE.Vector3(positionRaw.x, positionRaw.y, positionRaw.z),
+        position: new THREE.Vector3(point.x, point.y, point.z), normal, contactKind,
         velocityBefore: before.clone(),
         velocityAfter: new THREE.Vector3(afterX, afterY, afterZ),
         velocityChange,
@@ -765,6 +818,16 @@ export class RagdollSystem {
     this.head.getWorldPosition(position);
     this.head.getWorldQuaternion(rotation);
     return { position, rotation };
+  }
+
+  getHeadCollisionCenter(target: THREE.Vector3): THREE.Vector3 {
+    const head = this.bodies.get('head');
+    return head ? target.copy(head.body.translation()) : this.getHeadPose(target).position;
+  }
+
+  getVelocity(target: THREE.Vector3): THREE.Vector3 {
+    const core = this.bodies.get('core');
+    return core ? target.copy(core.body.linvel()) : target.set(0, 0, 0);
   }
 
   getOwnedBodyHandles(): ReadonlySet<number> {
