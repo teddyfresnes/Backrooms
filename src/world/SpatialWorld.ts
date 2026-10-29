@@ -3,6 +3,7 @@ import { installLiminalAtrium } from './LiminalAtrium';
 import { installOrdinaryArchitecture, connectArchitecturalOpenings } from './LiminalArchitecture';
 import { createSpatialBaseboards } from './SpatialBaseboards';
 import { cleanSpatialWallJunctions } from './SpatialWallJunctions';
+import { closeSpatialFloorContacts } from './SpatialFloorContacts';
 import { spatialTemplate, clearSpatialTemplates, transitionHost } from './SpatialTemplates';
 import { applySpatialRelief } from './SpatialRelief';
 import { reconcileStructuralSupports } from './StructuralSupports';
@@ -513,6 +514,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
   // Supports and gallery parapets can bury a last ordinary fragment. Resolve
   // those final solids before their finish, and rebuild the physical floor.
   if (cleanSpatialWallJunctions(world)) rebuildFloors();
+  closeSpatialFloorContacts(world);
   spatial.prisms.push(...createSpatialBaseboards(world));
 
   for (const s of topology.surfaces) {

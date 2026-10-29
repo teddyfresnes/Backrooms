@@ -18,7 +18,8 @@ import { pointInRect } from ${file('.', 'src/world/types.ts')};
 import { prepareSpatialArchitecture, mountArchitectureBatch } from ${file('.', 'src/render/SpatialArchitectureBuffers.ts')};
 import { auditAxisPlaneTriangles } from ${file('.', 'tests/support/geometry-audit.ts')};
 import { auditFinishCoverage } from ${file('.', 'tests/support/finish-audit.ts')};
-${baseline ? `import { generateInfiniteChunk as generateBefore, clearInfiniteWorldCaches as clearBefore } from ${file(baseline, 'src/world/InfiniteWorld.ts')};` : ''}
+${baseline ? `import { generateInfiniteChunk as generateBefore, clearInfiniteWorldCaches as clearBefore } from ${file(baseline, 'src/world/InfiniteWorld.ts')};
+import { prepareSpatialArchitecture as prepareBefore } from ${file(baseline, 'src/render/SpatialArchitectureBuffers.ts')};` : ''}
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const records = [], errors = [];
 for (let i = 0; i < 24; i++) {
@@ -32,14 +33,28 @@ for (let i = 0; i < 24; i++) {
     bareRooms: w.rooms.filter(r => r.baseboards === false).length, features: counts(w),
     sourceFeaturesUnchanged: before ? hash(w.features) === hash(before.features) : undefined,
     roomShapesUnchanged: before ? hash(roomShape(w)) === hash(roomShape(before)) : undefined,
+    lightingUnchanged: before ? hash([w.lights, w.unlitZones, w.surfaceStyle]) === hash([before.lights, before.unlitZones, before.surfaceStyle]) : undefined,
     openingsUnchanged: before ? hash([w.floorOpenings, w.ceilingOpenings]) === hash([before.floorOpenings, before.ceilingOpenings]) : undefined };
   if (before && hash(counts(w)) !== hash(counts(before))) errors.push({ seed, reason: 'feature counts changed', before: counts(before), after: counts(w) });
   if (w.spatial) {
-    const batch = prepareSpatialArchitecture(w), geometries = batch.map(b => ({ name: b.name, material: b.material, geometry: mountArchitectureBatch(b) }));
+    const prepared = prepareSpatialArchitecture(JSON.parse(JSON.stringify(w)));
+    const batch = structuredClone(prepared, { transfer: prepared.flatMap(b => [b.position.buffer, b.normal.buffer, b.uv.buffer, b.color.buffer]) });
+    const geometries = batch.map(b => ({ name: b.name, material: b.material, geometry: mountArchitectureBatch(b) }));
     const coverage = auditFinishCoverage(w, geometries); row.coverage = { ...coverage, errors: undefined };
     if (coverage.errors.length) errors.push({ seed, reason: 'final contour coverage', details: coverage.errors });
+    ${baseline ? `if (before?.spatial) {
+      const prior = prepareBefore(before).map(b => ({ material: b.material, geometry: mountArchitectureBatch(b) }));
+      const checked = auditFinishCoverage(before, prior); row.beforeCoverage = { ...checked, errors: checked.errors.length };
+      prior.forEach(b => b.geometry.dispose());
+      const geometry = wall => [wall.x, wall.z, wall.orientation, wall.length, wall.thickness, wall.bottom, wall.height];
+      const oldWalls = new Map(before.walls.map(w => [w.id, w]));
+      row.wallCorrections = { removed: before.walls.filter(a => !w.walls.some(b => b.id === a.id)).length,
+        changed: w.walls.filter(a => oldWalls.has(a.id) && hash(geometry(a)) !== hash(geometry(oldWalls.get(a.id)))).length,
+        floorContacts: w.topology.surfaces.filter(s => s.id.includes('/contact-')).length };
+    }` : ''}
     const audit = auditAxisPlaneTriangles(geometries); row.triangles = audit.triangleCount; row.batches = batch.length;
     row.baseboards = w.spatial.prisms.filter(p => p.material === 'baseboard').length;
+    if (batch.length > 10) errors.push({ seed, reason: 'architecture batch budget exceeded', count: batch.length });
     if (audit.errors.length) errors.push({ seed, reason: 'overlapping axis-plane triangles', details: audit.errors });
     for (const b of batch) for (let n = 0; n < b.normal.length; n += 3) {
       const length = Math.hypot(b.normal[n], b.normal[n + 1], b.normal[n + 2]);

@@ -123,8 +123,11 @@ redondante, pas de lui appliquer un décalage arbitraire.
 - `SpatialBaseboards` construit les bandes sur les faces verticales exposées des
   solides finaux, au profil du vrai sol et de l’union de ses fragments. Les rampes
   utilisent leur plan affine, même loin de l’origine. La finition vient de la pièce canonique,
-  avec exclusions partielles par face via `BaseboardZones`, partagé avec le rendu
-  historique. Les angles compatibles ont une coupe d'onglet ; aucune rallonge
+  résolue par intervalle dans `SpatialFinishPolicy` lorsqu'un sol traverse plusieurs
+  pièces. Les exclusions partielles par face viennent de `BaseboardZones`, partagé
+  avec le rendu historique. Un seuil tangent au sol n'occulte pas la plinthe.
+  Les marches ne reçoivent pas de bandes horizontales automatiques ; les pentes
+  et paliers gardent leur profil réel. Les angles compatibles ont une coupe d'onglet ; aucune rallonge
   arbitraire n'est ajoutée aux extrémités historiques. Les plinthes restent sans
   collision et regroupées dans le même lot de matériau.
 - `SpatialPrism.openFaces` omet les contacts mur/sol et les onglets internes des

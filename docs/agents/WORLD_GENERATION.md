@@ -98,6 +98,12 @@ diffuseurs blancs neutres ; son profil d’éclairage moderne reste plus faible.
   ne pas effacer un autre niveau. Une exclusion historique sans altitude reste
   applicable par face/intervalle. `SpatialBaseboards` consomme les contours et
   sols finaux, y compris façades, piliers, passages bas et parois de galerie.
+- Le nettoyage spatial final ferme aussi les L/T recréés par les découpes.
+  `WallSegment.junctionRole` protège colonnes, masses et appuis lors du passage
+  au worker. `SpatialFloorContacts` ferme uniquement les contacts sol/mur de
+  moins de 5 mm, après les dernières découpes, hors vides/réservations et sans
+  franchir une limite de propriétaire. Sol visible et collider viennent du même
+  patch ; les niches et les tolérances du rendu ne sont pas modifiées.
 - Une ouverture de sol ne doit conserver aucun collider de sol en dessous.
 - `floorRects` décrit le sol effectivement rendu et praticable.
 - Les rampes et marches ont une géométrie visuelle et des formes Rapier issues

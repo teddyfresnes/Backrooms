@@ -46,6 +46,10 @@ export const auditFinishCoverage = (world: WorldPlan, batches: { material: strin
             if (floor.role === 'stair' || !pointInRect(x, z, floor.bounds)) continue;
             const y = surfaceY(floor, x, z);
             if (y < w.bottom - 1e-6 || y + .14 > w.bottom + w.height + 1e-6 || levels.has(Math.round(y * 1e6))) continue;
+            // A ray starting inside a perpendicular solid can see the far
+            // wall through its backface. Such a buried face needs no trim.
+            if (solidIndex.query({ minX: x, maxX: x, minZ: z, maxZ: z }).some(other => other !== w
+              && pointInRect(x, z, boundsOf(other), 1e-6) && y + .06 > other.bottom + 1e-6 && y + .06 < other.bottom + other.height - 1e-6)) continue;
             if (!nearby.some(s => pointInRect(outerX, outerZ, s.bounds) && Math.abs(surfaceY(s, outerX, outerZ) - surfaceY(floor, outerX, outerZ)) < 1e-6)) continue;
             const origin = new THREE.Vector3(alongX ? at : fixed + sign * .24, y + .06, alongX ? fixed + sign * .24 : at);
             ray.set(origin, new THREE.Vector3(alongX ? 0 : -sign, 0, alongX ? -sign : 0)); ray.near = 0; ray.far = .241;

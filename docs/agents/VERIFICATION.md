@@ -143,8 +143,12 @@ de l'observateur. `ApartmentBrightness` protège la priorité de l'interrupteur.
 Ces sondes CPU ne prouvent ni l'apparence du bloom ni le coût GPU des sept sources.
 `SpatialBaseboards.test.ts` raycaste les bandes finales aux angles, exclusions,
 sols inclinés et coutures ; il couvre aussi les résidus post-découpe et leurs
-colliders. `node scripts/audit-wall-finishes.mjs [ancien-checkout]` contrôle 24
-seeds, les triangles et la conservation des features, sans prétendre mesurer le GPU.
+colliders. `SpatialFinishesPhysical` compare les contacts de sol réparés dans les
+buffers transférés et Rapier. `node scripts/audit-wall-finishes.mjs [ancien-checkout]`
+contrôle 24 seeds : chaque intervalle de contour, faces courtes comprises, est
+sondé au plus tous les 2 m, avec zones nues, supports, triangles et conservation
+des features/lumières. Le harnais indépendant est `tests/support/finish-audit.ts`.
+Il ne mesure pas le GPU. Voir [la validation actuelle](../validation/WALL_FINISH_VALIDATION_20261029.md).
 Le rapport [STAIR_FIX_VALIDATION.md](../validation/STAIR_FIX_VALIDATION.md)
 distingue les contrôles CPU du contrôle visuel WebGL.
 `AtriumEnvelope` vérifie les quatre niveaux, les parois porteuses, les tunnels

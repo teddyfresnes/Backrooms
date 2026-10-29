@@ -43,13 +43,13 @@ export interface WalkableTopology {
 export const overlapRect = (a: Rect, b: Rect, padding = 0): boolean => a.minX < b.maxX + padding && a.maxX > b.minX - padding && a.minZ < b.maxZ + padding && a.maxZ > b.minZ - padding;
 export const clipRect = (a: Rect, b: Rect): Rect | undefined => overlapRect(a, b) ? {
   minX: Math.max(a.minX, b.minX), maxX: Math.min(a.maxX, b.maxX), minZ: Math.max(a.minZ, b.minZ), maxZ: Math.min(a.maxZ, b.maxZ) } : undefined;
-export const cutRects = (input: readonly Rect[], cuts: readonly Rect[]): Rect[] => {
+export const cutRects = (input: readonly Rect[], cuts: readonly Rect[], minimumExtent = .001): Rect[] => {
   let pieces = [...input];
   for (const cut of cuts) pieces = pieces.flatMap(r => {
     const c = clipRect(r, cut); if (!c) return [r];
     return [{ ...r, maxX: c.minX }, { ...r, minX: c.maxX },
       { minX: c.minX, maxX: c.maxX, minZ: r.minZ, maxZ: c.minZ },
-      { minX: c.minX, maxX: c.maxX, minZ: c.maxZ, maxZ: r.maxZ }].filter(p => rectWidth(p) > .001 && rectDepth(p) > .001);
+      { minX: c.minX, maxX: c.maxX, minZ: c.maxZ, maxZ: r.maxZ }].filter(p => rectWidth(p) > minimumExtent && rectDepth(p) > minimumExtent);
   });
   return pieces;
 };

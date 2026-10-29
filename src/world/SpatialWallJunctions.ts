@@ -41,18 +41,19 @@ export const cleanSpatialWallJunctions = (world: WorldPlan, closeReturns = true)
   });
   const walls = boxes.filter(w => !w.detail && !w.junctionRole && w.collision && w.kind !== 'vista-frame' && w.height > .3 && safe(boundsOf(w)));
   const editable = new Set(walls);
-  // Include the whole possible corner ownership change, not just a tiny snap.
+  // Relocate changed walls immediately. A tiny search envelope remains correct
+  // even for chains of snaps and full-thickness L corner ownership changes.
   const partitionThickness = 2.8; // Maximum ordinary BSP thickness, not a mass.
-  const margin = partitionThickness + SHOULDER;
-  const index = new RectIndex(boxes, w => {
-    const b = boundsOf(w); return { minX: b.minX - margin, maxX: b.maxX + margin, minZ: b.minZ - margin, maxZ: b.maxZ + margin };
-  });
+  const margin = RESIDUAL + SHOULDER;
+  const expand = (b: Rect): Rect => ({ minX: b.minX - margin, maxX: b.maxX + margin, minZ: b.minZ - margin, maxZ: b.maxZ + margin });
+  const index = new RectIndex(boxes, w => expand(boundsOf(w)));
   const changed = new Set<WallSegment>(), removed = new Set<WallSegment>();
   const setBounds = (w: WallSegment, b: Rect) => {
+    const previous = expand(boundsOf(w));
     w.x = (b.minX + b.maxX) / 2; w.z = (b.minZ + b.maxZ) / 2;
     w.length = w.orientation === 'x' ? b.maxX - b.minX : b.maxZ - b.minZ;
     w.thickness = w.orientation === 'x' ? b.maxZ - b.minZ : b.maxX - b.minX;
-    changed.add(w);
+    changed.add(w); index.relocate(w, previous);
   };
   const rank = (a: WallSegment, b: WallSegment) => b.length - a.length || a.id.localeCompare(b.id);
   for (const w of [...walls].sort(rank)) for (const peer of index.query(boundsOf(w)).sort(rank)) {

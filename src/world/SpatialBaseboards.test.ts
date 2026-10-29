@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { createSpatialBaseboards, BASEBOARD_DEPTH } from './SpatialBaseboards';
 import { baseboardExclusions } from './BaseboardZones';
 import { cleanSpatialWallJunctions } from './SpatialWallJunctions';
+import { closeSpatialFloorContacts } from './SpatialFloorContacts';
 import { profilePrism, prismCollider } from './SpatialGeometry';
 import { cutRects, type HeightProfile, type WalkableSurface } from './WalkableTopology';
 import { createSpatialPrismBatch } from '../render/SpatialGeometry';
@@ -108,6 +109,24 @@ describe('final exposed baseboard contours', () => {
       { id: 'facade-threshold', bounds: rect(-3, 3, .2, .8), bottom: -.16, top: 0 }],
     [floor(rect(-3, 3, .2, 4))]);
     withMesh(w, mesh => expect(hits(mesh, 0, .5, 0, -1)).toHaveLength(1));
+  });
+
+  it('closes a sub-millimetre floor seam on its real column face, without bridging a pit or an owner cut', () => {
+    const w = fixture([{ id: 'column', bounds: rect(-1, 1, -1, 1) }], [floor(rect(1.0003, 4, -4, 4))]);
+    w.walls[0]!.junctionRole = 'column';
+    const original = structuredClone(w);
+    withMesh(w, mesh => expect(hits(mesh, 1.3, 0, -1, 0)).toHaveLength(0));
+    closeSpatialFloorContacts(w);
+    const patch = w.topology!.surfaces.find(s => s.id.includes('/contact-'))!;
+    expect(patch.bounds).toEqual(rect(1, 1.0003, -1, 1));
+    expect(w.colliders).toEqual(original.colliders); expect(w.walls).toEqual(original.walls);
+    withMesh(w, mesh => expect(hits(mesh, 1.3, 0, -1, 0)).toHaveLength(1));
+    const once = structuredClone(w); closeSpatialFloorContacts(w); expect(w).toEqual(once);
+    original.floorOpenings = [rect(1, 1.0003, -2, 2)];
+    closeSpatialFloorContacts(original);
+    expect(original.topology!.surfaces).toHaveLength(1);
+    const edge = fixture([{ id: 'next-owner', bounds: rect(56.0003, 57, -1, 1) }], [floor(rect(54, 56, -4, 4))]);
+    closeSpatialFloorContacts(edge); expect(edge.topology!.surfaces).toHaveLength(1);
   });
 
   it('does not add automatic horizontal bands to individual stair treads', () => {
@@ -216,6 +235,15 @@ describe('final exposed baseboard contours', () => {
 });
 
 describe('post-cut wall cleanup', () => {
+  it('updates the local index when L ownership crosses an index cell and buries a final nib', () => {
+    const w = fixture([{ id: 'horizontal', bounds: rect(3.5, 7.5, -.5, .5) },
+      { id: 'vertical', bounds: rect(6.8, 8.2, .003, 4) }, { id: 'nib', bounds: rect(8, 8.1, -.1, .1) }]);
+    cleanSpatialWallJunctions(w);
+    expect(w.walls.some(w => w.id === 'nib')).toBe(false);
+    expect(w.colliders.some(c => c.id === 'nib')).toBe(false);
+    const once = structuredClone(w); cleanSpatialWallJunctions(w); expect(w).toEqual(once);
+  });
+
   it('preserves structural roles, non-box intrados and protected hole lips through serialisation', () => {
     const w = fixture([{ id: 'host', bounds: rect(-4, 4, -.5, .5) },
       { id: 'column', bounds: rect(-1, 1, -.3, .503) }, { id: 'intrados', bounds: rect(2, 3, -.3, .503) },

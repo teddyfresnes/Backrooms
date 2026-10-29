@@ -1,6 +1,6 @@
 import { RectIndex } from './RectIndex';
 import type { TrimInterval } from './BaseboardZones';
-import type { WalkableSurface } from './WalkableTopology';
+import { overlapRect, type WalkableSurface } from './WalkableTopology';
 import type { WorldPlan } from './types';
 
 interface FinishFace extends TrimInterval { axis: 'x' | 'z'; fixed: number; sign: -1 | 1 }
@@ -13,10 +13,22 @@ export interface FinishInterval extends TrimInterval { datum: number }
 export const createSpatialFinishResolver = (world: WorldPlan) => {
   const rooms = new Map(world.rooms.map(r => [r.id, r]));
   const index = new RectIndex(world.rooms, r => r.bounds);
+  const ambiguous = new Set(world.rooms.filter(r => index.query(r.bounds).some(other => other !== r
+    && Math.abs((other.floorY ?? 0) - (r.floorY ?? 0)) < .05
+    && overlapRect(r.bounds, other.bounds, 1e-6))).map(r => r.id));
   return (face: FinishFace, floor: WalkableSurface): FinishInterval[] => {
     const source = floor.roomId ? rooms.get(floor.roomId) : undefined;
     const profile = floor.profile, height = profile.kind === 'flat' ? profile.y : Math.min(profile.startY, profile.endY);
     const cross = face.fixed + face.sign * .015;
+    if (source && !ambiguous.has(source.id) && (profile.kind === 'linear' || Math.abs((source.floorY ?? 0) - height) < .05)) {
+      const b = source.bounds, f = floor.bounds;
+      // Strict containment keeps the general resolver's endpoint ownership,
+      // including a room boundary differing by the last bit of a double.
+      if (f.minX >= b.minX && f.maxX <= b.maxX && f.minZ >= b.minZ && f.maxZ <= b.maxZ
+        && cross >= (face.axis === 'x' ? b.minZ : b.minX) && cross <= (face.axis === 'x' ? b.maxZ : b.maxX)) {
+        return source.baseboards === false ? [] : [{ min: face.min, max: face.max, datum: source.floorY ?? height }];
+      }
+    }
     const search = face.axis === 'x' ? { minX: face.min, maxX: face.max, minZ: cross, maxZ: cross }
       : { minZ: face.min, maxZ: face.max, minX: cross, maxX: cross };
     const nearby = index.query(search).filter(r => {
