@@ -82,7 +82,7 @@ pas présentés comme une reproduction exacte de cette capture.
   L'architecture reste à **10 lots maximum** dans ce corpus (hors autres objets
   ajoutés au montage du jeu).
 
-- Préservation : **512 propositions**, dont **193 structures anciennes**
+- Préservation : **512 emplacements examinés**, dont **193 structures anciennes**
   (149 squeeze-view, 25 grid-pit, 19 liminal-pit), datums/styles régionaux et
   propriétaires d'atria identiques ; **5 monuments sur 5** identiques au hash
   complet. Le BSP conserve **83,77 %** de la surface praticable des 32 plans de
@@ -91,7 +91,33 @@ pas présentés comme une reproduction exacte de cette capture.
   du corpus CPU. L'index déplace ses entrées lorsque les murs changent : le test
   de coin traversant une cellule de l'index vérifie qu'aucun résidu n'est oublié.
 
-La suite générale finale et les builds sont complétés après leur exécution.
+- Suite générale finale : **659/660**, 84 fichiers, environ 255 s, sans build
+  concurrent. L'unique échec porte sur le nom racine de l'asset appartement :
+  attendu `ImportedApartmentScene_v1.19.2`, présent
+  `russian_cigarette_pack(1).glb`. Le même test échoue sur la référence
+  (**14/15** dans son fichier). L'asset est inchangé et son contenu complet est
+  vérifié par le SHA256
+  `1b1864ff763676e6fa4bc0b66e0ae2d854a7bf9ef3e61990d2c9f6fce7067dda`.
+- TypeScript et les builds principal/hébergé passent. La version hébergée passe
+  aussi **39/39** tests ciblés, incluant le vrai montage des buffers transférés.
+  La sortie finale contient **3 075 fichiers**, **264 181 004 octets**, un fichier
+  maximal de **16 MiB** ; les **148 OBJ** et **148 vêtements lossless** sont
+  vérifiés, les assets du manifeste sont présents et l'appartement est lossless.
+  La suite personnage FBX n'est pas relancée : ses modules
+  d'animation, ragdoll et caméra ne changent pas ; les tests physiques natifs et
+  régionaux de la suite générale ainsi que les deux nouveaux cas sont exécutés.
+
+## Fichiers concernés
+
+- Géométrie finale : `SpatialWallJunctions.ts`, `SpatialFloorContacts.ts`,
+  `SpatialWorld.ts`, `RectIndex.ts`, `WalkableTopology.ts`, `types.ts`.
+- Finition : `SpatialFinishPolicy.ts`, `SpatialBaseboards.ts`.
+- Régressions : `SpatialBaseboards.test.ts`, `SpatialFinishesPhysical.test.ts`,
+  `tests/support/finish-audit.ts`, `scripts/audit-wall-finishes.mjs`.
+- Contrats et résultats : les trois guides génération/rendu/vérification et les
+  fichiers de données liés ci-dessous. `WallJunctions`, les templates BSP, le
+  rendu historique et `FaceExposure` ont été examinés ; leurs corrections
+  antérieures restent en place.
 
 ## Coût CPU
 
