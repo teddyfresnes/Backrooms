@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-29",
+  "project_id": "appgprj_6ad38cbd518c81918ef345d5a1eb55fc",
+  "version_number": 22,
+  "version_id": "appgprj_6ad38cbd518c81918ef345d5a1eb55fc~appgver_c4e4fb0652ac8191804e81c8707cc898",
+  "deployment_id": "appgdep_6ae33018b4048191aa4bf0c8c3debb68",
+  "status": "succeeded",
+  "url": "https://backrooms-integre.teddykoeh.chatgpt.site",
+  "access_mode": "custom",
+  "current_user_role": "owner",
+  "site_source_commit": "b1921322189823af850e195d6ed5a607d07c51e8",
+  "github_implementation_commit": "19fd5a5b64c495efacd2ff8abbd2b135886536fa",
+  "github_validation_commit": "74e63917a20b03d93f1b9c220c730c08c723cbab",
+  "publication_method": "source_build_after_archive_upload_timeout",
+  "archive_upload": {
+    "attempted": true,
+    "timeout_ms": 300001,
+    "saved_version_created": false
+  },
+  "local_archive": {
+    "path": "/workspace/scratch/6fa16f3b1be0/backrooms-v22-20261029.tar",
+    "uncompressedTarSha256": "sha256:c237a8d91a7ec879f32b3ab35a4a62a530a94624e003c7275214543f70c611a1",
+    "uncompressedTarBytes": 267182080,
+    "compressedBytes": 242076213,
+    "file_count": 3076,
+    "expanded_file_bytes": 264181110
+  },
+  "published_archive": {
+    "archive_format": "tar",
+    "sediment_file_id": "file_00000000d50081f8a9d37c0ede0f404b",
+    "content_hash": "sha256:bfcb332f2bdb954a6b2941ed51964b4baf6fc10d6fdf15d3b340e604925739db",
+    "size_bytes": 266977280,
+    "file_count": 3076
+  },
+  "checks_file": "wall-finishes-checks-current.json",
+  "report": "WALL_FINISH_VALIDATION_20261029.md",
+  "visual_webgl_verified": false
+}
+

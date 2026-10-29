@@ -156,7 +156,18 @@ Données : [couverture avant/après](wall-finishes-current.json),
 [coût avant](wall-finishes-current-before.json),
 [coût après](wall-finishes-current-after.json),
 [préservation](wall-finishes-preservation-current.json),
-[identité après optimisation](wall-finishes-optimization-current.json).
+[identité après optimisation](wall-finishes-optimization-current.json),
+[résumé des contrôles](wall-finishes-checks-current.json).
+
+## Publication
+
+Version **22** publiée : https://backrooms-integre.teddykoeh.chatgpt.site.
+La source hébergée est `b1921322189823af850e195d6ed5a607d07c51e8`.
+Le transfert de l'archive locale a expiré après 300 s, sans créer de version.
+Après vérification de l'historique, la publication depuis cette même source a
+réussi. La version sauvegardée possède son archive de 3 076 fichiers ; ses
+identifiants et les deux provenances d'archive figurent dans
+[deployment-v22.json](deployment-v22.json). L'accès existant est conservé.
 
 ## Limite visuelle
 
