@@ -17,6 +17,7 @@ import { findSurface, surfaceY } from ${file('.', 'src/world/WalkableTopology.ts
 import { pointInRect } from ${file('.', 'src/world/types.ts')};
 import { prepareSpatialArchitecture, mountArchitectureBatch } from ${file('.', 'src/render/SpatialArchitectureBuffers.ts')};
 import { auditAxisPlaneTriangles } from ${file('.', 'tests/support/geometry-audit.ts')};
+import { auditFinishCoverage } from ${file('.', 'tests/support/finish-audit.ts')};
 ${baseline ? `import { generateInfiniteChunk as generateBefore, clearInfiniteWorldCaches as clearBefore } from ${file(baseline, 'src/world/InfiniteWorld.ts')};` : ''}
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const records = [], errors = [];
@@ -34,7 +35,9 @@ for (let i = 0; i < 24; i++) {
     openingsUnchanged: before ? hash([w.floorOpenings, w.ceilingOpenings]) === hash([before.floorOpenings, before.ceilingOpenings]) : undefined };
   if (before && hash(counts(w)) !== hash(counts(before))) errors.push({ seed, reason: 'feature counts changed', before: counts(before), after: counts(w) });
   if (w.spatial) {
-    const batch = prepareSpatialArchitecture(w), geometries = batch.map(b => ({ name: b.name, geometry: mountArchitectureBatch(b) }));
+    const batch = prepareSpatialArchitecture(w), geometries = batch.map(b => ({ name: b.name, material: b.material, geometry: mountArchitectureBatch(b) }));
+    const coverage = auditFinishCoverage(w, geometries); row.coverage = { ...coverage, errors: undefined };
+    if (coverage.errors.length) errors.push({ seed, reason: 'final contour coverage', details: coverage.errors });
     const audit = auditAxisPlaneTriangles(geometries); row.triangles = audit.triangleCount; row.batches = batch.length;
     row.baseboards = w.spatial.prisms.filter(p => p.material === 'baseboard').length;
     if (audit.errors.length) errors.push({ seed, reason: 'overlapping axis-plane triangles', details: audit.errors });

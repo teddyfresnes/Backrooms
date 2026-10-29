@@ -72,7 +72,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     bottom: g.floorY - .16, top: g.floorY + SPATIAL_CLEARANCE,
   }))) : [];
   const addPrism = (p: SpatialPrism) => { spatial.prisms.push(p); if (p.collision) world.colliders.push(prismCollider(p)); };
-  const wall = (id: string, bounds: Rect, bottom: number, top: number, tint = 1, detail?: WallSegment['detail']) => {
+  const wall = (id: string, bounds: Rect, bottom: number, top: number, tint = 1, detail?: WallSegment['detail'], junctionRole?: WallSegment['junctionRole']) => {
     if (top <= bottom + .005 || rectWidth(bounds) < .005 || rectDepth(bounds) < .005) return;
     const apertures = boundaryClearances.filter(c => c.bottom < top && c.top > bottom && overlapRect(c.bounds, bounds));
     const parts = cutRects([bounds], apertures.map(a => a.bounds)).map(b => ({ bounds: b, bottom, top }));
@@ -82,7 +82,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
       addPrism({ ...profilePrism(name, b, flat(part.bottom), flat(part.top)), tint });
       const alongX = rectWidth(b) > rectDepth(b), p = rectCenter(b);
       world.walls.push({ id: name, x: p.x, z: p.z, orientation: alongX ? 'x' : 'z', length: alongX ? rectWidth(b) : rectDepth(b), thickness: alongX ? rectDepth(b) : rectWidth(b),
-        bottom: part.bottom, height: part.top - part.bottom, tint, collision: true, kind: 'wallpaper', ...(detail ? { detail } : {}) });
+        bottom: part.bottom, height: part.top - part.bottom, tint, collision: true, kind: 'wallpaper', ...(detail ? { detail } : {}), ...(junctionRole ? { junctionRole } : {}) });
     }
   };
   const dependency = (story: number, bounds: Rect, bottom: number, top: number, reason: 'atrium' | 'stairs' | 'drop' | 'view') => {
@@ -289,8 +289,8 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
       for (const part of parts) world.rooms.push({ ...part.source, id: part.id, bounds: part.bounds, floorY: h,
         ceilingHeight: mode === 'lower-maze' ? roofY : h + part.source.ceilingHeight, structuralCeilingY: mode === 'lower-maze' ? roofY : h + part.source.ceilingHeight, baseboards: part.source.baseboards ?? true, access: 'open' });
       const roomAt = (x: number, z: number) => parts.find(r => pointInRect(x, z, r.bounds, -.001));
-      const addArchitecture = (name: string, bounds: Rect, height: number, bottom = 0, tint = 1, detail?: WallSegment['detail']) => {
-        for (const [i, piece] of cutRects([bounds], protectedRoutes).entries()) wall(`${id}/bsp/${name}/${i}`, piece, h + bottom, h + height, tint, detail);
+      const addArchitecture = (name: string, bounds: Rect, height: number, bottom = 0, tint = 1, detail?: WallSegment['detail'], role?: WallSegment['junctionRole']) => {
+        for (const [i, piece] of cutRects([bounds], protectedRoutes).entries()) wall(`${id}/bsp/${name}/${i}`, piece, h + bottom, h + height, tint, detail, role);
       };
       if (normal) {
         for (const w of template.walls) {
@@ -302,10 +302,10 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
           addArchitecture(w.id, bounds, top, w.bottom, w.tint, w.detail);
         }
         if (mode === 'rooms') {
-          for (const [i, mass] of template.solidMasses.entries()) { const r = intersect(move(mass.bounds), b); if (r) addArchitecture(`mass-${i}`, r, roomAt(rectCenter(r).x, rectCenter(r).z)?.source.ceilingHeight ?? 2.74); }
-          for (const [i, c] of template.columns.entries()) { const r = intersect(move({ minX: c.x - c.width / 2, maxX: c.x + c.width / 2, minZ: c.z - c.depth / 2, maxZ: c.z + c.depth / 2 }), b); if (r) addArchitecture(`column-${i}`, r, Math.min(c.height, 4.35)); }
+          for (const [i, mass] of template.solidMasses.entries()) { const r = intersect(move(mass.bounds), b); if (r) addArchitecture(`mass-${i}`, r, roomAt(rectCenter(r).x, rectCenter(r).z)?.source.ceilingHeight ?? 2.74, 0, 1, undefined, 'mass'); }
+          for (const [i, c] of template.columns.entries()) { const r = intersect(move({ minX: c.x - c.width / 2, maxX: c.x + c.width / 2, minZ: c.z - c.depth / 2, maxZ: c.z + c.depth / 2 }), b); if (r) addArchitecture(`column-${i}`, r, Math.min(c.height, 4.35), 0, 1, undefined, c.kind === 'pilaster' ? undefined : 'column'); }
         }
-      } else if (family === 'pillars') for (const sx of [-1, 1]) for (const sz of [-1, 1]) addArchitecture(`pillar-${sx}-${sz}`, { minX: p.x + sx * 7 - .7, maxX: p.x + sx * 7 + .7, minZ: p.z + sz * 7 - .7, maxZ: p.z + sz * 7 + .7 }, 2.74);
+      } else if (family === 'pillars') for (const sx of [-1, 1]) for (const sz of [-1, 1]) addArchitecture(`pillar-${sx}-${sz}`, { minX: p.x + sx * 7 - .7, maxX: p.x + sx * 7 + .7, minZ: p.z + sz * 7 - .7, maxZ: p.z + sz * 7 + .7 }, 2.74, 0, 1, undefined, 'column');
 
       if (mode === 'rooms') {
         const old = topology.surfaces.filter(s => s.id.startsWith(`${id}/floor`));
@@ -407,7 +407,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     const bounds = { minX: source.x - (source.orientation === 'x' ? source.length : source.thickness) / 2, maxX: source.x + (source.orientation === 'x' ? source.length : source.thickness) / 2,
       minZ: source.z - (source.orientation === 'z' ? source.length : source.thickness) / 2, maxZ: source.z + (source.orientation === 'z' ? source.length : source.thickness) / 2 };
     world.walls = world.walls.filter(w => w !== source); world.colliders = world.colliders.filter(c => c.id !== source.id); spatial.prisms = spatial.prisms.filter(p => p.id !== source.id);
-    cutRects([bounds], [aperture]).forEach((b, i) => wall(`${source.id}/regional-door-${i}`, b, source.bottom, source.bottom + source.height, source.tint, source.detail));
+    cutRects([bounds], [aperture]).forEach((b, i) => wall(`${source.id}/regional-door-${i}`, b, source.bottom, source.bottom + source.height, source.tint, source.detail, source.junctionRole));
   };
 
   // A door crosses the thickness of its host wall. BSP room bounds can stop
@@ -450,7 +450,9 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     if (!cuts.length) return [s];
     return cutRects([s.bounds], cuts.map(c => c.bounds)).map((bounds, i) => ({ ...s, id: `${s.id}/cage-cut-${i}`, bounds, profile: restrictProfile(s.bounds, s.profile, bounds) }));
   });
-  cleanSpatialWallJunctions(world);
+  // Keep feature selection on its existing reserved floor shapes. Final L/T
+  // ownership is resolved after authored openings and gallery guards exist.
+  cleanSpatialWallJunctions(world, false);
   const rawSurfaces = topology.surfaces;
   const rebuildFloors = () => {
     const doors = new Set(world.features.filter(f => f.kind === 'interactive-door').map(f => f.colliderId));
@@ -463,7 +465,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
   };
   stitchBspPartitions(world, rebuildFloors, () => connectSpatialSurfaces(world), carve);
   rebuildFloors();
-  reconcileStructuralSupports(world, wall);
+  reconcileStructuralSupports(world, (id, b, bottom, top, tint, detail) => wall(id, b, bottom, top, tint, detail, 'support'));
   completeCeilingEnvelope(world, addPrism);
   completeOpenTransitionEnvelope(world, addPrism);
   const wallCount = world.walls.length;

@@ -10,6 +10,7 @@ import { mountArchitectureBatch, prepareSpatialArchitecture } from '../render/Sp
 import type { Rect, WorldPlan } from './types';
 import { generateInfiniteChunk, clearInfiniteWorldCaches } from './InfiniteWorld';
 import { auditAxisPlaneTriangles } from '../../tests/support/geometry-audit';
+import { auditFinishCoverage } from '../../tests/support/finish-audit';
 
 const flat = (y: number): HeightProfile => ({ kind: 'flat', y });
 const rect = (minX: number, maxX: number, minZ: number, maxZ: number): Rect => ({ minX, maxX, minZ, maxZ });
@@ -102,6 +103,41 @@ describe('final exposed baseboard contours', () => {
     expect(createSpatialBaseboards(w)).toEqual([]);
   });
 
+  it('retains trim above a structural threshold that only touches its floor plane', () => {
+    const w = fixture([{ id: 'wall', bounds: rect(-3, 3, -.2, .2) },
+      { id: 'facade-threshold', bounds: rect(-3, 3, .2, .8), bottom: -.16, top: 0 }],
+    [floor(rect(-3, 3, .2, 4))]);
+    withMesh(w, mesh => expect(hits(mesh, 0, .5, 0, -1)).toHaveLength(1));
+  });
+
+  it('does not add automatic horizontal bands to individual stair treads', () => {
+    const w = fixture([{ id: 'stair-cheek', bounds: rect(-3, 3, -.2, .2), top: 5 }],
+      [{ ...floor(rect(-3, 3, .2, 4), 1), role: 'stair' }]);
+    expect(createSpatialBaseboards(w)).toEqual([]);
+  });
+
+  it.each([true, false])('covers a complete mixed-source room perimeter with policy %s, including a pillar and doorway', baseboards => {
+    const boxes = [{ id: 'bsp-west', bounds: rect(-4, -3.6, -4, 4) },
+      { id: 'regional-north', bounds: rect(-4, 4, -4, -3.6) },
+      { id: 'mass-east', bounds: rect(3.6, 4, -4, 4) },
+      { id: 'south-left', bounds: rect(-4, -1, 3.6, 4) },
+      { id: 'south-right', bounds: rect(1, 4, 3.6, 4) },
+      { id: 'pillar', bounds: rect(-.7, .7, -.7, .7) }];
+    const floors = cutRects([rect(-4, 4, -4, 4)], boxes.map(b => b.bounds)).map((b, i) => ({ ...floor(b, 0, `tile-${i}`), roomId: 'room' }));
+    const w = fixture(boxes, floors);
+    w.rooms = [{ id: 'room', bounds: rect(-4, 4, -4, 4), kind: 'office', level: 0, floorY: 0, ceilingHeight: 3, detailDensity: 0, baseboards }];
+    w.spatial!.prisms.push(...createSpatialBaseboards(w));
+    const prepared = prepareSpatialArchitecture(JSON.parse(JSON.stringify(w)) as WorldPlan);
+    const batches = prepared.map(b => ({ ...b, geometry: mountArchitectureBatch(b) }));
+    try {
+      const audit = auditFinishCoverage(w, batches);
+      expect(audit.errors).toEqual([]);
+      expect(baseboards ? audit.equipped : audit.bare).toBeGreaterThan(20);
+      if (baseboards) expect(audit.supportedMetres).toBeGreaterThan(30);
+      expect(auditAxisPlaneTriangles(batches).errors).toEqual([]);
+    } finally { batches.forEach(b => b.geometry.dispose()); }
+  });
+
   it('joins translated ramp fragments by their affine plane and keeps their real slope', () => {
     const a = { ...floor(rect(40, 43, 30.2, 30.21)), profile: { kind: 'linear' as const, axis: 'x' as const, startY: 1, endY: 1.5 } };
     const b = { ...a, id: 'b', bounds: rect(40, 43, 30.21, 34) };
@@ -138,6 +174,23 @@ describe('final exposed baseboard contours', () => {
     });
   });
 
+  it('resolves every adjacent room interval when a final floor spans several canonical rooms', () => {
+    const w = fixture([{ id: 'mixed-wall', bounds: rect(-4, 4, -.2, .2) },
+      { id: 'return-from-another-generator', bounds: rect(3.8, 4, .2, 4) }], [floor(rect(-4, 4, .2, 4), 0, 'bare')]);
+    w.rooms = [false, true].map((baseboards, i) => ({ id: i ? 'equipped' : 'bare',
+      bounds: rect(i ? 0 : -4, i ? 4 : 0, .2, 4), baseboards, kind: 'office', level: 0,
+      floorY: 0, ceilingHeight: 3, detailDensity: 0 }));
+    // A lower-maze/landing can be tiled before its BSP room IDs are resolved.
+    // The single inherited ID must not erase the equipped half or its return.
+    withMesh(w, mesh => {
+      expect(hits(mesh, -2, .5, 0, -1)).toHaveLength(0);
+      expect(hits(mesh, 2, .5, 0, -1)).toHaveLength(1);
+      expect(hits(mesh, 3.5, 2, 1, 0)).toHaveLength(1);
+    });
+    w.topology!.surfaces[0]!.roomId = 'equipped';
+    withMesh(w, mesh => expect(hits(mesh, -2, .5, 0, -1)).toHaveLength(0));
+  });
+
   it('opens cut end caps on chunk seams and survives serialisation and worker transfer', () => {
     const w = fixture([{ id: 'continuation', bounds: rect(50, 56, -.2, .2) }], [floor(rect(49, 56, .2, 4))]);
     const trim = createSpatialBaseboards(w);
@@ -163,6 +216,51 @@ describe('final exposed baseboard contours', () => {
 });
 
 describe('post-cut wall cleanup', () => {
+  it('preserves structural roles, non-box intrados and protected hole lips through serialisation', () => {
+    const w = fixture([{ id: 'host', bounds: rect(-4, 4, -.5, .5) },
+      { id: 'column', bounds: rect(-1, 1, -.3, .503) }, { id: 'intrados', bounds: rect(2, 3, -.3, .503) },
+      { id: 'hole-lip', bounds: rect(-3, -2, -.3, .503) }]);
+    w.walls.find(w => w.id === 'column')!.junctionRole = 'column';
+    w.spatial!.prisms.find(p => p.id === 'intrados')!.vertices[1] = 2.8;
+    w.floorOpenings = [rect(-3, -2, .503, 2)];
+    const restored = JSON.parse(JSON.stringify(w)) as WorldPlan, before = structuredClone(restored);
+    expect(cleanSpatialWallJunctions(restored)).toBe(false);
+    expect(restored).toEqual(before);
+  });
+  it('closes an almost aligned post-cut continuation and its sub-centimetre end gap', () => {
+    const w = fixture([{ id: 'bsp', bounds: rect(-4, 0, -.5, .5) },
+      { id: 'facade', bounds: rect(.003, 2, -.497, .503) }]);
+    cleanSpatialWallJunctions(w);
+    const p = w.spatial!.prisms.find(p => p.id === 'facade')!;
+    expect(Math.min(...p.vertices.filter((_, i) => i % 3 === 0))).toBe(0);
+    expect(Math.max(...p.vertices.filter((_, i) => i % 3 === 2))).toBe(.5);
+    expect(w.colliders.find(c => c.id === p.id)).toEqual(prismCollider(p));
+  });
+
+  it.each([.8, 1.3])('closes a final L with unequal thickness %s, leaving a real butt joint', thickness => {
+    const w = fixture([{ id: 'horizontal', bounds: rect(-4, 0, -.5, .5) },
+      { id: 'vertical', bounds: rect(-thickness / 2, thickness / 2, .003, 4) }]);
+    cleanSpatialWallJunctions(w);
+    const horizontal = w.walls.find(w => w.id === 'horizontal')!, vertical = w.walls.find(w => w.id === 'vertical')!;
+    expect(horizontal.x + horizontal.length / 2).toBeCloseTo(thickness / 2);
+    expect(vertical.z - vertical.length / 2).toBeCloseTo(.5);
+    const once = structuredClone(w); cleanSpatialWallJunctions(w); expect(w).toEqual(once);
+    for (const p of w.spatial!.prisms) expect(w.colliders.find(c => c.id === p.id)).toEqual(prismCollider(p));
+  });
+
+  it('closes a thin T return against a taller facade without flattening a real niche or a door', () => {
+    const w = fixture([{ id: 'host', bounds: rect(3.5, 4.5, -4, 4), top: 5 },
+      { id: 'near-T', bounds: rect(0, 3.497, -.2, .2) },
+      { id: 'niche', bounds: rect(0, 3.2, 1.8, 2.2) },
+      { id: 'door-jamb', bounds: rect(0, 3.497, -2.2, -1.8) }]);
+    w.features = [{ kind: 'interactive-door', bounds: rect(3.4, 3.6, -2.3, -1.7) } as WorldPlan['features'][number]];
+    const originals = structuredClone(w.walls);
+    cleanSpatialWallJunctions(w);
+    const t = w.walls.find(w => w.id === 'near-T')!;
+    expect(t.x + t.length / 2).toBeCloseTo(3.5, 6);
+    expect(w.walls.find(w => w.id === 'niche')).toEqual(originals[2]);
+    expect(w.walls.find(w => w.id === 'door-jamb')).toEqual(originals[3]);
+  });
   it('absorbs a millimetre pilaster residue, retaining a readable bay and matching prism/collision data', () => {
     const w = fixture([{ id: 'host', bounds: rect(-4, 4, -.5, .5) }, { id: 'strip', bounds: rect(-1, 1, -.3, .503) }, { id: 'bay', bounds: rect(2, 3, -.2, 1) }]);
     cleanSpatialWallJunctions(w);
@@ -196,4 +294,15 @@ it('inherits whole-room bare zones across canonical chunks, independent of load 
     expect(w.baseboardlessZones).toEqual(w.rooms.filter(r => r.baseboards === false).map(r => ({ ...r.bounds, floorY: r.floorY ?? 0 })));
     expect(w.spatial!.prisms.some(p => p.material === 'baseboard')).toBe(true);
   }
+  const trace = (w: WorldPlan, x: number) => [...new Set(w.spatial!.prisms.filter(p => p.material === 'baseboard'
+    && p.vertices.some((v, i) => i % 3 === 0 && Math.abs(v - x) < 1e-6)
+    && p.vertices.some((v, i) => i % 3 === 0 && Math.abs(v - x) > 1e-6))
+    .flatMap(p => [0, 1, 2, 3, 4, 5, 6, 7].filter(i => Math.abs(p.vertices[i * 3]! - x) < 1e-6)
+      .map(i => [p.vertices[i * 3 + 1], p.vertices[i * 3 + 2]].map(v => Math.round(v! * 1e6)).join('/'))))].sort();
+  expect(trace(first[0]!, 56).length).toBeGreaterThan(4);
+  expect(trace(first[0]!, 56)).toEqual(trace(first[1]!, -56));
+  // Full unload, cold regeneration and remount use the same worker buffers.
+  const initial = prepareSpatialArchitecture(first[0]!);
+  clearInfiniteWorldCaches();
+  expect(prepareSpatialArchitecture(generateInfiniteChunk('BASEBOARD-ZONE-SEAMS', addresses[0]!))).toEqual(initial);
 });

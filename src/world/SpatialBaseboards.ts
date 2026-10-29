@@ -1,5 +1,6 @@
 import { baseboardExclusions, subtractTrimIntervals, type TrimInterval } from './BaseboardZones';
 import { RectIndex } from './RectIndex';
+import { createSpatialFinishResolver } from './SpatialFinishPolicy';
 import type { SpatialPrism } from './SpatialTypes';
 import type { WalkableSurface } from './WalkableTopology';
 import type { Rect, WorldPlan } from './types';
@@ -99,15 +100,16 @@ export const createSpatialBaseboards = (world: WorldPlan): SpatialPrism[] => {
   if (!world.spatial || !world.topology) return [];
   const solids = world.spatial.prisms.filter(p => p.collision && (p.material === 'wall' || p.material === 'plaster')).map(prism => ({ prism, bounds: boundsOf(prism) }));
   const floorIndex = new RectIndex(world.topology.surfaces, s => s.bounds), solidIndex = new RectIndex(solids, s => s.bounds);
-  const rooms = new Map(world.rooms.map(r => [r.id, r]));
+  const finish = createSpatialFinishResolver(world);
   const faceCache = new Map(solids.map(s => [s, facesOf(s)]));
   const groups = new Map<string, Run[]>(), half = world.size / 2, depth = BASEBOARD_DEPTH;
   for (const solid of solids) for (const face of faceCache.get(solid)!) {
     if (Math.abs(face.fixed - face.sign * half) < EPS) continue; // outward cut boundary, not an architectural end
     const nearby = floorIndex.query(strip(face.axis, face.fixed, face.min, face.max, depth + .002));
     for (const floor of nearby) {
-      const room = floor.roomId ? rooms.get(floor.roomId) : undefined, policy = room?.baseboards;
-      if (policy === false) continue;
+      // Tread-by-tread horizontal bands are not a stair skirting profile.
+      // Keep the actual sloping ramp finish and the flat landing's own datum.
+      if (floor.role === 'stair') continue;
       const b = floor.bounds, low = face.axis === 'x' ? b.minZ : b.minX, high = face.axis === 'x' ? b.maxZ : b.maxX;
       const touching = face.fixed + face.sign * EPS * 2;
       if (touching < low - EPS || touching > high + EPS) continue;
@@ -116,9 +118,11 @@ export const createSpatialBaseboards = (world: WorldPlan): SpatialPrism[] => {
       const run: Run = { axis: face.axis, fixed: face.fixed, sign: face.sign, min, max, floor };
       let ranges = floorSupport(run, nearby).flatMap(r => clipPositive(r, at => y(run, at) - faceY(face, at, true)));
       ranges = ranges.flatMap(r => clipPositive(r, at => faceY(face, at, false) - y(run, at) - BASEBOARD_HEIGHT - .02));
-      const datum = room?.floorY ?? y(run, (min + max) / 2);
-      const zones = (world.baseboardlessZones ?? []).filter(z => z.floorY === undefined || Math.abs(z.floorY - datum) < .05);
-      ranges = subtractTrimIntervals(ranges, baseboardExclusions(zones, face.axis, face.fixed + face.sign * depth / 2, min, max));
+      ranges = finish(run, floor).flatMap(policy => {
+        const clipped = ranges.map(r => ({ min: Math.max(r.min, policy.min), max: Math.min(r.max, policy.max) })).filter(r => r.max - r.min > EPS);
+        const zones = (world.baseboardlessZones ?? []).filter(z => z.floorY === undefined || Math.abs(z.floorY - policy.datum) < .05);
+        return subtractTrimIntervals(clipped, baseboardExclusions(zones, face.axis, face.fixed + face.sign * depth / 2, policy.min, policy.max));
+      });
       // Floors in balconies/landings can extend underneath a solid. Resolve
       // occlusion in the actual vertical band, never by the wall centre.
       for (const other of solidIndex.query(strip(face.axis, face.fixed, min, max, depth))) {
@@ -137,8 +141,11 @@ export const createSpatialBaseboards = (world: WorldPlan): SpatialPrism[] => {
           const a = faceY(f, at, bottom);
           return g ? a + (faceY(g, at, bottom) - a) * (sample - f.fixed) / (g.fixed - f.fixed) : a;
         };
-        let cuts = clipPositive({ min: lo, max: hi }, at => y(run, at) + BASEBOARD_HEIGHT - otherY(at, true) - EPS);
-        cuts = cuts.flatMap(c => clipPositive(c, at => otherY(at, false) - y(run, at) - EPS));
+        // clipPositive admits numerical equality. Require strictly positive
+        // vertical overlap here: a facade threshold ending on the floor must
+        // not erase the neighbouring wall's entire skirting interval.
+        let cuts = clipPositive({ min: lo, max: hi }, at => y(run, at) + BASEBOARD_HEIGHT - otherY(at, true) - 2 * EPS);
+        cuts = cuts.flatMap(c => clipPositive(c, at => otherY(at, false) - y(run, at) - 2 * EPS));
         ranges = subtractTrimIntervals(ranges, cuts);
       }
       const key = planeKey(run), list = groups.get(key) ?? [];

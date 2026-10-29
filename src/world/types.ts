@@ -38,6 +38,8 @@ export interface QuaternionData extends Vec3Data {
 
 export interface WallSegment {
   id: string;
+  /** Non-partition solids retain their architectural role after BSP cropping. */
+  junctionRole?: 'column' | 'mass' | 'support';
   /** Owning room for generated architectural continuations such as a raised ceiling shell. */
   roomId?: string;
   x: number;
