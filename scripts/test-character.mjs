@@ -8,7 +8,7 @@ rmSync(path.join(root,'.character-test-dist'),{recursive:true,force:true});
 const files=['character','physics','player'].flatMap(folder=>readdirSync(path.join(root,'src',folder)).filter(f=>f.endsWith('.ts')&&!f.includes('.test.')).map(f=>path.join(root,'src',folder,f)));
 files.push(path.join(root,'src/ui/settings.ts'));
 await build({entryPoints:files,outbase:path.join(root,'src'),outdir:path.join(root,'.character-test-dist'),bundle:true,platform:'node',format:'esm',packages:'external',loader:{'.css':'empty'},plugins:[{name:'rapier-runtime',setup(b){b.onResolve({filter:/^@dimforge\/rapier3d$/},()=>({path:path.join(root,'tests/character/support/rapier-headless.mjs')}));}}]});
-await build({entryPoints:[path.join(root,'tests/character/support/fixture-world.ts')],outfile:path.join(root,'.character-test-dist/fixture-world.js'),bundle:true,platform:'node',format:'esm',packages:'external'});
+await build({entryPoints:[path.join(root,'tests/character/support/fixture-world.ts'),path.join(root,'tests/character/support/regional-world.ts')],outdir:path.join(root,'.character-test-dist'),bundle:true,platform:'node',format:'esm',packages:'external'});
 const tests=process.argv.slice(2);
 const result=spawnSync(process.execPath,['--test','--test-concurrency=1','--test-timeout=60000',...(tests.length?tests:readdirSync(path.join(root,'tests/character')).filter(f=>f.endsWith('.test.mjs')).map(f=>`tests/character/${f}`))],{cwd:root,stdio:'inherit'});
 process.exitCode=result.status??1;

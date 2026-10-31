@@ -1,0 +1,79 @@
+{
+  "baseline": "/workspace/scratch/6fa16f3b1be0/Backrooms-liminal-baseline",
+  "columns": 512,
+  "retained": 174,
+  "oldFamilies": {
+    "squeeze-view": 149,
+    "grid-pit": 25
+  },
+  "added": 19,
+  "newFamilies": {
+    "sunken-court": 8,
+    "fault": 3,
+    "offset-well": 5,
+    "paired-wells": 3
+  },
+  "newDepths": {
+    "27": 3,
+    "54": 3,
+    "5.4": 6,
+    "10.8": 6,
+    "16.200000000000003": 1
+  },
+  "datums": 512,
+  "atria": 23,
+  "monuments": [
+    {
+      "index": 5,
+      "owner": {
+        "x": 7,
+        "z": 6,
+        "story": 0
+      },
+      "identical": true
+    },
+    {
+      "index": 1,
+      "owner": {
+        "x": 7,
+        "z": 30,
+        "story": 0
+      },
+      "identical": true
+    },
+    {
+      "index": 3,
+      "owner": {
+        "x": 23,
+        "z": 6,
+        "story": 0
+      },
+      "identical": true
+    },
+    {
+      "index": 4,
+      "owner": {
+        "x": 23,
+        "z": 22,
+        "story": 0
+      },
+      "identical": true
+    },
+    {
+      "index": 2,
+      "owner": {
+        "x": 7,
+        "z": 14,
+        "story": 0
+      },
+      "identical": true
+    }
+  ],
+  "actualBsp": {
+    "owners": 32,
+    "walkableArea": 335095.3304039011,
+    "bspArea": 280404.3025746692,
+    "hallArea": 46137.30582190034
+  },
+  "errors": []
+}

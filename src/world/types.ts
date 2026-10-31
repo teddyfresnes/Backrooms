@@ -1,3 +1,8 @@
+import type { InfiniteEdgeGates } from './InfiniteWorld';
+import type { WalkableTopology } from './WalkableTopology';
+import type { SpatialArchitecture } from './SpatialTypes';
+import type { LiminalArchitectureFeature } from './ArchitecturalOpenings';
+
 export type RoomKind =
   | 'office'
   | 'corridor'
@@ -16,6 +21,11 @@ export interface Rect {
   maxZ: number;
 }
 
+export interface BaseboardlessZone extends Rect {
+  /** Spatial finish ownership; omitted on historical two-dimensional zones. */
+  floorY?: number;
+}
+
 export interface Vec3Data {
   x: number;
   y: number;
@@ -28,6 +38,8 @@ export interface QuaternionData extends Vec3Data {
 
 export interface WallSegment {
   id: string;
+  /** Non-partition solids retain their architectural role after BSP cropping. */
+  junctionRole?: 'column' | 'mass' | 'support';
   /** Owning room for generated architectural continuations such as a raised ceiling shell. */
   roomId?: string;
   x: number;
@@ -41,6 +53,7 @@ export interface WallSegment {
   collision: boolean;
   kind: 'wallpaper' | 'plaster' | 'vista-frame';
   detail?:
+    | 'architectural-opening'
     | 'recess'
     | 'ceiling-drop'
     | 'upper-shell'
@@ -62,6 +75,10 @@ export interface StaticCollider {
   halfExtents: Vec3Data;
   kind: 'wall' | 'column' | 'floor' | 'step' | 'barrier';
   rotation?: QuaternionData;
+  /** Convex hull vertices relative to center, shared with rendered slabs. */
+  vertices?: number[];
+  /** Closed triangle mesh for a sheared structural wall with nonplanar caps. */
+  indices?: number[];
 }
 
 export type RoomAccess = 'open' | 'sealed' | 'secret';
@@ -72,9 +89,16 @@ export interface RoomRecord {
   kind: RoomKind;
   level: number;
   ceilingHeight: number;
+  /** Local absolute floor datum; level remains the historical room category. */
+  floorY?: number;
+  structuralCeilingY?: number;
+  /** Whole-room finish inherited from its canonical architectural source. */
+  baseboards?: boolean;
   detailDensity: number;
   /** Restricted rooms are deliberately removed from the ordinary doorway graph. */
   access?: RoomAccess;
+  /** Distinguish deliberate restrictions from a provisional navigation result. */
+  accessReason?: 'intentional' | 'unreachable';
 }
 
 export interface ColumnSlot {
@@ -143,6 +167,11 @@ export interface GridPitFeature {
   lowerBounds: Rect;
   lowerFloorY: number;
   lowerCeilingY: number;
+}
+
+export interface LiminalPitFeature extends Omit<GridPitFeature, 'kind' | 'pattern'> {
+  kind: 'liminal-pit';
+  family: 'offset-well' | 'fault' | 'paired-wells' | 'sunken-court';
 }
 
 export interface VistaFeature {
@@ -232,6 +261,9 @@ export interface StairSocketFeature {
   switchbackJoin?: 'joined' | 'divider';
   /** Local height of the first tread; inherited stairs start one story below. */
   baseY?: number;
+  /** Explicit endpoints for new stairs; absent fields retain the legacy 5.4m layout. */
+  rise?: number;
+  stepsPerFlight?: number;
   inherited?: boolean;
 }
 
@@ -333,6 +365,8 @@ export interface CeilingZone {
 }
 
 export type WorldFeature =
+  | LiminalArchitectureFeature
+  | LiminalPitFeature
   | GridPitFeature
   | VistaFeature
   | EpicStructureFeature
@@ -388,6 +422,9 @@ export interface SurfaceStyle {
 
 export interface WorldPlan {
   version: number;
+  spatial?: SpatialArchitecture;
+  topology?: WalkableTopology;
+  edgeGates?: InfiniteEdgeGates;
   seed: string;
   size: number;
   wallHeight: number;
@@ -414,7 +451,7 @@ export interface WorldPlan {
   /** Rare contiguous room bounds whose ceiling circuit is intentionally absent. */
   unlitZones?: Rect[];
   /** Coherent districts where wall and column trims are intentionally absent. */
-  baseboardlessZones?: Rect[];
+  baseboardlessZones?: BaseboardlessZone[];
   /** Rooms reserved for strict mirrored architecture rather than generic clutter. */
   symmetryZones?: Rect[];
   /** Small coherent districts that replace wallpaper with bare plaster. */

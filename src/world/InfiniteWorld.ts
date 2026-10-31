@@ -1,7 +1,16 @@
+import { applyVerticalBoundaries, getVerticalGateApproach } from './VerticalBoundaries';
+import { applyRegionalClaims, planRegionalVolumes, type RegionalClaim } from './RegionalVolumes';
+import { finalizeVerticalTopology, fitVerticalArchitecture, clearVerticalApertures } from './VerticalPlanner';
+import { prefixTopology, cutRects, LOWEST_STRUCTURE_Y } from './WalkableTopology';
+import { clearBspArchitectureCache, generateSpatialWorld } from './SpatialWorld';
+import { clearRegionalPlanCache, hasRegionalTransition, regionalAtrium, regionalDatum, regionalStyle } from './RegionalPlan';
 import {
   addStepColliders,
   generateSurfaceStyle,
-  generateWorld,
+  generateLegacyWorld as generateWorld,
+  generateStructuralPlan,
+  rebuildVerticalCeilingShells,
+  populateVerticalRoomLighting,
   lightPanelOverlapsRect,
   MAX_PIT_STORIES,
   rebuildSunkenArchitectureExtensions,
@@ -58,6 +67,10 @@ export interface EdgeGate {
   /** Position along the edge in chunk-local coordinates. */
   readonly offset: number;
   readonly width: number;
+  readonly floorY: number;
+  readonly layer: string;
+  readonly clearance: number;
+  readonly slabThickness: number;
 }
 
 export type InfiniteEdgeGates = Readonly<Record<ChunkEdge, readonly EdgeGate[]>>;
@@ -199,23 +212,31 @@ const canonicalEdgeAddress = (
 const edgeAddressSeed = (seed: string, address: CanonicalEdgeAddress, suffix: string): string =>
   `${seed}::infinite-edge:v${WRAPPER_VERSION}:${address.axis}:${address.line}:${address.lane}:${address.story}:${suffix}`;
 
+const canonicalGateCache = new Map<string, readonly EdgeGate[]>();
 const gatesForAddress = (seed: string, address: CanonicalEdgeAddress): readonly EdgeGate[] => {
-  const rng = new SeededRandom(edgeAddressSeed(seed, address, 'gates'));
-  const count = rng.chance(0.38) ? 2 : 1;
-  const offsets = count === 1
-    ? [quantize(rng.float(-34, 34), 0.25)]
-    : [
-        quantize(rng.float(-38, -8), 0.25),
-        quantize(rng.float(8, 38), 0.25),
-      ];
-  return Object.freeze(
-    offsets.map((offset) =>
-      Object.freeze({
-        offset,
-        width: quantize(rng.float(2.35, 4.6), 0.05),
-      }),
-    ),
-  );
+  const cacheKey = edgeAddressSeed(seed, address, 'vertical-gates:v1'), cached = canonicalGateCache.get(cacheKey); if (cached) return cached;
+  const rng = new SeededRandom(edgeAddressSeed(seed, address, 'gates')), count = rng.chance(.38) ? 2 : 1;
+  const offsets = count === 1 ? [quantize(rng.float(-34, 34), .25)] : [quantize(rng.float(-38, -8), .25), quantize(rng.float(8, 38), .25)];
+  const owners = address.axis === 'vertical' ? [
+    { coord: { x: address.line - 1, z: address.lane, story: address.story }, edge: 'east' as const },
+    { coord: { x: address.line, z: address.lane, story: address.story }, edge: 'west' as const },
+  ] : [
+    { coord: { x: address.lane, z: address.line - 1, story: address.story }, edge: 'south' as const },
+    { coord: { x: address.lane, z: address.line, story: address.story }, edge: 'north' as const },
+  ];
+  const result: EdgeGate[] = [];
+  for (const [i, offset] of offsets.entries()) {
+    const width = quantize(rng.float(2.35, 4.6), .05), heightRng = new SeededRandom(edgeAddressSeed(seed, address, `height:v1:${i}`));
+    const floorY = owners.some(o => epicStructureIndexForCoord(seed, o.coord) !== null) ? 0 : heightRng.pick([-.4, .4, .7]);
+    const options = [offset, ...heightRng.fork('offset-retries').shuffle(Array.from({ length: 29 }, (_, j) => -42 + j * 3))];
+    const safe = (candidate: number) => !result.some(g => Math.abs(candidate - g.offset) < (width + g.width) / 2 + 1) && owners.every(o => {
+      if (epicStructureIndexForCoord(seed, o.coord) !== null) return true;
+      const b = getVerticalGateApproach(INFINITE_CHUNK_SIZE, o.edge, { offset: candidate, width, floorY, layer: 'ground', clearance: 2.5, slabThickness: .16 });
+      return !protectedStructuralRects(seed, o.coord).some(r => rectsOverlap(b, r, .35));
+    });
+    result.push(Object.freeze({ offset: options.find(safe) ?? offset, width, floorY, layer: 'ground', clearance: 2.5, slabThickness: .16 }));
+  }
+  const frozen = Object.freeze(result); canonicalGateCache.set(cacheKey, frozen); trimStringCache(canonicalGateCache, 192); return frozen;
 };
 
 const oppositeEdge = (edge: ChunkEdge): ChunkEdge => edge === 'north'
@@ -241,12 +262,12 @@ const epicAbyssGatesForEdge = (
       .filter((passage) => passage.side === source.side)
       .map((passage) => Object.freeze({
         offset: passage.along,
-        width: passage.width,
+        width: passage.width, floorY: 0, layer: 'ground', clearance: 2.5, slabThickness: .16,
       })),
   );
 };
 
-export const getCanonicalEdgeGates = (
+export const getLegacyCanonicalEdgeGates = (
   seed: string,
   key: ChunkKey | ChunkCoord,
   edge: ChunkEdge,
@@ -254,6 +275,22 @@ export const getCanonicalEdgeGates = (
   const coord = resolveCoord(key);
   return epicAbyssGatesForEdge(seed, coord, edge) ??
     gatesForAddress(seed, canonicalEdgeAddress(coord, edge));
+};
+
+export const getCanonicalEdgeGates = (seed: string, key: ChunkKey | ChunkCoord, edge: ChunkEdge): readonly EdgeGate[] => {
+  const coord = resolveCoord(key), neighbor = parseChunkKey(getNeighborChunkKey(coord, edge));
+  if (seed.startsWith('RAW_LOCAL_') || epicStructureIndexForCoord(seed, coord) !== null || epicStructureIndexForCoord(seed, neighbor) !== null)
+    return getLegacyCanonicalEdgeGates(seed, coord, edge);
+  return [-42, -14, 14, 42].flatMap((offset, index) => {
+    const x = edge === 'west' ? coord.x * 4 : edge === 'east' ? coord.x * 4 + 3 : coord.x * 4 + index;
+    const z = edge === 'north' ? coord.z * 4 : edge === 'south' ? coord.z * 4 + 3 : coord.z * 4 + index;
+    const dx = edge === 'east' ? 1 : edge === 'west' ? -1 : 0, dz = edge === 'south' ? 1 : edge === 'north' ? -1 : 0;
+    const a = regionalDatum(seed, x, z), b = regionalDatum(seed, x + dx, z + dz);
+    if (Math.abs(a.y - b.y) > .001 && !hasRegionalTransition(seed, x, z, edge)) return [];
+    const wide = a.id === b.id && regionalStyle(seed, a.id).family !== 'maze' && !regionalAtrium(seed, x, z, coord.story) && !regionalAtrium(seed, x + dx, z + dz, coord.story);
+    return [{ offset, width: wide ? 25.6 : 4, floorY: (a.y + b.y) / 2,
+      layer: `regional/${coord.story}`, clearance: 3.05, slabThickness: .16 }];
+  });
 };
 
 export const getInfiniteEdgeGates = (
@@ -269,8 +306,46 @@ export const getInfiniteEdgeGates = (
   });
 };
 
+export const getLegacyInfiniteEdgeGates = (seed: string, key: ChunkKey | ChunkCoord): InfiniteEdgeGates => {
+  const coord = resolveCoord(key);
+  return { north: getLegacyCanonicalEdgeGates(seed, coord, 'north'), east: getLegacyCanonicalEdgeGates(seed, coord, 'east'),
+    south: getLegacyCanonicalEdgeGates(seed, coord, 'south'), west: getLegacyCanonicalEdgeGates(seed, coord, 'west') };
+};
+
 export const derivedChunkSeed = (seed: string, key: ChunkKey): string =>
-  `${seed}::infinite-chunk:v${WRAPPER_VERSION}:${key}`;
+  seed.startsWith('RAW_LOCAL_') && key === '0:0:0' ? seed.slice('RAW_LOCAL_'.length) : `${seed}::infinite-chunk:v${WRAPPER_VERSION}:${key}`;
+
+const structuralCache = new Map<string, WorldPlan>();
+const structuralPlan = (seed: string): WorldPlan => {
+  const cached = structuralCache.get(seed); if (cached) return cached;
+  const plan = generateStructuralPlan(seed);
+  const summary = { ...plan, walls: [], colliders: [], columns: [], detailSockets: [], lights: [], missingCeilingTiles: [] };
+  structuralCache.set(seed, summary); trimStringCache(structuralCache, 256); return summary;
+};
+const enclosureCache = new Map<string, readonly InheritedShaftEnclosure[]>();
+const canonicalShaftEnclosures = (seed: string, coord: ChunkCoord): readonly InheritedShaftEnclosure[] => {
+  const key = `${seed}:${createChunkKey(coord)}`, cached = enclosureCache.get(key); if (cached) return cached;
+  const plan = structuralPlan(derivedChunkSeed(seed, createChunkKey(coord))), inherited = inheritedShaftOpeningsForChunk(seed, coord);
+  const local = plan.features.flatMap(f => f.kind === 'grid-pit' ? f.holes : []);
+  const conflict = local.some(h => inherited.some(v => rectsOverlap(h, v, .08)));
+  const claims = coalesceInheritedShaftOpenings([...inherited, ...(conflict ? local.map(h => ({ ...cloneRect(h), sourceStory: inherited[0]?.sourceStory ?? coord.story, remainingStories: h.stories ?? 1 })) : [])]);
+  const result = inheritedShaftEnclosuresForPlan(plan, claims); enclosureCache.set(key, result); trimStringCache(enclosureCache, 192); return result;
+};
+const protectedStructuralRects = (seed: string, coord: ChunkCoord): Rect[] => {
+  const raw = structuralPlan(derivedChunkSeed(seed, createChunkKey(coord)));
+  const stair = inheritedStairForChunk(seed, coord);
+  return [...canonicalShaftEnclosures(seed, coord).map(e => e.bounds), ...inheritedShaftOpeningsForChunk(seed, coord),
+    ...extractLocalShaftHoles(raw), ...(stair ? [stair.bounds] : []),
+    ...raw.features.flatMap(f => f.kind === 'stair-socket' || f.kind === 'squeeze-view' ? [f.bounds] : []),
+    ...raw.solidMasses.map(m => m.bounds), ...raw.rooms.filter(r => r.accessReason === 'intentional').map(r => r.bounds)];
+};
+const regionalCache = new Map<string, RegionalClaim[]>();
+export const clearInfiniteWorldCaches = (): void => {
+  clearBspArchitectureCache();
+  clearRegionalPlanCache();
+  structuralCache.clear(); enclosureCache.clear(); canonicalGateCache.clear(); regionalCache.clear();
+  inheritedShaftOpeningsCache.clear(); floorOpeningsCache.clear(); inheritedStairCache.clear(); rawLocalFloorOpeningsCache.clear();
+};
 
 export const getInfiniteBiome = (seed: string, key: ChunkKey | ChunkCoord): InfiniteBiome => {
   const coord = resolveCoord(key);
@@ -1259,7 +1334,7 @@ export const inheritedShaftOpeningsForChunk = (
     const sourceKey = createChunkKey(sourceCoord);
     const sourceSeed = derivedChunkSeed(seed, sourceKey);
     if (worldMaxShaftStories(sourceSeed) <= distance) continue;
-    const sourcePlan = generateWorld(sourceSeed);
+    const sourcePlan = structuralPlan(sourceSeed);
     for (const feature of sourcePlan.features) {
       if (feature.kind !== 'grid-pit' && feature.kind !== 'squeeze-view') continue;
       for (const hole of feature.holes ?? []) {
@@ -1471,7 +1546,7 @@ const canonicalFloorOpeningsForChunk = (
     trimStringCache(floorOpeningsCache);
     return openings;
   }
-  const plan = generateWorld(derivedChunkSeed(seed, normalizedKey));
+  const plan = structuralPlan(derivedChunkSeed(seed, normalizedKey));
   const inherited = inheritedShaftOpeningsForChunk(seed, coord);
   const localOpenings = extractLocalShaftHoles(plan);
   const pitConflicted = localOpenings.some((hole) =>
@@ -1677,7 +1752,7 @@ const rawLocalFloorOpeningsForChunk = (
     trimStringCache(rawLocalFloorOpeningsCache);
     return openings;
   }
-  const plan = generateWorld(derivedChunkSeed(seed, normalizedKey));
+  const plan = structuralPlan(derivedChunkSeed(seed, normalizedKey));
   const openings = freezeRects(plan.floorOpenings ?? []);
   rawLocalFloorOpeningsCache.set(cacheKey, openings);
   if (rawLocalFloorOpeningsCache.size > 192) {
@@ -1704,7 +1779,7 @@ export const inheritedStairForChunk = (
 
   const sourceCoord = { ...coord, story: coord.story - 1 };
   const sourceKey = createChunkKey(sourceCoord);
-  const sourcePlan = generateWorld(derivedChunkSeed(seed, sourceKey));
+  const sourcePlan = structuralPlan(derivedChunkSeed(seed, sourceKey));
   const sourceStair = sourcePlan.features.find(
     (feature): feature is StairSocketFeature =>
       feature.kind === 'stair-socket' && (feature.baseY ?? 0) === 0,
@@ -2042,6 +2117,10 @@ const emitBiomeBoundarySkin = (
 };
 
 const prefixFeature = (feature: WorldFeature, prefix: string): WorldFeature => {
+  if (feature.kind === 'liminal-architecture') return { ...feature, id: prefix + feature.id, roomId: prefix + feature.roomId,
+    walls: feature.walls.map(w => ({ ...w, id: prefix + w.id, openings: w.openings.map(o => ({ ...o, ...(o.destination ? { destination: { ...o.destination,
+      surfaceId: `chunk-${o.destination.owner.x}:${o.destination.owner.z}:${o.destination.owner.story}/` + o.destination.surfaceId } } : {}) })) })) };
+  if (feature.kind === 'liminal-pit') return { ...feature, id: prefix + feature.id, roomId: prefix + feature.roomId };
   if (feature.kind === 'grid-pit' || feature.kind === 'epic-structure') {
     return { ...feature, id: `${prefix}${feature.id}`, roomId: `${prefix}${feature.roomId}` };
   }
@@ -2076,6 +2155,7 @@ const prefixFeature = (feature: WorldFeature, prefix: string): WorldFeature => {
 
 const prefixPlanIds = (plan: WorldPlan, key: ChunkKey): void => {
   const prefix = `chunk-${key}/`;
+  prefixTopology(plan, prefix, parseChunkKey(key).story);
   plan.rooms = plan.rooms.map((room) => ({ ...room, id: `${prefix}${room.id}` }));
   plan.walls = plan.walls.map((wall) => ({
     ...wall,
@@ -2184,13 +2264,33 @@ const stripFiniteLandmarks = (plan: WorldPlan): void => {
   });
 };
 
-export const generateInfiniteChunk = (
+export const generateLegacyInfiniteChunk = (
   seed: string,
   key: ChunkKey | ChunkCoord,
 ): WorldPlan => {
   const coord = resolveCoord(key);
   const normalizedKey = createChunkKey(coord);
-  const plan = generateWorld(derivedChunkSeed(seed, normalizedKey));
+  const epicIndex = epicStructureIndexForCoord(seed, coord), edgeGates = getLegacyInfiniteEdgeGates(seed, coord);
+  const regionKey = `${seed}:${normalizedKey}`, cachedRegion = regionalCache.get(regionKey);
+  const regionalClaims = cachedRegion ?? (epicIndex === null ? planRegionalVolumes(coord.story,
+    owner => structuralPlan(derivedChunkSeed(seed, createChunkKey({ ...coord, story: owner }))), claim => {
+      for (let story = claim.story; story <= Math.floor((claim.top - LOWEST_STRUCTURE_Y - .001) / INFINITE_STORY_PITCH); story++) {
+        const address = { ...coord, story };
+        if (epicStructureIndexForCoord(seed, address) !== null || protectedStructuralRects(seed, address).some(r => rectsOverlap(claim.bounds, r, .2))) return false;
+        if (story !== claim.story) {
+          const gates = getLegacyInfiniteEdgeGates(seed, address);
+          for (const edge of ['north', 'south', 'east', 'west'] as const) for (const g of gates[edge]) if (rectsOverlap(claim.bounds, getVerticalGateApproach(INFINITE_CHUNK_SIZE, edge, g), .2)) return false;
+        }
+      }
+      return true;
+    }) : []);
+  if (!cachedRegion) { regionalCache.set(regionKey, regionalClaims); trimStringCache(regionalCache, 64); }
+  const reservations = epicIndex === null ? [
+    ...regionalClaims.filter(c => c.story < coord.story && c.top - coord.story * INFINITE_STORY_PITCH > -.158).map(c => c.bounds), ...protectedStructuralRects(seed, coord), ...ceilingOpeningsForChunk(seed, coord),
+    ...(['north', 'south', 'east', 'west'] as const).flatMap(edge => edgeGates[edge].map(g => getVerticalGateApproach(INFINITE_CHUNK_SIZE, edge, g))),
+  ] : [];
+  const subfloor = regionalClaims.filter(c => c.story < coord.story && c.top - coord.story * INFINITE_STORY_PITCH <= -.158).map(c => ({ bounds: c.bounds, top: c.top - coord.story * INFINITE_STORY_PITCH }));
+  const plan = generateWorld(derivedChunkSeed(seed, normalizedKey), false, reservations, subfloor);
   // Topology may vary from story to story, but a vertical connection must not
   // swap wallpaper/carpet scale or tint while both floors are visible. Derive
   // the repeated surface treatment from the horizontal column only.
@@ -2239,9 +2339,19 @@ export const generateInfiniteChunk = (
   // regeneration when WorldView asks which ceiling cells to remove.
   plan.ceilingOpenings = ceilingOpenings.map(cloneRect);
   stripFiniteLandmarks(plan);
-  const epicIndex = epicStructureIndexForCoord(seed, coord);
-  if (epicIndex !== null) applyEpicStructure(plan, epicIndex, { worldSeed: seed, coord });
-  const edgeGates = getInfiniteEdgeGates(seed, coord);
+  if (epicIndex !== null) {
+    const obsolete = plan.features.filter(f => f.kind !== 'impossible-vista').map(f => f.id);
+    const doors = new Set(plan.features.flatMap(f => f.kind === 'interactive-door' ? [f.colliderId] : []));
+    delete plan.topology;
+    plan.walls = plan.walls.filter(w => !w.id.startsWith('vertical-guard/'));
+    plan.colliders = plan.colliders.filter(c => !c.id.startsWith('surface/') && !c.id.startsWith('vertical-roof/') && !c.id.startsWith('collider-vertical-guard/') && !doors.has(c.id) && !obsolete.some(id => c.id.startsWith(`${id}-`)));
+    for (const r of plan.rooms) r.floorY = 0;
+    rebuildBaseFloorColliders(plan);
+    const monument = applyEpicStructure(plan, epicIndex, { worldSeed: seed, coord });
+    if (epicIndex === 4) for (const r of plan.rooms.filter(r => r.id !== monument.roomId)) for (const [i, b] of cutRects([r.bounds], [monument.bounds, ...(plan.ceilingOpenings ?? [])]).entries()) {
+      const p = rectCenter(b); plan.colliders.push({ id: `epic4-maze-roof/${r.id}/${i}`, kind: 'barrier', center: { ...p, y: r.ceilingHeight + .08 }, halfExtents: { x: rectWidth(b) / 2, y: .08, z: rectDepth(b) / 2 } });
+    }
+  }
   // A chunk owns exactly one full story. The compact geometry below its holes
   // is only a local preview and must never receive a second 112 m boundary.
   emitBoundary(plan, seed, coord, 'north', edgeGates.north, 'upper');
@@ -2271,11 +2381,44 @@ export const generateInfiniteChunk = (
   rebuildSunkenArchitectureExtensions(plan);
   if (epicIndex === null) {
     demoteIncompleteTallRooms(plan);
+    applyRegionalClaims(plan, coord.story, regionalClaims);
+    applyVerticalBoundaries(plan, edgeGates);
+    for (const r of plan.rooms) {
+      r.ceilingHeight = Math.max(r.ceilingHeight, (r.floorY ?? 0) + 2.65);
+      const ramps = plan.topology?.surfaces.filter(s => s.role === 'ramp' && rectsOverlap(s.bounds, r.bounds)) ?? [];
+      if (ramps.length) r.ceilingHeight = Math.max(r.ceilingHeight, ...ramps.map(s => s.ceilingY));
+    }
+    fitVerticalArchitecture(plan); rebuildVerticalCeilingShells(plan); clearVerticalApertures(plan); fitVerticalArchitecture(plan);
+    for (const l of plan.lights.filter(l => l.level >= 0)) { const r = plan.rooms.find(r => r.id === l.roomId); if (r) l.ceilingY = r.ceilingHeight; }
+    finalizeVerticalTopology(plan);
+    const previousLightCount = plan.lights.length;
+    populateVerticalRoomLighting(plan);
+    applyVisualBiome({ ...plan, lights: plan.lights.slice(previousLightCount) }, visualBiome, `${chunkSeed}:vertical-topology:v1`);
+    enforceUnlitZones(plan);
     populateRareProps(plan, `${seed}:${normalizedKey}:rare-props`);
   }
   prefixPlanIds(plan, normalizedKey);
+  plan.edgeGates = edgeGates;
 
   attachInfiniteChunkMetadata(seed, plan, coord, biome, edgeGates, visualBiome);
+  return plan;
+};
+
+export const generateInfiniteChunk = (seed: string, key: ChunkKey | ChunkCoord): WorldPlan => {
+  const coord = resolveCoord(key);
+  if (seed.startsWith('RAW_LOCAL_') || epicStructureIndexForCoord(seed, coord) !== null) return generateLegacyInfiniteChunk(seed, coord);
+  const gates = getInfiniteEdgeGates(seed, coord), normalizedKey = createChunkKey(coord);
+  const finish = generateSurfaceStyle(`${seed}:spatial-finish:v3:${Math.floor(coord.x / 2)}:${Math.floor(coord.z / 2)}`);
+  const style = { ...generateSurfaceStyle(`${seed}:spatial-column:v2:${coord.x}:${coord.z}`),
+    floorPatternScale: finish.floorPatternScale, floorQuarterTurn: finish.floorQuarterTurn,
+    wallPatternScale: finish.wallPatternScale, ceilingPatternScale: finish.ceilingPatternScale };
+  const plan = generateSpatialWorld(seed, coord, style, gates);
+  const biome = getInfiniteBiome(seed, coord), visual = getInfiniteVisualBiome(seed, coord);
+  plan.visualBiome = visual;
+  applyVisualBiome(plan, visual, `${seed}:spatial-palette:v2:${coord.x}:${coord.z}`);
+  populateRareProps(plan, `${seed}:${normalizedKey}:spatial-props:v2`);
+  prefixPlanIds(plan, normalizedKey); plan.edgeGates = gates;
+  attachInfiniteChunkMetadata(seed, plan, coord, biome, gates, visual);
   return plan;
 };
 
@@ -2296,7 +2439,7 @@ export const attachInfiniteChunkMetadata = (
     key: normalizedKey,
     coord: freezeCoord(coord),
     worldOffset: getChunkWorldOffset(coord),
-    edgeGates: knownEdgeGates ?? getInfiniteEdgeGates(seed, coord),
+    edgeGates: knownEdgeGates ?? plan.edgeGates ?? getInfiniteEdgeGates(seed, coord),
     biome: knownBiome ?? getInfiniteBiome(seed, coord),
     visualBiome: knownVisualBiome ?? plan.visualBiome ?? getInfiniteVisualBiome(seed, coord),
     get ceilingOpenings(): readonly Readonly<Rect>[] {
@@ -2323,7 +2466,7 @@ export const isInfiniteChunkPlan = (plan: WorldPlan): boolean => metadataByPlan.
 export const getFloorOpenings = (plan: WorldPlan): readonly Readonly<Rect>[] =>
   freezeRects(
     plan.floorOpenings ?? plan.features.flatMap((feature): Rect[] =>
-      feature.kind === 'grid-pit'
+      feature.kind === 'grid-pit' || feature.kind === 'liminal-pit'
         ? (feature as GridPitFeature).holes.map(cloneRect)
         : [],
     ),

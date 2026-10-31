@@ -1,0 +1,65 @@
+{
+  "user_provided": true,
+  "dimensions": [
+    1672,
+    941
+  ],
+  "encoding": "WebP quality 90, no resize or crop",
+  "total_bytes": 454748,
+  "shots": [
+    {
+      "shot": 1,
+      "source": "11.png",
+      "source_sha256": "d6490095e647506d27abdcdc5e4b2fb3890a80ab28aca66b8fd7ec7a5e701fab",
+      "runtime": "public/assets/new-game/01.webp",
+      "runtime_sha256": "a85e0064918a9cadf5366a5b8460815283beb156554f8b007c98b6e4bd18ed51",
+      "bytes": 72342,
+      "subtitle": "Les autres sont partis depuis longtemps."
+    },
+    {
+      "shot": 2,
+      "source": "22.png",
+      "source_sha256": "95eef8ca66e0e9b2fa0efe9bb5e4473996eb8cc36c92d34364d2493d234da59b",
+      "runtime": "public/assets/new-game/02.webp",
+      "runtime_sha256": "a2cad29dea45cb2f937c394f9c8b1e9c4fb4f579bedeabd0da88f0cca910fc0b",
+      "bytes": 95050,
+      "subtitle": "J'ai passé la soirée sur ça."
+    },
+    {
+      "shot": 3,
+      "source": "33.png",
+      "source_sha256": "4d728eed1d713d9bafe4e7cf5619320dd6e943fefb513f42a350ff2c909bc3aa",
+      "runtime": "public/assets/new-game/03.webp",
+      "runtime_sha256": "bd1e5f214157d9fdd2cca6b7093c5ab4811876c58bddbbaacc09e636c146733b",
+      "bytes": 88316,
+      "subtitle": "00:30. Et demain recommence."
+    },
+    {
+      "shot": 4,
+      "source": "44.png",
+      "source_sha256": "626c2587649ee427214af186e05f28a2059d693046f151ca1477ea40fc9aa720",
+      "runtime": "public/assets/new-game/04.webp",
+      "runtime_sha256": "7feef0952e3178b6d9fa5f234ccce0dc1cff97634bd41806b654701c33b43128",
+      "bytes": 70796,
+      "subtitle": "L'air est froid. Tant mieux."
+    },
+    {
+      "shot": 5,
+      "source": "55.png",
+      "source_sha256": "e252592c02ae6f61e4e32c333e76e685165dc5fb71f35959e443852360e6c384",
+      "runtime": "public/assets/new-game/05.webp",
+      "runtime_sha256": "844412e7e5c30b85ecd13914a8b386918d92b7f5804f2374c5f419880565de1f",
+      "bytes": 64460,
+      "subtitle": "La pluie couvre le reste."
+    },
+    {
+      "shot": 6,
+      "source": "66.png",
+      "source_sha256": "70c39a92b14d3508d0d9d1f6e106be9f6c361d9956baf7c6a3abc98489517bb6",
+      "runtime": "public/assets/new-game/06.webp",
+      "runtime_sha256": "b9b4abdb6d9ee7aec981b499ee6ff126c1f6b7ee203eb82f9e04c67f2d73ce98",
+      "bytes": 63784,
+      "subtitle": "Plus qu'à monter."
+    }
+  ]
+}

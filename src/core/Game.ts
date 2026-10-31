@@ -13,6 +13,8 @@ import {
   BACKROOMS_ATMOSPHERE as ATMOSPHERE,
   BACKROOMS_LEGACY_ATMOSPHERE as LEGACY_ATMOSPHERE,
 } from '../render/BackroomsAtmosphere';
+import { MODERN_BACKROOMS_RIG } from '../render/FluorescentFixture';
+import { resolveLightingBrightness } from '../render/LightingBrightness';
 import { MaterialLibrary } from '../render/MaterialLibrary';
 import { PostFX } from '../render/PostFX';
 import { ExperienceUI } from '../ui/ExperienceUI';
@@ -85,14 +87,15 @@ export class Game {
   private readonly hemisphere = new THREE.HemisphereLight(
     ATMOSPHERE.yellow.hemisphereSky,
     ATMOSPHERE.yellow.hemisphereGround,
-    0.14,
+    MODERN_BACKROOMS_RIG.hemisphere.lit,
   );
-  private readonly ambientFill = new THREE.AmbientLight(ATMOSPHERE.yellow.ambient, 0.055);
-  private readonly directionalKey = new THREE.DirectionalLight(ATMOSPHERE.yellow.key, 0.22);
+  private readonly ambientFill = new THREE.AmbientLight(ATMOSPHERE.yellow.ambient, MODERN_BACKROOMS_RIG.ambient.lit);
+  private readonly directionalKey = new THREE.DirectionalLight(ATMOSPHERE.yellow.key, MODERN_BACKROOMS_RIG.key.lit);
   private readonly atmosphereTargetColor = new THREE.Color();
   private readonly ui: ExperienceUI;
   private readonly audio = new AudioSystem();
   private readonly lookDirection = new THREE.Vector3();
+  private readonly streamingVelocity = new THREE.Vector3();
   private readonly lastSafePosition = new THREE.Vector3();
   private readonly drawingBufferSize = new THREE.Vector2();
   private readonly cinematicPosition = new THREE.Vector3();
@@ -102,6 +105,7 @@ export class Game {
   private readonly systemDiagnostics: SystemDiagnostics;
   private readonly renderScale: RenderScaleLimits;
   private settings: GameSettings;
+  private brightnessProfile = resolveLightingBrightness();
   private readonly storage: GameSaveStorage | null;
   private materials?: MaterialLibrary;
   private worldStream?: WorldStream;
@@ -135,6 +139,7 @@ export class Game {
     private readonly options: GameOptions = {},
   ) {
     this.settings = loadGameSettings();
+    this.brightnessProfile = resolveLightingBrightness(this.settings.brightness);
     try {
       this.storage = window.localStorage;
     } catch {
@@ -244,6 +249,7 @@ export class Game {
       this.materials.materialSets,
       this.physics,
       this.settings.lighting,
+      this.settings.brightness,
     );
     await this.worldStream.initialize();
     if (this.disposed) return;
@@ -281,7 +287,7 @@ export class Game {
       },
     });
     if (this.options.launch?.kind === 'load') {
-      const { chunk, localPosition, quaternion } = this.options.launch.save.payload;
+      const { chunk, localPosition, quaternion, surface } = this.options.launch.save.payload;
       const offset = getChunkWorldOffset(chunk);
       const restoredPosition = {
         x: offset.x + localPosition.x,
@@ -291,7 +297,7 @@ export class Game {
       const destinationReady = await this.worldStream.prepareSavedChunk(chunk);
       if (this.disposed) return;
       if (!destinationReady) throw new Error('Impossible de préparer la sauvegarde sélectionnée.');
-      this.player.teleport(restoredPosition);
+      this.player.teleport(this.worldStream.restoreSurfacePosition(restoredPosition, surface, chunk));
       this.player.setLookQuaternion(quaternion);
       this.playableSeconds = this.options.launch.save.playTimeSeconds;
     }
@@ -335,7 +341,10 @@ export class Game {
     this.postFX = new PostFX(this.renderer, this.scene, this.camera, this.settings.lighting);
     this.resize();
     await this.postFX.waitUntilReady();
-    await this.renderer.compileAsync(this.scene, this.camera);
+    const characterWarmup = this.character?.renderWarmupRoots.map(root => ({ root, visible: root.visible })) ?? [];
+    for (const { root } of characterWarmup) root.visible = true;
+    try { await this.renderer.compileAsync(this.scene, this.camera); }
+    finally { for (const { root, visible } of characterWarmup) root.visible = visible; }
     if (this.disposed) return;
     setVisualProgress(0.92);
     // Warm every composer target behind the opaque loading overlay. The
@@ -383,15 +392,15 @@ export class Game {
     const darknessBlend = 1 - Math.exp(-Math.max(0, delta) * darknessRate);
     this.darkness = THREE.MathUtils.lerp(this.darkness, context.darkness, darknessBlend);
     if (legacy) {
-      this.hemisphere.intensity = 0.17;
-      this.ambientFill.intensity = 0.018;
-      this.directionalKey.intensity = 0.07;
+      this.hemisphere.intensity = 0.17 * this.brightnessProfile.relativeGain;
+      this.ambientFill.intensity = 0.018 * this.brightnessProfile.relativeGain;
+      this.directionalKey.intensity = 0.07 * this.brightnessProfile.relativeGain;
       this.postFX?.setDarkness(0);
       return;
     }
-    this.hemisphere.intensity = THREE.MathUtils.lerp(0.14, 0.07, this.darkness);
-    this.ambientFill.intensity = THREE.MathUtils.lerp(0.055, 0.018, this.darkness);
-    this.directionalKey.intensity = THREE.MathUtils.lerp(0.22, 0.08, this.darkness);
+    this.hemisphere.intensity = THREE.MathUtils.lerp(this.brightnessProfile.rig.hemisphere, MODERN_BACKROOMS_RIG.hemisphere.dark, this.darkness);
+    this.ambientFill.intensity = THREE.MathUtils.lerp(this.brightnessProfile.rig.ambient, MODERN_BACKROOMS_RIG.ambient.dark, this.darkness);
+    this.directionalKey.intensity = THREE.MathUtils.lerp(this.brightnessProfile.rig.key, MODERN_BACKROOMS_RIG.key.dark, this.darkness);
     this.postFX?.setDarkness(this.darkness);
   }
 
@@ -410,13 +419,13 @@ export class Game {
     this.fog.density = legacy ? 0.0042 : 0.0015;
     this.directionalKey.position.set(legacy ? 3.5 : 4.5, legacy ? 8 : 7.5, legacy ? 2.5 : 3.2);
     if (legacy) {
-      this.hemisphere.intensity = 0.17;
-      this.ambientFill.intensity = 0.018;
-      this.directionalKey.intensity = 0.07;
+      this.hemisphere.intensity = 0.17 * this.brightnessProfile.relativeGain;
+      this.ambientFill.intensity = 0.018 * this.brightnessProfile.relativeGain;
+      this.directionalKey.intensity = 0.07 * this.brightnessProfile.relativeGain;
     } else {
-      this.hemisphere.intensity = THREE.MathUtils.lerp(0.14, 0.07, this.darkness);
-      this.ambientFill.intensity = THREE.MathUtils.lerp(0.055, 0.018, this.darkness);
-      this.directionalKey.intensity = THREE.MathUtils.lerp(0.22, 0.08, this.darkness);
+      this.hemisphere.intensity = THREE.MathUtils.lerp(this.brightnessProfile.rig.hemisphere, MODERN_BACKROOMS_RIG.hemisphere.dark, this.darkness);
+      this.ambientFill.intensity = THREE.MathUtils.lerp(this.brightnessProfile.rig.ambient, MODERN_BACKROOMS_RIG.ambient.dark, this.darkness);
+      this.directionalKey.intensity = THREE.MathUtils.lerp(this.brightnessProfile.rig.key, MODERN_BACKROOMS_RIG.key.dark, this.darkness);
     }
   }
 
@@ -429,6 +438,8 @@ export class Game {
   private async applySettings(next: GameSettings): Promise<void> {
     const previousLighting = this.settings.lighting;
     this.settings = { ...next };
+    this.brightnessProfile = resolveLightingBrightness(next.brightness);
+    this.worldStream?.setBrightness(next.brightness);
     this.camera.fov = next.fieldOfView;
     this.camera.updateProjectionMatrix();
     this.player?.setFieldOfView(next.fieldOfView);
@@ -530,7 +541,7 @@ export class Game {
 
   private saveNow(kind: GameSaveKind): boolean {
     if (!this.storage || !this.player || !this.worldStream) return false;
-    const chunk = this.worldStream.getCenterCoord();
+    const chunk = this.worldStream.supportedCoordAt(this.lastSafePosition);
     const offset = getChunkWorldOffset(chunk);
     const look = this.player.getLookQuaternion();
     this.postFX?.render(0);
@@ -545,6 +556,7 @@ export class Game {
       payload: {
         seed: this.seed,
         chunk,
+        ...(this.worldStream.surfaceAnchorAt(this.lastSafePosition) ? { surface: this.worldStream.surfaceAnchorAt(this.lastSafePosition) } : {}),
         localPosition: {
           x: this.lastSafePosition.x - offset.x,
           y: this.lastSafePosition.y - offset.y,
@@ -571,7 +583,7 @@ export class Game {
     const pendingStory = this.pendingAutosaveStory;
     if (pendingStory === undefined || !this.worldStream) return;
     const center = this.worldStream.getCenterCoord();
-    const safeCoord = streamChunkCoordAt(this.lastSafePosition);
+    const safeCoord = this.worldStream?.supportedCoordAt(this.lastSafePosition) ?? streamChunkCoordAt(this.lastSafePosition);
     if (
       center.story !== pendingStory
       || safeCoord.story !== pendingStory
@@ -604,6 +616,7 @@ export class Game {
       { value: '/save', label: '/save', detail: 'SAUVEGARDE MAINTENANT' },
       VIEWMODEL_COMPLETION,
       { value: '/logs', label: '/logs', detail: 'AFFICHE OU MASQUE LE PANNEAU TECHNIQUE' },
+      { value: '/geometry ', label: '/geometry uv|volumes|off', detail: 'DIAGNOSTIC DES TEXTURES ET VOLUMES' },
       { value: '/noclip', label: '/noclip', detail: 'ACTIVE OU DESACTIVE LE VOL LIBRE' },
       { value: '/locate ', label: '/locate <cible>', detail: 'TÉLÉPORTE VERS UNE CIBLE CONNUE' },
     ];
@@ -669,7 +682,7 @@ export class Game {
         const feedback = 'SYNTAXE: /help';
         return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
       }
-      const feedback = '/viewmodel - première / troisième personne · /save - sauvegarder · /locate <cible> - teleportation · /noclip [on|off] - vol libre · /logs [on|off] - diagnostic';
+      const feedback = '/viewmodel - première / troisième personne · /save - sauvegarder · /locate <cible> - teleportation · /noclip [on|off] - vol libre · /logs [on|off] - diagnostic · /geometry uv|volumes|off - textures et volumes';
       return { close: false, feedback, messages: [echo, { kind: 'system', text: feedback }] };
     }
     if (normalizedCommand === 'save') {
@@ -680,6 +693,16 @@ export class Game {
         feedback,
         messages: [echo, { kind: saved ? 'system' : 'error', text: feedback }],
       };
+    }
+    if (normalizedCommand === 'geometry') {
+      const mode = args[0]?.toLowerCase();
+      if (args.length !== 1 || !['off', 'uv', 'volumes'].includes(mode ?? '')) {
+        const feedback = 'SYNTAXE: /geometry uv|volumes|off';
+        return { close: false, feedback, messages: [echo, { kind: 'error', text: feedback }] };
+      }
+      this.worldStream?.setArchitectureDebug(mode as 'off' | 'uv' | 'volumes');
+      const feedback = `DIAGNOSTIC ARCHITECTURE : ${mode!.toUpperCase()}`;
+      return { close: true, feedback, messages: [echo, { kind: 'system', text: feedback }] };
     }
     if (normalizedCommand === 'logs') {
       const visible = resolveDiagnosticsVisibility(this.diagnosticsVisible, args);
@@ -871,7 +894,9 @@ export class Game {
       if (partner && (partner.distanceTo(this.player.position) > 45 || Math.abs(partner.y - this.player.position.y) > 8)) {
         this.character?.setInteractionPartner(null);
       }
-      this.worldStream.update(this.elapsed, rawDelta, this.character?.getWorldPosition() ?? this.player.position);
+      this.player.getViewDirection(this.lookDirection);
+      this.worldStream.update(this.elapsed, rawDelta, this.character?.getWorldPosition() ?? this.player.position, this.lookDirection,
+        this.character?.getWorldVelocity(this.streamingVelocity));
       const nextStory = this.worldStream.getCenterCoord().story;
       if (nextStory !== this.activeStory) {
         this.activeStory = nextStory;

@@ -1,0 +1,358 @@
+{
+  "preparedGeometry": true,
+  "sourceRoot": "/workspace/scratch/6fa16f3b1be0/Backrooms-liminal-baseline",
+  "node": "v24.22.1",
+  "summary": {
+    "generationMs": {
+      "median": 217.10653600000023,
+      "p95": 340.41148799999974
+    },
+    "lightBakeMs": {
+      "median": 33.356040000000576,
+      "p95": 64.81275400000004
+    },
+    "workerGeometryMs": {
+      "median": 101.75818700000036,
+      "p95": 150.20464400000037
+    },
+    "mainThreadMountMs": {
+      "median": 2.4941659999994954,
+      "p95": 10.477322999999956
+    },
+    "physicsMountMs": {
+      "median": 13.257900999999947,
+      "p95": 17.744460000000117
+    },
+    "triangles": {
+      "median": 13027,
+      "p95": 18442
+    },
+    "batches": {
+      "median": 10,
+      "p95": 11
+    },
+    "architectureBytes": {
+      "median": 1667952,
+      "p95": 2391312
+    },
+    "colliders": {
+      "median": 960,
+      "p95": 1241
+    }
+  },
+  "results": [
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-0",
+      "hash": "41642162501d8ea5d17e49657aff162265d37ecdc793ead7c9df167d2d0c17c7",
+      "generationMs": 343.595107,
+      "lightBakeMs": 63.154904999999985,
+      "workerGeometryMs": 157.1733720000001,
+      "mainThreadMountMs": 10.477322999999956,
+      "physicsMountMs": 41.667775000000006,
+      "triangles": 16382,
+      "batches": 10,
+      "architectureBytes": 2117280,
+      "colliders": 1233
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-1",
+      "hash": "9340404077eace2d56b1cedbd59fa35804306db3c9651926b0cb60f20c7f2aae",
+      "generationMs": 208.22288600000013,
+      "lightBakeMs": 64.81275400000004,
+      "workerGeometryMs": 121.71990299999993,
+      "mainThreadMountMs": 11.837250999999924,
+      "physicsMountMs": 17.744460000000117,
+      "triangles": 13072,
+      "batches": 10,
+      "architectureBytes": 1667952,
+      "colliders": 894
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-2",
+      "hash": "b85864398174025ac66b5e9c6d98d31cdfe3a29a59486b180dbc8c3fda903f7d",
+      "generationMs": 333.706183,
+      "lightBakeMs": 64.74925700000017,
+      "workerGeometryMs": 96.69409100000007,
+      "mainThreadMountMs": 6.160415999999941,
+      "physicsMountMs": 12.747820000000047,
+      "triangles": 14107,
+      "batches": 10,
+      "architectureBytes": 1808004,
+      "colliders": 991
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-3",
+      "hash": "a8155fa98fa376cd0a12781ab6e995ef5bc899df9fcf83ced8e1dfd7155edb4c",
+      "generationMs": 153.05324100000007,
+      "lightBakeMs": 74.64403799999991,
+      "workerGeometryMs": 68.00510199999985,
+      "mainThreadMountMs": 3.2843619999998737,
+      "physicsMountMs": 8.665148999999928,
+      "triangles": 8073,
+      "batches": 10,
+      "architectureBytes": 1013100,
+      "colliders": 604
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-4",
+      "hash": "ec0aa8ed24a834d24617b9c3d0b55aef24cbe8e1f92285a8c8ad3395d1a220ed",
+      "generationMs": 301.6121320000002,
+      "lightBakeMs": 23.45725399999992,
+      "workerGeometryMs": 128.1126159999999,
+      "mainThreadMountMs": 2.726007000000209,
+      "physicsMountMs": 17.23618600000009,
+      "triangles": 18442,
+      "batches": 10,
+      "architectureBytes": 2391312,
+      "colliders": 1241
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-5",
+      "hash": "677267678e0df7307a250ecd0eb6f136d6e4045deef94723b284dba93ca9b59f",
+      "generationMs": 204.34543600000006,
+      "lightBakeMs": 20.646688000000267,
+      "workerGeometryMs": 110.0863360000003,
+      "mainThreadMountMs": 2.466403999999784,
+      "physicsMountMs": 13.996931000000131,
+      "triangles": 13035,
+      "batches": 10,
+      "architectureBytes": 1678644,
+      "colliders": 980
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-6",
+      "hash": "bcde2e5d0338482c6a557bacda546db8d720da18490d620c0b78806db9c2849b",
+      "generationMs": 249.16493600000013,
+      "lightBakeMs": 23.45906500000001,
+      "workerGeometryMs": 118.33831499999997,
+      "mainThreadMountMs": 2.461036000000149,
+      "physicsMountMs": 13.238812999999936,
+      "triangles": 13507,
+      "batches": 10,
+      "architectureBytes": 1730652,
+      "colliders": 978
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-7",
+      "hash": "25140554b16451b93bfb02a7eac936a8c3523956848c07aa9e4fd703ee17c92a",
+      "generationMs": 220.6859340000001,
+      "lightBakeMs": 31.022044999999707,
+      "workerGeometryMs": 93.01828599999999,
+      "mainThreadMountMs": 2.7222509999996873,
+      "physicsMountMs": 13.257900999999947,
+      "triangles": 12590,
+      "batches": 10,
+      "architectureBytes": 1614360,
+      "colliders": 960
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-8",
+      "hash": "c07d38382d6f1f30d3b36cb29c03d9b7363e7522bed7ad50593b5d4934573426",
+      "generationMs": 177.3782930000002,
+      "lightBakeMs": 25.0571259999997,
+      "workerGeometryMs": 115.52639200000021,
+      "mainThreadMountMs": 4.362685000000056,
+      "physicsMountMs": 16.64618100000007,
+      "triangles": 14286,
+      "batches": 10,
+      "architectureBytes": 1830048,
+      "colliders": 1016
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-9",
+      "hash": "5d5e7b3dc034e2a0f69b1c162f069ceed58eb7f0bf4a9434d0e6f34bd4660de4",
+      "generationMs": 145.7214300000005,
+      "lightBakeMs": 36.951232000000346,
+      "workerGeometryMs": 70.6059639999994,
+      "mainThreadMountMs": 1.7222170000004553,
+      "physicsMountMs": 8.918883000000278,
+      "triangles": 8033,
+      "batches": 10,
+      "architectureBytes": 1016532,
+      "colliders": 613
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-10",
+      "hash": "f6db5a5dfa8c5014548a30ad9fef36f20c73390ab57319357dc0bc4ea5207144",
+      "generationMs": 199.70594099999926,
+      "lightBakeMs": 28.516888999999537,
+      "workerGeometryMs": 99.13821200000075,
+      "mainThreadMountMs": 2.4941659999994954,
+      "physicsMountMs": 11.75003899999956,
+      "triangles": 12217,
+      "batches": 10,
+      "architectureBytes": 1567764,
+      "colliders": 855
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-11",
+      "hash": "2cfd91dd5d83ee4dc755e5459747588ce53b9d53c0c4e6bb18c4e0ea4bd8f634",
+      "generationMs": 279.9420650000002,
+      "lightBakeMs": 43.63919799999985,
+      "workerGeometryMs": 108.30551899999955,
+      "mainThreadMountMs": 2.438901999999871,
+      "physicsMountMs": 16.222625999999764,
+      "triangles": 12186,
+      "batches": 11,
+      "architectureBytes": 1572648,
+      "colliders": 981
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-12",
+      "hash": "ab73ea6a843bd7613bd01be5f5a88152b139eed4f2f5abffd342feb397b1e58c",
+      "generationMs": 226.01595300000008,
+      "lightBakeMs": 35.69301799999994,
+      "workerGeometryMs": 89.18295900000066,
+      "mainThreadMountMs": 2.0140489999994315,
+      "physicsMountMs": 15.58345300000019,
+      "triangles": 11827,
+      "batches": 10,
+      "architectureBytes": 1527372,
+      "colliders": 878
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-13",
+      "hash": "61b2a5936d5769321120f90bfa6c762bd77ebee756e912e2eec5853248f8cc15",
+      "generationMs": 213.85459199999968,
+      "lightBakeMs": 30.523181000000477,
+      "workerGeometryMs": 101.75818700000036,
+      "mainThreadMountMs": 2.510500999999749,
+      "physicsMountMs": 13.090959000000112,
+      "triangles": 10349,
+      "batches": 10,
+      "architectureBytes": 1315644,
+      "colliders": 729
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-14",
+      "hash": "427edd073b881aa3633537fb80c36eb465e66b69a712ac256e6f2fd8745d9d69",
+      "generationMs": 340.41148799999974,
+      "lightBakeMs": 45.9732469999999,
+      "workerGeometryMs": 150.20464400000037,
+      "mainThreadMountMs": 2.7048150000000533,
+      "physicsMountMs": 16.79135099999985,
+      "triangles": 18791,
+      "batches": 10,
+      "architectureBytes": 2426820,
+      "colliders": 1311
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-15",
+      "hash": "dbb431a19c327dcc36201f9d8868e4cef08bec4d0caa153abdebf08397da9272",
+      "generationMs": 231.93083299999944,
+      "lightBakeMs": 35.030854000000545,
+      "workerGeometryMs": 70.74239699999998,
+      "mainThreadMountMs": 2.105077000000165,
+      "physicsMountMs": 7.952830000000176,
+      "triangles": 8162,
+      "batches": 11,
+      "architectureBytes": 1034352,
+      "colliders": 560
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-16",
+      "hash": "8fb369e96f13953f3aa3d21673f4b8047a69ec882118bc8918329eb50ec19db7",
+      "generationMs": 249.8078230000001,
+      "lightBakeMs": 27.556829000000107,
+      "workerGeometryMs": 88.76351400000021,
+      "mainThreadMountMs": 1.9267280000003666,
+      "physicsMountMs": 13.481348999999682,
+      "triangles": 12569,
+      "batches": 10,
+      "architectureBytes": 1613172,
+      "colliders": 960
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-17",
+      "hash": "07468cf0a251469c64d28fbfe80925c8872938487f1e8713cfe1ae7ffcbe01c3",
+      "generationMs": 217.10653600000023,
+      "lightBakeMs": 44.668641999999636,
+      "workerGeometryMs": 114.66795699999966,
+      "mainThreadMountMs": 6.798181999999542,
+      "physicsMountMs": 15.90682199999992,
+      "triangles": 14452,
+      "batches": 11,
+      "architectureBytes": 1851960,
+      "colliders": 937
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-18",
+      "hash": "961aee5b7a11d5280b7b814ddbe49eb7d5c25543589596d069720184909abcff",
+      "generationMs": 293.18063299999994,
+      "lightBakeMs": 44.27084399999967,
+      "workerGeometryMs": 115.83988599999975,
+      "mainThreadMountMs": 2.099808999999368,
+      "physicsMountMs": 11.405948000001445,
+      "triangles": 12329,
+      "batches": 10,
+      "architectureBytes": 1567764,
+      "colliders": 942
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-19",
+      "hash": "ef573b635cf3b1608dd8cb149982a33bb43c0555d0d184d136bc3e2ac09c3311",
+      "generationMs": 172.264631,
+      "lightBakeMs": 29.782627999999022,
+      "workerGeometryMs": 95.70615399999951,
+      "mainThreadMountMs": 1.8752080000012938,
+      "physicsMountMs": 11.33055400000012,
+      "triangles": 12972,
+      "batches": 11,
+      "architectureBytes": 1663200,
+      "colliders": 905
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-20",
+      "hash": "52a93ffdc9d09215c026abbd18a4638eec1667bbad765892fb372a374e85348e",
+      "generationMs": 215.07680699999946,
+      "lightBakeMs": 33.356040000000576,
+      "workerGeometryMs": 122.34164999999848,
+      "mainThreadMountMs": 2.3476039999986824,
+      "physicsMountMs": 13.486949000000095,
+      "triangles": 16739,
+      "batches": 11,
+      "architectureBytes": 2167572,
+      "colliders": 1135
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-21",
+      "hash": "4db893d62c6f3c5ac30aa2df4a2dde6bb5f257cfa01a7ee5037e1fff4b6526c5",
+      "generationMs": 153.34028099999887,
+      "lightBakeMs": 27.20799199999965,
+      "workerGeometryMs": 85.84686399999919,
+      "mainThreadMountMs": 1.9547399999992194,
+      "physicsMountMs": 12.211596999999529,
+      "triangles": 13267,
+      "batches": 10,
+      "architectureBytes": 1701612,
+      "colliders": 969
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-22",
+      "hash": "c1e444ffac4462aa102bf6612d001830a76fbf358e438e4e1ed8188ab97d6918",
+      "generationMs": 177.8308739999993,
+      "lightBakeMs": 16.138011999999435,
+      "workerGeometryMs": 82.5291070000003,
+      "mainThreadMountMs": 2.9383490000000165,
+      "physicsMountMs": 11.59583500000008,
+      "triangles": 13027,
+      "batches": 10,
+      "architectureBytes": 1675740,
+      "colliders": 926
+    },
+    {
+      "seed": "VERTICAL-PROMPT-AUDIT-23",
+      "hash": "89a81bb6f94bd3ed420fb60225c1c878a911c641954f5e3fb07ebf80e6a1c50b",
+      "generationMs": 170.25364699999955,
+      "lightBakeMs": 30.076054000001022,
+      "workerGeometryMs": 35.249877999998716,
+      "mainThreadMountMs": 1.4346220000006724,
+      "physicsMountMs": 5.1068709999999555,
+      "triangles": 5622,
+      "batches": 10,
+      "architectureBytes": 695640,
+      "colliders": 372
+    }
+  ],
+  "limitation": "CPU proxy: no browser scheduling, real asset textures/props, GPU uploads, shader compilation or FPS measurement. Geometry preparation is timed separately as work executed by infinite.worker in production."
+}

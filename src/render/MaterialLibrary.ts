@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createFluorescentDiffuser } from './FluorescentFixture';
 import type { VisualBiome } from '../world/types';
 
 export interface MaterialSet {
@@ -206,15 +207,7 @@ export class MaterialLibrary {
       roughness: 0.78,
       metalness: 0.03,
     });
-    const fixtureGlow = new THREE.MeshBasicMaterial({
-      name: 'fluorescent-diffuser',
-      color: 0xfff4d1,
-      toneMapped: true,
-      fog: true,
-      depthTest: true,
-      depthWrite: true,
-      side: THREE.DoubleSide,
-    });
+    const fixtureGlow = createFluorescentDiffuser();
     const voidMaterial = new THREE.MeshBasicMaterial({ color: 0x020201, toneMapped: false });
 
     const yellowMaterials: MaterialSet = {
@@ -234,9 +227,7 @@ export class MaterialLibrary {
     const redFixtureFrame = fixtureFrame.clone();
     redFixtureFrame.name = 'red-biome-fluorescent-frame';
     redFixtureFrame.color.setHex(0x8f554c);
-    const redFixtureGlow = fixtureGlow.clone();
-    redFixtureGlow.name = 'red-biome-fluorescent-diffuser';
-    redFixtureGlow.color.setHex(0xff6657);
+    const redFixtureGlow = createFluorescentDiffuser('red-biome-fluorescent-diffuser', 0xff6657);
     const redMaterials: MaterialSet = {
       ...yellowMaterials,
       fixtureFrame: redFixtureFrame,
@@ -293,9 +284,7 @@ export class MaterialLibrary {
     const whiteFixtureFrame = fixtureFrame.clone();
     whiteFixtureFrame.name = 'white-biome-fluorescent-frame';
     whiteFixtureFrame.color.setHex(0xe5e9e7);
-    const whiteFixtureGlow = fixtureGlow.clone();
-    whiteFixtureGlow.name = 'white-biome-fluorescent-diffuser';
-    whiteFixtureGlow.color.setHex(0xf5fbff);
+    const whiteFixtureGlow = createFluorescentDiffuser('white-biome-fluorescent-diffuser', 0xf5fbff);
     const whiteMaterials: MaterialSet = {
       wall: whiteWall,
       plaster: whitePlaster,
@@ -310,6 +299,12 @@ export class MaterialLibrary {
       void: voidMaterial,
     };
 
+    // Dry architecture opts in. Texture pixels remain shared and untouched;
+    // actual cloned materials apply the remap after their lighting decorators.
+    for (const set of [yellowMaterials, redMaterials, whiteMaterials]) {
+      for (const name of ['wall', 'plaster', 'floor', 'ceiling', 'baseboard', 'pitWall', 'pitBottom'] as const)
+        set[name].userData.matteRoughness = [.82, .98];
+    }
     return new MaterialLibrary(
       {
         yellow: yellowMaterials,

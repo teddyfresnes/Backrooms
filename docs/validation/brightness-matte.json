@@ -1,0 +1,26 @@
+{
+  "texture": "public/assets/stairwell/textures/tile-roughness.jpg",
+  "size": [
+    1024,
+    1024
+  ],
+  "quantiles": [
+    "min",
+    "median",
+    "p95",
+    "max"
+  ],
+  "beforeEffectiveRoughness": [
+    0.6171764705882353,
+    0.6475294117647059,
+    0.6610196078431373,
+    0.6846274509803921
+  ],
+  "afterEffectiveRoughness": [
+    0.9187482352941176,
+    0.9236047058823529,
+    0.9257631372549019,
+    0.9295403921568627
+  ],
+  "sourcePixelsUnchanged": true
+}

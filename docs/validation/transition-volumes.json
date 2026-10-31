@@ -1,0 +1,79 @@
+{
+  "records": [
+    {
+      "corpus": "ORDINARY",
+      "worlds": 64,
+      "flights": 134,
+      "policies": {
+        "upper-slab": 134
+      },
+      "enclosures": {
+        "open": 94,
+        "wall": 40
+      },
+      "probes": 278,
+      "fixtureCorners": 536,
+      "returns": 944,
+      "bspArea": 552600.5552216523,
+      "floorArea": 661571.9177525194,
+      "bspShare": 0.8352841775674779,
+      "maxBatches": 10,
+      "triangles": 1546032,
+      "minClearance": 5.13
+    },
+    {
+      "corpus": "HOLDOUT",
+      "worlds": 32,
+      "flights": 71,
+      "policies": {
+        "upper-slab": 69,
+        "room": 2
+      },
+      "enclosures": {
+        "open": 46,
+        "wall": 25
+      },
+      "probes": 131,
+      "fixtureCorners": 284,
+      "returns": 489,
+      "bspArea": 296222.70277410117,
+      "floorArea": 333064.845186187,
+      "bspShare": 0.8893844758924027,
+      "maxBatches": 10,
+      "triangles": 793270,
+      "minClearance": 3.0775
+    }
+  ],
+  "examples": {
+    "upper-slab": {
+      "seed": "VOLUME-ORDINARY-0",
+      "coord": {
+        "x": -1,
+        "z": -1,
+        "story": -2
+      },
+      "id": "chunk--1:-1:-2/cell/-1/-4/-2/south/route",
+      "position": {
+        "x": -70,
+        "z": -143.91890556165018,
+        "y": -10.4725
+      }
+    },
+    "room": {
+      "seed": "VOLUME-HOLDOUT-7",
+      "coord": {
+        "x": 0,
+        "z": 1,
+        "story": 0
+      },
+      "id": "chunk-0:1:0/cell/3/5/0/south/route",
+      "position": {
+        "x": 42,
+        "z": 109.13569897501729,
+        "y": 0.10249999999999992
+      }
+    }
+  },
+  "errors": [],
+  "limits": "Actual Three Float32 worker buffers and Rapier colliders, mounted from real owners. CPU geometry audit; no WebGL image, GPU time or FPS."
+}

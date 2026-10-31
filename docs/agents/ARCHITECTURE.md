@@ -51,6 +51,14 @@ d'onglet masqué. Les retours au menu principal ne rejouent pas l'introduction.
 `public/assets/audio/music/playlist.json` référence les morceaux disponibles ;
 un morceau est tiré au hasard par démarrage et conservé aux retours au menu.
 
+`NewGameIntro` accompagne uniquement les nouvelles parties (y compris Continuer
+sans sauvegarde). Ses six WebP et phrases utilisent une horloge visible commune
+au zoom et aux clics de frappe ; un onglet masqué ne consomme pas le récit.
+Le hall charge en parallèle, puis conserve son dernier rendu de warmup sans
+boucle 3D jusqu'à la fin du film. Le routeur attend aussi sa disponibilité avant
+le fondu et `enterAfterIntro()`. Charger une sauvegarde restaure directement la
+pose enregistrée. Un nouveau départ utilise l'entrée du RDC, orientée vers +Z.
+
 Dans le garde-robe, la géométrie et les poses inverses du squelette restent dans
 les coordonnées locales de `CharacterRoot`. Après un morph ou une calibration,
 `rebindMakeHumanSkeleton` retire la transformation monde de la racine des poses
@@ -74,7 +82,11 @@ progression visuelle et audio ; l’entrée directe masque le menu sans transiti
 avant que cet écran soit retiré, afin qu’aucune frame du menu ne fuite en jeu.
 Le contrat central du labyrinthe reste `WorldPlan` dans `src/world/types.ts` ;
 la génération ne crée que des données et le rendu et la physique les consomment
-séparément.
+séparément. Le chemin ordinaire passe par `RegionalPlan` → `SpatialConnectors` →
+`SpatialWorld`, avant les détails. L’adresse `story` ne donne pas l’altitude du sol.
+Le pipeline historique complet reste explicite pour les monuments et les reproductions
+brutes. Son BSP est également réutilisé sur 224 m dans les plateaux ordinaires ;
+les réservations régionales précèdent la matérialisation aux altitudes finales.
 
 ## Responsabilités
 

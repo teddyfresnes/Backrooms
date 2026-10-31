@@ -337,6 +337,10 @@ export class ExperienceUI {
                         <option value="legacy">Classique</option>
                       </select>
                     </label>
+                    <label class="setting-row range-row">
+                      <strong>Luminosité</strong>
+                      <span class="range-control"><input data-setting="brightness" aria-label="Luminosité" type="range" min="0" max="100" step="1" /><output data-output="brightness"></output></span>
+                    </label>
                     <label class="setting-row">
                       <strong>Qualité</strong>
                       <select data-setting="renderQuality" aria-label="Qualité de rendu">
@@ -912,6 +916,7 @@ export class ExperienceUI {
       else control.value = String(value);
     }
     this.query<HTMLOutputElement>('[data-output="fieldOfView"]').value = `${Math.round(this.settings.fieldOfView)}°`;
+    this.query<HTMLOutputElement>('[data-output="brightness"]').value = `${Math.round(this.settings.brightness)}%`;
     this.query<HTMLOutputElement>('[data-output="lookSensitivity"]').value = `${Math.round(this.settings.lookSensitivity * 100)}%`;
     this.query<HTMLOutputElement>('[data-output="masterVolume"]').value = `${Math.round(this.settings.masterVolume * 100)}%`;
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-binding]')) {
@@ -951,7 +956,7 @@ export class ExperienceUI {
     const key = control.dataset.setting as keyof GameSettings;
     if (key === 'menuMotion' || key === 'cameraMotion' || key === 'crosshair') {
       this.settings = { ...this.settings, [key]: (control as HTMLInputElement).checked };
-    } else if (key === 'fieldOfView' || key === 'lookSensitivity' || key === 'masterVolume') {
+    } else if (key === 'fieldOfView' || key === 'lookSensitivity' || key === 'masterVolume' || key === 'brightness') {
       this.settings = { ...this.settings, [key]: Number(control.value) };
     } else {
       this.settings = { ...this.settings, [key]: control.value } as GameSettings;

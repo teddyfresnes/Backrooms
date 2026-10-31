@@ -1,0 +1,696 @@
+{
+  "goals": {
+    "regionalHeightRangeAtLeast": 12,
+    "zeroAreaFractionBelow": 0.1,
+    "plateauCellsAtLeast": 20,
+    "plateauChunkOwnersAtLeast": 3,
+    "eachFamilyInAtLeastSeeds": 3,
+    "ordinaryClearanceAtLeast": 2.498,
+    "accidentalIsolation": 0,
+    "mismatchedSeams": 0
+  },
+  "failures": [],
+  "normalDistributionSeeds": 128,
+  "neighborhoodSeeds": 8,
+  "neighborhoodChunksPerSeed": 25,
+  "sampledOrdinaryPlans": 328,
+  "sampledMonuments": 0,
+  "familyWorldCounts": {
+    "nonzero-ramp": 115,
+    "rampe-regionale": 115,
+    "escalier-regional": 92,
+    "ouverture-haute": 37,
+    "escalier-u": 8,
+    "galerie-u": 9,
+    "saut-passerelle": 15,
+    "galerie-l": 15,
+    "escalier-l": 14,
+    "escalier-bridge": 15,
+    "galerie-bridge": 20
+  },
+  "modes": {
+    "rooms": 4911,
+    "void": 110,
+    "gallery": 113,
+    "lower-maze": 114
+  },
+  "styles": {
+    "maze": 3370,
+    "hall": 1019,
+    "pillars": 859
+  },
+  "connectionCounts": {
+    "walk": 49326,
+    "ramp": 5358,
+    "stairs": 48592,
+    "drop": 440,
+    "view": 113,
+    "jump": 48
+  },
+  "oneWayLinks": 440,
+  "visibilityOnlyLinks": 113,
+  "overlappingPlayableCells": 113,
+  "walkableArea": 3985666.1212884057,
+  "zeroAreaFraction": 0.0019790761886019515,
+  "areaWeightedHeightBins": [
+    {
+      "minY": -19,
+      "maxY": -18,
+      "area": 1.9406451612903215,
+      "fraction": 4.869061035805092e-7
+    },
+    {
+      "minY": -18,
+      "maxY": -17,
+      "area": 10.838709677419374,
+      "fraction": 0.0000027194223870188077
+    },
+    {
+      "minY": -17,
+      "maxY": -16,
+      "area": 34.16774193548389,
+      "fraction": 0.00000857265533431642
+    },
+    {
+      "minY": -16,
+      "maxY": -15,
+      "area": 115.38580645161298,
+      "fraction": 0.00002895019375437733
+    },
+    {
+      "minY": -15,
+      "maxY": -14,
+      "area": 169.90967741935484,
+      "fraction": 0.00004263018332412333
+    },
+    {
+      "minY": -14,
+      "maxY": -13,
+      "area": 243.83999999999986,
+      "fraction": 0.0000611792339296744
+    },
+    {
+      "minY": -13,
+      "maxY": -12,
+      "area": 314.09548387096754,
+      "fraction": 0.00007880627084972198
+    },
+    {
+      "minY": -12,
+      "maxY": -11,
+      "area": 346.8799999999997,
+      "fraction": 0.00008703187608893312
+    },
+    {
+      "minY": -11,
+      "maxY": -10,
+      "area": 503.6180645161285,
+      "fraction": 0.00012635731373130782
+    },
+    {
+      "minY": -10,
+      "maxY": -9,
+      "area": 573.790967741935,
+      "fraction": 0.0001439636312426924
+    },
+    {
+      "minY": -9,
+      "maxY": -8,
+      "area": 700.4077419354844,
+      "fraction": 0.00017573166457523804
+    },
+    {
+      "minY": -8,
+      "maxY": -7,
+      "area": 133631.58627940607,
+      "fraction": 0.03352804329634702
+    },
+    {
+      "minY": -7,
+      "maxY": -6,
+      "area": 167639.80034851015,
+      "fraction": 0.0420606732342742
+    },
+    {
+      "minY": -6,
+      "maxY": -5,
+      "area": 291858.8277891123,
+      "fraction": 0.07322711409018483
+    },
+    {
+      "minY": -5,
+      "maxY": -4,
+      "area": 294458.8919408689,
+      "fraction": 0.07387946781792629
+    },
+    {
+      "minY": -4,
+      "maxY": -3,
+      "area": 397120.6760596318,
+      "fraction": 0.09963721595703198
+    },
+    {
+      "minY": -3,
+      "maxY": -2,
+      "area": 288085.6223657457,
+      "fraction": 0.07228042028580138
+    },
+    {
+      "minY": -2,
+      "maxY": -1,
+      "area": 190556.94758936277,
+      "fraction": 0.04781056460586588
+    },
+    {
+      "minY": -1,
+      "maxY": 0,
+      "area": 373371.0604705377,
+      "fraction": 0.0936784590350133
+    },
+    {
+      "minY": 0,
+      "maxY": 1,
+      "area": 269492.65236476803,
+      "fraction": 0.06761546104557323
+    },
+    {
+      "minY": 1,
+      "maxY": 2,
+      "area": 313583.6473047463,
+      "fraction": 0.07867785152139763
+    },
+    {
+      "minY": 2,
+      "maxY": 3,
+      "area": 360370.7729786534,
+      "fraction": 0.09041669874294059
+    },
+    {
+      "minY": 3,
+      "maxY": 4,
+      "area": 122280.7115027197,
+      "fraction": 0.03068011915236188
+    },
+    {
+      "minY": 4,
+      "maxY": 5,
+      "area": 125494.86365229546,
+      "fraction": 0.031486546999493034
+    },
+    {
+      "minY": 5,
+      "maxY": 6,
+      "area": 277309.15771993087,
+      "fraction": 0.06957661512052425
+    },
+    {
+      "minY": 6,
+      "maxY": 7,
+      "area": 301139.5943689201,
+      "fraction": 0.07555564997286512
+    },
+    {
+      "minY": 7,
+      "maxY": 8,
+      "area": 76256.43371642235,
+      "fraction": 0.019132669771078234
+    }
+  ],
+  "regionalDatumRange": [
+    -7.5,
+    7.35
+  ],
+  "largestObservedRegions": [
+    {
+      "seed": "REGIONAL-AUDIT-0",
+      "id": "district/-1/0",
+      "y": -3.2,
+      "cells": 53,
+      "chunks": [
+        "-2:-1",
+        "-1:-1",
+        "-2:0",
+        "-1:0",
+        "-2:1",
+        "-1:1"
+      ],
+      "minX": -7,
+      "maxX": -1,
+      "minZ": -2,
+      "maxZ": 5,
+      "width": 196,
+      "depth": 224,
+      "sampledArea": 41552
+    },
+    {
+      "seed": "REGIONAL-AUDIT-4",
+      "id": "district/-1/0",
+      "y": 2.95,
+      "cells": 53,
+      "chunks": [
+        "-2:0",
+        "-1:0",
+        "0:0",
+        "-2:1",
+        "-1:1",
+        "0:1"
+      ],
+      "minX": -8,
+      "maxX": 0,
+      "minZ": 0,
+      "maxZ": 6,
+      "width": 252,
+      "depth": 196,
+      "sampledArea": 41552
+    },
+    {
+      "seed": "REGIONAL-AUDIT-0",
+      "id": "district/0/0",
+      "y": 1.65,
+      "cells": 49,
+      "chunks": [
+        "0:-1",
+        "1:-1",
+        "0:0",
+        "1:0",
+        "0:1",
+        "1:1"
+      ],
+      "minX": 0,
+      "maxX": 7,
+      "minZ": -1,
+      "maxZ": 6,
+      "width": 224,
+      "depth": 224,
+      "sampledArea": 38416
+    },
+    {
+      "seed": "REGIONAL-AUDIT-4",
+      "id": "district/0/-1",
+      "y": -0.8,
+      "cells": 49,
+      "chunks": [
+        "0:-2",
+        "1:-2",
+        "-1:-1",
+        "0:-1",
+        "1:-1",
+        "0:0",
+        "1:0"
+      ],
+      "minX": -1,
+      "maxX": 6,
+      "minZ": -7,
+      "maxZ": 0,
+      "width": 224,
+      "depth": 224,
+      "sampledArea": 38416
+    },
+    {
+      "seed": "REGIONAL-AUDIT-2",
+      "id": "district/0/-1",
+      "y": 2.1,
+      "cells": 47,
+      "chunks": [
+        "0:-2",
+        "1:-2",
+        "0:-1",
+        "1:-1",
+        "0:0",
+        "1:0",
+        "2:0"
+      ],
+      "minX": 2,
+      "maxX": 8,
+      "minZ": -7,
+      "maxZ": 1,
+      "width": 196,
+      "depth": 252,
+      "sampledArea": 36848
+    },
+    {
+      "seed": "REGIONAL-AUDIT-6",
+      "id": "district/-1/-1",
+      "y": 6.4,
+      "cells": 45,
+      "chunks": [
+        "-2:-2",
+        "-1:-2",
+        "-2:-1",
+        "-1:-1",
+        "-2:0",
+        "-1:0"
+      ],
+      "minX": -8,
+      "maxX": -1,
+      "minZ": -6,
+      "maxZ": 0,
+      "width": 224,
+      "depth": 196,
+      "sampledArea": 35280
+    },
+    {
+      "seed": "REGIONAL-AUDIT-7",
+      "id": "district/0/1",
+      "y": -4.25,
+      "cells": 44,
+      "chunks": [
+        "0:1",
+        "1:1",
+        "0:2",
+        "1:2"
+      ],
+      "minX": 0,
+      "maxX": 6,
+      "minZ": 5,
+      "maxZ": 11,
+      "width": 196,
+      "depth": 196,
+      "sampledArea": 34496
+    },
+    {
+      "seed": "REGIONAL-AUDIT-3",
+      "id": "district/0/0",
+      "y": -5.25,
+      "cells": 43,
+      "chunks": [
+        "0:-1",
+        "-1:0",
+        "0:0",
+        "1:0",
+        "0:1",
+        "1:1"
+      ],
+      "minX": -1,
+      "maxX": 6,
+      "minZ": -1,
+      "maxZ": 6,
+      "width": 224,
+      "depth": 224,
+      "sampledArea": 33712
+    },
+    {
+      "seed": "REGIONAL-AUDIT-3",
+      "id": "district/1/0",
+      "y": -0.4,
+      "cells": 43,
+      "chunks": [
+        "1:-1",
+        "2:-1",
+        "1:0",
+        "2:0",
+        "1:1",
+        "2:1"
+      ],
+      "minX": 5,
+      "maxX": 11,
+      "minZ": -3,
+      "maxZ": 5,
+      "width": 196,
+      "depth": 252,
+      "sampledArea": 33712
+    },
+    {
+      "seed": "REGIONAL-AUDIT-0",
+      "id": "district/1/1",
+      "y": -0.8,
+      "cells": 42,
+      "chunks": [
+        "1:1",
+        "2:1",
+        "1:2",
+        "2:2"
+      ],
+      "minX": 4,
+      "maxX": 11,
+      "minZ": 5,
+      "maxZ": 11,
+      "width": 224,
+      "depth": 196,
+      "sampledArea": 32928
+    },
+    {
+      "seed": "REGIONAL-AUDIT-1",
+      "id": "district/-1/0",
+      "y": -5.75,
+      "cells": 42,
+      "chunks": [
+        "-2:0",
+        "-1:0",
+        "-2:1",
+        "-1:1"
+      ],
+      "minX": -8,
+      "maxX": -1,
+      "minZ": 0,
+      "maxZ": 6,
+      "width": 224,
+      "depth": 196,
+      "sampledArea": 32928
+    },
+    {
+      "seed": "REGIONAL-AUDIT-6",
+      "id": "district/1/-1",
+      "y": -5.15,
+      "cells": 41,
+      "chunks": [
+        "1:-2",
+        "2:-2",
+        "1:-1",
+        "2:-1",
+        "1:0",
+        "2:0"
+      ],
+      "minX": 5,
+      "maxX": 11,
+      "minZ": -7,
+      "maxZ": 1,
+      "width": 196,
+      "depth": 252,
+      "sampledArea": 32144
+    }
+  ],
+  "stairRuns": 1819,
+  "stairHeightSpans": {
+    "median": 4.128000000000001,
+    "p95": 6.328947368421053
+  },
+  "graphCenterlineLength": 460816.7962173259,
+  "clearanceViolations": 0,
+  "accidentalIsolation": 0,
+  "checkedSeamPortals": 1280,
+  "nonzeroSeamFraction": 0.99921875,
+  "seamErrors": 0,
+  "topologyErrors": [],
+  "generationFallbacks": {
+    "ordinaryRegionalPlan": 0,
+    "note": "Constructive ordinary planner has no flattening fallback; monuments and RAW_LOCAL use the explicit legacy path."
+  },
+  "landmarks": [
+    {
+      "family": "nonzero-ramp",
+      "seed": "VERTICAL-PROMPT-AUDIT-0",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -154,
+        "y": 6.390000000000001,
+        "z": 78.5
+      },
+      "profile": {
+        "kind": "linear",
+        "axis": "z",
+        "startY": 6.85,
+        "endY": 4.2
+      }
+    },
+    {
+      "family": "rampe-regionale",
+      "seed": "VERTICAL-PROMPT-AUDIT-0",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -154,
+        "y": 6.390000000000001,
+        "z": 78.5
+      }
+    },
+    {
+      "family": "escalier-regional",
+      "seed": "VERTICAL-PROMPT-AUDIT-0",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -117.5,
+        "y": 5.0525,
+        "z": 70
+      }
+    },
+    {
+      "family": "ouverture-haute",
+      "seed": "VERTICAL-PROMPT-AUDIT-1",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -70,
+        "y": 4.915,
+        "z": 56.75
+      },
+      "destination": {
+        "x": -70,
+        "y": -0.48500000000000054,
+        "z": 60
+      },
+      "destinationOwner": {
+        "x": -1,
+        "z": 1,
+        "story": -1
+      }
+    },
+    {
+      "family": "escalier-u",
+      "seed": "VERTICAL-PROMPT-AUDIT-3",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -144.6,
+        "y": -3.635,
+        "z": 114.5
+      },
+      "destination": {
+        "x": -148.2,
+        "y": -14.435,
+        "z": 114.5
+      },
+      "destinationOwner": {
+        "x": -1,
+        "z": 1,
+        "story": -2
+      }
+    },
+    {
+      "family": "galerie-u",
+      "seed": "VERTICAL-PROMPT-AUDIT-3",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -154,
+        "y": -3.635,
+        "z": 113.5
+      }
+    },
+    {
+      "family": "saut-passerelle",
+      "seed": "VERTICAL-PROMPT-AUDIT-4",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -160.3,
+        "y": 5.965,
+        "z": 157.6
+      },
+      "destination": {
+        "x": -157.7,
+        "y": 5.965,
+        "z": 157.6
+      }
+    },
+    {
+      "family": "galerie-l",
+      "seed": "VERTICAL-PROMPT-AUDIT-4",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -154,
+        "y": 5.965,
+        "z": 141.5
+      }
+    },
+    {
+      "family": "escalier-l",
+      "seed": "VERTICAL-PROMPT-AUDIT-6",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -144.6,
+        "y": 1.365,
+        "z": 58.5
+      },
+      "destination": {
+        "x": -165.5,
+        "y": -9.435,
+        "z": 79.4
+      },
+      "destinationOwner": {
+        "x": -1,
+        "z": 1,
+        "story": -2
+      }
+    },
+    {
+      "family": "escalier-bridge",
+      "seed": "VERTICAL-PROMPT-AUDIT-11",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -116.6,
+        "y": 2.165,
+        "z": 114.5
+      },
+      "destination": {
+        "x": -116.6,
+        "y": -8.635,
+        "z": 137.5
+      },
+      "destinationOwner": {
+        "x": -1,
+        "z": 1,
+        "story": -2
+      }
+    },
+    {
+      "family": "galerie-bridge",
+      "seed": "VERTICAL-PROMPT-AUDIT-11",
+      "owner": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "position": {
+        "x": -126,
+        "y": 2.165,
+        "z": 113.5
+      }
+    }
+  ]
+}

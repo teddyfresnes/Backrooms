@@ -1,0 +1,49 @@
+{
+  "baselineCommit": "68ee0e0a0d13bf9af9c5ad25bd588cf81e3b7cdc",
+  "identicalPlanHashes": 24,
+  "sampleSize": 24,
+  "character": {
+    "tests": 639,
+    "passed": 639,
+    "failed": 0
+  },
+  "firstUnitRun": {
+    "tests": 593,
+    "passed": 592,
+    "failed": 1
+  },
+  "finalTargeted": {
+    "renderingAndVisibilityTests": 16,
+    "passed": 16,
+    "sameStoryPreviews": 2,
+    "previewsPassed": 2
+  },
+  "browserQA": {
+    "verified": false,
+    "reason": "sites-previewd mailbox unavailable at /tmp/sites-previewd/requests"
+  },
+  "baselineMainThreadMountMs": {
+    "median": 44.38541600000008,
+    "p95": 75.94276500000001
+  },
+  "preparedMainThreadMountMs": {
+    "median": 2.5883690000009665,
+    "p95": 4.568946000000096
+  },
+  "unit": {
+    "tests": 595,
+    "passed": 594,
+    "failed": 1,
+    "failures": [
+      {
+        "file": "src/apartment/ImportedApartmentIntegration.test.ts",
+        "test": "imported apartment integration ships the attributed apartment without unlicensed editor additions"
+      }
+    ]
+  },
+  "siteBuild": {
+    "passed": true,
+    "wardrobeObjectsVerified": 148,
+    "clothingFilesLossless": 148
+  }
+}

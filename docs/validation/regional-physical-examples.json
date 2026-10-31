@@ -1,0 +1,130 @@
+[
+  {
+    "kind": "escalier-l",
+    "seed": "REGIONAL-AUDIT-6",
+    "owner": {
+      "x": 0,
+      "z": 0,
+      "story": 0
+    },
+    "position": {
+      "x": 23.4,
+      "y": 6.565,
+      "z": 2.5
+    },
+    "destination": {
+      "x": 2.5,
+      "y": -4.235,
+      "z": 23.4
+    }
+  },
+  {
+    "kind": "escalier-u",
+    "seed": "REGIONAL-AUDIT-6",
+    "owner": {
+      "x": 0,
+      "z": 0,
+      "story": 0
+    },
+    "position": {
+      "x": -32.6,
+      "y": 6.565,
+      "z": 2.5
+    },
+    "destination": {
+      "x": -36.2,
+      "y": -4.235,
+      "z": 2.5
+    }
+  },
+  {
+    "kind": "escalier-bridge",
+    "seed": "REGIONAL-AUDIT-20",
+    "owner": {
+      "x": 0,
+      "z": 0,
+      "story": 0
+    },
+    "position": {
+      "x": 51.4,
+      "y": 4.665,
+      "z": 30.5
+    },
+    "destination": {
+      "x": 51.4,
+      "y": -6.135000000000001,
+      "z": 53.5
+    }
+  },
+  {
+    "kind": "ouverture-haute",
+    "seed": "REGIONAL-AUDIT-0",
+    "owner": {
+      "x": 0,
+      "z": 0,
+      "story": 0
+    },
+    "position": {
+      "x": 28.75,
+      "z": 42,
+      "y": 2.5149999999999997
+    },
+    "destination": {
+      "x": 32,
+      "y": -2.8850000000000007,
+      "z": 42
+    }
+  },
+  {
+    "kind": "saut-passerelle",
+    "seed": "REGIONAL-AUDIT-6",
+    "owner": {
+      "x": 0,
+      "z": 0,
+      "story": 0
+    },
+    "position": {
+      "x": 7.7,
+      "z": 17.6,
+      "y": 6.565
+    },
+    "destination": {
+      "x": 10.3,
+      "y": 6.565,
+      "z": 17.6
+    }
+  },
+  {
+    "kind": "galerie-bridge",
+    "seed": "REGIONAL-AUDIT-7",
+    "owner": {
+      "x": 0,
+      "z": 0,
+      "story": 0
+    },
+    "position": {
+      "x": 42,
+      "z": 42,
+      "y": 1.815
+    },
+    "destination": {
+      "x": 42,
+      "z": 42,
+      "y": -8.985000000000001
+    }
+  },
+  {
+    "kind": "rampe-regionale",
+    "seed": "REGIONAL-AUDIT-0",
+    "owner": {
+      "x": 0,
+      "z": 0,
+      "story": 0
+    },
+    "position": {
+      "x": -50.5,
+      "z": -42,
+      "y": 1.3024999999999998
+    }
+  }
+]
