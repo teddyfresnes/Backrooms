@@ -1,0 +1,93 @@
+{
+  "date": "2026-10-31",
+  "project_id": "appgprj_6ad38cbd518c81918ef345d5a1eb55fc",
+  "github_implementation_commit": "e172e26b4ca629427cdb15629f22787e664e26ea",
+  "site_source_commit": "69bd86affaa8b18a50cc2dc1e1fdae59111a2ad8",
+  "access_mode": "custom",
+  "current_user_role": "owner",
+  "publication_method": "source_build_after_local_packaging_failure",
+  "local_packaging": {
+    "attempts": 3,
+    "completed": false,
+    "error": "Staged directories changed while tar was reading them.",
+    "archive_saved": false,
+    "archive_upload_attempted": false
+  },
+  "failed_first_publication": {
+    "version_number": 25,
+    "version_id": "appgprj_6ad38cbd518c81918ef345d5a1eb55fc~appgver_043c37e2507c81918ea0beeab93cb581",
+    "deployment_id": "appgdep_6ae64eeecbfc81918fb6ac638da121b4",
+    "source_commit": "9fd2724beb7660809bbb574191e48269d3b1eeb2",
+    "status": "failed",
+    "reason": "AppGen archive exceeds the 256 MiB expanded archive limit. Package only the required build output or configured static assets. Remove unused files or reduce large media, then package and upload again."
+  },
+  "hosting_budget": {
+    "static_files": 3099,
+    "static_file_bytes": 263947960,
+    "static_limit_bytes": 265289728,
+    "project_tar_budget_bytes": 268435456,
+    "lossless_texture_bytes_saved": 1519428,
+    "published_tar_budget_passed": true
+  },
+  "validation": {
+    "main_test_files": 23,
+    "main_tests_passed": 128,
+    "final_routing_and_photo_tests_passed": 9,
+    "hosted_test_files": 14,
+    "hosted_tests_passed": 59,
+    "character_cases_exercised": 651,
+    "character_first_run_passed": 649,
+    "character_missing_fixture_failures": 2,
+    "character_targeted_rerun_passed": 2,
+    "character_unresolved_failures": 0,
+    "real_wardrobe_entrance_integration_passed": true,
+    "main_typescript_passed": true,
+    "hosted_production_build_passed": true,
+    "main_full_asset_build_run": false,
+    "main_checkout_sparse": true,
+    "runtime_files_matching_main_and_hosted_source": 14,
+    "hosted_apartment_split_gzip_url_preserved": true,
+    "hosted_character_motion_pack_preserved": true,
+    "entry_motion_bytes": 303095,
+    "entry_motion_sha256": "18e324cc51ab5285d30baeb24ca051af995e9f039f54ad220d28ab409aa822f5",
+    "apartment_original_bytes": 349270200,
+    "apartment_lossless": true,
+    "wardrobe_objects_verified": 148,
+    "clothing_files_lossless": 148,
+    "hosted_textures_with_identical_RGBA": 2,
+    "visual_webgl_verified": false,
+    "audio_listening_verified": false,
+    "browser_fps_measured": false,
+    "preview_blocker": "Managed preview service unavailable: /tmp/sites-previewd/requests missing."
+  },
+  "reports": [
+    "ENTRY_CINEMATIC_VALIDATION_20261031.md",
+    "entry-animation-assets.json",
+    "hosting-lossless-textures.json"
+  ],
+  "pull_request": "https://github.com/teddyfresnes/Backrooms/pull/2",
+  "failed_second_publication": {
+    "version_number": 26,
+    "version_id": "appgprj_6ad38cbd518c81918ef345d5a1eb55fc~appgver_2604d520f7b48191bdf4954baed4969c",
+    "deployment_id": "appgdep_6ae651341294819183a3733d2bb42754",
+    "source_commit": "84c35bdc7f6ded21e120442afea7d4763ac65a7e",
+    "status": "failed",
+    "reason": "Hosted blood WebP was ignored by Git and absent during remote finalization."
+  },
+  "new_runtime_assets_verified_in_source": 3,
+  "hosting_guards_in_remote_postbuild": true,
+  "known_wardrobe_source_files_checked": 296,
+  "temporary_mhclo_output_bytes_removed": 3670016,
+  "version_number": 27,
+  "version_id": "appgprj_6ad38cbd518c81918ef345d5a1eb55fc~appgver_d0c093d05618819188c598c86839c965",
+  "deployment_id": "appgdep_6ae65339d8d08191a79b895f533d02aa",
+  "status": "succeeded",
+  "url": "https://backrooms-integre.teddykoeh.chatgpt.site",
+  "published_archive": {
+    "archive_format": "tar",
+    "sediment_file_id": "file_0000000094b881f796a3670049fc7bb3",
+    "content_hash": "sha256:70a026def606d2dd6d0d8835cf75284494520432ce3c58251e6e4ebb62cce12f",
+    "size_bytes": 266762240,
+    "file_count": 3100
+  }
+}

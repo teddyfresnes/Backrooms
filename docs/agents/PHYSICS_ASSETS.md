@@ -51,6 +51,11 @@ afin de ne pas détruire Rapier au milieu du tick d’entrée courant. Une fois 
 niveau 0 réellement initialisé, le nouveau runtime écrit son checkpoint
 automatique de destination.
 
+Pendant l'entrée cinématique d'une nouvelle partie, `ArrivalCinematic` anime
+uniquement la présentation du vantail droit. La physique et le joueur restent
+figés au point intérieur sûr jusqu'au raccord POV ; la porte revient fermée
+avant de rendre les commandes. Aucun tick Rapier ne traverse ce collider fermé.
+
 `SaveHistory` conserve au plus douze entrées versionnées, manuelles ou
 automatiques, communes aux deux expériences. Une seule autosave représente la
 session courante et remplace la précédente. Elle est écrite à l’entrée d’un
