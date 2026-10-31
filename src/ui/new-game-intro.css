@@ -1,0 +1,133 @@
+.new-game-film {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: #e4e5df;
+  background: #030506;
+  cursor: default;
+  isolation: isolate;
+  opacity: 1;
+  transition: opacity 650ms ease-in;
+}
+
+.new-game-film-stage {
+  position: relative;
+  flex: 0 0 auto;
+  width: min(100vw, calc((100dvh - 11.5rem) * 1.7778));
+  aspect-ratio: 1672 / 941;
+  overflow: hidden;
+  background: #030506;
+}
+
+.new-game-film-stage img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  user-select: none;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.new-game-film-stage img[hidden] { display: none; will-change: auto; }
+
+.new-game-film-stage::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, transparent 40%, #03050666 100%);
+  box-shadow: inset 0 0 5rem 1rem #03050655;
+}
+
+.new-game-film-grain {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: .045;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23fff' filter='url(%23n)' d='M0 0h160v160H0z'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+
+.new-game-film-caption {
+  z-index: 2;
+  display: grid;
+  place-items: start center;
+  width: min(90%, 70rem);
+  min-height: 3.5em;
+  margin-top: clamp(1.1rem, 3vh, 2rem);
+  font-family: 'JetBrains Mono Variable', monospace;
+  font-size: clamp(.88rem, 1.35vw, 1.24rem);
+  font-weight: 350;
+  line-height: 1.75;
+  letter-spacing: .025em;
+  text-align: center;
+  text-wrap: balance;
+  text-shadow: 0 2px 16px #000;
+}
+
+.new-game-film-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.new-game-film-controls {
+  position: absolute;
+  right: clamp(1rem, 4vw, 4rem);
+  bottom: max(1.2rem, env(safe-area-inset-bottom));
+  left: clamp(1rem, 4vw, 4rem);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1.5rem;
+  font: 400 .72rem 'JetBrains Mono Variable', monospace;
+  letter-spacing: .09em;
+}
+
+.new-game-film-loading { margin-right: auto; color: #939d9e; }
+.new-game-film-track { width: min(24vw, 12rem); height: 1px; margin-top: .7rem; overflow: hidden; background: #89999626; }
+.new-game-film-track i { display: block; width: 100%; height: 100%; background: #b4c1bd; transform: scaleX(0); transform-origin: left; transition: transform .3s ease; }
+.new-game-film-track[hidden], .new-game-film-controls button[hidden] { display: none; }
+
+.new-game-film-controls button {
+  min-height: 44px;
+  padding: .5rem .2rem;
+  border: 0;
+  border-bottom: 1px solid #a9bab446;
+  border-radius: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  color: #b8c4c0;
+  background: transparent;
+  cursor: pointer;
+  transition: color .2s, border-color .2s;
+}
+.new-game-film-controls button span { display: inline-block; margin-left: 1.2rem; }
+.new-game-film-controls button:hover { color: #fff; border-color: #d9dfd9; }
+.new-game-film-controls button:focus-visible { outline: 1px solid #d9dfd9; outline-offset: 5px; }
+.new-game-film-controls button:disabled { opacity: .35; cursor: wait; }
+.new-game-film.is-leaving { opacity: 0; }
+.new-game-film:focus { outline: none; }
+.new-game-film.is-reduced-motion { transition-duration: 150ms; }
+.new-game-film.is-reduced-motion .new-game-film-grain { display: none; }
+
+@media (max-width: 640px) {
+  .new-game-film-caption { width: 87%; min-height: 5em; margin-top: 1.5rem; }
+  .new-game-film-controls { gap: 1rem; font-size: .65rem; }
+  .new-game-film-loading { max-width: 50%; }
+}

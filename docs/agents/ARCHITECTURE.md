@@ -51,6 +51,14 @@ d'onglet masqué. Les retours au menu principal ne rejouent pas l'introduction.
 `public/assets/audio/music/playlist.json` référence les morceaux disponibles ;
 un morceau est tiré au hasard par démarrage et conservé aux retours au menu.
 
+`NewGameIntro` accompagne uniquement les nouvelles parties (y compris Continuer
+sans sauvegarde). Ses six WebP et phrases utilisent une horloge visible commune
+au zoom et aux clics de frappe ; un onglet masqué ne consomme pas le récit.
+Le hall charge en parallèle, puis conserve son dernier rendu de warmup sans
+boucle 3D jusqu'à la fin du film. Le routeur attend aussi sa disponibilité avant
+le fondu et `enterAfterIntro()`. Charger une sauvegarde restaure directement la
+pose enregistrée. Un nouveau départ utilise l'entrée du RDC, orientée vers +Z.
+
 Dans le garde-robe, la géométrie et les poses inverses du squelette restent dans
 les coordonnées locales de `CharacterRoot`. Après un morph ou une calibration,
 `rebindMakeHumanSkeleton` retire la transformation monde de la racine des poses

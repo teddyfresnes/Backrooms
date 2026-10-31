@@ -21,6 +21,8 @@ export class SiteAudio {
   private introTitleBuffer?: AudioBuffer;
   private hoverBuffer?: AudioBuffer;
   private clickBuffer?: AudioBuffer;
+  private typingBuffer?: AudioBuffer;
+  private readonly typingSources = new Set<AudioBufferSourceNode>();
   private introSource?: AudioBufferSourceNode;
   private buffersLoading?: Promise<void>;
   private menu?: HTMLAudioElement;
@@ -56,6 +58,15 @@ export class SiteAudio {
       connectAudioOutput(context, master);
       this.context = context;
       this.master = master;
+      this.typingBuffer = context.createBuffer(1, Math.ceil(context.sampleRate * .032), context.sampleRate);
+      const samples = this.typingBuffer.getChannelData(0);
+      let noise = 0x43a21;
+      for (let i = 0; i < samples.length; i++) {
+        noise ^= noise << 13; noise ^= noise >>> 17; noise ^= noise << 5;
+        const t = i / context.sampleRate;
+        samples[i] = ((noise >>> 0) / 0xffffffff * 2 - 1) * Math.exp(-t * 230) * .7
+          + Math.sin(t * Math.PI * 2 * 1750) * Math.exp(-t * 160) * .18;
+      }
       this.buffersLoading = this.loadBuffers(context);
     }
     return this.buffersLoading!;
@@ -136,6 +147,19 @@ export class SiteAudio {
     this.playUiClip(this.clickBuffer, 0.65, 1);
   }
 
+  playStoryTypingTick(letter: string, index: number): void {
+    if (!letter.trim() || this.masterVolume <= 0 || document.hidden || this.context?.state !== 'running') return;
+    const source = this.playUiClip(this.typingBuffer, .13, .9 + index % 7 * .035);
+    if (!source) return;
+    this.typingSources.add(source);
+    source.addEventListener('ended', () => this.typingSources.delete(source), { once: true });
+  }
+
+  stopStoryTyping(): void {
+    for (const source of this.typingSources) source.stop();
+    this.typingSources.clear();
+  }
+
   setMenuActive(active: boolean): void {
     this.menuActive = active;
     if (!this.menu || this.disposed) return;
@@ -186,7 +210,7 @@ export class SiteAudio {
     this.clickBuffer = click;
   }
 
-  private playUiClip(buffer: AudioBuffer | undefined, gainValue: number, rate: number): void {
+  private playUiClip(buffer: AudioBuffer | undefined, gainValue: number, rate: number): AudioBufferSourceNode | undefined {
     if (!buffer || !this.context || !this.master || this.disposed) return;
     const source = this.context.createBufferSource();
     const gain = this.context.createGain();
@@ -199,6 +223,7 @@ export class SiteAudio {
       gain.disconnect();
     }, { once: true });
     source.start();
+    return source;
   }
 
   private playMenu(): void {
@@ -237,6 +262,7 @@ export class SiteAudio {
     if (this.disposed) return;
     this.disposed = true;
     this.stopIntroCue();
+    this.stopStoryTyping();
     if (this.menuFadeFrame !== undefined) cancelAnimationFrame(this.menuFadeFrame);
     this.menu?.pause();
     this.menu?.removeAttribute('src');
@@ -251,6 +277,7 @@ export class SiteAudio {
     this.introTitleBuffer = undefined;
     this.hoverBuffer = undefined;
     this.clickBuffer = undefined;
+    this.typingBuffer = undefined;
     this.buffersLoading = undefined;
     this.menu = undefined;
     this.menuSource = undefined;

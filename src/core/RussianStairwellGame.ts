@@ -33,6 +33,7 @@ import { HallExitInteraction } from '../stairwell/HallExitInteraction';
 import { StairwellEnvironment } from '../stairwell/StairwellEnvironment';
 import { StairwellMaterials } from '../stairwell/StairwellMaterials';
 import { createStairwellPlan } from '../stairwell/createStairwellPlan';
+import { STAIRWELL_SPAWN } from '../stairwell/layout';
 import { ExperienceUI } from '../ui/ExperienceUI';
 import type { ConsoleCompletion, ConsoleMode, ConsoleSubmitResult } from '../ui/ExperienceUI';
 import { loadGameSettings, type GameSettings } from '../ui/settings';
@@ -110,6 +111,7 @@ export class RussianStairwellGame {
     private readonly container: HTMLElement,
     private readonly launch: RussianStairwellLaunch,
     private readonly callbacks: RussianStairwellGameCallbacks,
+    private readonly options: { deferEntry?: boolean } = {},
   ) {
     this.settings = loadGameSettings();
     try {
@@ -332,15 +334,10 @@ export class RussianStairwellGame {
       this.player.setLookQuaternion(this.launch.save.payload.quaternion);
       this.playableSeconds = this.launch.save.playTimeSeconds;
     } else {
-      this.player.teleport(apartment.entrySpawn);
-      const towardDoor = apartment.doorCenter.clone().sub(apartment.entrySpawn);
-      towardDoor.y = 0;
-      if (towardDoor.lengthSq() > 1e-8) {
-        this.player.setLookQuaternion(new THREE.Quaternion().setFromUnitVectors(
-          new THREE.Vector3(0, 0, -1),
-          towardDoor.normalize(),
-        ));
-      }
+      this.player.teleport(STAIRWELL_SPAWN);
+      this.player.setLookQuaternion(new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, 1),
+      ));
     }
     this.lastSafePosition.copy(this.player.position);
     setVisualProgress(0.8);
@@ -391,6 +388,18 @@ export class RussianStairwellGame {
     this.saveNow('autosave');
     this.ui.setReady();
     this.previousTime = performance.now();
+    // The cinematic owns the screen: retain the warmed frame without running
+    // a hidden 3D render/physics loop throughout the six photographic shots.
+    if (!this.options.deferEntry) {
+      this.renderer.setAnimationLoop(this.frame);
+      this.enter(true);
+    }
+  }
+
+  enterAfterIntro(): void {
+    if (!this.initialized || this.disposed) return;
+    this.previousTime = performance.now();
+    this.accumulator = 0;
     this.renderer.setAnimationLoop(this.frame);
     this.enter(true);
   }

@@ -61,6 +61,23 @@ beforeEach(() => {
 afterEach(() => { audio.dispose(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('prepared and calibrated site audio', () => {
+  it('uses short reused typing clicks on the master bus, respecting mute, visibility and cancellation', async () => {
+    await audio.prepare(); await audio.unlock();
+    const context = ContextMock.latest;
+    audio.playStoryTypingTick('L', 0); audio.playStoryTypingTick('é', 1);
+    expect(context.sources).toHaveLength(2);
+    expect(context.sources[0].buffer).toBe(context.sources[1].buffer);
+    expect(context.sources[0].buffer!.duration).toBeLessThan(.04);
+    audio.playStoryTypingTick(' ', 2); expect(context.sources).toHaveLength(2);
+    audio.setMasterVolume(0); audio.playStoryTypingTick('a', 3); expect(context.sources).toHaveLength(2);
+    audio.setMasterVolume(.6);
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    audio.playStoryTypingTick('b', 4); expect(context.sources).toHaveLength(2);
+    audio.stopStoryTyping();
+    expect(context.sources.every(source => source.connections.length > 0)).toBe(true);
+    expect(context.sources.every(source => vi.mocked(source.disconnect).mock.calls.length === 1)).toBe(true);
+  });
+
   it('decodes once before labels and triggers every cue immediately with valid offsets', async () => {
     await audio.prepare(); await audio.unlock();
     const context = ContextMock.latest;

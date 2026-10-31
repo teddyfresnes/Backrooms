@@ -54,7 +54,7 @@ export const STAIRWELL_RIGHT_FLIGHT: Rect = {
 export const STAIRWELL_SPAWN: Vec3Data = {
   x: -0.72,
   y: 0.865,
-  z: -3.15,
+  z: -5.05,
 };
 
 export const STAIRWELL_ENTRANCE_WIDTH = 2.34;
