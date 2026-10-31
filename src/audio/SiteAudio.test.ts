@@ -61,13 +61,49 @@ beforeEach(() => {
 afterEach(() => { audio.dispose(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('prepared and calibrated site audio', () => {
+  it('plays only the selected voice, caches its two reactions and cancels previews before delayed loading completes', async () => {
+    await audio.unlock(); await audio.prepareVoice('ian');
+    const calls = vi.mocked(fetch).mock.calls.length;
+    audio.playVoice('ian','hmm');
+    for(let i=0;i<20;i++)await Promise.resolve();
+    expect(ContextMock.latest.sources).toHaveLength(1);
+    expect(vi.mocked(fetch).mock.calls.length).toBe(calls);
+    audio.stopVoice();
+    audio.playVoice('meghan','gasp'); audio.stopVoice();
+    for(let i=0;i<30;i++)await Promise.resolve();
+    expect(ContextMock.latest.sources).toHaveLength(1);
+    audio.playVoice('meghan','gasp');
+    for(let i=0;i<30;i++)await Promise.resolve();
+    expect(ContextMock.latest.sources).toHaveLength(2);
+    expect(vi.mocked(fetch).mock.calls.some(([url])=>url==='/assets/audio/voices/meghan/gasp.ogg')).toBe(true);
+    audio.setMasterVolume(0); audio.playVoice('alex','hmm');
+    for(let i=0;i<10;i++)await Promise.resolve();
+    expect(ContextMock.latest.sources).toHaveLength(2);
+  });
+
+  it('streams the prologue music on the master bus and pauses/releases it with the film', async () => {
+    await audio.unlock(); audio.startStoryMusic(); await Promise.resolve();
+    const music=MediaMock.items.find(media=>media.src.endsWith('new-game-memories.ogg'))!;
+    expect(music).toBeDefined(); expect(music.play).toHaveBeenCalled();
+    const source=ContextMock.latest.media!, gain=source.connections[0];
+    expect(gain.connections).toContain(ContextMock.latest.gains[0]);
+    vi.spyOn(document,'hidden','get').mockReturnValue(true); audio.syncVisibility();
+    expect(music.pause).toHaveBeenCalled();
+    vi.spyOn(document,'hidden','get').mockReturnValue(false); audio.syncVisibility(); await Promise.resolve();
+    expect(music.play).toHaveBeenCalledTimes(2);
+    audio.fadeStoryMusicOut(); expect(gain.gain.value).toBe(0);
+    audio.stopStoryMusic(); expect(music.removeAttribute).toHaveBeenCalledWith('src'); expect(source.disconnect).toHaveBeenCalled();
+  });
+
   it('uses short reused typing clicks on the master bus, respecting mute, visibility and cancellation', async () => {
     await audio.prepare(); await audio.unlock();
     const context = ContextMock.latest;
-    audio.playStoryTypingTick('L', 0); audio.playStoryTypingTick('é', 1);
+    audio.playStoryTypingTick('L', 0); audio.playStoryTypingTick('é', 2);
     expect(context.sources).toHaveLength(2);
     expect(context.sources[0].buffer).toBe(context.sources[1].buffer);
     expect(context.sources[0].buffer!.duration).toBeLessThan(.04);
+    expect(Math.max(...context.sources[0].buffer!.getChannelData(0).map(Math.abs))).toBeLessThan(.12);
+    audio.playStoryTypingTick('a', 3); audio.playStoryTypingTick('.', 4); expect(context.sources).toHaveLength(2);
     audio.playStoryTypingTick(' ', 2); expect(context.sources).toHaveLength(2);
     audio.setMasterVolume(0); audio.playStoryTypingTick('a', 3); expect(context.sources).toHaveLength(2);
     audio.setMasterVolume(.6);

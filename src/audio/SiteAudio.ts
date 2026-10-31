@@ -1,6 +1,7 @@
 import { audioGainFromSetting } from './volume';
 import { connectAudioOutput } from './output';
 import { chooseMenuTrack } from './MenuMusic';
+import { characterVoiceUrl, type CharacterVoiceCue, type CharacterVoiceId } from './VoiceCatalog';
 
 export type IntroCue = 'warning' | 'headphones' | 'credit' | 'title';
 
@@ -23,6 +24,14 @@ export class SiteAudio {
   private clickBuffer?: AudioBuffer;
   private typingBuffer?: AudioBuffer;
   private readonly typingSources = new Set<AudioBufferSourceNode>();
+  private readonly voiceBuffers = new Map<string, AudioBuffer>();
+  private readonly voiceLoads = new Map<string, Promise<void>>();
+  private voiceSource?: AudioBufferSourceNode;
+  private voiceRequest = 0;
+  private storyMusic?: HTMLAudioElement;
+  private storyMusicSource?: MediaElementAudioSourceNode;
+  private storyMusicGain?: GainNode;
+  private storyMusicPaused = false;
   private introSource?: AudioBufferSourceNode;
   private buffersLoading?: Promise<void>;
   private menu?: HTMLAudioElement;
@@ -60,12 +69,13 @@ export class SiteAudio {
       this.master = master;
       this.typingBuffer = context.createBuffer(1, Math.ceil(context.sampleRate * .032), context.sampleRate);
       const samples = this.typingBuffer.getChannelData(0);
-      let noise = 0x43a21;
+      let noise = 0x43a21, softNoise = 0;
       for (let i = 0; i < samples.length; i++) {
         noise ^= noise << 13; noise ^= noise >>> 17; noise ^= noise << 5;
         const t = i / context.sampleRate;
-        samples[i] = ((noise >>> 0) / 0xffffffff * 2 - 1) * Math.exp(-t * 230) * .7
-          + Math.sin(t * Math.PI * 2 * 1750) * Math.exp(-t * 160) * .18;
+        softNoise = softNoise * .86 + ((noise >>> 0) / 0xffffffff * 2 - 1) * .14;
+        const envelope = (1 - Math.exp(-t * 1100)) * Math.exp(-t * 155);
+        samples[i] = (softNoise * .24 + Math.sin(t * Math.PI * 2 * 330) * .025) * envelope;
       }
       this.buffersLoading = this.loadBuffers(context);
     }
@@ -148,8 +158,8 @@ export class SiteAudio {
   }
 
   playStoryTypingTick(letter: string, index: number): void {
-    if (!letter.trim() || this.masterVolume <= 0 || document.hidden || this.context?.state !== 'running') return;
-    const source = this.playUiClip(this.typingBuffer, .13, .9 + index % 7 * .035);
+    if (index % 2 || !/[\p{L}\p{N}]/u.test(letter) || this.masterVolume <= 0 || document.hidden || this.context?.state !== 'running') return;
+    const source = this.playUiClip(this.typingBuffer, .075, .96 + index % 3 * .02);
     if (!source) return;
     this.typingSources.add(source);
     source.addEventListener('ended', () => this.typingSources.delete(source), { once: true });
@@ -158,6 +168,82 @@ export class SiteAudio {
   stopStoryTyping(): void {
     for (const source of this.typingSources) source.stop();
     this.typingSources.clear();
+  }
+
+  async prepareVoice(voice: CharacterVoiceId): Promise<void> {
+    await this.prepare();
+    const context = this.context;
+    if (!context || this.disposed) return;
+    await Promise.all((['hmm', 'gasp'] as const).map(cue => {
+      const key = `${voice}/${cue}`;
+      if (this.voiceBuffers.has(key)) return;
+      let pending = this.voiceLoads.get(key);
+      if (!pending) {
+        pending = (async () => {
+          const response = await fetch(characterVoiceUrl(voice, cue), { signal: AbortSignal.timeout(12000) });
+          if (!response.ok) throw new Error('Voix indisponible');
+          const buffer = await context.decodeAudioData(await response.arrayBuffer());
+          if (!this.disposed && this.context === context) this.voiceBuffers.set(key, buffer);
+        })().finally(() => this.voiceLoads.delete(key));
+        this.voiceLoads.set(key, pending);
+      }
+      return pending;
+    }));
+  }
+
+  playVoice(voice: CharacterVoiceId, cue: CharacterVoiceCue): void {
+    this.stopVoice();
+    const request = this.voiceRequest;
+    if (document.hidden || this.masterVolume <= 0 || this.disposed) return;
+    void this.prepareVoice(voice).then(() => {
+      if (request !== this.voiceRequest || this.disposed || document.hidden || this.masterVolume <= 0 || this.context?.state !== 'running') return;
+      this.voiceSource = this.playUiClip(this.voiceBuffers.get(`${voice}/${cue}`), .7, 1);
+    }).catch(() => undefined);
+  }
+
+  stopVoice(): void {
+    this.voiceRequest++;
+    this.voiceSource?.stop();
+    this.voiceSource = undefined;
+  }
+
+  startStoryMusic(): void {
+    if (this.disposed || !this.context || !this.master) return;
+    if (!this.storyMusic) {
+      this.storyMusic = new Audio('/assets/audio/music/new-game-memories.ogg');
+      this.storyMusic.preload = 'auto';
+      this.storyMusicGain = this.context.createGain();
+      this.storyMusicGain.gain.value = 0;
+      this.storyMusicSource = this.context.createMediaElementSource(this.storyMusic);
+      this.storyMusicSource.connect(this.storyMusicGain).connect(this.master);
+    }
+    this.setStoryMusicPaused(document.hidden);
+  }
+
+  setStoryMusicPaused(paused: boolean): void {
+    this.storyMusicPaused = paused;
+    const music = this.storyMusic;
+    if (!music) return;
+    if (paused) { music.pause(); return; }
+    void music.play().then(() => {
+      if (this.storyMusic !== music || this.storyMusicPaused || document.hidden) { music.pause(); return; }
+      this.storyMusicGain?.gain.setTargetAtTime(.32, this.context!.currentTime, .35);
+    }).catch(() => undefined);
+  }
+
+  fadeStoryMusicOut(): void {
+    if (this.context) this.storyMusicGain?.gain.setTargetAtTime(0, this.context.currentTime, .18);
+  }
+
+  stopStoryMusic(): void {
+    this.storyMusic?.pause();
+    this.storyMusic?.removeAttribute('src');
+    this.storyMusic?.load();
+    this.storyMusicSource?.disconnect();
+    this.storyMusicGain?.disconnect();
+    this.storyMusic = undefined;
+    this.storyMusicSource = undefined;
+    this.storyMusicGain = undefined;
   }
 
   setMenuActive(active: boolean): void {
@@ -172,6 +258,8 @@ export class SiteAudio {
 
   syncVisibility(): void {
     this.setMenuActive(this.menuActive);
+    this.setStoryMusicPaused(document.hidden);
+    if (document.hidden) { this.stopVoice(); this.stopStoryTyping(); }
   }
 
   private async loadBuffers(context: AudioContext): Promise<void> {
@@ -263,6 +351,10 @@ export class SiteAudio {
     this.disposed = true;
     this.stopIntroCue();
     this.stopStoryTyping();
+    this.stopVoice();
+    this.stopStoryMusic();
+    this.voiceBuffers.clear();
+    this.voiceLoads.clear();
     if (this.menuFadeFrame !== undefined) cancelAnimationFrame(this.menuFadeFrame);
     this.menu?.pause();
     this.menu?.removeAttribute('src');

@@ -293,3 +293,17 @@ describe('game save history', () => {
     });
   });
 });
+
+it('round-trips every mail objective state while preserving old saves and rejecting unknown stages', () => {
+  const storage = new MemoryStorage();
+  for (const arrivalState of ['approach', 'mail', 'home', 'done'] as const) {
+    const input = russianInput();
+    const result = writeGameSave(storage, { ...input, payload: { ...input.payload, windowBlindsOpen: [true, false], arrivalState } });
+    expect(result.ok).toBe(true);
+    if(result.ok) expect(loadGameSave(storage,result.save.id)?.payload).toMatchObject({arrivalState});
+  }
+  const legacy=writeGameSave(storage,russianInput());expect(legacy.ok).toBe(true);
+  if(legacy.ok) expect(loadGameSave(storage,legacy.save.id)?.payload).not.toHaveProperty('arrivalState');
+  const invalid={...russianInput(),payload:{...russianInput().payload,windowBlindsOpen:[true,true],arrivalState:'unknown'}};
+  expect(writeGameSave(storage,invalid as unknown as RussianStairwellGameSaveInput).ok).toBe(false);
+});

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createHallMailbox } from './HallMailbox';
 import { applyMatteSurface } from '../render/MatteSurface';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { StairwellMaterialSet } from './StairwellMaterials';
@@ -170,6 +171,7 @@ export class StairwellEnvironment {
   readonly furnitureColliders: StaticCollider[] = [];
   readonly rainAudioOpenings: RainOpening[] = [];
   hallEntranceDoor?: THREE.Object3D;
+  entranceMailbox?: THREE.Object3D;
   private readonly importedWindowTemplate?: THREE.Object3D;
   private readonly importedEntranceDoorTemplate?: THREE.Object3D;
   private readonly importedMailboxTemplate?: THREE.Object3D;
@@ -989,33 +991,7 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     const template = this.importedMailboxTemplate;
     if (!template) return;
 
-    const mailbox = template.clone(true);
-    mailbox.name = 'hall-entrance-mailbox';
-    // Put it on the visible wall of the entrance hall, large and almost flush.
-    mailbox.rotation.y = -Math.PI * 0.5;
-
-    template.updateMatrixWorld(true);
-    const sourceBounds = new THREE.Box3().setFromObject(template);
-    const sourceSize = sourceBounds.getSize(new THREE.Vector3());
-    if (sourceSize.x <= 0.0001 || sourceSize.y <= 0.0001 || sourceSize.z <= 0.0001) return;
-
-    const targetLength = 1.95;
-    const targetHeight = 1.38;
-    const uniformScale = Math.min(targetLength / sourceSize.x, targetHeight / sourceSize.y);
-    mailbox.scale.setScalar(uniformScale);
-    mailbox.updateMatrixWorld(true);
-
-    const bounds = new THREE.Box3().setFromObject(mailbox);
-    const centerPoint = bounds.getCenter(new THREE.Vector3());
-    const interiorFaceX = STAIRWELL_BOUNDS.maxX - STAIRWELL_WALL_THICKNESS;
-    const targetMaxX = interiorFaceX - 0.006;
-    const targetCenterY = 1.42;
-    const targetCenterZ = wallFaceZ + 1.18;
-    mailbox.position.set(
-      targetMaxX - bounds.max.x,
-      targetCenterY - centerPoint.y,
-      targetCenterZ - centerPoint.z,
-    );
+    const mailbox = createHallMailbox(template, wallFaceZ);
 
     mailbox.traverse((object) => {
       const mesh = object as THREE.Mesh;
@@ -1040,6 +1016,10 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
       }
     });
 
+    this.entranceMailbox = mailbox;
+    const cabinet = mailbox.getObjectByName('Base');
+    const collider = cabinet && colliderFromVisibleObject('hall-mailbox-cabinet', cabinet);
+    if (collider) this.furnitureColliders.push(collider);
     this.group.add(mailbox);
   }
 

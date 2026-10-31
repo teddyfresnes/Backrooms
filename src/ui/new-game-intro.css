@@ -100,9 +100,7 @@
 }
 
 .new-game-film-loading { margin-right: auto; color: #939d9e; }
-.new-game-film-track { width: min(24vw, 12rem); height: 1px; margin-top: .7rem; overflow: hidden; background: #89999626; }
-.new-game-film-track i { display: block; width: 100%; height: 100%; background: #b4c1bd; transform: scaleX(0); transform-origin: left; transition: transform .3s ease; }
-.new-game-film-track[hidden], .new-game-film-controls button[hidden] { display: none; }
+.new-game-film-controls button[hidden] { display: none; }
 
 .new-game-film-controls button {
   min-height: 44px;
@@ -117,7 +115,6 @@
   cursor: pointer;
   transition: color .2s, border-color .2s;
 }
-.new-game-film-controls button span { display: inline-block; margin-left: 1.2rem; }
 .new-game-film-controls button:hover { color: #fff; border-color: #d9dfd9; }
 .new-game-film-controls button:focus-visible { outline: 1px solid #d9dfd9; outline-offset: 5px; }
 .new-game-film-controls button:disabled { opacity: .35; cursor: wait; }

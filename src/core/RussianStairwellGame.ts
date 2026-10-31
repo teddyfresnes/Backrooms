@@ -30,6 +30,10 @@ import { PostFX } from '../render/PostFX';
 import { resolveLightingBrightness } from '../render/LightingBrightness';
 import { compactSceneDataMaps, restoreSceneDataMaps, warmSceneForPlay } from '../render/SceneWarmup';
 import { HallExitInteraction } from '../stairwell/HallExitInteraction';
+import { HallArrivalStory } from '../stairwell/HallArrivalStory';
+import { NarrativeCaption } from '../ui/NarrativeCaption';
+import { useCharacterState } from '../wardrobe/studio/state/CharacterState';
+import { resolveCharacterVoice } from '../audio/VoiceCatalog';
 import { StairwellEnvironment } from '../stairwell/StairwellEnvironment';
 import { StairwellMaterials } from '../stairwell/StairwellMaterials';
 import { createStairwellPlan } from '../stairwell/createStairwellPlan';
@@ -95,6 +99,8 @@ export class RussianStairwellGame {
   private lightSwitch?: ApartmentLightSwitchInteraction;
   private windowBlinds?: ApartmentWindowBlindsInteraction;
   private hallExit?: HallExitInteraction;
+  private arrivalStory?: HallArrivalStory;
+  private readonly loadingAbort = new AbortController();
   private postFX?: PostFX;
   private pixelRatio: number;
   private accumulator = 0;
@@ -194,7 +200,7 @@ export class RussianStairwellGame {
     setVisualProgress(0.12);
     const [materialsResult, apartmentResult] = await Promise.allSettled([
       StairwellMaterials.load(this.renderer),
-      ImportedApartmentEnvironment.load(),
+      ImportedApartmentEnvironment.load(this.loadingAbort.signal),
     ]);
     if (materialsResult.status === 'rejected' || apartmentResult.status === 'rejected') {
       if (materialsResult.status === 'fulfilled') materialsResult.value.dispose();
@@ -324,6 +330,16 @@ export class RussianStairwellGame {
       this.ui,
       () => this.callbacks.onEnterBackrooms(),
     );
+    if (!environment.entranceMailbox) throw new Error('Les boîtes aux lettres du hall sont indisponibles.');
+    const config = useCharacterState.getState().config;
+    const voice = resolveCharacterVoice(config.voiceId, config.body.gender);
+    const voiceReady = siteAudio.prepareVoice(voice).catch(() => undefined);
+    this.arrivalStory = new HallArrivalStory(
+      environment.entranceMailbox, this.ui, new NarrativeCaption(this.root),
+      this.launch.kind === 'new' ? 'approach' : this.launch.save.payload.arrivalState ?? 'done',
+      cue => siteAudio.playVoice(voice, cue),
+      () => { this.autosaveElapsed = AUTOSAVE_INTERVAL_SECONDS; },
+    );
     setVisualProgress(0.74);
 
     if (this.launch.kind === 'load') {
@@ -378,7 +394,7 @@ export class RussianStairwellGame {
     });
     if (this.disposed) return;
     setVisualProgress(0.98);
-    await audioReady;
+    await Promise.all([audioReady, voiceReady]);
     if (this.disposed) return;
     setVisualProgress(1);
     this.initialized = true;
@@ -416,6 +432,7 @@ export class RussianStairwellGame {
   private tryInteract(): void {
     if (!this.player || !this.door || this.character?.isBusy) return;
     this.player.getViewDirection(this.viewDirection);
+    if (this.arrivalStory?.interact(this.player.position, this.viewDirection, this.player.isLocked && !this.ui.isConsoleOpen)) return;
     if (this.lightSwitch?.interact(
       this.player.position,
       this.viewDirection,
@@ -476,6 +493,7 @@ export class RussianStairwellGame {
     this.ui.setLocked(locked);
     this.player?.setInputEnabled(locked && !this.ui.isConsoleOpen);
     this.character?.setActive(locked && !this.ui.isConsoleOpen);
+    if (!locked) { this.arrivalStory?.suspend(); siteAudio.stopVoice(); }
     void this.audio.setSuspended(!locked || document.hidden);
     this.previousTime = performance.now();
     this.accumulator = 0;
@@ -599,6 +617,7 @@ export class RussianStairwellGame {
         entranceDoor: this.door.getState(),
         apartmentLightOn: this.apartment.areInteriorLightsEnabled,
         windowBlindsOpen: this.windowBlinds?.getState() ?? [true, true],
+        arrivalState: this.arrivalStory?.getState() ?? 'done',
       },
     });
     if (!result.ok && !this.saveErrorShown) {
@@ -638,10 +657,12 @@ export class RussianStairwellGame {
       this.hallExit?.update(this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
       this.lightSwitch?.update(this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
       this.windowBlinds?.update(delta, this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
+      this.arrivalStory?.update(delta, this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
       const surface = this.currentSurface();
       this.audio.updateInteriorGain(this.interiorRainGain(surface));
     } else {
       this.accumulator = 0;
+      this.arrivalStory?.suspend();
       this.ui.setInteraction(null);
     }
     const instantaneousFps = measuredDelta > 0 ? 1 / measuredDelta : 60;
@@ -688,6 +709,7 @@ export class RussianStairwellGame {
   }
 
   private readonly onVisibilityChange = (): void => {
+    if (document.hidden) { this.arrivalStory?.suspend(); siteAudio.stopVoice(); }
     if (document.hidden) this.saveNow('autosave');
     void this.audio.setSuspended(document.hidden || !this.player?.isLocked);
     this.previousTime = performance.now();
@@ -724,6 +746,9 @@ export class RussianStairwellGame {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.loadingAbort.abort();
+    this.arrivalStory?.dispose();
+    siteAudio.stopVoice();
     this.renderer.setAnimationLoop(null);
     window.removeEventListener('resize', this.resize);
     window.removeEventListener('keydown', this.onConsoleHotkey);

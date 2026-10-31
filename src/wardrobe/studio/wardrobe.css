@@ -777,3 +777,12 @@ button:focus-visible, input:focus-visible { outline:2px solid #fff3a6; outline-o
   font-size: 10px;
   letter-spacing: .015em;
 }
+
+.wardrobe-voices { margin: 0 0 1.4rem; padding: 0; border: 0; }
+.wardrobe-voices legend { margin-bottom: .7rem; font-weight: 600; }
+.wardrobe-voice-options { display: grid; grid-template-columns: 1fr 1fr; gap: .65rem; }
+.wardrobe-voice-options label { display: flex; align-items: center; gap: .55rem; font-size: .85rem; cursor: pointer; }
+.wardrobe-voice-options input { accent-color: #d2cfb2; }
+.wardrobe-voice-preview { display: flex; flex-wrap: wrap; gap: .5rem; margin: .9rem 0 .6rem; }
+.wardrobe-voices small { font-size: .65rem; opacity: .6; }
+.wardrobe-voices a { color: inherit; }

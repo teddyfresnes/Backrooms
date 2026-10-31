@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { loadApartmentScene } from './LoadApartmentScene';
 import { resolveLightingBrightness } from '../render/LightingBrightness';
 import { isApartmentInteriorVisible } from './ApartmentVisibility';
 import { optimizeApartmentSmallProps } from './SmallPropGeometry';
@@ -1180,9 +1181,8 @@ export class ImportedApartmentEnvironment {
     };
   }
 
-  static async load(): Promise<ImportedApartmentEnvironment> {
-    const loader = new THREE.ObjectLoader();
-    const model = await loader.loadAsync(MODEL_URL);
+  static async load(signal?: AbortSignal): Promise<ImportedApartmentEnvironment> {
+    const model = await loadApartmentScene(MODEL_URL, signal);
     try {
       return new ImportedApartmentEnvironment(model);
     } catch (error) {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AssetLibrary, useAssetLibrary } from '../assets/AssetLibrary'
+import { VoicePicker } from './VoicePicker'
 import { MORPHS } from '../core/morphs'
 import { EXPRESSION_PULSE_INTERVAL_MS, expressionPulseMs, FACIAL_EXPRESSIONS, type FacialExpressionId } from '../core/expressions'
 import { morphUiModel, sexFromGenderMorph } from '../core/humanMeasurements'
@@ -220,6 +221,7 @@ function GeneralEditor() {
   const sex = sexFromGenderMorph(body.gender)
   return <div className="simple-content">
     <h3>Général</h3>
+    <VoicePicker />
     <label className="character-name-field">
       <span>Nom du personnage</span>
       <input type="text" maxLength={32} value={name} placeholder="Custom" onChange={(event) => setName(event.target.value)} />
@@ -312,8 +314,8 @@ function SimpleEditor({ category, advanced }: { category: SimpleCategory; advanc
   const { manifest } = useAssetLibrary()
   const appearance = useCharacterState((s) => s.config.appearance)
   const setAppearance = useCharacterState((s) => s.setAppearance)
-  if (!manifest) return null
   if (category === 'general') return <GeneralEditor />
+  if (!manifest) return null
   if (category === 'skin') return <div className="simple-content"><h3>Peau</h3><MaterialButtons materials={manifest.skins} selected={appearance.skinMaterialId} originalLabel="Standard" onSelect={(id) => setAppearance('skinMaterialId', id)} /></div>
   if (category === 'eyes') return <EyeEditor advanced={advanced} />
   if (category === 'hair') return <HairEditor />

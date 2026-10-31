@@ -19,6 +19,7 @@ import {
 } from '../core/humanMeasurements'
 import type { CharacterConfig, ClothingSlot, MorphSection } from '../core/types'
 import { makeDefaultCharacter } from './defaults'
+import { resolveCharacterVoice, type CharacterVoiceId } from '../../../audio/VoiceCatalog'
 
 const AUTOSAVE_KEY = 'character-studio/current/v4'
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
@@ -60,6 +61,7 @@ interface EditorState {
   setMorph: (section: 'body' | 'face', key: string, value: number) => void
   setSex: (sex: BiologicalSex) => void
   setName: (name: string) => void
+  setVoice: (voice: CharacterVoiceId) => void
   setIdentity: (id: string, name: string, updatedAt?: number) => void
   restoreConfig: (config: CharacterConfig) => void
   commitSnapshot: () => void
@@ -117,6 +119,7 @@ function normalizeConfig(saved: CharacterConfig): CharacterConfig {
     ...defaults,
     ...saved,
     baseAssetId: 'makehuman-hm08',
+    voiceId: resolveCharacterVoice(saved.voiceId, saved.body?.gender),
     body: safeBody(saved.body),
     face: safeSection('face', saved.face),
     appearance: {
@@ -165,6 +168,7 @@ export const useCharacterState = create<EditorState>((set, get) => ({
   cameraResetToken: 0,
   commitSnapshot: () => {},
   setName: (name) => set((state) => ({ config: updated({ ...state.config, name: name.slice(0, 32) }) })),
+  setVoice: (voiceId) => set(state => ({ config: updated({ ...state.config, voiceId: resolveCharacterVoice(voiceId) }) })),
   // Identity-only updates deliberately preserve the existing body/face/object
   // references. Promoting a preset to Custom must not be mistaken for a body
   // morph, otherwise the rig is recalibrated while a new hair mesh is mounting.

@@ -90,6 +90,7 @@ export interface CharacterConfig {
   id: string
   name: string
   baseAssetId: string
+  voiceId?: import('../../../audio/VoiceCatalog').CharacterVoiceId
   body: Record<string, number>
   face: Record<string, number>
   appearance: AppearanceConfig

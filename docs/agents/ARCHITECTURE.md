@@ -53,11 +53,22 @@ un morceau est tiré au hasard par démarrage et conservé aux retours au menu.
 
 `NewGameIntro` accompagne uniquement les nouvelles parties (y compris Continuer
 sans sauvegarde). Ses six WebP et phrases utilisent une horloge visible commune
-au zoom et aux clics de frappe ; un onglet masqué ne consomme pas le récit.
+au zoom et aux frappes feutrées ; un onglet masqué ne consomme pas le récit.
+`SiteAudio` joue le morceau fourni pendant le film, puis le fond au passage au jeu.
+Le décodage JSON et les tableaux de l'appartement passent par `apartment.worker` ;
+`LoadApartmentScene` reçoit les buffers transférés et monte les géométries par lots.
+Le worker est terminé lors du résultat, d'une erreur ou d'une annulation.
 Le hall charge en parallèle, puis conserve son dernier rendu de warmup sans
 boucle 3D jusqu'à la fin du film. Le routeur attend aussi sa disponibilité avant
 le fondu et `enterAfterIntro()`. Charger une sauvegarde restaure directement la
 pose enregistrée. Un nouveau départ utilise l'entrée du RDC, orientée vers +Z.
+
+`HallArrivalStory` possède l'objectif courrier, le portillon `Door_3`, sa surbrillance
+et l'enveloppe ; il utilise le vrai pivot du modèle et le prompt d'interaction commun.
+`NarrativeCaption` écrit sans son sur le temps joué du runtime, sans boucle autonome.
+`SaveHistory.arrivalState` conserve approche/courrier/récupération ; les sauvegardes
+antérieures sans ce champ ignorent l'objectif. Les cinq voix et leurs deux réactions
+sont choisies dans Général du garde-robe et persistées dans le profil du personnage.
 
 Dans le garde-robe, la géométrie et les poses inverses du squelette restent dans
 les coordonnées locales de `CharacterRoot`. Après un morph ou une calibration,

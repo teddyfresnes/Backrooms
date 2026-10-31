@@ -34,7 +34,6 @@ export class NewGameIntro {
   private readonly action: HTMLButtonElement;
   private readonly retry: HTMLButtonElement;
   private readonly status: HTMLElement;
-  private readonly progress: HTMLElement;
   private readonly reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private readonly previousInert: boolean;
   private readonly times = NEW_GAME_SHOTS.map(shot => letterTimes(shot.text));
@@ -68,17 +67,15 @@ export class NewGameIntro {
       <div class="new-game-film-caption"><span data-film-copy aria-hidden="true"></span>
         <span class="new-game-film-announcement" aria-live="polite"></span></div>
       <div class="new-game-film-controls">
-        <div class="new-game-film-loading"><span data-film-status>Préparation des images…</span>
-          <div class="new-game-film-track" role="progressbar" aria-label="Préparation du hall" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div></div>
+        <span class="new-game-film-loading" data-film-status role="status"></span>
         <button type="button" data-film-retry hidden>Réessayer les images</button>
-        <button type="button" data-film-action>Passer <span aria-hidden="true">↗</span></button>
+        <button type="button" data-film-action>Passer</button>
       </div>`;
     this.copy = this.root.querySelector('[data-film-copy]')!;
     this.announcement = this.root.querySelector('.new-game-film-announcement')!;
     this.action = this.root.querySelector('[data-film-action]')!;
     this.retry = this.root.querySelector('[data-film-retry]')!;
     this.status = this.root.querySelector('[data-film-status]')!;
-    this.progress = this.root.querySelector('.new-game-film-track')!;
     const stage = this.root.querySelector('.new-game-film-stage')!;
     for (const shot of NEW_GAME_SHOTS) {
       const img = document.createElement('img');
@@ -101,18 +98,10 @@ export class NewGameIntro {
     this.load();
   }
 
-  setProgress(value: number): void {
-    const progress = Math.max(0, Math.min(1, value));
-    this.progress.setAttribute('aria-valuenow', String(Math.round(progress * 100)));
-    (this.progress.firstElementChild as HTMLElement).style.transform = `scaleX(${progress})`;
-  }
-
   setSceneReady(): void {
     if (this.disposed) return;
     this.sceneReady = true;
-    this.setProgress(1);
     this.status.textContent = this.imageError ? 'Une image est indisponible.' : '';
-    this.progress.hidden = true;
     this.action.disabled = false;
     this.updateAction();
     if (this.presentationDone) this.advance();
@@ -122,6 +111,7 @@ export class NewGameIntro {
   async reveal(enter: () => void): Promise<void> {
     if (this.disposed) return;
     siteAudio.stopStoryTyping();
+    siteAudio.fadeStoryMusicOut();
     this.underlay.inert = this.previousInert;
     enter();
     this.root.classList.add('is-leaving');
@@ -136,6 +126,7 @@ export class NewGameIntro {
     if (this.disposed) return;
     this.disposed = true;
     this.stopTimeline();
+    siteAudio.stopStoryMusic();
     this.loading?.abort();
     if (this.exitTimer !== undefined) window.clearTimeout(this.exitTimer);
     this.resolveExit?.();
@@ -154,7 +145,7 @@ export class NewGameIntro {
     const controller = this.loading = new AbortController();
     this.imageError = false;
     this.retry.hidden = true;
-    this.status.textContent = 'Préparation des images…';
+    this.status.textContent = '';
     const decoded = this.images.map(img => new Promise<void>((resolve, reject) => {
       let settled = false;
       const finish = (error?: unknown) => {
@@ -179,6 +170,7 @@ export class NewGameIntro {
     void Promise.all(decoded).then(() => {
       if (this.disposed || controller.signal.aborted || this.presentationDone) return;
       this.status.textContent = '';
+      siteAudio.startStoryMusic();
       this.beginShot();
       this.frame = requestAnimationFrame(this.tick);
     }).catch(() => {
@@ -253,7 +245,7 @@ export class NewGameIntro {
   };
 
   private updateAction(): void {
-    this.action.innerHTML = this.presentationDone ? 'Préparation…' : 'Passer <span aria-hidden="true">↗</span>';
+    this.action.textContent = this.presentationDone ? 'Un instant…' : 'Passer';
   }
 
   private stopTimeline(): void {
@@ -265,6 +257,7 @@ export class NewGameIntro {
   private onVisibility = (): void => {
     this.previous = undefined;
     if (document.hidden) siteAudio.stopStoryTyping();
+    siteAudio.setStoryMusicPaused(document.hidden);
   };
 
   private onKey = (event: KeyboardEvent): void => {

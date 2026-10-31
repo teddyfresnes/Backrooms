@@ -220,6 +220,8 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
   const boot = createBoot(
     launch.kind === 'load' ? 'Chargement de la sauvegarde' : 'Préparation du niveau',
   );
+  boot.element.hidden = !!intro;
+  if (intro) boot.element.style.display = 'none';
   boot.setProgress(0.02);
   let game: GameRuntime | null = null;
   try {
@@ -241,7 +243,6 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
     activeGame = game;
     await game.initialize((progress) => {
       boot.setProgress(0.08 + progress * 0.92);
-      intro?.setProgress(progress);
     });
     if (id !== transitionId) {
       game.dispose();

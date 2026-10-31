@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const audio = vi.hoisted(() => ({ unlock: vi.fn(), playStoryTypingTick: vi.fn(), stopStoryTyping: vi.fn() }));
+const audio = vi.hoisted(() => ({ unlock: vi.fn(), playStoryTypingTick: vi.fn(), stopStoryTyping: vi.fn(),
+  startStoryMusic: vi.fn(), stopStoryMusic: vi.fn(), fadeStoryMusicOut: vi.fn(), setStoryMusicPaused: vi.fn() }));
 vi.mock('../audio/SiteAudio', () => ({ siteAudio: audio }));
 import { NewGameIntro, NEW_GAME_SHOTS } from './NewGameIntro';
 
@@ -80,7 +81,7 @@ describe('new game photographic prologue', () => {
     let finished = false; void intro.finished.then(() => { finished = true; });
     button().click(); await settle();
     expect(finished).toBe(false); expect(button().disabled).toBe(true);
-    intro.setProgress(.7); expect(document.querySelector('[role="progressbar"]')!.getAttribute('aria-valuenow')).toBe('70');
+    expect(document.querySelector('[role="progressbar"]')).toBeNull();
     intro.setSceneReady(); await settle(); expect(finished).toBe(true);
     intro.dispose(); await decode(); step();
     expect(frames.size).toBe(0); expect(vi.getTimerCount()).toBe(0); expect(app.inert).toBe(false);

@@ -13,6 +13,7 @@ export const MAX_GAME_SAVE_HISTORY_ENTRIES = GAME_SAVE_HISTORY_LIMIT;
 
 export type GameSaveKind = 'manual' | 'autosave';
 export type GameSaveExperienceId = 'russian-stairwell' | 'backrooms';
+export type HallArrivalState = 'approach' | 'mail' | 'home' | 'done';
 
 export interface GameSaveDoorState {
   readonly progress: number;
@@ -26,6 +27,7 @@ export interface RussianStairwellSavePayload {
   readonly entranceDoor: Readonly<GameSaveDoorState>;
   readonly apartmentLightOn: boolean;
   readonly windowBlindsOpen?: readonly [boolean, boolean];
+  readonly arrivalState?: HallArrivalState;
 }
 
 export interface BackroomsSavePayload {
@@ -245,6 +247,9 @@ const sanitizeDoorState = (value: unknown): GameSaveDoorState | null => {
 
 const sanitizeRussianPayload = (value: unknown): RussianStairwellSavePayload | null => {
   if (!isRecord(value)) return null;
+  const hasStoryKeys = hasExactKeys(value,
+    ['safePosition', 'quaternion', 'entranceDoor', 'apartmentLightOn', 'windowBlindsOpen', 'arrivalState']);
+  if (hasStoryKeys && !['approach', 'mail', 'home', 'done'].includes(value.arrivalState as string)) return null;
   const hasCurrentKeys = hasExactKeys(
     value,
     ['safePosition', 'quaternion', 'entranceDoor', 'apartmentLightOn', 'windowBlindsOpen'],
@@ -254,14 +259,14 @@ const sanitizeRussianPayload = (value: unknown): RussianStairwellSavePayload | n
     ['safePosition', 'quaternion', 'entranceDoor', 'apartmentLightOn'],
   );
   const hasLegacyKeys = hasExactKeys(value, ['safePosition', 'quaternion', 'entranceDoor']);
-  if (!hasCurrentKeys && !hasLightKeys && !hasLegacyKeys) {
+  if (!hasStoryKeys && !hasCurrentKeys && !hasLightKeys && !hasLegacyKeys) {
     return null;
   }
   const safePosition = sanitizePosition(value.safePosition);
   const quaternion = sanitizeQuaternion(value.quaternion);
   const entranceDoor = sanitizeDoorState(value.entranceDoor);
-  const apartmentLightOn = hasCurrentKeys || hasLightKeys ? value.apartmentLightOn : false;
-  const windowBlindsOpen = hasCurrentKeys ? value.windowBlindsOpen : [true, true];
+  const apartmentLightOn = hasStoryKeys || hasCurrentKeys || hasLightKeys ? value.apartmentLightOn : false;
+  const windowBlindsOpen = hasStoryKeys || hasCurrentKeys ? value.windowBlindsOpen : [true, true];
   if (
     !safePosition
     || !quaternion
@@ -276,6 +281,7 @@ const sanitizeRussianPayload = (value: unknown): RussianStairwellSavePayload | n
     quaternion,
     entranceDoor,
     apartmentLightOn,
+    ...(hasStoryKeys ? { arrivalState: value.arrivalState as HallArrivalState } : {}),
     windowBlindsOpen: Object.freeze([
       windowBlindsOpen[0] as boolean,
       windowBlindsOpen[1] as boolean,
