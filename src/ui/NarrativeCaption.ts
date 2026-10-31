@@ -24,9 +24,9 @@ export class NarrativeCaption {
     this.letters = Array.from(text);
     this.elapsed = 0;
     this.active = true;
+    this.root.hidden = false;
     this.copy.textContent = this.reduced ? text : '';
     this.announcement.textContent = text;
-    this.root.hidden = false;
     this.root.style.opacity = '1';
   }
 

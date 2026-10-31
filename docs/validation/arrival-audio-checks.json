@@ -1,0 +1,79 @@
+[
+  {
+    "runtime": "assets/audio/voices/alex/hmm.ogg",
+    "duration": 1.05225,
+    "codec": "opus",
+    "channels": 1,
+    "fully_decoded": true
+  },
+  {
+    "runtime": "assets/audio/voices/alex/gasp.ogg",
+    "duration": 0.354083,
+    "codec": "opus",
+    "channels": 1,
+    "fully_decoded": true
+  },
+  {
+    "runtime": "assets/audio/voices/ian/hmm.ogg",
+    "duration": 0.737292,
+    "codec": "opus",
+    "channels": 1,
+    "fully_decoded": true
+  },
+  {
+    "runtime": "assets/audio/voices/ian/gasp.ogg",
+    "duration": 0.520438,
+    "codec": "opus",
+    "channels": 1,
+    "fully_decoded": true
+  },
+  {
+    "runtime": "assets/audio/voices/sean/hmm.ogg",
+    "duration": 2.112583,
+    "codec": "opus",
+    "channels": 1,
+    "fully_decoded": true
+  },
+  {
+    "runtime": "assets/audio/voices/sean/gasp.ogg",
+    "duration": 0.612354,
+    "codec": "opus",
+    "channels": 1,
+    "fully_decoded": true
+  },
+  {
+    "runtime": "assets/audio/voices/karen/hmm.ogg",
+    "duration": 0.652063,
+    "codec": "opus",
+    "channels": 1,
+    "fully_decoded": true
+  },
+  {
+    "runtime": "assets/audio/voices/karen/gasp.ogg",
+    "duration": 0.430583,
+    "codec": "opus",
+    "channels": 1,
+    "fully_decoded": true
+  },
+  {
+    "runtime": "assets/audio/voices/meghan/hmm.ogg",
+    "duration": 1.04025,
+    "codec": "opus",
+    "channels": 1,
+    "fully_decoded": true
+  },
+  {
+    "runtime": "assets/audio/voices/meghan/gasp.ogg",
+    "duration": 0.276542,
+    "codec": "opus",
+    "channels": 1,
+    "fully_decoded": true
+  },
+  {
+    "runtime": "assets/audio/music/new-game-memories.ogg",
+    "duration": 83.6065,
+    "codec": "opus",
+    "channels": 2,
+    "fully_decoded": true
+  }
+]

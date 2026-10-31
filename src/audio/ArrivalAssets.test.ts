@@ -18,6 +18,14 @@ describe('user-provided cinematic and dialogue recordings',()=>{
       const bytes=await readFile(new URL('../../public/'+file.runtime,import.meta.url));
       expect(bytes.subarray(0,4).toString()).toBe('OggS');
       expect(bytes.includes('OpusHead')).toBe(true);
+      const streams: string[]=[];
+      for(let at=0;at<bytes.length;){
+        const segments=bytes[at+26]!,body=at+27+segments;
+        if(bytes[at+5]!&2)streams.push(bytes.subarray(body,body+8).toString());
+        let length=0;for(let i=0;i<segments;i++)length+=bytes[at+27+i]!;
+        at=body+length;
+      }
+      expect(streams).toEqual(['OpusHead']);
       expect(bytes.length).toBe(file.bytes);total+=bytes.length;
       expect(createHash('sha256').update(bytes).digest('hex')).toBe(file.runtime_sha256);
     }

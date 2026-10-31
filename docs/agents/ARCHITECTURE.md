@@ -54,7 +54,7 @@ un morceau est tiré au hasard par démarrage et conservé aux retours au menu.
 `NewGameIntro` accompagne uniquement les nouvelles parties (y compris Continuer
 sans sauvegarde). Ses six WebP et phrases utilisent une horloge visible commune
 au zoom et aux frappes feutrées ; un onglet masqué ne consomme pas le récit.
-`SiteAudio` joue le morceau fourni pendant le film, puis le fond au passage au jeu.
+`SiteAudio` joue le morceau fourni pendant le film, puis l'atténue au passage au jeu.
 Le décodage JSON et les tableaux de l'appartement passent par `apartment.worker` ;
 `LoadApartmentScene` reçoit les buffers transférés et monte les géométries par lots.
 Le worker est terminé lors du résultat, d'une erreur ou d'une annulation.

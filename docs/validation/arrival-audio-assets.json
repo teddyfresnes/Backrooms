@@ -4,77 +4,77 @@
   "voice_license": "CC BY 4.0",
   "voice_author": "Dillon Becker",
   "music_rights": "User-provided; no additional license claim.",
-  "encoding": "Full-length local Opus; voice mono 40 kbps/-20 LUFS; music stereo 40 kbps/-22 LUFS. Original uploads unchanged.",
+  "encoding": "Full-length local Opus; voice mono 40 kbps/-20 LUFS; music stereo 40 kbps/-22 LUFS. Original uploads unchanged. Audio-only mapping excludes artwork/video streams from the source WAV containers.",
   "files": [
     {
       "runtime": "assets/audio/voices/alex/hmm.ogg",
       "source_in_zip": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Male/Alex Brodie/miscellaneous_2_alex.wav",
       "source_sha256": "e72c06c4f0c7642e00d8cdb7d1bc549151d8bda4ea37b19b55ae8d0f444217cb",
-      "runtime_sha256": "6312acb265480a7751c00792483105e10eeb2cbc6c64835977172db0b8034501",
-      "bytes": 12600
+      "runtime_sha256": "15fd9af5b0e1c8c487dd3926d85bb303b18de8fb30d65d1c3938b43bfbfbcdd3",
+      "bytes": 5875
     },
     {
       "runtime": "assets/audio/voices/alex/gasp.ogg",
       "source_in_zip": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Male/Alex Brodie/miscellaneous_19_alex.wav",
       "source_sha256": "932e7857305dced358aac30ae641581667c80e098ee03ba6cf3a1c2f396c2992",
-      "runtime_sha256": "662a4bd165b689138550edd263a65e5f125a72f36a139feebbe66a78c62bd3b8",
-      "bytes": 8744
+      "runtime_sha256": "82739a75d4562566269ff3daa124381a06da38f7a0ba01def8206642fe7418f6",
+      "bytes": 2019
     },
     {
       "runtime": "assets/audio/voices/ian/hmm.ogg",
       "source_in_zip": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Male/Ian Lampert/miscellaneous_2_ian.wav",
       "source_sha256": "a24827715f372754fb8a0351798a2ad5faef4786d8c578ed491436ac0601b861",
-      "runtime_sha256": "194ae72e5bb554c6a1cccc868862df504de85d1235434c2d13e082f741dfc14e",
-      "bytes": 10340
+      "runtime_sha256": "30de87286cf7949208e2aefd5741eeec5e8c0950e463b4cec60910531d03de17",
+      "bytes": 3615
     },
     {
       "runtime": "assets/audio/voices/ian/gasp.ogg",
       "source_in_zip": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Male/Ian Lampert/miscellaneous_19_ian.wav",
       "source_sha256": "52f7f8707dec918b806863d425259ece42058507a6fcb14168041ea1cefbc00e",
-      "runtime_sha256": "8a1e6e75e836a11f845edfcd49a39f17dcc0992a5b72af779b12dcfdf966b353",
-      "bytes": 9549
+      "runtime_sha256": "e5072d0ae5ae695532a435bb1e032b0097a1ba7a08cc43e3883107fd9917b109",
+      "bytes": 2824
     },
     {
       "runtime": "assets/audio/voices/sean/hmm.ogg",
       "source_in_zip": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Male/Sean Lenhart/miscellaneous_2_sean.wav",
       "source_sha256": "19dc28d0fdb3db61a630e1a730777566a431c9fd4c729c19cb0c212d9284ad51",
-      "runtime_sha256": "6800894d3bef4f6500e00d456bddf2fe979563bcd173b884acb02a49a65d2232",
-      "bytes": 16936
+      "runtime_sha256": "02a89ae9eec8ebfcde0b4c9910c54b973983af0e61a8b34c8a49db0963e701e4",
+      "bytes": 10211
     },
     {
       "runtime": "assets/audio/voices/sean/gasp.ogg",
       "source_in_zip": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Male/Sean Lenhart/miscellaneous_19_sean.wav",
       "source_sha256": "7167eb9177cb63986679a277ccbf18a19afb02e9b0f4cb5e2e8e8a96a587ea14",
-      "runtime_sha256": "904718e4bce40dbc3b122af115b1148d34abd9e83082c406f7e1a821526e7144",
-      "bytes": 10239
+      "runtime_sha256": "58447ce1c7bcf70508d316732a4ad097315e38239956451d35767520527586c0",
+      "bytes": 3514
     },
     {
       "runtime": "assets/audio/voices/karen/hmm.ogg",
       "source_in_zip": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Female/Karen Cenon/miscellaneous_2_karen.wav",
       "source_sha256": "1cb8ff1513881fb4059940059ba2a7c150414452394472a398c2d607ddf06a8e",
-      "runtime_sha256": "2626688bf9b759d9c9f04128df283ffaa49eea1d70d5dc7edcb15cccc4dcaf42",
-      "bytes": 10264
+      "runtime_sha256": "1309fda81838d4dcb4aa413c85c5c4e4697daa63178f2ce225ee202bc48da5c9",
+      "bytes": 3539
     },
     {
       "runtime": "assets/audio/voices/karen/gasp.ogg",
       "source_in_zip": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Female/Karen Cenon/miscellaneous_19_karen.wav",
       "source_sha256": "4684be86a8e8b8147ac1168ab13cf571dfe0362107abb382e265ee6a644c95d3",
-      "runtime_sha256": "1b5e56e6686cecb2686b49d23b8d76b48219510f20b6e4c0cf9554f48ee4626a",
-      "bytes": 9284
+      "runtime_sha256": "5f0da9a0510469a07ba2b9116ba9981855bf272e84eb5ff907bba40d4527294a",
+      "bytes": 2559
     },
     {
       "runtime": "assets/audio/voices/meghan/hmm.ogg",
       "source_in_zip": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Female/Meghan Christian/miscellaneous_2_meghan.wav",
       "source_sha256": "399a63dae06e3569e476bc4cd1de9a8db48a82948fa37901a5fc21cc43c0992f",
-      "runtime_sha256": "0b0ff0b9ca46c4d58027435d2eb949fe50dc0cc587f5b277117644a482f95a03",
-      "bytes": 12073
+      "runtime_sha256": "6176a17113902c1edf600d2bd4cc1d23974501a9b2f25b042a16b266f5897e19",
+      "bytes": 5348
     },
     {
       "runtime": "assets/audio/voices/meghan/gasp.ogg",
       "source_in_zip": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Female/Meghan Christian/miscellaneous_19_meghan.wav",
       "source_sha256": "dce5b71cfa7a5e2ffb04c6e7e2501d0a8148bbbc39dd2bb9f73ac62f3f3dd9f8",
-      "runtime_sha256": "d4e7450e5f51c17e1580148d2dc129a308acef7a15a5ab9fbf6b761b9b395475",
-      "bytes": 8426
+      "runtime_sha256": "b9da73513a47e4b2126c55b838bb9d29dbe36e7ac0aad580ea20e51107503f32",
+      "bytes": 1701
     },
     {
       "runtime": "assets/audio/music/new-game-memories.ogg",
@@ -84,5 +84,5 @@
       "bytes": 444308
     }
   ],
-  "total_bytes": 552763
+  "total_bytes": 485513
 }
