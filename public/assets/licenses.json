@@ -579,6 +579,19 @@
         "stairwell-furniture/soviet_old_table.glb"
       ],
       "changes": "Original embedded GLB; source, author and license are recorded in the file metadata."
+    },
+    {
+      "name": "Entrance cinematic animations",
+      "author": "User-provided FBX recordings",
+      "source": [
+        "Entering Code.fbx",
+        "Opening Door Inwards.fbx"
+      ],
+      "license": "User-provided; no additional rights asserted",
+      "files": [
+        "cinematics/entry-motion.bin"
+      ],
+      "changes": "Animation tracks only, no source meshes/textures. Float32 arrays and original durations preserved, redundant keys optimized and gzip-compressed. Pose retargeted to the selected character; authored horizontal motion drives entrance placement."
     }
   ],
   "character": [

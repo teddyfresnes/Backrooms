@@ -13,6 +13,8 @@ import type { RussianStairwellLaunch } from './core/RussianStairwellGame';
 import { siteAudio } from './audio/SiteAudio';
 import { OpeningIntro } from './ui/OpeningIntro';
 import { NewGameIntro } from './ui/NewGameIntro';
+import { ApartmentPreload } from './apartment/ApartmentPreload';
+import { APARTMENT_MODEL_URL } from './apartment/ApartmentAsset';
 import { loadGameSettings } from './ui/settings';
 
 const appElement = document.querySelector<HTMLElement>('#app');
@@ -34,6 +36,7 @@ interface BootView {
 
 let activeGame: GameRuntime | null = null;
 let activeNewGameIntro: NewGameIntro | null = null;
+let activeApartmentPreload: ApartmentPreload | null = null;
 let transitionId = 0;
 let openingFinished = false;
 
@@ -74,6 +77,8 @@ const readSave = (id: string): GameSaveEntry | null => {
 };
 
 const clearRuntime = (): void => {
+  activeApartmentPreload?.dispose();
+  activeApartmentPreload = null;
   activeNewGameIntro?.dispose();
   activeNewGameIntro = null;
   activeGame?.dispose();
@@ -217,6 +222,7 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
   clearRuntime();
   const intro = launch.kind === 'new' ? new NewGameIntro(app) : null;
   activeNewGameIntro = intro;
+  let preload: ApartmentPreload | undefined;
   const boot = createBoot(
     launch.kind === 'load' ? 'Chargement de la sauvegarde' : 'Préparation du niveau',
   );
@@ -225,6 +231,12 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
   boot.setProgress(0.02);
   let game: GameRuntime | null = null;
   try {
+    preload = intro ? new ApartmentPreload(APARTMENT_MODEL_URL) : undefined;
+    activeApartmentPreload = preload ?? null;
+    // Only network/worker preparation runs during the photos. Heavy 3D work
+    // waits for their end, when the compositor-driven loading indicator shows.
+    if (intro) await intro.finished;
+    if (id !== transitionId) return;
     const { RussianStairwellGame } = await import('./core/RussianStairwellGame');
     if (id !== transitionId) return;
     boot.setProgress(0.08);
@@ -238,11 +250,12 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
         { kind: 'new' },
         true,
       )),
-    }, { deferEntry: !!intro });
+    }, { deferEntry: !!intro, apartmentPreload: preload });
     game = stairwell;
     activeGame = game;
     await game.initialize((progress) => {
       boot.setProgress(0.08 + progress * 0.92);
+      intro?.setProgress(progress);
     });
     if (id !== transitionId) {
       game.dispose();
@@ -254,13 +267,15 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
       await intro.finished;
       if (id !== transitionId) return;
       boot.element.remove();
-      await intro.reveal(() => stairwell.enterAfterIntro());
+      await intro.reveal(() => stairwell.startArrivalCinematic(), { continueMusic: true });
       if (activeNewGameIntro === intro) activeNewGameIntro = null;
       return;
     }
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     boot.element.remove();
   } catch (error) {
+    preload?.dispose();
+    if (activeApartmentPreload === preload) activeApartmentPreload = null;
     intro?.dispose();
     if (activeNewGameIntro === intro) activeNewGameIntro = null;
     if (activeGame === game) activeGame = null;

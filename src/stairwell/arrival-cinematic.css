@@ -1,0 +1,9 @@
+.arrival-cinematic { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+.arrival-cinematic[hidden] { display: none; }
+.arrival-letterbox { position: absolute; left: 0; width: 100%; height: 6vh; background: #020405; }
+.arrival-letterbox.top { top: 0; } .arrival-letterbox.bottom { bottom: 0; }
+.arrival-cinematic button { position: absolute; bottom: 2vh; right: 4vw; padding: .35rem .2rem; border: 0; color: #bcc6c4; background: transparent; font: .72rem 'JetBrains Mono Variable', monospace; cursor: pointer; pointer-events: auto; }
+.arrival-cinematic button:focus-visible { outline: 1px solid #bcc6c4; outline-offset: 3px; }
+.russian-stairwell-root.is-arrival-cinematic .experience-hud,
+.russian-stairwell-root.is-arrival-cinematic [data-ui="hud"],
+.russian-stairwell-root.is-arrival-cinematic .narrative-caption { visibility: hidden; }

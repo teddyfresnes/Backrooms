@@ -52,16 +52,17 @@ d'onglet masqué. Les retours au menu principal ne rejouent pas l'introduction.
 un morceau est tiré au hasard par démarrage et conservé aux retours au menu.
 
 `NewGameIntro` accompagne uniquement les nouvelles parties (y compris Continuer
-sans sauvegarde). Ses six WebP et phrases utilisent une horloge visible commune
-au zoom et aux frappes feutrées ; un onglet masqué ne consomme pas le récit.
-`SiteAudio` joue le morceau fourni pendant le film, puis l'atténue au passage au jeu.
-Le décodage JSON et les tableaux de l'appartement passent par `apartment.worker` ;
-`LoadApartmentScene` reçoit les buffers transférés et monte les géométries par lots.
-Le worker est terminé lors du résultat, d'une erreur ou d'une annulation.
-Le hall charge en parallèle, puis conserve son dernier rendu de warmup sans
-boucle 3D jusqu'à la fin du film. Le routeur attend aussi sa disponibilité avant
-le fondu et `enterAfterIntro()`. Charger une sauvegarde restaure directement la
-pose enregistrée. Un nouveau départ utilise l'entrée du RDC, orientée vers +Z.
+sans sauvegarde). Les zooms/fondus des six WebP passent par le compositeur ; le
+texte et les frappes suivent le temps visible. Pendant les photos, seul le worker
+prépare l'appartement et conserve ses buffers. Après `intro.finished`, le routeur
+importe/construit le runtime sous un indicateur de chargement. `ApartmentPreload.take`
+transfère alors les tableaux à `LoadApartmentScene` ; toute annulation termine le worker.
+Après le warmup, `ArrivalCinematic` anime un clone du personnage choisi avec les
+deux clips fournis et le vrai vantail de porte. La dernière caméra rejoint la POV
+de `CharacterRuntime` avant de rendre les commandes et d'autoriser la sauvegarde.
+`SiteAudio` conserve le morceau pendant photos, attente et plans 3D ; il l'atténue
+uniquement au raccord POV. Une sauvegarde chargée contourne ce prologue. Voir
+`docs/validation/ENTRY_CINEMATIC_VALIDATION_20261031.md` pour les contrats et limites.
 
 `HallArrivalStory` possède l'objectif courrier, le portillon `Door_3`, sa surbrillance
 et l'enveloppe ; il utilise le vrai pivot du modèle et le prompt d'interaction commun.

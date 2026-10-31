@@ -211,6 +211,7 @@ export class SiteAudio {
     if (this.disposed || !this.context || !this.master) return;
     if (!this.storyMusic) {
       this.storyMusic = new Audio('/assets/audio/music/new-game-memories.ogg');
+      this.storyMusic.loop = true;
       this.storyMusic.preload = 'auto';
       this.storyMusicGain = this.context.createGain();
       this.storyMusicGain.gain.value = 0;

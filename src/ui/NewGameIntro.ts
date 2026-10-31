@@ -21,10 +21,9 @@ const letterTimes = (text: string): number[] => {
   });
 };
 
-/** A separate presentation above the loading runtime. One visible-time clock
- * drives both camera motion and lettering; loading/hidden tabs cannot skip a
- * sentence or emit a burst of delayed audio. The scene takes over only once
- * both the prologue and the real runtime are ready. */
+/** Photos use compositor animation; the visible-time text emits no catch-up
+ * sound. Completion releases the host's heavy 3D work behind the spinner.
+ * Music can then be transferred to the animated entrance presentation. */
 export class NewGameIntro {
   readonly finished: Promise<void>;
   private readonly root = document.createElement('section');
@@ -34,6 +33,10 @@ export class NewGameIntro {
   private readonly action: HTMLButtonElement;
   private readonly retry: HTMLButtonElement;
   private readonly status: HTMLElement;
+  private readonly waiting: HTMLElement;
+  private readonly progress: HTMLElement;
+  private readonly animations = new Map<HTMLImageElement, Animation[]>();
+  private readonly pausedAnimations = new Set<Animation>();
   private readonly reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private readonly previousInert: boolean;
   private readonly times = NEW_GAME_SHOTS.map(shot => letterTimes(shot.text));
@@ -48,9 +51,9 @@ export class NewGameIntro {
   private letters = 0;
   private sceneReady = false;
   private presentationDone = false;
-  private completed = false;
   private disposed = false;
   private imageError = false;
+  private musicTransferred = false;
 
   constructor(private readonly underlay: HTMLElement) {
     this.finished = new Promise(resolve => { this.resolveFinished = resolve; });
@@ -63,9 +66,12 @@ export class NewGameIntro {
     this.root.tabIndex = -1;
     this.root.innerHTML = `
       <div class="new-game-film-stage" aria-hidden="true"></div>
-      <div class="new-game-film-grain" aria-hidden="true"></div>
       <div class="new-game-film-caption"><span data-film-copy aria-hidden="true"></span>
         <span class="new-game-film-announcement" aria-live="polite"></span></div>
+      <div class="new-game-film-wait" role="status" hidden>
+        <span class="new-game-film-spinner" aria-hidden="true"></span><span>Chargement</span>
+        <div class="new-game-film-progress" role="progressbar" aria-label="Chargement du niveau" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+      </div>
       <div class="new-game-film-controls">
         <span class="new-game-film-loading" data-film-status role="status"></span>
         <button type="button" data-film-retry hidden>Réessayer les images</button>
@@ -76,6 +82,8 @@ export class NewGameIntro {
     this.action = this.root.querySelector('[data-film-action]')!;
     this.retry = this.root.querySelector('[data-film-retry]')!;
     this.status = this.root.querySelector('[data-film-status]')!;
+    this.waiting = this.root.querySelector('.new-game-film-wait')!;
+    this.progress = this.root.querySelector('.new-game-film-progress')!;
     const stage = this.root.querySelector('.new-game-film-stage')!;
     for (const shot of NEW_GAME_SHOTS) {
       const img = document.createElement('img');
@@ -102,18 +110,24 @@ export class NewGameIntro {
     if (this.disposed) return;
     this.sceneReady = true;
     this.status.textContent = this.imageError ? 'Une image est indisponible.' : '';
-    this.action.disabled = false;
-    this.updateAction();
-    if (this.presentationDone) this.advance();
+    this.setProgress(1);
+  }
+
+  setProgress(value: number): void {
+    const progress = Math.max(0, Math.min(1, value));
+    this.progress.setAttribute('aria-valuenow', String(Math.round(progress * 100)));
+    (this.progress.firstElementChild as HTMLElement).style.transform = `scaleX(${progress})`;
   }
 
   /** Hide the runtime's menu before this fade, keeping the actual scene behind. */
-  async reveal(enter: () => void): Promise<void> {
+  async reveal(enter: () => void, options: { continueMusic?: boolean } = {}): Promise<void> {
     if (this.disposed) return;
     siteAudio.stopStoryTyping();
-    siteAudio.fadeStoryMusicOut();
+    if (!options.continueMusic) siteAudio.fadeStoryMusicOut();
     this.underlay.inert = this.previousInert;
     enter();
+    this.musicTransferred = !!options.continueMusic;
+    this.waiting.hidden = true;
     this.root.classList.add('is-leaving');
     await new Promise<void>(resolve => {
       this.resolveExit = resolve;
@@ -126,7 +140,9 @@ export class NewGameIntro {
     if (this.disposed) return;
     this.disposed = true;
     this.stopTimeline();
-    siteAudio.stopStoryMusic();
+    if (!this.musicTransferred) siteAudio.stopStoryMusic();
+    for (const list of this.animations.values()) for (const animation of list) animation.cancel();
+    this.animations.clear(); this.pausedAnimations.clear();
     this.loading?.abort();
     if (this.exitTimer !== undefined) window.clearTimeout(this.exitTimer);
     this.resolveExit?.();
@@ -188,7 +204,27 @@ export class NewGameIntro {
     this.copy.textContent = '';
     this.announcement.textContent = NEW_GAME_SHOTS[this.shot].text;
     this.root.dataset.shot = String(this.shot + 1);
-    this.images.forEach((img, i) => { img.hidden = i !== this.shot && i !== this.shot - 1; });
+    this.images.forEach((img, i) => {
+      img.hidden = i !== this.shot && i !== this.shot - 1;
+      if (i < this.shot - 1) { for (const animation of this.animations.get(img) ?? []) animation.cancel(); this.animations.delete(img); }
+    });
+    const shot = NEW_GAME_SHOTS[this.shot];
+    const image = this.images[this.shot]!;
+    const duration = this.times[this.shot]!.at(-1)! + HOLD_MS;
+    const transform = (fraction: number): string => `translate3d(${shot.pan * (1 - fraction * 1.5)}%, ${this.shot % 2 ? -.5 * fraction : .5 * fraction}%, 0) scale(${shot.reverse ? 1.11 - .065 * fraction : 1.035 + .075 * fraction})`;
+    image.style.transform = this.reducedMotion ? 'none' : transform(0);
+    // Transform/opacity run in the compositor, not in the text's JS frame loop.
+    if (!this.reducedMotion) this.animate(image, [{ transform: transform(0) }, { transform: transform(1) }], duration);
+    this.animate(image, [{ opacity: 0 }, { opacity: 1 }], this.reducedMotion ? 150 : FADE_MS);
+    if (this.shot > 0) this.animate(this.images[this.shot - 1]!, [{ opacity: 1 }, { opacity: 0 }], this.reducedMotion ? 150 : FADE_MS);
+  }
+
+  private animate(image: HTMLImageElement, frames: Keyframe[], duration: number): void {
+    if (typeof image.animate !== 'function') { Object.assign(image.style, frames.at(-1)); return; }
+    const animation = image.animate(frames, { duration, fill: 'both', easing: 'linear' });
+    void animation.finished.catch(() => undefined);
+    this.animations.set(image, [...(this.animations.get(image) ?? []), animation]);
+    if (document.hidden) { animation.pause(); this.pausedAnimations.add(animation); }
   }
 
   private tick = (now: number): void => {
@@ -199,13 +235,6 @@ export class NewGameIntro {
     const shot = NEW_GAME_SHOTS[this.shot];
     const schedule = this.times[this.shot]!;
     const duration = schedule.at(-1)! + HOLD_MS;
-    const fraction = Math.min(1, this.elapsed / duration);
-    const fade = Math.min(1, this.elapsed / (this.reducedMotion ? 180 : FADE_MS));
-    this.images[this.shot]!.style.opacity = String(fade);
-    if (this.shot > 0) this.images[this.shot - 1]!.style.opacity = String(1 - fade);
-    const zoom = shot.reverse ? 1.11 - .065 * fraction : 1.035 + .075 * fraction;
-    this.images[this.shot]!.style.transform = this.reducedMotion ? 'none'
-      : `translate3d(${shot.pan * (1 - fraction * 1.5)}%, ${this.shot % 2 ? -.5 * fraction : .5 * fraction}%, 0) scale(${zoom})`;
     const letters = Array.from(shot.text);
     let count = this.letters;
     while (count < schedule.length && this.elapsed >= schedule[count]!) count++;
@@ -228,25 +257,17 @@ export class NewGameIntro {
   };
 
   private advance = (): void => {
-    if (this.disposed || this.completed) return;
+    if (this.disposed || this.presentationDone) return;
     this.presentationDone = true;
+    siteAudio.startStoryMusic();
     this.stopTimeline();
     this.loading?.abort();
     this.retry.hidden = true;
-    if (!this.sceneReady) {
-      this.status.textContent = 'Le hall se prépare…';
-      this.action.disabled = true;
-      this.updateAction();
-      return;
-    }
-    this.completed = true;
+    this.root.classList.add('is-waiting');
+    this.waiting.hidden = this.sceneReady;
     this.action.hidden = true;
     this.resolveFinished();
   };
-
-  private updateAction(): void {
-    this.action.textContent = this.presentationDone ? 'Un instant…' : 'Passer';
-  }
 
   private stopTimeline(): void {
     if (this.frame !== undefined) cancelAnimationFrame(this.frame);
@@ -256,6 +277,9 @@ export class NewGameIntro {
 
   private onVisibility = (): void => {
     this.previous = undefined;
+    if (document.hidden) {
+      for (const list of this.animations.values()) for (const animation of list) if (animation.playState === 'running') { animation.pause(); this.pausedAnimations.add(animation); }
+    } else { for (const animation of this.pausedAnimations) animation.play(); this.pausedAnimations.clear(); }
     if (document.hidden) siteAudio.stopStoryTyping();
     siteAudio.setStoryMusicPaused(document.hidden);
   };

@@ -38,6 +38,27 @@ afterEach(() => {
 });
 
 describe('new game photographic prologue', () => {
+  it('runs photo transforms in browser animations, pauses them in background and never rewrites zoom on text frames', async () => {
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'animate');
+    const animations: { playState: string; pause: ReturnType<typeof vi.fn>; play: ReturnType<typeof vi.fn>; cancel: ReturnType<typeof vi.fn> }[] = [];
+    const animate = vi.fn(() => {
+      const animation = { playState: 'running', finished: new Promise<void>(() => undefined), pause: vi.fn(), play: vi.fn(), cancel: vi.fn() };
+      animation.pause.mockImplementation(() => { animation.playState = 'paused'; }); animation.play.mockImplementation(() => { animation.playState = 'running'; });
+      animations.push(animation); return animation as unknown as Animation;
+    });
+    Object.defineProperty(HTMLElement.prototype, 'animate', { configurable: true, value: animate });
+    try {
+      intro = new NewGameIntro(app); await decode();
+      const transform = images()[0]!.style.transform;
+      for (let i = 0; i < 20; i++) step();
+      expect(images()[0]!.style.transform).toBe(transform); expect(animate).toHaveBeenCalledTimes(2);
+      const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true); document.dispatchEvent(new Event('visibilitychange'));
+      expect(animations.every(animation => animation.pause.mock.calls.length === 1)).toBe(true);
+      hidden.mockReturnValue(false); document.dispatchEvent(new Event('visibilitychange'));
+      expect(animations.every(animation => animation.play.mock.calls.length === 1)).toBe(true);
+      intro.dispose(); expect(animations.every(animation => animation.cancel.mock.calls.length === 1)).toBe(true);
+    } finally { if (original) Object.defineProperty(HTMLElement.prototype, 'animate', original); else delete (HTMLElement.prototype as unknown as Record<string, unknown>).animate; }
+  });
   it('decodes six ordered images, types every exact sentence and automatically hands over to the ready hall', async () => {
     intro = new NewGameIntro(app); intro.setSceneReady();
     expect(app.inert).toBe(true);
@@ -80,12 +101,22 @@ describe('new game photographic prologue', () => {
     intro = new NewGameIntro(app);
     let finished = false; void intro.finished.then(() => { finished = true; });
     button().click(); await settle();
-    expect(finished).toBe(false); expect(button().disabled).toBe(true);
-    expect(document.querySelector('[role="progressbar"]')).toBeNull();
+    expect(finished).toBe(true); expect(button().hidden).toBe(true);
+    expect(document.querySelector<HTMLElement>('.new-game-film-wait')!.hidden).toBe(false);
+    intro.setProgress(.6); expect(document.querySelector('[role="progressbar"]')!.getAttribute('aria-valuenow')).toBe('60');
     intro.setSceneReady(); await settle(); expect(finished).toBe(true);
     intro.dispose(); await decode(); step();
     expect(frames.size).toBe(0); expect(vi.getTimerCount()).toBe(0); expect(app.inert).toBe(false);
     expect(document.querySelector('.new-game-film')).toBeNull();
+  });
+
+  it('keeps the spinner out of the film and transfers music across the 3D shots without fading it early', async () => {
+    intro = new NewGameIntro(app); await decode();
+    expect(document.querySelector<HTMLElement>('.new-game-film-wait')!.hidden).toBe(true);
+    button().click(); intro.setSceneReady();
+    const entering = intro.reveal(vi.fn(), { continueMusic: true });
+    await vi.advanceTimersByTimeAsync(700); await entering;
+    expect(audio.fadeStoryMusicOut).not.toHaveBeenCalled(); expect(audio.stopStoryMusic).not.toHaveBeenCalled();
   });
 
   it('shows every image and readable phrase with reduced motion, without invisible typing sounds', async () => {

@@ -1144,6 +1144,20 @@ export class CharacterRuntime {
     this.setInteractionPartner(this.environment.findPartnerSpawn(this.player!.position, facing));
   }
   get cameraMode(): ViewMode { return this.viewMode; }
+  createArrivalAvatar(): { avatar: THREE.Group; idle: THREE.AnimationClip } {
+    if (!this.character) throw new Error('Personnage non préparé.');
+    return { avatar: cloneSkeleton(this.character) as THREE.Group, idle: this.animations.get('idle')!.clip };
+  }
+  setArrivalPresentation(active: boolean): void {
+    if (active) { this.avatarAnchor.visible = false; this.firstPersonAvatarAnchor.visible = false; return; }
+    this.viewMode = 'first-person';
+    this.updateAvatarTransform(0, true); this.applyViewMode(true); this.presentCamera();
+  }
+  getArrivalPOV(output: THREE.PerspectiveCamera): void {
+    this.viewMode = 'first-person'; this.applyViewMode(true);
+    this.updateAvatarTransform(0, true);
+    output.copy(this.firstPersonCamera);
+  }
   get renderWarmupRoots(): readonly THREE.Object3D[] {
     return [this.avatarAnchor, this.firstPersonAvatarAnchor, ...(this.idleNpcAnchor ? [this.idleNpcAnchor] : [])];
   }

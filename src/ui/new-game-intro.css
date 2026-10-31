@@ -38,6 +38,16 @@
 
 .new-game-film-stage img[hidden] { display: none; will-change: auto; }
 
+.new-game-film.is-waiting .new-game-film-stage,
+.new-game-film.is-waiting .new-game-film-caption,
+.new-game-film.is-waiting .new-game-film-controls { visibility: hidden; }
+.new-game-film-wait { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.3rem; color: #9da7a7; font: .75rem 'JetBrains Mono Variable', monospace; letter-spacing: .08em; }
+.new-game-film-wait[hidden] { display: none; }
+.new-game-film-spinner { width: 2rem; height: 2rem; border: 1px solid #ffffff20; border-top-color: #d3dddd; border-radius: 50%; animation: film-loading-spin 1s linear infinite; will-change: transform; }
+.new-game-film-progress { width: 10rem; height: 1px; background: #ffffff15; overflow: hidden; }
+.new-game-film-progress i { display: block; height: 100%; background: #acbaba; transform: scaleX(0); transform-origin: left; transition: transform .2s; }
+@keyframes film-loading-spin { to { transform: rotate(360deg); } }
+
 .new-game-film-stage::after {
   position: absolute;
   inset: 0;
@@ -47,15 +57,6 @@
   box-shadow: inset 0 0 5rem 1rem #03050655;
 }
 
-.new-game-film-grain {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  opacity: .045;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23fff' filter='url(%23n)' d='M0 0h160v160H0z'/%3E%3C/svg%3E");
-  background-size: 160px 160px;
-}
 
 .new-game-film-caption {
   z-index: 2;
@@ -121,7 +122,7 @@
 .new-game-film.is-leaving { opacity: 0; }
 .new-game-film:focus { outline: none; }
 .new-game-film.is-reduced-motion { transition-duration: 150ms; }
-.new-game-film.is-reduced-motion .new-game-film-grain { display: none; }
+
 
 @media (max-width: 640px) {
   .new-game-film-caption { width: 87%; min-height: 5em; margin-top: 1.5rem; }

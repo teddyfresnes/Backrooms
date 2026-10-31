@@ -9,14 +9,18 @@ interface MenuOptions {
   onRequestLoadGame(id: string): void;
   onRequestContinue?(): void;
 }
-interface RuntimeStub { initialize: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn>; enterAfterIntro: ReturnType<typeof vi.fn> }
+interface RuntimeStub { initialize: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn>; enterAfterIntro: ReturnType<typeof vi.fn>; startArrivalCinematic: ReturnType<typeof vi.fn> }
 interface FilmStub { finished: Promise<void>; complete(): void; setSceneReady: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn>; reveal: ReturnType<typeof vi.fn> }
 const state = vi.hoisted(() => ({
   menus: [] as MenuOptions[],
   halls: [] as { game: RuntimeStub; launch: unknown; options: { deferEntry?: boolean }; callbacks: MenuOptions }[],
   films: [] as FilmStub[],
   nextGate: null as Gate | null,
+  preloads: [] as { dispose: ReturnType<typeof vi.fn> }[],
 }));
+vi.mock('../apartment/ApartmentPreload', () => ({ ApartmentPreload: class {
+  dispose = vi.fn(); constructor() { state.preloads.push(this); }
+} }));
 vi.mock('./Game', () => ({ Game: class {
   constructor(_root: HTMLElement, options: MenuOptions) { state.menus.push(options); }
   initialize = vi.fn(async (progress: (n: number) => void) => { progress(1); });
@@ -30,6 +34,7 @@ vi.mock('./RussianStairwellGame', () => ({ RussianStairwellGame: class {
   initialize = vi.fn(async (progress: (n: number) => void) => { progress(.5); await this.gate?.promise; progress(1); });
   dispose = vi.fn();
   enterAfterIntro = vi.fn();
+  startArrivalCinematic = vi.fn();
 } }));
 vi.mock('../ui/NewGameIntro', () => ({ NewGameIntro: class {
   complete: () => void = () => undefined;
@@ -61,7 +66,7 @@ const gate = (): Gate => { let resolve!: () => void; const promise = new Promise
 
 beforeEach(() => {
   vi.resetModules(); vi.clearAllMocks();
-  state.menus = []; state.halls = []; state.films = []; state.nextGate = null;
+  state.menus = []; state.halls = []; state.films = []; state.nextGate = null; state.preloads = [];
   frames = new Map(); sequence = 0; visibilityListeners = [];
   window.localStorage.clear(); document.body.innerHTML = '<div id="app"></div>';
   vi.stubGlobal('requestAnimationFrame', (fn: FrameRequestCallback) => { frames.set(++sequence, fn); return sequence; });
@@ -78,19 +83,23 @@ afterEach(() => {
   vi.restoreAllMocks(); vi.unstubAllGlobals();
 });
 
-it('starts a new cinematic in parallel with the real loader, gates gameplay, and bypasses it for saved sessions', async () => {
+it('prepares only in a worker during photos, defers the 3D runtime, then plays the entry before handing off', async () => {
   await import('../main'); await pump();
   expect(state.films).toHaveLength(0);
   const loading = state.nextGate = gate();
   state.menus[0]!.onRequestNewGame(); await pump();
-  const hall = state.halls[0]!, film = state.films[0]!;
-  expect(hall.launch).toEqual({ kind: 'new' }); expect(hall.options.deferEntry).toBe(true);
+  const film = state.films[0]!;
+  expect(state.halls).toHaveLength(0); expect(state.preloads).toHaveLength(1);
   expect(film.setSceneReady).not.toHaveBeenCalled();
   film.complete(); await pump();
+  const hall = state.halls[0]!;
+  expect(hall.launch).toEqual({ kind: 'new' }); expect(hall.options.deferEntry).toBe(true);
+  expect(hall.game.startArrivalCinematic).not.toHaveBeenCalled();
   expect(hall.game.enterAfterIntro).not.toHaveBeenCalled();
   loading.resolve(); await pump();
   expect(film.setSceneReady).toHaveBeenCalledOnce();
-  expect(film.reveal).toHaveBeenCalledOnce(); expect(hall.game.enterAfterIntro).toHaveBeenCalledOnce();
+  expect(film.reveal).toHaveBeenCalledOnce(); expect(hall.game.startArrivalCinematic).toHaveBeenCalledOnce();
+  expect(hall.game.enterAfterIntro).not.toHaveBeenCalled();
 
   const save = writeGameSave(window.localStorage, {
     experienceId: 'russian-stairwell', kind: 'manual', levelId: 'building', levelLabel: 'Immeuble', playTimeSeconds: 90,
@@ -108,6 +117,7 @@ it('disposes a cancelled cinematic and never re-enters its late-loading runtime'
   await import('../main'); await pump();
   const loading = state.nextGate = gate();
   state.menus[0]!.onRequestNewGame(); await pump();
+  state.films[0]!.complete(); await pump();
   const hall = state.halls[0]!, film = state.films[0]!;
   hall.callbacks.onRequestMainMenu(); await pump();
   expect(film.dispose).toHaveBeenCalledOnce(); expect(hall.game.dispose).toHaveBeenCalled();

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { loadApartmentScene } from './LoadApartmentScene';
+import { APARTMENT_MODEL_URL } from './ApartmentAsset';
+import type { ApartmentPreload } from './ApartmentPreload';
 import { resolveLightingBrightness } from '../render/LightingBrightness';
 import { isApartmentInteriorVisible } from './ApartmentVisibility';
 import { optimizeApartmentSmallProps } from './SmallPropGeometry';
@@ -8,7 +10,7 @@ import type { StaticCollider } from '../world/types';
 import { floorY, midLandingY, STAIRWELL_BOUNDS, STAIRWELL_LEVEL_COUNT } from '../stairwell/layout';
 import { APARTMENT_ENTRY_DOOR } from './layout';
 
-const MODEL_URL = '/assets/imported-apartment/apartment.json';
+const MODEL_URL = APARTMENT_MODEL_URL;
 
 // The user's latest Three.js Editor export already contains the requested
 // apartment alignment. Do not add another runtime offset or the doorway will
@@ -1181,8 +1183,8 @@ export class ImportedApartmentEnvironment {
     };
   }
 
-  static async load(signal?: AbortSignal): Promise<ImportedApartmentEnvironment> {
-    const model = await loadApartmentScene(MODEL_URL, signal);
+  static async load(signal?: AbortSignal, preload?: ApartmentPreload): Promise<ImportedApartmentEnvironment> {
+    const model = await loadApartmentScene(MODEL_URL, signal, preload);
     try {
       return new ImportedApartmentEnvironment(model);
     } catch (error) {
