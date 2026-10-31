@@ -28,3 +28,9 @@ The procedural world, its old structures/pitfalls, lighting and character physic
 - The full main asset build was not run in the sparse checkout; the complete hosted production build was run.
 
 The managed preview daemon is unavailable (`/tmp/sites-previewd/requests` missing). In-browser WebGL playback, subjective listening/mixing and actual frame pacing could not be verified here. Automated tests and the Node worker profile do not establish those results. See `deployment-v24.json` for the publication outcome.
+
+## Publication
+
+Version 24 is live at https://backrooms-integre.teddykoeh.chatgpt.site, built from pushed Site source `0b0e77459408b05a19c0b2528df1e58ea39542bd`. The final implementation in the GitHub branch is `8720a7512b1520c2eda43252ba06d333b1849fcc`. Twenty runtime files match byte-for-byte between the checkouts; the hosted apartment keeps its split-gzip URL and the hosted loader tests retain their existing adaptations. All eleven hosted audio hashes match the manifest.
+
+The final static output has 3,097 files and 265,147,422 bytes. The published tar has 3,098 files (including its hosting manifest), 267,960,320 bytes and hash `sha256:d2630529400212ce8f060de3f681887a9f2f21f687ca4a0956b4cb93c588399c`, below the project's 256 MiB tar budget. The local packager stopped because staged files changed while tar read them; no local archive was saved. The service rebuilt the same immutable pushed source and publication succeeded. The existing custom audience was preserved.

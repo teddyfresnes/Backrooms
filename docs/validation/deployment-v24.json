@@ -1,0 +1,65 @@
+{
+  "date": "2026-10-31",
+  "project_id": "appgprj_6ad38cbd518c81918ef345d5a1eb55fc",
+  "version_number": 24,
+  "version_id": "appgprj_6ad38cbd518c81918ef345d5a1eb55fc~appgver_51ecaa9022d08191acdfeb4348e38499",
+  "deployment_id": "appgdep_6ae61acb3b888191a305a03bb22a5d0a",
+  "status": "succeeded",
+  "url": "https://backrooms-integre.teddykoeh.chatgpt.site",
+  "access_mode": "custom",
+  "current_user_role": "owner",
+  "site_source_commit": "0b0e77459408b05a19c0b2528df1e58ea39542bd",
+  "github_initial_feature_commit": "f7cab6cb7f25b0e80dad61b9abc02de99b82e233",
+  "github_implementation_commit": "8720a7512b1520c2eda43252ba06d333b1849fcc",
+  "publication_method": "source_build_after_local_packaging_failure",
+  "local_packaging": {
+    "attempts": 1,
+    "completed": false,
+    "error": "Staged files/directories changed while tar was reading them.",
+    "archive_saved": false,
+    "archive_upload_attempted": false
+  },
+  "published_archive": {
+    "archive_format": "tar",
+    "sediment_file_id": "file_00000000c13c81f8b4caf1f8f1a49e44",
+    "content_hash": "sha256:d2630529400212ce8f060de3f681887a9f2f21f687ca4a0956b4cb93c588399c",
+    "size_bytes": 267960320,
+    "file_count": 3098
+  },
+  "hosting_budget": {
+    "static_files": 3097,
+    "static_file_bytes": 265147422,
+    "static_limit_bytes": 265289728,
+    "project_tar_budget_bytes": 268435456,
+    "published_tar_budget_passed": true
+  },
+  "validation": {
+    "main_test_files": 21,
+    "main_tests_passed": 122,
+    "hosted_test_files": 13,
+    "hosted_tests_passed": 61,
+    "main_typescript_passed": true,
+    "hosted_production_build_passed": true,
+    "main_full_asset_build_run": false,
+    "main_checkout_sparse": true,
+    "runtime_files_matching_main_and_hosted_source": 20,
+    "hosted_apartment_split_gzip_url_preserved": true,
+    "audio_files_fully_decoded": 11,
+    "audio_only_opus_streams": 11,
+    "total_new_audio_bytes": 485513,
+    "apartment_original_bytes": 349270200,
+    "apartment_lossless": true,
+    "wardrobe_objects_verified": 148,
+    "clothing_files_lossless": 148,
+    "visual_webgl_verified": false,
+    "audio_listening_verified": false,
+    "preview_blocker": "Managed preview service unavailable: /tmp/sites-previewd/requests missing."
+  },
+  "reports": [
+    "HALL_ARRIVAL_VALIDATION_20261031.md",
+    "arrival-audio-assets.json",
+    "arrival-audio-checks.json",
+    "arrival-worker-profile.json"
+  ],
+  "pull_request": "https://github.com/teddyfresnes/Backrooms/pull/2"
+}
