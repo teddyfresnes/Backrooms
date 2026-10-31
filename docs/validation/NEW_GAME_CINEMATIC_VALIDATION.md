@@ -18,6 +18,8 @@ The managed preview service was unavailable (`/tmp/sites-previewd/requests` miss
 
 Local packaging could not complete: after repairing a missing temporary directory with a workspace-local `TMPDIR`, two attempts stopped because staged files changed while tar was reading them. No local archive was saved, and the optional local `--archive` check was therefore not run. Publication uses the service's source-build fallback for the exact pushed Site source `599378b3945e9d49d7d3bef9d39e86dd40939381`. Final publication metadata is recorded separately in `deployment-v23.json`.
 
+Version 23 was published successfully at https://backrooms-integre.teddykoeh.chatgpt.site. The service reports a 267,448,320-byte tar archive containing 3,082 files, including its hosting manifest; this is below the 268,435,456-byte archive limit. The saved version confirms the exact source commit above. Twelve runtime/image files were compared byte-for-byte between the main and hosted checkouts and match.
+
 ## Mailboxes
 
 The entrance mailboxes are currently static in the game. Their GLB contains separate `Door_1_Bent`, `Door_2`, `Door_3` and `Door_4_Bent` nodes, so their doors can be animated individually. No baked animations are present, and this change does not add mailbox interaction or animation.
