@@ -119,10 +119,12 @@ Voir [docs/ADDING_FEATURES.md](docs/ADDING_FEATURES.md). Le registre est dans `s
 
 ## Assets et licences
 
-Les ressources livrées sont locales et le jeu ne hotlinke aucun CDN. Les sources et transformations sont consignées dans [public/assets/licenses.json](public/assets/licenses.json).
+Les ressources livrées sont locales et le jeu ne hotlinke aucun CDN. La liste complète des ressources tierces, de leurs auteurs et de leurs licences se trouve dans [LICENSES.md](LICENSES.md) ; les sources et transformations détaillées sont consignées dans [public/assets/licenses.json](public/assets/licenses.json).
 
 - PBR : ambientCG, CC0.
-- Audio : Freesound, CC0.
+- Modèles 3D : Poly Haven et Kenney (CC0), Sketchfab (CC BY 4.0).
+- Audio : Freesound, CC0 et CC BY 4.0.
+- Personnages : MakeHuman / MPFB (CC0 et CC BY), animations Mixamo.
 - Motif de papier peint : asset original généré pour ce projet avec le mode intégré `imagegen`, puis optimisé en WebP.
 - Albédo de moquette : asset original généré pour ce projet avec `imagegen`, associé aux cartes normal/ARM CC0 existantes puis optimisé en WebP.
 
