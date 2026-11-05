@@ -29,7 +29,7 @@ Le détail des sources et des transformations appliquées (recompression, décou
 | [Poly Haven](https://polyhaven.com) | Mobilier et accessoires 3D | CC0 1.0 |
 | [Kenney](https://kenney.nl) | Furniture Kit, Retro Urban Kit, porte de bureau | CC0 1.0 |
 | [Freesound](https://freesound.org) | Ambiances, pas, impacts, interactions, interface | CC0 1.0 et CC BY 4.0 |
-| [Sketchfab](https://sketchfab.com) | Appartement, fenêtre, portes, boîte aux lettres, table | CC BY 4.0 |
+| [Sketchfab](https://sketchfab.com) | Appartement, fenêtre, portes, boîte aux lettres, table, créature Bacteria | CC BY 4.0 |
 | [MakeHuman / MPFB](https://static.makehumancommunity.org) | Corps de base, morphs, peaux, coiffures, vêtements, pilosité, ongles | CC0 1.0 et CC BY |
 | [Mixamo](https://www.mixamo.com) | Mannequin et animations du personnage | Conditions d'utilisation Mixamo (Adobe) |
 | [OpenGameArt](https://opengameart.org) | Decals de sang | CC0 1.0 |
@@ -69,6 +69,7 @@ Le détail des sources et des transformations appliquées (recompression, décou
 | Typewriter's Key | PerMagnusLindborg | CC0 1.0 | [source](https://freesound.org/people/PerMagnusLindborg/sounds/335898/) | `audio/ui/intro-credit.mp3` |
 | Soft Dramatic Impact | NeoSpica | CC0 1.0 | [source](https://freesound.org/people/NeoSpica/sounds/504614/) | `audio/ui/intro-title.mp3` |
 | Musique du menu | Fournie par l’auteur du projet | — | — | `audio/music/menu.mp3` |
+| Tension, cri et répliques de Bacteria | Fournis par l’auteur du projet (créateurs non précisés) | — | — | `audio/bacteria/tension.mp3`, `audio/bacteria/scream-loop.mp3`, `audio/bacteria/voice-lines.mp3` |
 | Rain against a window | nicoproson | CC0 1.0 | [source](https://freesound.org/people/nicoproson/sounds/648529/) | `audio/apartment/rain-window.mp3` |
 | Wooden door open and close | Breviceps | CC0 1.0 | [source](https://freesound.org/people/Breviceps/sounds/457042/) | `audio/interactions/door-open.mp3`, `audio/interactions/door-close.mp3` |
 | Door lock mechanism | sgcardinal | CC0 1.0 | [source](https://freesound.org/people/sgcardinal/sounds/395753/) | `audio/interactions/lock.mp3`, `audio/interactions/unlock.mp3` |
@@ -90,6 +91,7 @@ Le détail des sources et des transformations appliquées (recompression, décou
 | Double Doors With Windows | PIPO | CC BY 4.0 | [source](https://sketchfab.com/3d-models/double-doors-with-windows-79ebb7d7e2ec415b9320f4680440ed0e) | `stairwell-hall-door/double_doors_with_windows.glb` |
 | Old Soviet Mailbox | tinderboxh | CC BY 4.0 | [source](https://sketchfab.com/3d-models/old-soviet-mailbox-dcda475994614b429ea351e070eb58c5) | `stairwell-mailbox/old_soviet_mailbox.glb` |
 | Soviet Old Table | Skilletik | CC BY 4.0 | [source](https://sketchfab.com/3d-models/soviet-old-table-9e1fc1a8f6f64995bcfab5e0ca17f6ea) | `stairwell-furniture/soviet_old_table.glb` |
+| Bacteria V2 Blender 3:01 | Speed12 (RocketOfficial) | CC BY 4.0 | [source](https://sketchfab.com/3d-models/bacteria-v2-blender-301-86faebd567194732ade04dd64f44b568) | `bacteria/bacteria.glb` |
 
 Le dossier `polyhaven/` à la racine du dépôt contient les distributions d'origine des modèles Poly Haven (CC0 1.0).
 
@@ -374,6 +376,7 @@ Les ressources suivantes sont utilisées sous licence Creative Commons Attributi
 - **Double Doors With Windows** par PIPO — CC BY 4.0 — https://sketchfab.com/3d-models/double-doors-with-windows-79ebb7d7e2ec415b9320f4680440ed0e
 - **Old Soviet Mailbox** par tinderboxh — CC BY 4.0 — https://sketchfab.com/3d-models/old-soviet-mailbox-dcda475994614b429ea351e070eb58c5
 - **Soviet Old Table** par Skilletik — CC BY 4.0 — https://sketchfab.com/3d-models/soviet-old-table-9e1fc1a8f6f64995bcfab5e0ca17f6ea
+- **Bacteria V2 Blender 3:01** par Speed12 (RocketOfficial) — CC BY 4.0 — https://sketchfab.com/3d-models/bacteria-v2-blender-301-86faebd567194732ade04dd64f44b568
 - **Roller blinds** par Garuda1982 — CC BY 4.0 — https://freesound.org/people/Garuda1982/sounds/553070/
 
 ### Coiffures

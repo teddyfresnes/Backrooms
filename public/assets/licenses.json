@@ -330,6 +330,18 @@
         "audio/music/new-game-memories.ogg"
       ],
       "changes": "Full recording normalized and encoded as stereo Opus 40 kbps for cinematic playback; original upload unchanged."
+    },
+    {
+      "name": "Bacteria tension, scream and voice lines",
+      "author": "User-provided recordings; creators not supplied",
+      "source": "tension.mp3, bacteriascream.mp3, Bacteria Backrooms Voice Lines.mp3",
+      "license": "User-provided; no additional rights asserted",
+      "files": [
+        "audio/bacteria/tension.mp3",
+        "audio/bacteria/scream-loop.mp3",
+        "audio/bacteria/voice-lines.mp3"
+      ],
+      "changes": "Re-encoded as MP3; the scream was trimmed of its leading/trailing silence, boosted by 7 dB and edge-faded to loop seamlessly."
     }
   ],
   "models": [
@@ -603,6 +615,17 @@
         "cinematics/entry-motion.bin"
       ],
       "changes": "Animation tracks only, no source meshes/textures. Float32 arrays and original durations preserved, redundant keys optimized and gzip-compressed. Pose retargeted to the selected character; authored horizontal motion drives entrance placement."
+    },
+    {
+      "name": "Bacteria V2 Blender 3:01",
+      "author": "Speed12 (https://sketchfab.com/RocketOfficial)",
+      "source": "https://sketchfab.com/3d-models/bacteria-v2-blender-301-86faebd567194732ade04dd64f44b568",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "files": [
+        "bacteria/bacteria.glb"
+      ],
+      "changes": "Original Sketchfab GLB export; at runtime the stage plane is hidden, bones are renamed to bare Mixamo names and the project Mixamo locomotion clips drive the skeleton."
     }
   ],
   "character": [

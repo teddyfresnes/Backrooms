@@ -10,6 +10,7 @@ export class StairwellLightPool {
   readonly lights: THREE.PointLight[] = [];
   private readonly sources: Array<{ kind: 'main' | 'wall'; position: THREE.Vector3 }> = [];
   private gain = resolveLightingBrightness(DEFAULT_BRIGHTNESS).relativeGain;
+  private power = 1;
 
   constructor(private profile: StairwellLightingProfile) {
     for (let level = 0; level < STAIRWELL_LEVEL_COUNT; level++) {
@@ -39,11 +40,19 @@ export class StairwellLightPool {
     this.applyProfile();
   }
 
+  /** Scripted mains power (0 = blackout, 1 = normal); stays a scalar, never a light count change. */
+  setPower(power: number): void {
+    const next = Math.max(0, Math.min(1, Number.isFinite(power) ? power : 1));
+    if (next === this.power) return;
+    this.power = next;
+    this.applyProfile();
+  }
+
   private applyProfile(): void {
     this.lights.forEach((light, index) => {
       const source = this.sources[index]!;
       light.color.setHex(source.kind === 'main' ? this.profile.mainColor : this.profile.wallColor);
-      light.intensity = (source.kind === 'main' ? this.profile.mainIntensity : this.profile.wallIntensity) * this.gain;
+      light.intensity = (source.kind === 'main' ? this.profile.mainIntensity : this.profile.wallIntensity) * this.gain * this.power;
       light.distance = source.kind === 'main' ? this.profile.mainDistance : this.profile.wallDistance;
     });
   }

@@ -46,6 +46,7 @@ export class ImportedApartmentDoorInteraction {
   private readonly closedAngle: number;
   private readonly maxRayDistance: number;
   private doorLocked = false;
+  private broken = false;
   private readonly closedPivotInverse = new THREE.Matrix4();
   private readonly closedPivotQuaternion = new THREE.Quaternion();
   private readonly closedPivotQuaternionInverse = new THREE.Quaternion();
@@ -198,6 +199,44 @@ export class ImportedApartmentDoorInteraction {
     return this.doorLocked;
   }
 
+  /** Closed, or close enough that nothing can slip through the remaining gap. */
+  isSecured(): boolean {
+    if (this.state === 'closed' || this.state === 'blocked-closing' || this.state === 'blocked-opening') return true;
+    return this.state === 'closing' && this.getState().progress < 0.3;
+  }
+
+  get isBroken(): boolean { return this.broken; }
+
+  /** A blow on the leaf from the landing: a short jolt that never opens it. */
+  jolt(strength: number): void {
+    if (this.broken || this.state !== 'closed') return;
+    const range = this.options.openAngle - this.closedAngle;
+    this.angularVelocity += Math.sign(range) * THREE.MathUtils.clamp(strength, 0, 1) * 0.9;
+    this.targetAngle = this.closedAngle;
+  }
+
+  /** Bursts the leaf inward, whatever the bolt says. Input stays disabled until repair(). */
+  breach(): void {
+    this.broken = true;
+    this.doorLocked = false;
+    this.options.onLockChange?.(false);
+    this.state = 'opening';
+    this.targetAngle = this.options.openAngle;
+    this.angularVelocity = Math.sign(this.options.openAngle - this.closedAngle) * 14;
+    this.setPrompt(null);
+  }
+
+  /** Restores a closed, unlocked and usable leaf (checkpoint reset). */
+  repair(): void {
+    this.broken = false;
+    this.restoreState({ progress: 0, targetProgress: 0, locked: false });
+  }
+
+  /** Makes a broken leaf usable again without moving it. */
+  releaseBroken(): void {
+    this.broken = false;
+  }
+
   setLocked(locked: boolean): boolean {
     if (this.state !== 'closed') return false;
     this.doorLocked = locked;
@@ -255,6 +294,7 @@ export class ImportedApartmentDoorInteraction {
     }
 
     if (!locked
+      || this.broken
       || this.state === 'blocked-opening'
       || this.state === 'blocked-closing') {
       this.setPrompt(null);
@@ -275,6 +315,7 @@ export class ImportedApartmentDoorInteraction {
 
   interact(playerPosition: THREE.Vector3, viewDirection: THREE.Vector3, locked: boolean): boolean {
     if (!locked
+      || this.broken
       || this.state === 'blocked-opening'
       || this.state === 'blocked-closing') return false;
     if (this.state === 'closed' && this.rayHitsLock(playerPosition, viewDirection)) {

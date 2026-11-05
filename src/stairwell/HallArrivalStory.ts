@@ -106,6 +106,15 @@ export class HallArrivalStory {
 
   suspend(): void { this.caption.hide(); this.hidePrompt(); }
 
+  /** The way home is over (the Bacteria encounter was survived). */
+  complete(): void {
+    if (this.disposed || this.state === 'done') return;
+    this.state = 'done';
+    this.highlight.visible = false;
+    this.hidePrompt();
+    this.onChange();
+  }
+
   private hitsDoor(position: Readonly<Vec3Data>, direction: THREE.Vector3): boolean {
     // Reject rays from other floors or outside the hall, including through walls.
     if (position.y < .25 || position.y > 1.5 || Math.abs(position.x) > 1.82 || position.z < -6.03 || position.z > -1.2 || direction.lengthSq() < 1e-6) return false;

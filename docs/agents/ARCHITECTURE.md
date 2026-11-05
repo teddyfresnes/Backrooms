@@ -71,6 +71,18 @@ et l'enveloppe ; il utilise le vrai pivot du modèle et le prompt d'interaction 
 antérieures sans ce champ ignorent l'objectif. Les cinq voix et leurs deux réactions
 sont choisies dans Général du garde-robe et persistées dans le profil du personnage.
 
+`BacteriaEncounter` (`src/monster`) prend le relais à l'état `home` : près de la première
+volée, les néons du hall coupent, la porte s'ouvre sur `BackroomsCorridor` (couloir
+temporaire, éclairé par un tableau d'uniforms, sans lumière ajoutée à la cage) et
+`BacteriaActor` est révélé. Le modèle se déforme sur son propre rig (crâne fendu, bras
+au sol) : toute la pose est procédurale, autour des axes de la créature. Suivent la
+poursuite (`BacteriaLayout`, testée : sprint = marge, marche = capturé), le siège de la
+porte, le placard puis la sortie ou le screamer et le retour au checkpoint du hall.
+Pendant la scène, aucune sauvegarde n'est écrite : l'état reste `home` jusqu'à la
+survie (`done`). `BacteriaAudio` utilise le contexte et le bus maître de `AudioSystem`.
+Les deux `PointLight` du couloir existent dès le chargement, à zéro, pour ne jamais
+changer le nombre de lumières (et recompiler les shaders) pendant la partie.
+
 Dans le garde-robe, la géométrie et les poses inverses du squelette restent dans
 les coordonnées locales de `CharacterRoot`. Après un morph ou une calibration,
 `rebindMakeHumanSkeleton` retire la transformation monde de la racine des poses

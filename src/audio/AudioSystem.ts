@@ -109,6 +109,8 @@ const createLoopSource = (
   return source;
 };
 
+const lerpValue = (from: number, to: number, amount: number): number => from + (to - from) * amount;
+
 export class AudioSystem {
   private context?: AudioContext;
   private master?: GainNode;
@@ -536,6 +538,34 @@ export class AudioSystem {
     const buffer = enabled ? this.lightSwitchOn : this.lightSwitchOff;
     if (!buffer) return;
     this.playRecordedClip(buffer, { offset: 0, duration: buffer.duration }, 0.54, 1, 10500);
+  }
+
+  /** Shared context and master bus for scripted sound layers (null before start). */
+  getOutput(): { readonly context: AudioContext; readonly destination: AudioNode } | null {
+    return this.context && this.master ? { context: this.context, destination: this.master } : null;
+  }
+
+  /** Heavy blows built from the decoded door and body recordings. `muffle` 0..1 = through a wall. */
+  impact(kind: 'door-bang' | 'door-burst' | 'power-cut' | 'closet-rip', muffle = 0): void {
+    const cutoff = (open: number): number => lerpValue(open, 900, Math.min(1, Math.max(0, muffle)));
+    if (kind === 'power-cut') {
+      if (this.lightSwitchOff) this.playRecordedClip(this.lightSwitchOff, { offset: 0, duration: this.lightSwitchOff.duration }, 0.9, 0.62, 5200, 0, 6);
+      return;
+    }
+    if (kind === 'door-bang') {
+      if (this.doorClose) this.playRecordedClip(this.doorClose, { offset: 0, duration: Math.min(0.5, this.doorClose.duration) }, 1.35, 0.58, cutoff(5200), 0, 9);
+      if (this.bodyFall) this.playRecordedClip(this.bodyFall, { offset: this.transientOffset(this.bodyFall), duration: 0.45 }, 0.8, 0.72, cutoff(3200), 0.012, 8);
+      return;
+    }
+    if (kind === 'closet-rip') {
+      if (this.doorOpen) this.playRecordedClip(this.doorOpen, { offset: 0, duration: this.doorOpen.duration }, 1.2, 1.55, 9800, 0, 4);
+      if (this.boneCrack) this.playRecordedClip(this.boneCrack, { offset: 0, duration: this.boneCrack.duration }, 0.9, 0.7, 8200);
+      return;
+    }
+    if (this.doorClose) this.playRecordedClip(this.doorClose, { offset: 0, duration: this.doorClose.duration }, 1.6, 0.48, cutoff(7000), 0, 10);
+    if (this.bodyFall) this.playRecordedClip(this.bodyFall, { offset: this.transientOffset(this.bodyFall), duration: this.bodyFall.duration }, 1.1, 0.62, cutoff(5200), 0.02, 9);
+    if (this.boneCrack) this.playRecordedClip(this.boneCrack, { offset: 0, duration: this.boneCrack.duration }, 1, 0.55, cutoff(6400), 0.05);
+    if (this.doorOpen) this.playRecordedClip(this.doorOpen, { offset: 0, duration: this.doorOpen.duration }, 0.9, 1.8, cutoff(9000), 0.04);
   }
 
   update(room: RoomKind): void {

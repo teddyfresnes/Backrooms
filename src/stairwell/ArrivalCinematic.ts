@@ -92,6 +92,8 @@ export class ArrivalCinematic {
   }
 
   get isShowing(): boolean { return this.showing && !this.finished; }
+  /** The hinged right leaf, reused by later scripted scenes once the arrival has ended. */
+  get entranceMotion(): EntranceDoorMotion { return this.entrance; }
 
   start(pov: THREE.PerspectiveCamera): void {
     if (this.disposed || this.showing) return;

@@ -41,6 +41,7 @@ npm run validate
 - `F` maintenu + clic gauche : esquive / contre
 - `E` au sol : demander le relevé
 - `E` : ouvrir ou fermer la porte de l’appartement
+- `E` face au placard de l’entrée, pendant la poursuite de Bacteria : s’y cacher
 - `C` : ouvrir le chat local et envoyer un message sous la forme `me: message`
 - `H` : ouvrir la console avec `/` déjà prêt
 - `↑` / `↓` : parcourir l'historique des messages et commandes

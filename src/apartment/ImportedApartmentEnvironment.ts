@@ -586,7 +586,7 @@ export const trimDoorFrameOverhang = (
   });
 };
 
-interface DoorRuntime {
+export interface DoorRuntime {
   pivot: THREE.Group;
   leaf: THREE.Object3D;
   closedBox: THREE.Box3;
@@ -663,6 +663,7 @@ export const createApartmentMainLight = (fixtureBox: THREE.Box3): THREE.PointLig
 export class ImportedApartmentEnvironment {
   readonly group = new THREE.Group();
   readonly entryDoor: DoorRuntime;
+  readonly closetDoor: DoorRuntime;
   readonly lightSwitch: THREE.Group;
   readonly doorLock: THREE.Group;
   readonly windowBlinds: readonly [ApartmentWindowBlindRuntime, ApartmentWindowBlindRuntime];
@@ -750,6 +751,16 @@ export class ImportedApartmentEnvironment {
     tintDoorLeafBrown(bathroomLeaf);
     forceOpaqueTwoSided(closetLeaf);
     tintDoorLeafBrown(closetLeaf);
+    // The entry closet is the hiding place of the Bacteria encounter. Hinge it
+    // on its west jamb, outside the frozen/batched model, so it can be cracked
+    // open or torn off at runtime. Positive angles swing it into the entry.
+    this.closetDoor = this.makeDoorRuntime(
+      'imported-apartment-closet-door-pivot',
+      closetLeaf,
+      (box) => new THREE.Vector3(box.min.x, box.min.y, box.getCenter(new THREE.Vector3()).z),
+      0,
+      Math.PI * 0.56,
+    );
 
     this.shellColliderMeshes = [];
     for (const mesh of collectMeshes(this.model)) {

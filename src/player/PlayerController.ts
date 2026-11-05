@@ -56,6 +56,7 @@ const COMBAT_GUARD_LOOK_DOWN_LIMIT = THREE.MathUtils.degToRad(82);
 
 export class PlayerController {
   private gameplayInputEnabled = true;
+  private lookLocked = false;
   private readonly externalMotion = new THREE.Vector3();
   readonly controls: PointerLockControls;
   readonly position = new THREE.Vector3();
@@ -383,6 +384,12 @@ export class PlayerController {
     }
   }
   setControlBindings(bindings: ControlBindings): void { this.input.setBindings(bindings); }
+  get isInputEnabled(): boolean { return this.gameplayInputEnabled; }
+  /** Scripted shots own the view: mouse motion is ignored until released. */
+  setLookLocked(locked: boolean): void {
+    this.lookLocked = locked;
+    this.resetFallbackPoint();
+  }
   setSprintSuppressed(suppressed: boolean): void {
     this.sprintSuppressed = suppressed;
     if (suppressed) this.sprinting = false;
@@ -1926,7 +1933,7 @@ export class PlayerController {
   }
 
   private readonly onMouseMove = (event: MouseEvent): void => {
-    if (!this.isLocked || this.traversal) return;
+    if (!this.isLocked || this.traversal || this.lookLocked) return;
     let rawHorizontal = Number.isFinite(event.movementX) ? event.movementX : 0;
     let rawVertical = Number.isFinite(event.movementY) ? event.movementY : 0;
     if (!this.controls.isLocked) {

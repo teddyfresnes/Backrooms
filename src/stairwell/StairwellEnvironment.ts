@@ -190,6 +190,9 @@ export class StairwellEnvironment {
   private moonLight?: THREE.DirectionalLight;
   private streetLampLight?: THREE.SpotLight;
   private readonly localLighting = new StairwellLightPool(STAIRWELL_LIGHTING_PROFILES.modern);
+  private baseFixtureGlow?: { emissive: number; color: THREE.Color };
+  private rainExclusion: THREE.Box3 | null = null;
+  private readonly clearedExterior: THREE.Object3D[] = [];
   private readonly cloudGroups: Array<{ group: THREE.Group; baseX: number; drift: number; phase: number }> = [];
   private readonly skyRandom = new SeededRandom(STAIRWELL_RANDOM_SEED).fork('sky');
   private readonly cloudRandom = new SeededRandom(STAIRWELL_RANDOM_SEED).fork('cloud');
@@ -1761,6 +1764,51 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     this.localLighting.setBrightness(value);
   }
 
+  /** Scripted mains power of the cage fixtures: light sources and their tubes dim together. */
+  setPower(power: number): void {
+    const value = Math.max(0, Math.min(1, Number.isFinite(power) ? power : 1));
+    this.localLighting.setPower(value);
+    const glow = this.materials.fixtureGlow;
+    this.baseFixtureGlow ??= { emissive: glow.emissiveIntensity, color: glow.color.clone() };
+    glow.emissiveIntensity = this.baseFixtureGlow.emissive * value;
+    glow.color.copy(this.baseFixtureGlow.color).multiplyScalar(0.18 + 0.82 * value);
+  }
+
+  /** Rain drops inside this world box are not drawn (a room temporarily built outside). */
+  setRainExclusion(box: THREE.Box3 | null): void {
+    this.rainExclusion = box ? box.clone() : null;
+  }
+
+  /**
+   * Hides the compact exterior props that would intrude into a temporary volume
+   * built just outside the facade. Large merged batches stay (they lie under it).
+   */
+  setExteriorClearance(box: THREE.Box3 | null): void {
+    for (const object of this.clearedExterior) object.visible = true;
+    this.clearedExterior.length = 0;
+    if (!box) return;
+    const bounds = new THREE.Box3();
+    const size = new THREE.Vector3();
+    this.group.updateMatrixWorld(true);
+    this.group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if ((!mesh.isMesh && !(object as THREE.LineSegments).isLineSegments) || !object.visible) return;
+      if (object === this.rain || object === this.hallEntranceDoor) return;
+      let ancestor: THREE.Object3D | null = object.parent;
+      while (ancestor && ancestor !== this.group) {
+        if (ancestor === this.hallEntranceDoor) return;
+        ancestor = ancestor.parent;
+      }
+      bounds.setFromObject(object);
+      if (bounds.isEmpty() || !bounds.intersectsBox(box)) return;
+      bounds.getSize(size);
+      if (bounds.max.z > STAIRWELL_BOUNDS.minZ - STAIRWELL_WALL_THICKNESS * 0.5) return;
+      if (size.x > 30 || size.z > 30) return;
+      object.visible = false;
+      this.clearedExterior.push(object);
+    });
+  }
+
   private configureExteriorShadowCasters(): void {
     const casterMaterials = new Set([
       'exterior-facade',
@@ -1853,6 +1901,12 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
         drop.dz = refreshed.dz;
       }
       this.writeRainDrop(buffer, index, drop);
+      const exclusion = this.rainExclusion;
+      if (exclusion && drop.x >= exclusion.min.x && drop.x <= exclusion.max.x
+        && drop.z >= exclusion.min.z && drop.z <= exclusion.max.z && drop.y - drop.length <= exclusion.max.y) {
+        const offset = index * 6;
+        buffer[offset + 1] = buffer[offset + 4] = -60;
+      }
     }
     attribute.needsUpdate = true;
   }

@@ -39,6 +39,13 @@ import { useCharacterState } from '../wardrobe/studio/state/CharacterState';
 import { resolveCharacterVoice } from '../audio/VoiceCatalog';
 import { StairwellEnvironment } from '../stairwell/StairwellEnvironment';
 import { StairwellMaterials } from '../stairwell/StairwellMaterials';
+import { EntranceDoorMotion } from '../stairwell/EntranceDoorMotion';
+import { BacteriaActor } from '../monster/BacteriaActor';
+import { BacteriaAudio } from '../monster/BacteriaAudio';
+import { BacteriaEncounter } from '../monster/BacteriaEncounter';
+import { BackroomsCorridor } from '../monster/BackroomsCorridor';
+import { StoryHud } from '../ui/StoryHud';
+import { formatKeyLabel } from '../input/ControlBindings';
 import { createStairwellPlan } from '../stairwell/createStairwellPlan';
 import { STAIRWELL_SPAWN } from '../stairwell/layout';
 import { ExperienceUI } from '../ui/ExperienceUI';
@@ -105,6 +112,13 @@ export class RussianStairwellGame {
   private arrivalStory?: HallArrivalStory;
   private arrivalCinematic?: ArrivalCinematic;
   private arrivalCompleted = false;
+  private encounter?: BacteriaEncounter;
+  private ownEntranceMotion?: EntranceDoorMotion;
+  private readonly bacteriaAudio = new BacteriaAudio(() => this.audio.getOutput());
+  private readonly storyHud: StoryHud;
+  private readonly lastHintPosition = new THREE.Vector3(Number.NaN, 0, 0);
+  private sprintHintShown = false;
+  private questHold = 0;
   private readonly loadingAbort = new AbortController();
   private postFX?: PostFX;
   private pixelRatio: number;
@@ -172,6 +186,7 @@ export class RussianStairwellGame {
         this.character?.setActive(!open && !!this.player?.isLocked);
       },
     }, this.settings, 'russian-stairwell');
+    this.storyHud = new StoryHud(this.root);
     this.scene.background = new THREE.Color(0x090d11);
     this.scene.fog = new THREE.Fog(0x10161c, 16, 52);
     this.configureBackroomsLighting();
@@ -198,6 +213,19 @@ export class RussianStairwellGame {
     });
     await this.audio.setSuspended(true);
     emitProgress();
+    // The creature only matters on the way home; a failed download must never
+    // block the stairwell, so this settles to null instead of rejecting.
+    const bacteriaReady = Promise.allSettled([
+      BacteriaActor.load(this.loadingAbort.signal),
+      BackroomsCorridor.load(this.renderer),
+      this.bacteriaAudio.load(),
+    ]).then(([actor, corridor]): readonly [BacteriaActor, BackroomsCorridor] | null => {
+      if (actor.status === 'fulfilled' && corridor.status === 'fulfilled') return [actor.value, corridor.value];
+      if (actor.status === 'fulfilled') actor.value.dispose();
+      if (corridor.status === 'fulfilled') corridor.value.dispose();
+      if (!this.disposed) console.warn('Rencontre Bacteria indisponible.', actor.status === 'rejected' ? actor.reason : corridor.status === 'rejected' ? corridor.reason : null);
+      return null;
+    });
 
     const plan = createStairwellPlan();
     const physics = await PhysicsWorld.create(plan);
@@ -398,6 +426,40 @@ export class RussianStairwellGame {
       this.lastSafePosition.copy(this.player.position);
     }
 
+    const bacteria = await bacteriaReady;
+    if (this.disposed) {
+      bacteria?.[0].dispose();
+      bacteria?.[1].dispose();
+      return;
+    }
+    if (bacteria) {
+      const [actor, corridor] = bacteria;
+      const entrance = this.arrivalCinematic?.entranceMotion
+        ?? (this.ownEntranceMotion = new EntranceDoorMotion(environment.hallEntranceDoor!));
+      this.encounter = new BacteriaEncounter({
+        scene: this.scene,
+        renderCamera: this.camera,
+        eyeCamera: this.playerCamera,
+        player: this.player,
+        environment,
+        door: this.door,
+        closet: apartment.closetDoor,
+        entrance,
+        audio: this.audio,
+        hud: this.storyHud,
+        setPrompt: (label) => this.ui.setInteraction(label),
+        baseFieldOfView: () => this.settings.fieldOfView,
+        sprintKeyLabel: () => formatKeyLabel(this.settings.controls.sprint),
+        setAvatarHidden: (hidden) => this.character?.setArrivalPresentation(hidden),
+        isStoryWaitingHome: () => this.arrivalStory?.getState() === 'home',
+        onSurvived: () => {
+          this.arrivalStory?.complete();
+          this.questHold = 7;
+          this.saveNow('autosave');
+        },
+      }, actor, corridor, this.bacteriaAudio);
+    }
+
     this.postFX = new PostFX(
       this.renderer,
       this.scene,
@@ -413,7 +475,11 @@ export class RussianStairwellGame {
     setVisualProgress(0.92);
     await warmSceneForPlay({
       renderer: this.renderer, scene: this.scene, camera: this.camera,
-      roots: [...this.character.renderWarmupRoots, ...(this.arrivalCinematic?.warmupRoots ?? [])],
+      roots: [
+        ...this.character.renderWarmupRoots,
+        ...(this.arrivalCinematic?.warmupRoots ?? []),
+        ...(bacteria ? [...bacteria[0].warmupRoots, bacteria[1].group] : []),
+      ],
       cancelled: () => this.disposed,
       render: () => this.postFX?.render(1 / 60),
       onProgress: progress => setVisualProgress(.92 + progress * .06),
@@ -477,6 +543,9 @@ export class RussianStairwellGame {
     if (!this.player || !this.door || this.character?.isBusy) return;
     this.player.getViewDirection(this.viewDirection);
     if (this.arrivalStory?.interact(this.player.position, this.viewDirection, this.player.isLocked && !this.ui.isConsoleOpen)) return;
+    if (this.player.isLocked && this.encounter?.interact(this.player.position, this.viewDirection)) return;
+    // Hidden in the closet or watching a scripted shot: nothing else reacts to E.
+    if (this.encounter?.isHidden || (this.encounter?.isActive && this.encounter.locksInput)) return;
     if (this.lightSwitch?.interact(
       this.player.position,
       this.viewDirection,
@@ -487,7 +556,7 @@ export class RussianStairwellGame {
       this.viewDirection,
       this.player.isLocked,
     )) return;
-    if (this.hallExit?.interact(
+    if (!this.encounter?.isActive && this.hallExit?.interact(
       this.player.position,
       this.viewDirection,
       this.player.isLocked,
@@ -538,6 +607,7 @@ export class RussianStairwellGame {
     this.player?.setInputEnabled(locked && !this.ui.isConsoleOpen);
     this.character?.setActive(locked && !this.ui.isConsoleOpen);
     if (!locked) { this.arrivalStory?.suspend(); siteAudio.stopVoice(); }
+    this.storyHud.setPlaying(locked);
     void this.audio.setSuspended(!locked || document.hidden);
     this.previousTime = performance.now();
     this.accumulator = 0;
@@ -639,6 +709,9 @@ export class RussianStairwellGame {
   private saveNow(kind: GameSaveKind): boolean {
     if (this.options.deferEntry && !this.arrivalCompleted) return false;
     if (!this.initialized || !this.player || !this.door || !this.apartment) return false;
+    // A save in the middle of the encounter would resume a half-played scene.
+    // The story stays at "home" until it is survived, so a load replays it whole.
+    if (this.encounter?.isActive || this.encounter?.isHidden) return false;
     if (!this.storage) {
       if (!this.saveErrorShown) {
         this.saveErrorShown = true;
@@ -699,15 +772,22 @@ export class RussianStairwellGame {
       this.playableSeconds += delta;
       this.autosaveElapsed += delta;
       if (this.autosaveElapsed >= AUTOSAVE_INTERVAL_SECONDS) this.saveNow('autosave');
+      // Before the rig copies its camera: scripted looks must drive the body too.
+      this.encounter?.update(delta);
       this.character?.update(delta);
+      this.encounter?.applyCamera();
       this.environment.update(this.elapsed);
       this.apartment?.updateVisibility(this.camera.position);
       this.player.getViewDirection(this.viewDirection);
-      this.door.update(0, this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
-      this.hallExit?.update(this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
-      this.lightSwitch?.update(this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
-      this.windowBlinds?.update(delta, this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
-      this.arrivalStory?.update(delta, this.player.position, this.viewDirection, !this.ui.isConsoleOpen && !this.character?.isBusy);
+      const interactive = !this.ui.isConsoleOpen && !this.character?.isBusy
+        && !this.encounter?.isHidden && !this.encounter?.locksInput;
+      this.door.update(0, this.player.position, this.viewDirection, interactive);
+      this.hallExit?.update(this.player.position, this.viewDirection, interactive && !this.encounter?.isActive);
+      this.lightSwitch?.update(this.player.position, this.viewDirection, interactive);
+      this.windowBlinds?.update(delta, this.player.position, this.viewDirection, interactive);
+      this.arrivalStory?.update(delta, this.player.position, this.viewDirection, interactive && !this.encounter?.isActive);
+      if (!this.ui.isConsoleOpen) this.encounter?.updatePrompt(this.player.position, this.viewDirection);
+      this.updateStoryHud(delta);
       const surface = this.currentSurface();
       this.audio.updateInteriorGain(this.interiorRainGain(surface));
     } else {
@@ -729,6 +809,34 @@ export class RussianStairwellGame {
     this.renderRequested = false;
     this.postFX?.render(delta);
   };
+
+  private updateStoryHud(delta: number): void {
+    if (!this.player) return;
+    this.storyHud.update(delta);
+    if (this.questHold > 0) {
+      this.questHold -= delta;
+      if (this.questHold <= 0) this.storyHud.setQuest(null);
+    } else {
+      const fromEncounter = this.encounter?.questText;
+      if (fromEncounter || this.encounter?.isActive) {
+        this.storyHud.setQuest(fromEncounter?.text ?? null, fromEncounter?.tone);
+      } else {
+        const state = this.arrivalStory?.getState();
+        this.storyHud.setQuest(
+          state === 'approach' || state === 'mail' ? 'Récupère ton courrier dans le hall'
+            : state === 'home' ? 'Rentre chez toi · dernier étage' : null,
+        );
+      }
+    }
+    // Sprint tooltip, once, as soon as the player actually starts walking.
+    if (this.sprintHintShown || this.encounter?.isActive) return;
+    if (Number.isNaN(this.lastHintPosition.x)) {
+      this.lastHintPosition.copy(this.player.position);
+    } else if (this.lastHintPosition.distanceTo(this.player.position) > 0.6) {
+      this.sprintHintShown = true;
+      this.storyHud.showHint(formatKeyLabel(this.settings.controls.sprint), 'Maintenir pour courir', 6.5);
+    }
+  }
 
   private applyRenderFeatures(delta: number): void {
     const compact = this.adaptiveFeatures.update(this.settings.renderQuality, this.fps, delta);
@@ -799,6 +907,11 @@ export class RussianStairwellGame {
     this.disposed = true;
     this.loadingAbort.abort();
     this.options.apartmentPreload?.dispose();
+    // Before the cinematic and environment: it restores their lights and door.
+    this.encounter?.dispose();
+    this.bacteriaAudio.dispose();
+    this.ownEntranceMotion?.dispose();
+    this.storyHud.dispose();
     this.arrivalCinematic?.dispose();
     if (this.options.deferEntry) siteAudio.stopStoryMusic();
     this.arrivalStory?.dispose();
