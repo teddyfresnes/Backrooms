@@ -1,6 +1,9 @@
+import { loadAudioAsset } from './AudioAssetQueue';
 import type { RoomKind } from '../world/types';
 import { audioGainFromSetting } from './volume';
+import type { SpatialAudioBus } from './SpatialDoorAudio';
 import { connectAudioOutput } from './output';
+import { CooperativeWork } from '../core/CooperativeWork';
 
 export type AudioSurface = 'backrooms-carpet' | 'apartment-wood' | 'stairwell-concrete';
 export type LandingKind = 'light' | 'medium' | 'heavy' | 'traumatic';
@@ -112,6 +115,7 @@ const createLoopSource = (
 const lerpValue = (from: number, to: number, amount: number): number => from + (to - from) * amount;
 
 export class AudioSystem {
+  get spatialBus(): SpatialAudioBus | undefined { return this.context && this.master ? { context: this.context, destination: this.master } : undefined; }
   private context?: AudioContext;
   private master?: GainNode;
   private humGain?: GainNode;
@@ -145,6 +149,7 @@ export class AudioSystem {
   private masterVolume = 0.6;
   private loadedAssetCount = 0;
   private loadProgress?: (progress: number) => void;
+  private interiorMix = 1;
 
   constructor(private readonly ambience: AudioAmbience = 'backrooms') {}
 
@@ -183,15 +188,15 @@ export class AudioSystem {
       this.ventGain.connect(this.lowpass);
     } else {
       this.rainGain = context.createGain();
-      this.rainGain.gain.value = 0.018;
+      this.rainGain.gain.value = 0.018 * this.interiorMix;
       this.rainGain.connect(this.master);
     }
 
     const commonPromise = Promise.all([
-      this.loadBuffers(FOOTSTEP_URLS['backrooms-carpet']),
+      this.ambience === 'backrooms' ? this.loadBuffers(FOOTSTEP_URLS['backrooms-carpet']) : Promise.resolve([]),
       this.loadBuffers(FOOTSTEP_URLS['apartment-wood']),
       this.loadBuffers(FOOTSTEP_URLS['stairwell-concrete']),
-      this.loadBuffer(SPRINT_URLS['backrooms-carpet']),
+      this.ambience === 'backrooms' ? this.loadBuffer(SPRINT_URLS['backrooms-carpet']) : Promise.resolve(null),
       this.loadBuffer(SPRINT_URLS['apartment-wood']),
       this.loadBuffer(SPRINT_URLS['stairwell-concrete']),
       this.loadBuffer('/assets/audio/impacts/body-fall-normalized.mp3'),
@@ -269,6 +274,10 @@ export class AudioSystem {
     if (sprintConcrete) this.sprintBuffers['stairwell-concrete'] = sprintConcrete;
     this.bodyFall = bodyFall ?? undefined;
     this.boneCrack = boneCrack ?? undefined;
+    const work=new CooperativeWork();
+    for(const buffer of [...carpet,...wood,...concrete,...(bodyFall?[bodyFall]:[])]){
+      if(this.disposed)return;this.transientOffset(buffer);await work.checkpoint();
+    }
     this.loadProgress?.(1);
     this.loadProgress = undefined;
   }
@@ -285,9 +294,8 @@ export class AudioSystem {
 
   private async loadBuffer(url: string): Promise<AudioBuffer | null> {
     try {
-      const response = await fetch(url);
-      if (!response.ok || !this.context) return null;
-      return await this.context.decodeAudioData(await response.arrayBuffer());
+      if (!this.context || this.disposed) return null;
+      return await loadAudioAsset(this.context, url);
     } catch {
       return null;
     } finally {
@@ -584,12 +592,20 @@ export class AudioSystem {
 
   updateInteriorGain(targetGain: number): void {
     if (!this.context || !this.rainGain) return;
-    const target = Math.min(1, Math.max(0, targetGain));
+    const target = Math.min(1, Math.max(0, targetGain)) * this.interiorMix;
     this.rainGain.gain.setTargetAtTime(target, this.context.currentTime, 0.18);
+  }
+
+  setInteriorMix(mix: number): void {
+    this.interiorMix = Math.min(1, Math.max(0, mix));
+    if (this.interiorMix === 0 && this.context && this.rainGain) {
+      this.rainGain.gain.setTargetAtTime(0, this.context.currentTime, .04);
+    }
   }
 
   async setSuspended(suspended: boolean): Promise<void> {
     if (!this.context || this.disposed) return;
+    if(this.context.state===(suspended?'suspended':'running'))return;
     try {
       if (suspended) {
         this.stopSprint(0.025);

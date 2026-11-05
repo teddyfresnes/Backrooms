@@ -20,7 +20,7 @@ const azertyBindings: ControlBindings = {
   right: 'KeyD',
   sprint: 'ShiftLeft',
   jump: 'Space',
-  crouch: 'ControlLeft',
+  crouch: 'Digit0',
   interact: 'KeyE',
 };
 
@@ -40,6 +40,7 @@ const forbiddenCodes = new Set([
   'ContextMenu',
   'PrintScreen',
   'Pause',
+  'KeyP',
 ]);
 
 const namedLabels: Readonly<Record<string, string>> = {
@@ -82,7 +83,7 @@ export const defaultControlBindings = (preset: KeyboardPreset = 'azerty'): Contr
 /** Letter bindings follow the active layout; non-letter keys keep their physical code. */
 export const controlCodeFromKeyboardEvent = (
   event: Pick<KeyboardEvent, 'code' | 'key'>,
-): string => (/^[a-z]$/i.test(event.key) ? `Key${event.key.toUpperCase()}` : event.code);
+): string => (/^(?:Numpad|Arrow)/.test(event.code) ? event.code : /^[a-z]$/i.test(event.key) ? `Key${event.key.toUpperCase()}` : event.code);
 
 export const isBindableCode = (code: string): boolean => {
   if (!code || forbiddenCodes.has(code)) return false;
@@ -104,6 +105,25 @@ export const equivalentKeyCodes = (code: string): readonly string[] => {
   return [code];
 };
 
+/** Fixed physical alternatives coexist with the configurable main bindings. */
+export const secondaryControlCodes: Readonly<Record<ControlAction, readonly string[]>> = {
+  forward: ['ArrowUp'], backward: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
+  sprint: ['ShiftRight'], jump: ['ControlLeft', 'ControlRight'],
+  crouch: ['Digit0', 'Numpad0'], interact: ['Numpad1'],
+};
+export const actionKeyCodes = (bindings: ControlBindings, action: ControlAction): readonly string[] => {
+  const primary = equivalentKeyCodes(bindings[action]).filter(code =>
+    !controlActions.some(other => other !== action && secondaryControlCodes[other].includes(code)));
+  return [...new Set([...primary, ...secondaryControlCodes[action]])];
+};
+export const matchesControlAction = (event: Pick<KeyboardEvent, 'code' | 'key'>, bindings: ControlBindings, action: ControlAction): boolean =>
+  actionKeyCodes(bindings, action).includes(controlCodeFromKeyboardEvent(event));
+export const canBindControlAction = (action:ControlAction,code:string):boolean => isBindableCode(code)
+  && !controlActions.some(other=>other!==action&&equivalentKeyCodes(code).some(key=>secondaryControlCodes[other].includes(key)));
+export const isEditableKeyTarget = (event: KeyboardEvent): boolean =>
+  event.composedPath().some(target => typeof HTMLElement!=='undefined' && target instanceof HTMLElement &&
+    (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable));
+
 export const bindingConflictKey = (code: string): string => {
   if (code === 'ShiftLeft' || code === 'ShiftRight') return 'Shift';
   if (code === 'ControlLeft' || code === 'ControlRight') return 'Control';
@@ -116,8 +136,11 @@ export const sanitizeControlBindings = (
   fallback = defaultControlBindings(),
 ): ControlBindings => {
   const candidate = typeof value === 'object' && value !== null
-    ? value as Partial<Record<ControlAction, unknown>>
+    ? { ...value as Partial<Record<ControlAction, unknown>> }
     : {};
+  // v46 and earlier used Ctrl for crouch. The newly requested Ctrl jump owns
+  // that physical key; migrate only this conflict, keeping other saved keys.
+  if (candidate.crouch === 'ControlLeft' || candidate.crouch === 'ControlRight') candidate.crouch = 'Digit0';
   const requested = controlActions.map((action) => candidate[action]);
   const valid = requested.every((code): code is string => (
     typeof code === 'string' && isBindableCode(code)
@@ -135,7 +158,7 @@ export const remapControlBinding = (
   action: ControlAction,
   code: string,
 ): { bindings: ControlBindings; swappedAction?: ControlAction } => {
-  if (!isBindableCode(code)) return { bindings: { ...bindings } };
+  if (!canBindControlAction(action,code)) return { bindings: { ...bindings } };
   const previousCode = bindings[action];
   const swappedAction = controlActions.find((candidate) => (
     candidate !== action && bindingConflictKey(bindings[candidate]) === bindingConflictKey(code)

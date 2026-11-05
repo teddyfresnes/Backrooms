@@ -3,11 +3,12 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 import { describeViewDirection } from '../core/Diagnostics';
 import type { PlayerMovementDiagnostics as PlayerDiagnostics } from './MovementDiagnostics';
 import { InputManager } from '../input/InputManager';
+import { DashcamLook } from './DashcamLook';
 import type { ControlBindings } from '../input/ControlBindings';
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import type { DoorOpenMode, QuaternionData, Vec3Data } from '../world/types';
 import { MOVEMENT_TUNING, type MovementMode } from './MovementConfig';
-import { directionChangeSeverity, expSmoothing, forwardBiasedDiagonalAxes, manualLeanAxis, movementBasisFromYaw, moveSpeedAlongDirection2D, moveTowards2D, normalizedSpeed } from './MovementKinematics';
+import { directionChangeSeverity, expSmoothing, forwardBiasedDiagonalAxes, movementBasisFromYaw, moveSpeedAlongDirection2D, moveTowards2D, normalizedSpeed } from './MovementKinematics';
 
 export interface LandingImpact {
   readonly strength: number;
@@ -19,6 +20,7 @@ export interface LandingImpact {
 
 export interface PlayerCallbacks {
   onLockChange(locked: boolean): void;
+  onPointerCaptureChange?(captured: boolean): void;
   onFootstep(strength: number): void;
   onMovementAudioState?(state: 'idle' | 'sprint'): void;
   onInteract(mode: DoorOpenMode): void;
@@ -56,6 +58,9 @@ const COMBAT_GUARD_LOOK_DOWN_LIMIT = THREE.MathUtils.degToRad(82);
 
 export class PlayerController {
   private gameplayInputEnabled = true;
+  private readonly dashcamLook = new DashcamLook();
+  private canSprint = true;
+  private canJump = true;
   private lookLocked = false;
   private readonly externalMotion = new THREE.Vector3();
   readonly controls: PointerLockControls;
@@ -172,39 +177,46 @@ export class PlayerController {
   private cameraClock = 0;
   private cameraMotionEnabled = true;
   private fallbackPlaying = false;
-  private fallbackPoint?: { x: number; y: number; time: number };
+  private playingRequested = false;
+  private discardCaptureMotion = true;
   private pointerRequestPending = false;
   private readonly originalCursor: string;
   private readonly originalTabIndex: number;
-  private readonly resetFallbackPoint = (): void => { this.fallbackPoint = undefined; };
+  private readonly resetFallbackPoint = (): void => { this.discardCaptureMotion = true; };
   private readonly onFallbackPause = (): void => {
-    if (!this.fallbackPlaying) return;
-    this.fallbackPlaying = false;
-    this.resetFallbackPoint();
-    this.pointerElement.style.cursor = this.originalCursor;
-    this.callbacks.onLockChange(false);
+    if (this.playingRequested || this.isLocked) this.unlock();
   };
   private readonly onFallbackKey = (event: KeyboardEvent): void => {
     if (event.code === 'Escape') this.onFallbackPause();
   };
   private readonly onPointerLock = (): void => {
+    if (!this.playingRequested || this.pointerDocument.hidden) {
+      queueMicrotask(() => { if(this.pointerDocument.pointerLockElement===this.pointerElement)this.pointerDocument.exitPointerLock?.(); });
+      return;
+    }
     this.fallbackPlaying = false;
     this.resetFallbackPoint();
     this.pointerElement.style.cursor = this.originalCursor;
     this.callbacks.onLockChange(true);
+    this.callbacks.onPointerCaptureChange?.(true);
   };
   private readonly onPointerUnlock = (): void => {
+    // Browsers may consume Escape before dispatching a key event. Capture loss
+    // itself must pause, rather than silently enabling uncaptured mouse look.
+    const wasPlaying = this.playingRequested;
+    this.playingRequested = false;
+    this.fallbackPlaying = false;
     this.resetFallbackPoint();
     this.pointerElement.style.cursor = this.originalCursor;
-    this.callbacks.onLockChange(false);
+    this.callbacks.onPointerCaptureChange?.(false);
+    if (wasPlaying) this.callbacks.onLockChange(false);
   };
   private readonly onCanvasMouseDown = (event: MouseEvent): void => {
     if (!this.isLocked || event.target !== this.pointerElement || this.controls.isLocked) return;
     this.pointerElement.focus({ preventScroll: true });
-    this.fallbackPoint = { x: event.clientX, y: event.clientY, time: event.timeStamp };
     // A game's asynchronous startup loses user activation. Retry capture on
     // the next real canvas click even though fallback gameplay is already active.
-    this.requestPointerCapture();
+    this.requestPointerCapture(event);
   };
 
   constructor(
@@ -218,6 +230,9 @@ export class PlayerController {
     this.syncContinuousAimYawFromLookQuaternion(true);
     this.renderLookQuaternion.copy(camera.quaternion);
     this.controls = new PointerLockControls(this.lookCamera, domElement);
+    // Own mouse look below so real capture, finite deltas and the first event
+    // after recapture are checked BEFORE any camera rotation is applied.
+    this.controls.enabled = false;
     this.baseFov = camera.fov;
     this.pointerDocument = domElement.ownerDocument;
     this.pointerElement = domElement;
@@ -232,39 +247,54 @@ export class PlayerController {
     this.renderUpdate(0, 1);
     this.controls.addEventListener('lock', this.onPointerLock);
     this.controls.addEventListener('unlock', this.onPointerUnlock);
+    this.pointerDocument.addEventListener('mousemove', this.onPointerMotionGate, true);
     this.pointerDocument.addEventListener('mousemove', this.onMouseMove);
     this.pointerDocument.addEventListener('mousedown', this.onCanvasMouseDown);
     this.pointerElement.addEventListener('mouseleave', this.resetFallbackPoint);
     this.pointerDocument.addEventListener('keydown', this.onFallbackKey);
     this.pointerDocument.defaultView?.addEventListener('blur', this.onFallbackPause);
+    this.pointerDocument.addEventListener('visibilitychange', this.onPointerVisibility);
   }
 
   get isLocked(): boolean { return this.controls.isLocked || this.fallbackPlaying; }
+  get isPointerCaptured(): boolean {
+    return this.playingRequested && this.controls.isLocked
+      && this.pointerDocument.pointerLockElement === this.pointerElement && !this.pointerDocument.hidden;
+  }
+  private readonly onPointerVisibility = (): void => { if (this.pointerDocument.hidden) this.onFallbackPause(); };
   get isTraversing(): boolean { return this.traversal !== undefined; }
   get isNoclipEnabled(): boolean { return this.noclipEnabled; }
   get isIncapacitated(): boolean { return this.incapacitated; }
   get isLandingRecovering(): boolean { return this.landingRecoveryTimer > 0; }
-  lock(): void {
+  lock(event?: MouseEvent): void {
+    this.playingRequested = true;
     // Starting gameplay must not depend on optional browser pointer capture.
     this.fallbackPlaying = true;
     this.resetFallbackPoint();
     this.pointerElement.style.cursor = 'crosshair';
     this.pointerElement.focus({ preventScroll: true });
     this.callbacks.onLockChange(true);
-    this.requestPointerCapture();
+    this.callbacks.onPointerCaptureChange?.(this.controls.isLocked);
+    if (event) this.requestPointerCapture(event);
   }
 
-  private requestPointerCapture(): void {
+  private requestPointerCapture(event: MouseEvent): void {
+    if (!event.isTrusted || !['click', 'mousedown', 'pointerdown'].includes(event.type)) return;
+    if (typeof navigator !== 'undefined' && navigator.userActivation?.isActive === false) return;
     if (this.pointerRequestPending || this.controls.isLocked) return;
     this.pointerRequestPending = true;
     try {
       const request = this.pointerElement.requestPointerLock?.();
-      void Promise.resolve(request).catch(() => { /* Keep ordinary mouse controls. */ })
-        .finally(() => { this.pointerRequestPending = false; });
+      void Promise.resolve(request).catch(() => { /* Keep the click-to-capture affordance. */ })
+        .finally(() => {
+          this.pointerRequestPending = false;
+          if (!this.playingRequested && this.pointerDocument.pointerLockElement === this.pointerElement) this.pointerDocument.exitPointerLock?.();
+        });
     } catch { this.pointerRequestPending = false; }
   }
 
   unlock(): void {
+    this.playingRequested = false;
     const playing = this.isLocked;
     this.fallbackPlaying = false;
     this.resetFallbackPoint();
@@ -325,6 +355,7 @@ export class PlayerController {
     this.targetBodyLagLateral = 0;
   }
 
+  get fieldOfView():number{return this.baseFov;}
   setFieldOfView(fieldOfView: number): void {
     this.baseFov = THREE.MathUtils.clamp(fieldOfView, 60, 100);
     if (!this.sprinting && !this.crouching && !this.lowPosture && this.slideTimer <= 0) {
@@ -399,7 +430,12 @@ export class PlayerController {
       ? THREE.MathUtils.clamp(scale, 0.55, 1.15)
       : 1;
   }
-  isSprintRequested(): boolean { return this.input.axes.sprint; }
+  setMovementCapabilities(capabilities: { sprint: boolean; jump: boolean }): void {
+    this.canSprint = capabilities.sprint; this.canJump = capabilities.jump;
+    if (!this.canSprint) this.sprinting = false;
+  }
+
+  isSprintRequested(): boolean { return this.canSprint && this.input.axes.sprint; }
 
   setNoclipEnabled(enabled: boolean): boolean {
     if (this.noclipEnabled === enabled) return this.noclipEnabled;
@@ -427,7 +463,7 @@ export class PlayerController {
   /** Read-only movement intent for animation selection; PlayerController remains the sole input owner. */
   getMovementIntent(): { forward: number; right: number; sprint: boolean; crouch: boolean } {
     const axes = this.input.axes;
-    return { forward: axes.forward, right: axes.right, sprint: axes.sprint && !this.sprintSuppressed, crouch: axes.crouch };
+    return { forward: axes.forward, right: axes.right, sprint: this.canSprint && axes.sprint && !this.sprintSuppressed, crouch: axes.crouch };
   }
   /** Read-only control evidence used by the dev pit-stumble model. */
   getPitControlIntent(): { forward: number; right: number; jumpGraceSeconds: number } {
@@ -674,6 +710,7 @@ export class PlayerController {
     const length = Math.hypot(x, y, z, w);
     if (!Number.isFinite(length) || length < MIN_LOOK_QUATERNION_LENGTH) return false;
     this.lookCamera.quaternion.set(x / length, y / length, z / length, w / length);
+    this.dashcamLook.reset(this.lookCamera.quaternion);
     this.syncContinuousAimYawFromLookQuaternion(false);
     this.renderLookQuaternion.copy(this.lookCamera.quaternion);
     this.traversal?.lookQuaternion.copy(this.lookCamera.quaternion);
@@ -727,6 +764,16 @@ export class PlayerController {
     };
   }
 
+  prepareScriptedStanding(): void {
+    this.crouchRequested=false;this.crouching=false;this.lowPosture=false;this.physics.setCrouched(false);
+    this.resetTransientMovement();
+  }
+  setScriptedPose(destination: Vec3Data, confined: boolean, shape?: {halfHeight:number;radius:number}): void {
+    this.externalMotion.set(0, 0, 0); this.resetTransientMovement(); this.motionBlend = 0;
+    this.physics.setScriptedPlayerPose(destination, confined, shape); this.physics.getPosition(this.position);
+    this.previousPosition.copy(this.position); this.renderedPosition.copy(this.position);
+    this.renderUpdate(0, 1);
+  }
   teleport(destination: Vec3Data): void {
     this.externalMotion.set(0, 0, 0);
     this.incapacitated = false;
@@ -853,6 +900,11 @@ export class PlayerController {
     this.externalMotion.set(0, 0, 0);
   }
 
+  private movementConstraint?: (position:THREE.Vector3, movement:THREE.Vector3)=>void;
+  private readonly constrainedMovement=new THREE.Vector3();
+  /** Narrative hesitation changes intended motion before collision resolution, never teleports. */
+  setMovementConstraint(constraint?: (position:THREE.Vector3,movement:THREE.Vector3)=>void):void{this.movementConstraint=constraint;}
+
   private updateMovement(delta: number): void {
     const rootX = this.animationRootStep.x + this.externalMotion.x, rootZ = this.animationRootStep.z + this.externalMotion.z;
     this.animationRootStep.set(0, 0, 0); this.animationRootBlocked = false;
@@ -878,10 +930,7 @@ export class PlayerController {
       return;
     }
 
-    this.targetManualLean = manualLeanAxis(
-      this.input.isPressed('KeyA'),
-      this.input.isPressed('KeyE'),
-    );
+    this.targetManualLean = 0;
 
     if (this.noclipEnabled) {
       this.consumeInactiveActions();
@@ -953,7 +1002,7 @@ export class PlayerController {
     else this.lowPostureElapsed = 0;
 
     const axes = this.input.axes;
-    const sprintRequested = !this.sprintSuppressed
+    const sprintRequested = this.canSprint && !this.sprintSuppressed
       && axes.sprint
       && axes.forward >= MOVEMENT_TUNING.locomotion.sprintForwardMin;
     const diagonalAxes = forwardBiasedDiagonalAxes(
@@ -965,7 +1014,7 @@ export class PlayerController {
       ? axes.right * MOVEMENT_TUNING.locomotion.sprintStrafeScale
       : diagonalAxes.right;
     const crouchPressed = this.input.consumeActionPress('crouch');
-    const jumpRequested = this.input.consumeActionPress('jump');
+    const jumpRequested = this.input.consumeActionPress('jump') && this.canJump;
 
     this.updateBasis();
     // Sprint is forward-led: backward/side-only input stays at walk speed.
@@ -1053,11 +1102,11 @@ export class PlayerController {
     const intendedX = this.velocity.x * delta + rootX;
     const intendedZ = this.velocity.z * delta + rootZ;
 
-    const result = this.physics.move({
-      x: intendedX,
-      y: this.verticalVelocity * delta,
-      z: intendedZ,
-    });
+    const requested=this.constrainedMovement.set(intendedX,this.verticalVelocity*delta,intendedZ);
+    this.movementConstraint?.(this.position,requested);
+    if(Math.abs(requested.x-intendedX)>.00001)this.velocity.x=0;
+    if(Math.abs(requested.z-intendedZ)>.00001)this.velocity.z=0;
+    const result = this.physics.move(requested);
     this.position.copy(result.position);
     const rootDistance = Math.hypot(rootX, rootZ);
     this.animationRootBlocked = rootDistance > .0001
@@ -1651,12 +1700,9 @@ export class PlayerController {
     const gait = THREE.MathUtils.lerp(this.previousGaitPhase, this.gaitPhase, alpha);
     const cameraMotion = this.cameraMotionEnabled ? 1 : 0;
 
-    // PointerLockControls owns the aim quaternion directly. Bodycam inertia is added
-    // as tiny bounded impulses/offsets instead of low-pass filtering the mouse aim.
-    // Severe impacts are the exception: only a small head-look cone remains while
-    // the body stays pinned to its impact orientation.
     this.constrainDownedLook();
-    this.renderLookQuaternion.copy(this.lookCamera.quaternion);
+    this.dashcamLook.sample(this.lookCamera.quaternion, frameDelta,
+      this.cameraMotionEnabled && !this.incapacitated && !this.traversal, this.renderLookQuaternion);
 
     this.motionBlend = THREE.MathUtils.lerp(
       this.motionBlend,
@@ -1831,6 +1877,7 @@ export class PlayerController {
     const roll = (
       this.lookRoll
       + this.fastTurnRoll
+      + this.dashcamLook.roll
       - this.strafeLean * MOVEMENT_TUNING.camera.strafeLeanRadians
       - manualLeanAmount * MOVEMENT_TUNING.camera.manualLeanAngleRadians
       - manualLeanSwayRoll
@@ -1933,28 +1980,18 @@ export class PlayerController {
   }
 
   private readonly onMouseMove = (event: MouseEvent): void => {
-    if (!this.isLocked || this.traversal || this.lookLocked) return;
+    if (!this.isPointerCaptured || this.traversal || this.lookLocked) return;
     let rawHorizontal = Number.isFinite(event.movementX) ? event.movementX : 0;
     let rawVertical = Number.isFinite(event.movementY) ? event.movementY : 0;
-    if (!this.controls.isLocked) {
-      // Embedded previews may deny pointer lock or report zero movementX/Y.
-      // Ordinary mouse motion must still aim without holding a combat button.
-      if (event.target !== this.pointerElement) { this.resetFallbackPoint(); return; }
-      const previous = this.fallbackPoint;
-      this.fallbackPoint = { x: event.clientX, y: event.clientY, time: event.timeStamp };
-      if (previous && event.timeStamp - previous.time < 500) {
-        const dx = event.clientX - previous.x, dy = event.clientY - previous.y;
-        if (Number.isFinite(dx) && (dx !== 0 || rawHorizontal === 0)) rawHorizontal = dx;
-        if (Number.isFinite(dy) && (dy !== 0 || rawVertical === 0)) rawVertical = dy;
-      }
-      this.lookEuler.setFromQuaternion(this.lookCamera.quaternion, 'YXZ');
-      this.lookEuler.y -= rawHorizontal * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed;
-      this.lookEuler.x = THREE.MathUtils.clamp(
-        this.lookEuler.x - rawVertical * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed,
-        -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01,
-      );
-      this.lookCamera.quaternion.setFromEuler(this.lookEuler);
-    }
+    rawHorizontal = THREE.MathUtils.clamp(rawHorizontal, -140, 140);
+    rawVertical = THREE.MathUtils.clamp(rawVertical, -140, 140);
+    this.lookEuler.setFromQuaternion(this.lookCamera.quaternion, 'YXZ');
+    this.lookEuler.y -= rawHorizontal * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed;
+    this.lookEuler.x = THREE.MathUtils.clamp(
+      this.lookEuler.x - rawVertical * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed,
+      Math.PI / 2 - this.controls.maxPolarAngle, Math.PI / 2 - this.controls.minPolarAngle,
+    );
+    this.lookCamera.quaternion.setFromEuler(this.lookEuler);
     if (rawHorizontal !== 0 || rawVertical !== 0) this.lookActivitySerial += 1;
     const horizontal = THREE.MathUtils.clamp(rawHorizontal, -140, 140);
     const vertical = THREE.MathUtils.clamp(rawVertical, -140, 140);
@@ -1991,14 +2028,25 @@ export class PlayerController {
     this.turnIntensity = Math.max(this.turnIntensity, turnStrength);
   };
 
+  private readonly onPointerMotionGate = (event: MouseEvent): void => {
+    if (event.target !== this.pointerElement && !this.isPointerCaptured) return;
+    if (!this.isPointerCaptured || this.discardCaptureMotion) {
+      if (this.isPointerCaptured) this.discardCaptureMotion = false;
+      event.stopImmediatePropagation();
+    }
+  };
+
   dispose(): void {
+    this.playingRequested = false; this.fallbackPlaying = false;
     this.pointerDocument.removeEventListener('mousemove', this.onMouseMove);
+    this.pointerDocument.removeEventListener('mousemove', this.onPointerMotionGate, true);
     this.pointerDocument.removeEventListener('mousedown', this.onCanvasMouseDown);
     this.pointerElement.removeEventListener('mouseleave', this.resetFallbackPoint);
     this.pointerElement.style.cursor = this.originalCursor;
     this.pointerElement.tabIndex = this.originalTabIndex;
     this.pointerDocument.removeEventListener('keydown', this.onFallbackKey);
     this.pointerDocument.defaultView?.removeEventListener('blur', this.onFallbackPause);
+    this.pointerDocument.removeEventListener('visibilitychange', this.onPointerVisibility);
     this.controls.removeEventListener('lock', this.onPointerLock);
     this.controls.removeEventListener('unlock', this.onPointerUnlock);
     this.controls.disconnect();

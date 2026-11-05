@@ -32,6 +32,7 @@ export class SiteAudio {
   private storyMusicSource?: MediaElementAudioSourceNode;
   private storyMusicGain?: GainNode;
   private storyMusicPaused = false;
+  private storyMusicMix = 1;
   private introSource?: AudioBufferSourceNode;
   private buffersLoading?: Promise<void>;
   private menu?: HTMLAudioElement;
@@ -210,6 +211,7 @@ export class SiteAudio {
   startStoryMusic(): void {
     if (this.disposed || !this.context || !this.master) return;
     if (!this.storyMusic) {
+      this.storyMusicMix = 1;
       this.storyMusic = new Audio('/assets/audio/music/new-game-memories.ogg');
       this.storyMusic.loop = true;
       this.storyMusic.preload = 'auto';
@@ -228,12 +230,19 @@ export class SiteAudio {
     if (paused) { music.pause(); return; }
     void music.play().then(() => {
       if (this.storyMusic !== music || this.storyMusicPaused || document.hidden) { music.pause(); return; }
-      this.storyMusicGain?.gain.setTargetAtTime(.32, this.context!.currentTime, .35);
+      this.storyMusicGain?.gain.setTargetAtTime(.32 * this.storyMusicMix, this.context!.currentTime, .12);
     }).catch(() => undefined);
   }
 
   fadeStoryMusicOut(): void {
     if (this.context) this.storyMusicGain?.gain.setTargetAtTime(0, this.context.currentTime, .18);
+  }
+
+  /** Driven by the host's visible-time clock, including pause/resume. */
+  setStoryMusicMix(mix: number): void {
+    this.storyMusicMix = Math.min(1, Math.max(0, mix));
+    if (this.context) this.storyMusicGain?.gain.setTargetAtTime(.32 * this.storyMusicMix, this.context.currentTime, .04);
+    if (this.storyMusicMix === 0) this.stopStoryMusic();
   }
 
   stopStoryMusic(): void {

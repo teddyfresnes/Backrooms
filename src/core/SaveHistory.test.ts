@@ -1,4 +1,8 @@
+import {reachPowerCut,gasTarget,gasOrigin} from '../../tests/support/gas-journey';
 import { describe, expect, it } from 'vitest';
+import { ApartmentQuest, RENT_MAIL_ID } from '../story/ApartmentQuest';
+import {InventoryState}from '../apartment/InventoryState';
+import {CorridorStory}from '../story/CorridorProgress';
 import {
   GAME_SAVE_HISTORY_LIMIT,
   GAME_SAVE_HISTORY_SCHEMA_VERSION,
@@ -57,7 +61,51 @@ const backroomsInput = (playTimeSeconds = 120): BackroomsGameSaveInput => ({
   },
 });
 
+it('keeps old saves compatible and round-trips inventory, the active world, objectives and every lighting/camera checkpoint',()=>{
+  const store=new MemoryStorage(),quest=new ApartmentQuest();quest.reachHome();quest.setLight(true);quest.setGas(true);quest.setRadio(true);quest.setTelevision(true);quest.readMail(RENT_MAIL_ID);quest.finishGame('lost');quest.nextThought();reachPowerCut(quest);
+  const old=writeGameSave(store,russianInput());expect(old.ok).toBe(true);
+  const bag=new InventoryState();bag.acquireLamp();bag.toggleLamp();bag.store({id:'prop:test-small',label:'Petit objet'});
+  const story=new CorridorStory();story.activate();
+  for(const checkpoint of [0,1,3.2,8.2,17,42]){
+    if(checkpoint>0&&!story.state.triggered)for(let i=0;i<205;i++)story.observe({x:-2+i*.1,y:9.535,z:-2.7},{x:-2,y:8.67,z:-2.7},true,Math.PI/2);
+    while(story.state.elapsed<checkpoint)story.update(.05,true);
+    const base=russianInput();const input={...base,payload:{...base.payload,computer:quest.snapshot(),inventory:bag.snapshot(),corridor:story.snapshot(),objective:story.objective(true)}};
+    const saved=writeGameSave(store,input);expect(saved.ok).toBe(true);
+    const latest=listGameSaves(store)[0]!;expect(latest.experienceId).toBe('russian-stairwell');if(latest.experienceId!=='russian-stairwell')throw Error();
+    expect(latest.payload.inventory).toEqual(bag.snapshot());expect(latest.payload.corridor).toEqual(story.snapshot());expect(latest.payload.objective).toEqual(story.objective(true));expect(latest.payload.computer?.apartment?.outageTriggered).toBe(true);
+    expect(new CorridorStory(latest.payload.corridor).snapshot()).toEqual(story.snapshot());
+  }
+});
+
 describe('game save history', () => {
+  it('round-trips all apartment device states, thoughts, a pending outage and the completed one', () => {
+    const storage = new MemoryStorage(), input = russianInput(), quest = new ApartmentQuest();
+    quest.reachHome(); quest.setLight(true); quest.setGas(true); quest.setTelevision(true); quest.setRadio(true); quest.useComputer(); quest.breakWhisky();
+    quest.readMail(RENT_MAIL_ID); quest.finishGame('won'); quest.nextThought(); quest.advanceNarration(.5,false);
+    for (let phase = 0; phase < 2; phase++) {
+      const computer = quest.snapshot();
+      const result = writeGameSave(storage, { ...input, payload: { ...input.payload, apartmentLightOn: quest.devices.lightOn, computer } });
+      expect(result.ok).toBe(true); if (!result.ok) throw new Error('Save rejected');
+      const loaded = loadGameSave(storage, result.save.id);
+      expect(loaded?.experienceId === 'russian-stairwell' && loaded.payload.computer).toEqual(computer);
+      if (loaded?.experienceId !== 'russian-stairwell') throw new Error('Wrong save');
+      const restored = new ApartmentQuest(loaded.payload.computer);
+      expect(restored.devices).toMatchObject({ gasOn: true, pcUsed: true, whiskyBroken: true, firstGameFinished: true });
+      if (phase === 0) { expect(restored.devices.outageLeadSeconds).toBeCloseTo(.5); expect(restored.devices.outageTriggered).toBe(false); }
+      else { expect(restored.devices.outageTriggered).toBe(true); expect(restored.advanceOutage(gasOrigin,gasTarget,true)).toBe(false); expect(restored.nextThought()).toBeNull(); }
+      reachPowerCut(quest);
+    }
+  });
+  it('round-trips computer quests and read mail without rejecting older stairwell saves', () => {
+    const storage = new MemoryStorage(), input = russianInput();
+    const computer = { homeReached: true, stage: 'game' as const, readMailIds: ['maman', 'regie-prelevement'] };
+    const result = writeGameSave(storage, { ...input, payload: { ...input.payload, computer } });
+    expect(result.ok).toBe(true); if (!result.ok) throw new Error('Save rejected');
+    const loaded = loadGameSave(storage, result.save.id);
+    expect(loaded?.experienceId === 'russian-stairwell' && loaded.payload.computer).toEqual(computer);
+    expect(writeGameSave(new MemoryStorage(), input).ok).toBe(true);
+    expect(writeGameSave(new MemoryStorage(), { ...input, payload: { ...input.payload, computer: { ...computer, homeReached: false } } }).ok).toBe(false);
+  });
   it('round-trips optional versioned surface anchors while accepting old payloads', () => {
     for (const height of [-.8, .225, .9, 1.8]) {
       const storage = new MemoryStorage(), input = backroomsInput();
@@ -306,4 +354,58 @@ it('round-trips every mail objective state while preserving old saves and reject
   if(legacy.ok) expect(loadGameSave(storage,legacy.save.id)?.payload).not.toHaveProperty('arrivalState');
   const invalid={...russianInput(),payload:{...russianInput().payload,windowBlindsOpen:[true,true],arrivalState:'unknown'}};
   expect(writeGameSave(storage,invalid as unknown as RussianStairwellGameSaveInput).ok).toBe(false);
+});
+
+it('persists one-time mail/door events, stable actors and neighbour variation without persisting timers',()=>{
+ const storage=new MemoryStorage(),base=russianInput();
+ const facts={specialDoorConsumed:true,attempts:{'west-neighbor-door-1-leaf':3},voices:{'west-neighbor-door-1-leaf':'karen' as const}};
+ const saved=writeGameSave(storage,{...base,payload:{...base.payload,windowBlindsOpen:[true,true],arrivalState:'mail',mailGaspPlayed:true,neighbors:facts}});
+ expect(saved.ok).toBe(true);expect(listGameSaves(storage)[0]?.payload).toMatchObject({mailGaspPlayed:true,neighbors:facts});
+ const fresh=writeGameSave(storage,{...base,payload:{...base.payload,windowBlindsOpen:[true,true],arrivalState:'approach',mailGaspPlayed:false,neighbors:{specialDoorConsumed:false,attempts:{}}}});
+ expect(fresh.ok).toBe(true);if(!fresh.ok)return;
+ expect(loadGameSave(storage,fresh.save.id)?.payload).toMatchObject({mailGaspPlayed:false,neighbors:{specialDoorConsumed:false,attempts:{}}});
+});
+it.each(['approach','mail','home','done'] as const)('migrates the missing gasp flag from an old %s snapshot',arrivalState=>{
+ const storage=new MemoryStorage(),base=russianInput();
+ writeGameSave(storage,{...base,payload:{...base.payload,windowBlindsOpen:[true,true],arrivalState}});
+ const raw=JSON.parse(storage.getItem(GAME_SAVE_HISTORY_STORAGE_KEY)!);delete raw.entries[0].payload.mailGaspPlayed;
+ storage.setItem(GAME_SAVE_HISTORY_STORAGE_KEY,JSON.stringify(raw));
+ expect(listGameSaves(storage)[0]?.payload).toMatchObject({mailGaspPlayed:arrivalState!=='approach'});
+});
+it('round-trips resident agitation and the last delivered line while rejecting malformed reaction state',()=>{
+ const storage=new MemoryStorage(),base=russianInput(),id='west-neighbor-door-1-leaf';
+ const neighbors={specialDoorConsumed:false,attempts:{[id]:1000},voices:{[id]:'ian' as const},reactions:{[id]:{annoyance:11.2,cursor:17,lastLine:22}}};
+ const input={...base,payload:{...base.payload,windowBlindsOpen:[true,true] as const,arrivalState:'home' as const,neighbors}};
+ const result=writeGameSave(storage,input);expect(result.ok).toBe(true);
+ if(result.ok)expect(loadGameSave(storage,result.save.id)?.payload).toMatchObject({neighbors});
+ for(const bad of [{annoyance:99,cursor:1,lastLine:1},{annoyance:1,cursor:-1,lastLine:1},{annoyance:1,cursor:1,lastLine:1000}]){
+  expect(writeGameSave(storage,{...input,payload:{...input.payload,neighbors:{...neighbors,reactions:{[id]:bad}}}}).ok).toBe(false);
+ }
+});
+
+it('keeps loose object poses, broken residue and independent fixtures in the existing history schema',()=>{
+  const storage=new MemoryStorage(),input=russianInput();
+  const objects={version:1 as const,bodies:{'prop:chess/pawn':{position:{x:-5,y:9.7,z:0},rotation:{x:0,y:0,z:0,w:1},sleeping:true}},broken:{'prop:flowerpot':{kind:'pot' as const,position:{x:-5,y:9.7,z:0},residuePending:true}},deposits:[{kind:'soil' as const,position:{x:-5,y:9.57,z:0},normal:{x:0,y:1,z:0},radius:.1}]};
+  const fixtures={version:1 as const,tapOn:true,waterLevel:.8,fanOn:true,deskLampOn:false,closetDoor:.3};
+  const result=writeGameSave(storage,{...input,payload:{...input.payload,objects,fixtures}});expect(result.ok).toBe(true);if(!result.ok)throw Error('Save rejected');
+  const loaded=loadGameSave(storage,result.save.id);expect(loaded?.experienceId).toBe('russian-stairwell');if(loaded?.experienceId!=='russian-stairwell')throw Error('Wrong save');
+  expect(loaded.payload.objects).toEqual(objects);expect(loaded.payload.fixtures).toEqual(fixtures);
+  expect(writeGameSave(storage,{...input,payload:{...input.payload,fixtures:{...fixtures,waterLevel:2}}}).ok).toBe(false);
+});
+it('keeps old saves readable and round-trips all broken dishes and glass without changing the history key or version',()=>{
+  const storage=new MemoryStorage(),input=russianInput();
+  const old=writeGameSave(storage,input);expect(old.ok).toBe(true);
+  const broken=Object.fromEntries(Array.from({length:24},(_,i)=>[`prop:KitchenStuff/dish-${i}`,{kind:i%2?'glass' as const:'ceramic' as const,position:{x:-5,y:9.4,z:0}}]));
+  const objects={version:1 as const,bodies:{},broken,deposits:[]};
+  const written=writeGameSave(storage,{...input,kind:'manual',payload:{...input.payload,objects}});expect(written.ok).toBe(true);
+  if(written.ok){const loaded=loadGameSave(storage,written.save.id);expect(loaded?.payload).toMatchObject({objects});}
+  if(old.ok)expect(loadGameSave(storage,old.save.id)).not.toBeNull();
+});
+it('restores PC transition recovery and accepts an already-consumed version-43 outage without replaying it',()=>{
+  const storage=new MemoryStorage(),input=russianInput(),quest=new ApartmentQuest();quest.reachHome();quest.setLight(true);quest.setGas(true);quest.setTelevision(true);quest.setRadio(true);quest.readMail(RENT_MAIL_ID);quest.finishGame('lost');quest.nextThought();quest.advanceNarration(.75,false);
+  const pcUse={version:1 as const,phase:'sitting' as const,safePosition:{x:-6.36,y:9.5363203,z:-4.3},chairOffset:.35};
+  const result=writeGameSave(storage,{...input,payload:{...input.payload,computer:quest.snapshot(),pcUse}});expect(result.ok).toBe(true);if(!result.ok)throw Error('Save failed');const saved=loadGameSave(storage,result.save.id);
+  expect(saved?.experienceId==='russian-stairwell'&&saved.payload.pcUse).toEqual(pcUse);
+  reachPowerCut(quest);const legacy=quest.snapshot();legacy.apartment!.outageLeadSeconds=1.12;
+  const old=writeGameSave(storage,{...input,payload:{...input.payload,computer:legacy}});expect(old.ok).toBe(true);const restored=new ApartmentQuest(legacy);expect(restored.isComputerBlocked).toBe(true);expect(restored.advanceOutage(gasOrigin,gasTarget,true)).toBe(false);
 });

@@ -16,6 +16,8 @@ export interface GameSettings {
   fieldOfView: number;
   lookSensitivity: number;
   masterVolume: number;
+  subtitles?: boolean;
+  soundCaptions?: boolean;
   menuMotion: boolean;
   cameraMotion: boolean;
   crosshair: boolean;
@@ -34,6 +36,8 @@ export const defaultGameSettings = (): GameSettings => ({
   fieldOfView: 72,
   lookSensitivity: 1,
   masterVolume: 0.6,
+  subtitles: true,
+  soundCaptions: false,
   menuMotion: typeof window === 'undefined'
     ? true
     : !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -75,6 +79,8 @@ export const loadGameSettings = (): GameSettings => {
         ? stored.cameraMotion
         : defaults.cameraMotion,
       crosshair: typeof stored.crosshair === 'boolean' ? stored.crosshair : defaults.crosshair,
+      subtitles: typeof stored.subtitles === 'boolean' ? stored.subtitles : true,
+      soundCaptions: typeof stored.soundCaptions === 'boolean' ? stored.soundCaptions : false,
       controls: sanitizeControlBindings(stored.controls, defaults.controls),
     };
   } catch {

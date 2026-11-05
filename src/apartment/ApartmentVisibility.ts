@@ -5,6 +5,7 @@ export function isApartmentInteriorVisible(
   viewer: Readonly<{ x: number; y: number }>, doorAngle: number, floorY: number,
 ): boolean {
   if (viewer.y < floorY - .08) return false;
-  if (viewer.x < APARTMENT_ENTRY_DOOR.wallFaceX + .08) return true;
-  return Math.abs(doorAngle) > .001;
+  if (viewer.x < APARTMENT_ENTRY_DOOR.wallFaceX + .30) return true;
+  // Mount before the first visible crack, including the last closing frame.
+  return Math.abs(doorAngle) > .00001;
 }

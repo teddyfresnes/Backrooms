@@ -3,6 +3,12 @@ import type {
   GameSaveStorage,
   GameSaveVec3,
 } from './GameSave';
+import { sanitizeComputerUse, type ComputerUseProgress } from '../apartment/ComputerUseState';
+import { sanitizeInventory, type InventoryProgress } from '../apartment/InventoryState';
+import { sanitizeCorridor, type CorridorProgress } from '../story/CorridorProgress';
+import { sanitizeApartmentObjects, sanitizeApartmentFixtures, type ApartmentObjectsProgress, type ApartmentFixturesProgress } from '../apartment/ApartmentInteractionState';
+import type { CharacterVoiceId } from '../audio/VoiceCatalog';
+import { sanitizeComputerProgress, type ComputerProgress } from '../story/ApartmentQuest';
 
 export type { GameSaveQuaternion, GameSaveStorage, GameSaveVec3 } from './GameSave';
 
@@ -14,6 +20,12 @@ export const MAX_GAME_SAVE_HISTORY_ENTRIES = GAME_SAVE_HISTORY_LIMIT;
 export type GameSaveKind = 'manual' | 'autosave';
 export type GameSaveExperienceId = 'russian-stairwell' | 'backrooms';
 export type HallArrivalState = 'approach' | 'mail' | 'home' | 'done';
+export interface HallNeighborProgress {
+  readonly specialDoorConsumed: boolean;
+  readonly attempts: Readonly<Record<string, number>>;
+  readonly voices?: Readonly<Record<string, CharacterVoiceId>>;
+  readonly reactions?: Readonly<Record<string, { readonly annoyance:number; readonly cursor:number; readonly lastLine:number }>>;
+}
 
 export interface GameSaveDoorState {
   readonly progress: number;
@@ -28,6 +40,15 @@ export interface RussianStairwellSavePayload {
   readonly apartmentLightOn: boolean;
   readonly windowBlindsOpen?: readonly [boolean, boolean];
   readonly arrivalState?: HallArrivalState;
+  readonly mailGaspPlayed?: boolean;
+  readonly neighbors?: HallNeighborProgress;
+  readonly computer?: ComputerProgress;
+  readonly objects?: ApartmentObjectsProgress;
+  readonly fixtures?: ApartmentFixturesProgress;
+  readonly pcUse?: ComputerUseProgress;
+  readonly inventory?:InventoryProgress;
+  readonly corridor?:CorridorProgress;
+  readonly objective?:string|null;
 }
 
 export interface BackroomsSavePayload {
@@ -247,18 +268,21 @@ const sanitizeDoorState = (value: unknown): GameSaveDoorState | null => {
 
 const sanitizeRussianPayload = (value: unknown): RussianStairwellSavePayload | null => {
   if (!isRecord(value)) return null;
-  const hasStoryKeys = hasExactKeys(value,
+  const extras = ['mailGaspPlayed', 'neighbors', 'computer', 'objects', 'fixtures', 'pcUse', 'inventory', 'corridor', 'objective'];
+  if (Object.keys(value).some(key => !['safePosition', 'quaternion', 'entranceDoor', 'apartmentLightOn', 'windowBlindsOpen', 'arrivalState', ...extras].includes(key))) return null;
+  const core = Object.fromEntries(Object.entries(value).filter(([key]) => !extras.includes(key)));
+  const hasStoryKeys = hasExactKeys(core,
     ['safePosition', 'quaternion', 'entranceDoor', 'apartmentLightOn', 'windowBlindsOpen', 'arrivalState']);
   if (hasStoryKeys && !['approach', 'mail', 'home', 'done'].includes(value.arrivalState as string)) return null;
   const hasCurrentKeys = hasExactKeys(
-    value,
+    core,
     ['safePosition', 'quaternion', 'entranceDoor', 'apartmentLightOn', 'windowBlindsOpen'],
   );
   const hasLightKeys = hasExactKeys(
-    value,
+    core,
     ['safePosition', 'quaternion', 'entranceDoor', 'apartmentLightOn'],
   );
-  const hasLegacyKeys = hasExactKeys(value, ['safePosition', 'quaternion', 'entranceDoor']);
+  const hasLegacyKeys = hasExactKeys(core, ['safePosition', 'quaternion', 'entranceDoor']);
   if (!hasStoryKeys && !hasCurrentKeys && !hasLightKeys && !hasLegacyKeys) {
     return null;
   }
@@ -276,12 +300,50 @@ const sanitizeRussianPayload = (value: unknown): RussianStairwellSavePayload | n
     || windowBlindsOpen.length !== 2
     || windowBlindsOpen.some((open) => typeof open !== 'boolean')
   ) return null;
+  if (value.mailGaspPlayed !== undefined && typeof value.mailGaspPlayed !== 'boolean') return null;
+  let neighbors: HallNeighborProgress | undefined;
+  if (value.neighbors !== undefined) {
+    const n = value.neighbors;
+    if (!isRecord(n) || Object.keys(n).some(key => !['specialDoorConsumed', 'attempts', 'voices', 'reactions'].includes(key)) || typeof n.specialDoorConsumed !== 'boolean' || !isRecord(n.attempts)) return null;
+    const entries = Object.entries(n.attempts);
+    if (entries.length > 16 || entries.some(([key, attempt]) => !/^(?:west|east|north)-neighbor-door-\d+-leaf$/.test(key) || !Number.isSafeInteger(attempt) || (attempt as number) < 0)) return null;
+    const voices = n.voices;
+    if (voices !== undefined && (!isRecord(voices) || Object.entries(voices).some(([key, voice]) => !/^(?:west|east|north)-neighbor-door-\d+-leaf$/.test(key) || !['alex', 'ian', 'sean', 'karen', 'meghan'].includes(voice as string)))) return null;
+    const reactions=n.reactions;
+    if(reactions!==undefined&&(!isRecord(reactions)||Object.keys(reactions).length>16||Object.entries(reactions).some(([id,r])=>
+      !/^(?:west|east|north)-neighbor-door-\d+-leaf$/.test(id)||!isRecord(r)||Object.keys(r).some(k=>!['annoyance','cursor','lastLine'].includes(k))
+      ||typeof r.annoyance!=='number'||!Number.isFinite(r.annoyance)||r.annoyance<0||r.annoyance>12
+      ||!Number.isSafeInteger(r.cursor)||(r.cursor as number)<0||!Number.isSafeInteger(r.lastLine)||(r.lastLine as number)<-1||(r.lastLine as number)>100)))return null;
+    neighbors = Object.freeze({ specialDoorConsumed: n.specialDoorConsumed, attempts: Object.freeze(Object.fromEntries(entries)) as Record<string, number>, ...(voices ? { voices: Object.freeze({ ...voices }) as Record<string, CharacterVoiceId> } : {}),
+      ...(reactions?{reactions:Object.freeze(Object.fromEntries(Object.entries(reactions).map(([id,r])=>[id,Object.freeze({...r as object})]))) as HallNeighborProgress['reactions']}: {}) });
+  }
+  const computer = value.computer === undefined ? undefined : sanitizeComputerProgress(value.computer);
+  if (computer === null) return null;
+  const objects = value.objects === undefined ? undefined : sanitizeApartmentObjects(value.objects);
+  const fixtures = value.fixtures === undefined ? undefined : sanitizeApartmentFixtures(value.fixtures);
+  const pcUse=value.pcUse===undefined?undefined:sanitizeComputerUse(value.pcUse);
+  const inventory=value.inventory===undefined?undefined:sanitizeInventory(value.inventory);
+  const corridor=value.corridor===undefined?undefined:sanitizeCorridor(value.corridor);
+  if (objects === null || fixtures === null || pcUse===null || inventory===null || corridor===null) return null;
+  if(value.objective!==undefined&&value.objective!==null&&(typeof value.objective!=='string'||value.objective.length>180))return null;
+  if(corridor?.active&&!computer?.apartment?.outageTriggered)return null;
+  if(corridor?.triggered&&!inventory?.slots[0])return null;
   return Object.freeze({
     safePosition,
     quaternion,
     entranceDoor,
     apartmentLightOn,
     ...(hasStoryKeys ? { arrivalState: value.arrivalState as HallArrivalState } : {}),
+    // Old snapshots have no exact sound history. Existing mail/home/done
+    // progression means the reminder was already encountered: do not rearm it.
+    mailGaspPlayed: typeof value.mailGaspPlayed === 'boolean' ? value.mailGaspPlayed : value.arrivalState !== 'approach',
+    ...(neighbors ? { neighbors } : {}),
+    ...(computer ? { computer } : {}),
+    ...(objects ? { objects } : {}),
+    ...(fixtures ? { fixtures } : {}),
+    ...(pcUse ? { pcUse } : {}),
+    ...(inventory?{inventory}:{}),...(corridor?{corridor}:{}),
+    ...(value.objective!==undefined?{objective:value.objective as string|null}:{}),
     windowBlindsOpen: Object.freeze([
       windowBlindsOpen[0] as boolean,
       windowBlindsOpen[1] as boolean,

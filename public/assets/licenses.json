@@ -342,6 +342,35 @@
         "audio/bacteria/voice-lines.mp3"
       ],
       "changes": "Re-encoded as MP3; the scream was trimmed of its leading/trailing silence, boosted by 7 dB and edge-faded to loop seamlessly."
+    },
+    {
+      "name": "Super Dialogue Audio Pack V1 — neighbour refusals and nonverbal reactions",
+      "author": "Dillon Becker; actors Alex Brodie, Ian Lampert, Sean Lenhart, Karen Cenon, Meghan Christian",
+      "source": "https://dillonbecker.itch.io/sdap",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "files": [
+        "audio/neighbors/*/refusal-*.ogg",
+        "audio/neighbors/*/miscellaneous-13.ogg",
+        "audio/neighbors/*/miscellaneous-15.ogg"
+      ],
+      "changes": "Recorded human clips, full duration, mono Opus 40 kbps, normalized to -22 LUFS / -4 dBTP. No speech synthesis or pitch-altered player voice. Cue mapping from the pack reference sheet; listening validation pending."
+    },
+    {
+      "name": "Knock on door",
+      "author": "jankooiker",
+      "source": "https://freesound.org/people/jankooiker/sounds/237937/",
+      "license": "CC0 1.0",
+      "file": "audio/interactions/knock-wood.ogg",
+      "changes": "Public MP3 preview of three recorded wooden-door knocks; band-limited and normalized, mono Opus 64 kbps."
+    },
+    {
+      "name": "Mechanical entrance doorbell #2",
+      "author": "Joseph SARDIN / BigSoundBank",
+      "source": "https://bigsoundbank.com/mechanical-entrance-doorbell-2-s3045.html",
+      "license": "CC0 1.0",
+      "file": "audio/interactions/apartment-bell.ogg",
+      "changes": "Recorded Parisian apartment bell; full duration, band-limited and normalized, mono Opus 64 kbps."
     }
   ],
   "models": [
@@ -626,6 +655,15 @@
         "bacteria/bacteria.glb"
       ],
       "changes": "Original Sketchfab GLB export; at runtime the stage plane is hidden, bones are renamed to bare Mixamo names and the project Mixamo locomotion clips drive the skeleton."
+    },
+    {
+      "name": "Pressure television face",
+      "source": "Original generated artwork for this game",
+      "license": "Original AI-generated game artwork",
+      "files": [
+        "apartment/tv-pressure-smile.webp"
+      ],
+      "changes": "512×384 WebP used by the existing TV CanvasTexture."
     }
   ],
   "character": [

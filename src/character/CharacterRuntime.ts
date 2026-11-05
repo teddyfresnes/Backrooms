@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SeatedCharacterPose, type ComputerPoseSample, type ComputerPoseFrame } from './SeatedCharacterPose';
 import { GaitTransition, sampleGaitPhase, alignGaitPhase, createSlideSprintRecoveryClip } from './LocomotionBlend';
 import { createCrouchLocomotionClips, CROUCH_LOCOMOTION_IDS, CROUCH_GAIT_REFERENCE_SPEED } from './CrouchLocomotion';
 import { advanceStrikeClock, CombatImpactAudio } from './CombatFeel';
@@ -1148,6 +1149,45 @@ export class CharacterRuntime {
     if (!this.character) throw new Error('Personnage non préparé.');
     return { avatar: cloneSkeleton(this.character) as THREE.Group, idle: this.animations.get('idle')!.clip };
   }
+  private computerPose?: SeatedCharacterPose;
+  private computerViewMode?: ViewMode;
+  private readonly computerHidden = new Map<THREE.Object3D, boolean>();
+  beginComputerPresentation(): void {
+    if (!this.character || this.computerPose) return;
+    this.computerViewMode=this.viewMode;this.firstPersonObstaclePose.reset();this.resetCombatState(true);
+    this.computerPose=new SeatedCharacterPose(this.character,this.avatarAnchor,this.animations.get('idle')!.clip,this.animations.get('walking')!.clip,this.firstPersonFootToSole,this.animations.get('standing-to-crouched')!.clip);
+    this.avatarAnchor.visible=true;this.firstPersonAvatarAnchor.visible=false;
+  }
+  sampleComputerPresentation(sample: ComputerPoseSample, firstPerson: boolean): ComputerPoseFrame {
+    this.beginComputerPresentation();
+    if(!this.computerPose)throw Error('Personnage indisponible pour le PC.');
+    this.viewMode=firstPerson?'first-person':'third-person';
+    this.avatarAnchor.visible=true;this.firstPersonAvatarAnchor.visible=false;this.headMaskWarmup.value=firstPerson?1:0;
+    this.character?.traverse(o=>{const slot=o.userData.wardrobeSlot;if((o as THREE.Mesh).isMesh&&(['hair','beard','eyebrows','eyelashes','eyes'].includes(slot)||!(o as THREE.SkinnedMesh).isSkinnedMesh&&o.parent?.name.toLowerCase().includes('head'))){
+      if(firstPerson){if(!this.computerHidden.has(o))this.computerHidden.set(o,o.visible);o.visible=false;}else if(this.computerHidden.has(o)){o.visible=this.computerHidden.get(o)!;this.computerHidden.delete(o);}
+    }});
+    return this.computerPose.sample(sample);
+  }
+  endComputerPresentation(forceFirstPerson: boolean): void {
+    this.computerPose?.dispose();this.computerPose=undefined;this.headMaskWarmup.value=0;
+    for(const [o,visible] of this.computerHidden)o.visible=visible;this.computerHidden.clear();
+    this.viewMode=forceFirstPerson?'first-person':this.computerViewMode??this.viewMode;this.computerViewMode=undefined;
+    this.playAnimation('idle',true,1,false,true);this.updateAvatarTransform(0,true);this.applyViewMode(true);this.presentCamera();
+  }
+  getEquipmentHandPosition(output:THREE.Vector3):boolean {
+    const hand=this.viewMode==='first-person'&&!this.computerPose?this.firstPersonRightHandBone:this.rightHandBone;
+    if(!hand||this.isBusy)return false;hand.getWorldPosition(output);return true;
+  }
+  sampleCorridorPresentation(position:THREE.Vector3,yaw:number,headYaw:number,time:number,firstPerson:boolean):ComputerPoseFrame {
+    const feet=position.clone();feet.y-=.865;
+    const frame=this.sampleComputerPresentation({feet,yaw,seated:0,seat:feet,lean:0,time,walking:0,handWeight:0},firstPerson);
+    if(this.headBone){this.headBone.rotateY(headYaw);this.headBone.updateWorldMatrix(false,true);}
+    frame.eye.copy(frame.head).add(new THREE.Vector3(0,.075,0)).add(new THREE.Vector3(Math.sin(yaw+headYaw),0,Math.cos(yaw+headYaw)).multiplyScalar(.095));return frame;
+  }
+  setExternalCameraPresentation(active: boolean): void {
+    if (active) { this.avatarAnchor.visible = false; this.firstPersonAvatarAnchor.visible = false; return; }
+    this.updateAvatarTransform(0, true); this.applyViewMode(true); this.presentCamera();
+  }
   setArrivalPresentation(active: boolean): void {
     if (active) { this.avatarAnchor.visible = false; this.firstPersonAvatarAnchor.visible = false; return; }
     this.viewMode = 'first-person';
@@ -1164,11 +1204,16 @@ export class CharacterRuntime {
   get isDown(): boolean { return !!this.ragdoll || !!this.recovery; }
   get isBusy(): boolean { return this.isDown || !!this.pairCoordinator.session; }
   toggleView(): ViewMode { this.setViewMode(this.viewMode === 'first-person' ? 'third-person' : 'first-person'); this.presentCamera(); return this.viewMode; }
-  setSettings(settings: GameSettings): void { this.settings = { ...settings }; this.combatImpactAudio.setVolume(settings.masterVolume); this.applyViewMode(false); }
+  setSettings(settings: GameSettings): void { this.settings = { ...settings }; this.combatImpactAudio.setVolume(settings.masterVolume); if(this.computerPose){this.avatarAnchor.visible=true;this.firstPersonAvatarAnchor.visible=false;}else this.applyViewMode(false); }
   handleLanding(impactSpeed: number, impact?: LandingImpact): void { this.handleLandingAnimation(impact?.strength ?? Math.min(1, impactSpeed / 16), impact); }
-  setActive(active: boolean): void {
+  setActive(active: boolean, preserveState=false): void {
     this.root.hidden = !active;
-    if (!active) { this.emoteMenu.close(); this.resetCombatState(true); this.cancelPairInteraction(); }
+    if (!active) {
+      this.emoteMenu.close();
+      if(!preserveState){this.resetCombatState(true);this.cancelPairInteraction();}
+      this.combatPointerHeld=false;this.combatLeftPointerHeld=false;this.combatCounterModifierHeld=false;
+      this.combatBufferedPunchSeconds=0;this.combatHeavyTapDetector.cancel();this.combatHeavyUpgradePending=false;
+    }
     this.player?.setInputEnabled(active && !this.isBusy && this.recoveryCameraBlend < 0);
     if (active) this.combatImpactAudio.unlock();
     this.accumulator = 0;
@@ -10645,6 +10690,9 @@ export class CharacterRuntime {
   
 
   dispose(): void {
+    this.computerPose?.dispose();
+    this.computerPose = undefined;
+    this.computerHidden.clear();
     if (this.disposed) return;
     this.disposed = true;
     this.emoteMenu.dispose();

@@ -4,6 +4,8 @@ import * as THREE from 'three';
  * AGX still processes the final scene; bloom is an optional halo, not the
  * mechanism that makes the panel read as a white emitter. */
 export const FLUORESCENT_PANEL_RADIANCE = 2;
+export const createFluorescentPanelGeometry = (): THREE.PlaneGeometry =>
+  new THREE.PlaneGeometry(2.24, 1.16).rotateX(Math.PI * .5);
 export const createFluorescentDiffuser = (name = 'fluorescent-diffuser', tint = 0xffffff): THREE.MeshBasicMaterial =>
   new THREE.MeshBasicMaterial({ name, color: new THREE.Color(tint).multiplyScalar(FLUORESCENT_PANEL_RADIANCE),
     toneMapped: true, fog: true, depthTest: true, depthWrite: true, side: THREE.DoubleSide });

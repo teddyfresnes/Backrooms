@@ -44,6 +44,7 @@ export class MaterialLibrary {
   static async load(
     renderer: THREE.WebGLRenderer,
     onProgress?: (ratio: number) => void,
+    palette: 'all' | 'yellow' = 'all',
   ): Promise<MaterialLibrary> {
     const manager = new THREE.LoadingManager();
     manager.onProgress = (_url, loaded, total) => onProgress?.(total === 0 ? 0 : loaded / total);
@@ -70,32 +71,17 @@ export class MaterialLibrary {
       whiteFloorRoughness: `${base}/white-biome/floor/white-carpet-roughness.jpg`,
     };
 
-    const [
-      wallpaper,
-      plasterColor,
-      plasterNormal,
-      plasterArm,
-      carpetColor,
-      carpetNormal,
-      carpetArm,
-      ceilingColor,
-      ceilingNormal,
-      ceilingArm,
-      whiteWallColor,
-      whiteWallNormal,
-      whiteWallRoughness,
-      whiteFloorColor,
-      whiteFloorNormal,
-      whiteFloorRoughness,
-    ] = await Promise.all(
-      Object.entries(paths).map(async ([key, path]) =>
-        configureTexture(
-          await loader.loadAsync(path),
-          anisotropy,
-          key.endsWith('Color') || key === 'wallpaper',
-        ),
-      ),
-    );
+    const loaded = await Promise.all(Object.entries(paths)
+      .filter(([key]) => palette === 'all' || !key.startsWith('white'))
+      .map(async ([key, path]) => [key, configureTexture(await loader.loadAsync(path), anisotropy,
+        key.endsWith('Color') || key === 'wallpaper')] as const));
+    const byName = Object.fromEntries(loaded);
+    // The finite yellow corridor never mounts other palettes. Aliases avoid
+    // fetching/uploading the white-biome images while retaining shared ownership.
+    const [wallpaper, plasterColor, plasterNormal, plasterArm, carpetColor, carpetNormal, carpetArm,
+      ceilingColor, ceilingNormal, ceilingArm, whiteWallColor, whiteWallNormal, whiteWallRoughness,
+      whiteFloorColor, whiteFloorNormal, whiteFloorRoughness] = Object.keys(paths).map(key => byName[key] ?? byName.wallpaper!);
+
 
     carpetArm.channel = 0;
     ceilingArm.channel = 0;
@@ -312,7 +298,7 @@ export class MaterialLibrary {
         red: redMaterials,
         white: whiteMaterials,
       },
-      [
+      [...new Set([
         wallpaper,
         plasterColor,
         plasterNormal,
@@ -329,7 +315,7 @@ export class MaterialLibrary {
         whiteFloorColor,
         whiteFloorNormal,
         whiteFloorRoughness,
-      ],
+      ])],
     );
   }
 

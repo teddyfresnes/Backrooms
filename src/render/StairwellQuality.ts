@@ -1,5 +1,14 @@
 import { renderScaleLimits, type RenderScaleLimits } from './AdaptiveQuality';
 import type { RenderQualityPreference } from '../ui/settings';
+import type { LightingMode } from './LightingMode';
+
+/** Auto varies pixel count, never the shader pipeline during a walk. */
+export function stairwellPipelineFeatures(preference: RenderQualityPreference, lighting: LightingMode) {
+  return {
+    compact: preference === 'performance' || (preference === 'auto' && lighting === 'legacy'),
+    shadows: preference === 'quality',
+  };
+}
 
 /** Large displays can fall back to a real 720p-class budget on a slow GPU. */
 export function stairwellRenderScaleLimits(width: number, height: number, dpr: number, coarse: boolean): RenderScaleLimits {

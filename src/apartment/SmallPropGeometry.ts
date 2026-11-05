@@ -1,19 +1,21 @@
 import * as THREE from 'three';
+import { CooperativeWork } from '../core/CooperativeWork';
 
 const WORLD_CELL = .0008;
 
 /** Weld sub-millimetre tessellation on small static props; architecture is excluded.
  * UV/normal buckets retain texture seams and sharp edges. No decimation runs per frame.
  */
-export function simplifySmallPropGeometry(mesh: THREE.Mesh): THREE.BufferGeometry | null {
+function* smallPropSteps(mesh: THREE.Mesh): Generator<void, THREE.BufferGeometry | null> {
   const source = mesh.geometry;
+  if(source.userData.apartmentSmallPropPrepared===1)return null;
   if (mesh instanceof THREE.SkinnedMesh || Array.isArray(mesh.material) || source.groups.length > 1
     || Object.keys(source.morphAttributes).length > 0 || Number.isFinite(source.drawRange.count)) return null;
   const position = source.getAttribute('position');
   const count = source.index?.count ?? position.count;
   if (count < 54_000) return null;
   mesh.updateWorldMatrix(true, false);
-  source.computeBoundingBox();
+  if (!source.boundingBox) source.computeBoundingBox();
   const worldSize = source.boundingBox!.clone().applyMatrix4(mesh.matrixWorld).getSize(new THREE.Vector3());
   const maxDimension = Math.max(worldSize.x, worldSize.y, worldSize.z);
   if (maxDimension > .5) return null;
@@ -30,6 +32,7 @@ export function simplifySmallPropGeometry(mesh: THREE.Mesh): THREE.BufferGeometr
   const uv = source.getAttribute('uv');
   const uv1 = source.getAttribute('uv1');
   for (let i = 0; i < position.count; i++) {
+    if (i % 2048 === 0) yield;
     const key = `${Math.floor(position.getX(i) * scale.x / WORLD_CELL)},${Math.floor(position.getY(i) * scale.y / WORLD_CELL)},${Math.floor(position.getZ(i) * scale.z / WORLD_CELL)}`
       + (uv ? `/${Math.floor(uv.getX(i) * uvCells)},${Math.floor(uv.getY(i) * uvCells)}` : '')
       + (uv1 ? `/${Math.floor(uv1.getX(i) * uvCells)},${Math.floor(uv1.getY(i) * uvCells)}` : '')
@@ -46,6 +49,7 @@ export function simplifySmallPropGeometry(mesh: THREE.Mesh): THREE.BufferGeometr
   }
   const indices: number[] = [];
   for (let i = 0; i < count; i += 3) {
+    if (i % 6144 === 0) yield;
     const a = remap[source.index?.getX(i) ?? i]!;
     const b = remap[source.index?.getX(i + 1) ?? i + 1]!;
     const c = remap[source.index?.getX(i + 2) ?? i + 2]!;
@@ -63,6 +67,7 @@ export function simplifySmallPropGeometry(mesh: THREE.Mesh): THREE.BufferGeometr
   const compactPosition = geometry.getAttribute('position');
   const originalPoint = new THREE.Vector3(), compactPoint = new THREE.Vector3();
   for (let i = 0; i < position.count; i++) {
+    if (i % 2048 === 0) yield;
     originalPoint.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
     compactPoint.fromBufferAttribute(compactPosition, remap[i]!).applyMatrix4(mesh.matrixWorld);
     if (originalPoint.distanceToSquared(compactPoint) > .0014 ** 2) { geometry.dispose(); return null; }
@@ -70,6 +75,30 @@ export function simplifySmallPropGeometry(mesh: THREE.Mesh): THREE.BufferGeometr
   geometry.computeBoundingBox(); geometry.computeBoundingSphere();
   geometry.name = `${source.name || mesh.name}-compact`;
   return geometry;
+}
+
+export function simplifySmallPropGeometry(mesh: THREE.Mesh): THREE.BufferGeometry | null {
+  const steps = smallPropSteps(mesh); let step = steps.next();
+  while (!step.done) step = steps.next(); return step.value;
+}
+
+export async function optimizeApartmentSmallPropsAsync(root: THREE.Object3D, signal?: AbortSignal): Promise<void> {
+  root.updateWorldMatrix(true, true);
+  const work = new CooperativeWork(signal), cache = new Map<THREE.BufferGeometry, THREE.BufferGeometry>();
+  const replaced = new Set<THREE.BufferGeometry>(), meshes: THREE.Mesh[] = [];
+  root.traverse(object => { if (object instanceof THREE.Mesh) meshes.push(object); });
+  for (const mesh of meshes) {
+    const original = mesh.geometry; let optimized = cache.get(original);
+    if (!optimized) {
+      const steps = smallPropSteps(mesh); let step = steps.next();
+      while (!step.done) { await work.checkpoint(); step = steps.next(); }
+      optimized = step.value ?? undefined;
+    }
+    if (optimized) { cache.set(original, optimized); mesh.geometry = optimized; replaced.add(original); }
+    await work.checkpoint();
+  }
+  for (const mesh of meshes) replaced.delete(mesh.geometry);
+  replaced.forEach(geometry => geometry.dispose());
 }
 
 export function optimizeApartmentSmallProps(root: THREE.Object3D): void {

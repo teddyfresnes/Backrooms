@@ -3,36 +3,27 @@ import type { ImportedApartmentDoorInteraction } from '../apartment/ImportedApar
 import type { DoorRuntime } from '../apartment/ImportedApartmentEnvironment';
 import type { AudioSystem } from '../audio/AudioSystem';
 import type { PlayerController } from '../player/PlayerController';
-import type { EntranceDoorMotion } from '../stairwell/EntranceDoorMotion';
-import type { StairwellEnvironment } from '../stairwell/StairwellEnvironment';
-import { APARTMENT_ENTRY_DOOR, APARTMENT_FLOOR_Y } from '../apartment/layout';
-import { STAIRWELL_FLOOR_HEIGHT } from '../stairwell/layout';
+import type { Vec3Data } from '../world/types';
 import type { StoryHud } from '../ui/StoryHud';
 import type { BacteriaActor } from './BacteriaActor';
 import type { BacteriaAudio } from './BacteriaAudio';
-import type { BackroomsCorridor } from './BackroomsCorridor';
 import {
-  APARTMENT_ENTRY_WAYPOINTS,
-  BACKROOMS_CORRIDOR,
   CATCH_RADIUS,
-  CHASE_CHECKPOINT,
   CHASE_SPEEDS,
   ChasePath,
   CLOSET,
   createChaseWaypoints,
-  DOOR_BANG_POSITION,
+  createEntryWaypoints,
+  PLAYER_CENTER_HEIGHT,
   DOOR_BANG_SECONDS,
-  isChaseTriggerPosition,
-  MONSTER_START,
   REVEAL_TIMELINE as R,
 } from './BacteriaLayout';
 
 type Phase =
-  | 'dormant' | 'armed' | 'reveal' | 'chase' | 'bang' | 'inside'
+  | 'dormant' | 'reveal' | 'chase' | 'bang' | 'inside'
   | 'search' | 'leaving' | 'survived' | 'jumpscare' | 'dead';
 
 const EYE_HEIGHT = 0.73;
-const PLAYER_CENTER_HEIGHT = 0.865;
 const UP = new THREE.Vector3(0, 1, 0);
 const smooth = (value: number): number => { const t = THREE.MathUtils.clamp(value, 0, 1); return t * t * (3 - 2 * t); };
 const lerpAngle = (from: number, to: number, amount: number): number => {
@@ -47,10 +38,8 @@ export interface BacteriaEncounterHost {
   /** Player eye camera (PlayerController), used as the scripted viewpoint. */
   readonly eyeCamera: THREE.PerspectiveCamera;
   readonly player: PlayerController;
-  readonly environment: StairwellEnvironment;
   readonly door: ImportedApartmentDoorInteraction;
   readonly closet: DoorRuntime;
-  readonly entrance: EntranceDoorMotion;
   readonly audio: AudioSystem;
   readonly hud: StoryHud;
   setPrompt(label: string | null): void;
@@ -58,21 +47,23 @@ export interface BacteriaEncounterHost {
   sprintKeyLabel(): string;
   /** Hides/shows the player's own avatar (inside the closet). */
   setAvatarHidden(hidden: boolean): void;
-  isStoryWaitingHome(): boolean;
+  readonly threshold: Readonly<Vec3Data>;
+  canStartReveal(): boolean;
+  isRevealLampLit(): boolean;
+  onReveal(): void;
+  onRetry(): void;
   onSurvived(): void;
 }
 
-/**
- * Owns the whole scripted encounter: the lights-on reveal behind the hall door,
- * the chase up the stairwell, the siege of the apartment door, the closet and
- * the outcome. Updated by the stairwell runtime at its frame rate, only while
- * the game is actually being played (so pausing freezes everything).
- */
+/** The post-outage reveal, chase, breach and hiding sequence. */
 export class BacteriaEncounter {
   private phase: Phase = 'dormant';
   private phaseTime = 0;
-  private readonly path = new ChasePath(createChaseWaypoints());
-  private readonly entryPath = new ChasePath(APARTMENT_ENTRY_WAYPOINTS.map(point => ({ ...point, speed: 1 })));
+  private readonly path: ChasePath;
+  private readonly entryPath: ChasePath;
+  private readonly creatureLight = new THREE.PointLight(0xfff0c2, 0, 7.5, 1.7);
+  private revealTime: number | null = null;
+  private revealFov = 11.5;
   private distanceAlong = 0;
   private readonly monsterPosition = new THREE.Vector3();
   private monsterYaw = 0;
@@ -87,25 +78,18 @@ export class BacteriaEncounter {
   private readonly shakeQuaternion = new THREE.Quaternion();
   private readonly raycaster = new THREE.Raycaster();
   private readonly cameraRight = new THREE.Vector3();
-  private nextPanel = 1;
   private fov = 0;
   private hidden = false;
-  private hiddenBeforeEntry = false;
-  private entered = false;
   private bangTimer = 0;
   private nextBang = 0;
   private closetAngle = 0;
   private closetTarget = 0;
   private closetSpeed = 6;
-  private flickerTimer = 0;
-  private power = 1;
   private shakeLevel = 0;
-  private revealHint = false;
   private searchStage = 0;
   private searchTimer = 0;
   private entryAlong = 0;
   private prompt: string | null = null;
-  private lightBorrowed = false;
   private closetTimer = 0;
   private seed = 0x51ac7e;
   private deathCause: 'caught' | 'closet' = 'caught';
@@ -113,16 +97,18 @@ export class BacteriaEncounter {
   constructor(
     private readonly host: BacteriaEncounterHost,
     private readonly actor: BacteriaActor,
-    private readonly corridor: BackroomsCorridor,
     private readonly sound: BacteriaAudio,
   ) {
+    this.path = new ChasePath(createChaseWaypoints(host.threshold));
+    this.entryPath = new ChasePath(createEntryWaypoints(host.threshold));
+    this.creatureLight.name = 'bacteria-creature-light';
     actor.setVisible(false);
-    host.scene.add(actor.root, corridor.group, corridor.revealLight, corridor.chaseLight);
+    host.scene.add(actor.root, this.creatureLight);
   }
 
   /** True from the reveal until the outcome: no save, no portal, no other prompt. */
   get isActive(): boolean {
-    return this.phase !== 'dormant' && this.phase !== 'armed' && this.phase !== 'survived';
+    return this.phase !== 'dormant' && this.phase !== 'survived';
   }
 
   get isHidden(): boolean { return this.hidden; }
@@ -131,12 +117,11 @@ export class BacteriaEncounter {
   get questText(): { text: string; tone: 'calm' | 'urgent' | 'hidden' } | null {
     const inside = this.playerInside();
     switch (this.phase) {
-      case 'armed': return { text: 'Rentre chez toi · dernier étage', tone: 'calm' };
       case 'reveal': return null;
       case 'chase':
         if (inside && !this.host.door.isSecured()) return { text: 'Ferme la porte de l’appartement !', tone: 'urgent' };
         if (inside) return { text: 'Cache-toi dans le placard de l’entrée !', tone: 'urgent' };
-        return { text: 'COURS ! Monte au dernier étage et enferme-toi chez toi', tone: 'urgent' };
+        return { text: 'COURS ! Retourne dans l’appartement', tone: 'urgent' };
       case 'bang':
       case 'inside':
         if (this.hidden) return { text: 'Ne bouge plus. Pas un bruit…', tone: 'hidden' };
@@ -150,29 +135,17 @@ export class BacteriaEncounter {
     }
   }
 
-  /** Arms (or disarms) the reveal according to the story state. */
-  syncStory(): void {
-    const waiting = this.host.isStoryWaitingHome();
-    if (waiting && this.phase === 'dormant') this.setPhase('armed');
-    else if (!waiting && this.phase === 'armed') this.setPhase('dormant');
-  }
-
   update(delta: number): void {
     const dt = Math.max(0, Math.min(0.05, delta));
     this.phaseTime += dt;
-    this.syncStory();
     const host = this.host;
     host.eyeCamera.getWorldPosition(this.eye);
     this.feet.copy(host.player.position);
     this.feet.y -= PLAYER_CENTER_HEIGHT;
 
-    // Resuming from the pause menu re-enables input: scripted shots keep it off.
     if (this.locksInput && host.player.isInputEnabled) host.player.setInputEnabled(false);
-    if (this.phase === 'armed') {
-      if (isChaseTriggerPosition(this.feet)) this.startReveal();
-      return;
-    }
     if (this.phase === 'dormant' || this.phase === 'survived') {
+      if (this.phase === 'dormant' && host.canStartReveal()) this.startReveal();
       this.animateCloset(dt);
       return;
     }
@@ -188,12 +161,10 @@ export class BacteriaEncounter {
       case 'dead': this.updateDead(); break;
     }
     // A death resets to the checkpoint inside the switch above.
-    if ((this.phase as Phase) === 'dormant' || (this.phase as Phase) === 'armed') return;
+    if ((this.phase as Phase) === 'dormant') return;
     this.animateCloset(dt);
-    this.updateHallPower(dt);
     this.actor.update(dt);
-    this.corridor.update(dt, this.actor.root.visible ? this.monsterPosition.z : null);
-    this.lightApartmentEntry();
+    this.updateCreatureLight();
     this.updateSound();
     this.shakeLevel = Math.max(0, this.shakeLevel - dt * 2.4);
   }
@@ -209,7 +180,7 @@ export class BacteriaEncounter {
     if (this.hidden && this.phase !== 'jumpscare' && this.phase !== 'dead') {
       // Crouched behind the leaf, watching the entry through the crack.
       const breathe = Math.sin(this.phaseTime * 1.9) * 0.008;
-      camera.position.set(CLOSET.hidePosition.x, APARTMENT_FLOOR_Y + 1.5 + breathe, CLOSET.hidePosition.z);
+      camera.position.set(CLOSET.hidePosition.x, this.host.threshold.y + 1.5 + breathe, CLOSET.hidePosition.z);
       this.target.set(CLOSET.peekTarget.x, CLOSET.peekTarget.y, CLOSET.peekTarget.z);
       this.lookMatrix.lookAt(camera.position, this.target, UP);
       camera.quaternion.setFromRotationMatrix(this.lookMatrix);
@@ -234,7 +205,7 @@ export class BacteriaEncounter {
 
   get locksInput(): boolean {
     return this.phase === 'reveal' || this.phase === 'jumpscare' || this.phase === 'dead'
-      || this.hidden || (this.phase === 'chase' && this.phaseTime < R.release - R.charge);
+      || this.hidden || (this.phase === 'chase' && this.phaseTime < R.releaseDelay);
   }
 
   // ---------------------------------------------------------------- reveal
@@ -242,68 +213,51 @@ export class BacteriaEncounter {
   private startReveal(): void {
     const host = this.host;
     this.setPhase('reveal');
+    host.player.prepareScriptedStanding();
     host.player.setInputEnabled(false);
     host.player.setLookLocked(true);
+    host.onReveal();
     host.hud.hideHint();
     this.fov = host.baseFieldOfView();
-    this.nextPanel = 1;
-    this.flickerTimer = 0;
+    this.revealTime = null;
     this.distanceAlong = 0;
-    this.monsterPosition.set(MONSTER_START.x, MONSTER_START.y, MONSTER_START.z);
-    this.monsterYaw = 0;
-    this.actor.setPlacement(this.monsterPosition, 0);
+    this.path.sample(0, this.monsterPosition);
+    this.monsterYaw = -Math.PI / 2;
+    this.actor.setPlacement(this.monsterPosition, this.monsterYaw);
     this.actor.setMotion('idle');
     this.actor.setLookTarget(null);
-    this.actor.setVisible(true);
-    this.corridor.setAll(false, true);
-    this.corridor.setVisible(true);
-    host.environment.setExteriorClearance(this.corridor.clearance);
-    host.environment.setRainExclusion(this.corridor.clearance);
-    this.revealHint = false;
   }
 
   private updateReveal(dt: number): void {
     const host = this.host;
-    const t = this.phaseTime;
-    // Mains failing: a few stutters, then dark.
-    if (t < R.flickerEnd) {
-      this.power = this.noise() > 0.45 ? 0.35 + this.noise() * 0.65 : 0.03;
-      host.environment.setPower(this.power);
-    } else if (this.power !== 0) {
-      this.power = 0;
-      host.environment.setPower(0);
-      host.audio.impact('power-cut');
-    }
-    // The door, by itself.
-    if (t >= R.doorOpenStart && t - dt < R.doorOpenStart) host.audio.door('open');
-    host.entrance.setOpen(smooth((t - R.doorOpenStart) / R.doorOpenDuration));
-    if (t >= R.firstPanel && t - dt < R.firstPanel) {
-      this.corridor.setPanel(0, true);
+    if (this.revealTime === null && host.isRevealLampLit()) {
+      this.revealTime = this.phaseTime;
+      this.actor.setVisible(true);
       this.actor.setLookTarget(this.eye);
+      this.sound.playTension();
+      this.revealFov = THREE.MathUtils.clamp(
+        THREE.MathUtils.radToDeg(2 * Math.atan(2.15 / this.eye.distanceTo(this.monsterPosition))),
+        10, 24,
+      );
     }
-    if (t >= R.tensionStart && t - dt < R.tensionStart) this.sound.playTension();
-    while (this.nextPanel < BACKROOMS_CORRIDOR.panelCount && t >= R.panelWaveStart + (this.nextPanel - 1) * R.panelInterval) {
-      this.corridor.setPanel(this.nextPanel, true);
-      this.nextPanel += 1;
-    }
-    if (t >= R.headSnap && t - dt < R.headSnap) { this.actor.snapHead(); this.shakeLevel = 0.35; }
-    this.actor.setLookTarget(t >= R.firstPanel ? this.eye : null);
 
-    // Head turns to the door, then locks on the creature while the lens closes in.
-    if (t >= R.turnStart) {
-      const door = this.target.set(0.25, 1.35, -6.2);
-      if (t >= R.firstPanel) this.actor.getHeadPosition(this.target).add(this.heading.set(0, -0.25, 0));
-      else this.target.copy(door);
-      this.lookMatrix.lookAt(this.eye, this.target, UP);
-      this.lookQuaternion.setFromRotationMatrix(this.lookMatrix);
-      const current = host.player.getLookQuaternion();
-      const rate = t < R.turnStart + R.turnDuration ? 2.6 : 6;
-      const next = new THREE.Quaternion(current.x, current.y, current.z, current.w).slerp(this.lookQuaternion, 1 - Math.exp(-dt * rate));
-      host.player.setLookQuaternion(next);
+    this.target.copy(this.monsterPosition).addScaledVector(UP, 1.6);
+    if (this.revealTime !== null) this.actor.getHeadPosition(this.target).addScaledVector(UP, -.32);
+    this.lookMatrix.lookAt(this.eye, this.target, UP);
+    this.lookQuaternion.setFromRotationMatrix(this.lookMatrix);
+    const current = host.player.getLookQuaternion();
+    const next = new THREE.Quaternion(current.x, current.y, current.z, current.w)
+      .slerp(this.lookQuaternion, 1 - Math.exp(-dt * 5));
+    host.player.setLookQuaternion(next);
+
+    if (this.revealTime === null) return;
+    const t = this.phaseTime - this.revealTime;
+    if (t >= R.headSnap && t - dt < R.headSnap) {
+      this.actor.snapHead();
+      this.shakeLevel = .35;
     }
-    const base = host.baseFieldOfView();
-    const zoom = smooth((t - R.zoomStart) / R.zoomDuration);
-    this.fov = THREE.MathUtils.lerp(base, 11.5, zoom * zoom) + (t > R.headSnap ? Math.sin((t - R.headSnap) * 40) * Math.exp(-(t - R.headSnap) * 6) * 1.2 : 0);
+    const zoom = smooth(t / R.zoomDuration);
+    this.fov = THREE.MathUtils.lerp(host.baseFieldOfView(), this.revealFov, zoom * zoom);
     if (t >= R.charge) this.startChase();
   }
 
@@ -314,34 +268,26 @@ export class BacteriaEncounter {
     this.actor.setMotion('run');
     this.sound.startScream();
     this.shakeLevel = 0.6;
-    this.power = 1;
-    this.host.environment.setPower(1);
   }
 
   private updateChase(dt: number): void {
     const host = this.host;
     const t = this.phaseTime;
-    const release = R.release - R.charge;
+    const release = R.releaseDelay;
     if (t < R.dezoomDuration + 0.3) {
       const base = host.baseFieldOfView();
       const out = smooth(t / R.dezoomDuration);
-      this.fov = THREE.MathUtils.lerp(11.5, base + 9, out) - 9 * smooth((t - R.dezoomDuration) / 0.3);
+      this.fov = THREE.MathUtils.lerp(this.revealFov, base + 9, out) - 9 * smooth((t - R.dezoomDuration) / 0.3);
     }
     if (t >= release && t - dt < release) {
       host.player.setLookLocked(false);
       host.player.setInputEnabled(true);
       host.hud.showHint(host.sprintKeyLabel(), 'COURS !', 4.5, true);
-      this.revealHint = true;
-    }
+      }
 
     const inside = this.playerInside();
-    const progress = this.path.project(this.feet);
-    const pursuing = !inside && t > release && this.distanceAlong > 4
-      && (this.distanceAlong >= progress.distance - 0.3 || progress.offset > 2.6);
-    if (pursuing) {
-      this.pursue(dt, CHASE_SPEEDS.landing + 0.6);
-      // Resume the route from where the pursuit left it, never from behind.
-      this.distanceAlong = Math.max(this.distanceAlong, Math.min(this.path.length, this.path.project(this.monsterPosition).distance));
+    if (!inside && this.distanceAlong >= this.path.length) {
+      this.pursue(dt, CHASE_SPEEDS.corridor);
     } else {
       this.distanceAlong = Math.min(this.path.length, this.distanceAlong + this.path.speedAt(this.distanceAlong) * dt);
       this.path.sample(this.distanceAlong, this.monsterPosition);
@@ -350,10 +296,10 @@ export class BacteriaEncounter {
     }
     this.actor.setLookTarget(this.eye);
     this.actor.setPlacement(this.monsterPosition, this.monsterYaw);
-    if (this.checkCaught()) return;
-    if (this.distanceAlong >= this.path.length - 1e-3 && !pursuing) {
-      if (inside && host.door.isSecured()) this.startBang();
-      else if (inside || this.hidden) this.enterApartment(false);
+    if (!inside && this.checkCaught()) return;
+    if (inside && this.distanceAlong >= this.path.length - 1e-3) {
+      if (host.door.isSecured()) this.startBang();
+      else this.enterApartment(false);
     }
   }
 
@@ -363,7 +309,7 @@ export class BacteriaEncounter {
     this.setPhase('bang');
     this.bangTimer = DOOR_BANG_SECONDS;
     this.nextBang = 0.1;
-    this.monsterPosition.set(DOOR_BANG_POSITION.x, DOOR_BANG_POSITION.y, DOOR_BANG_POSITION.z);
+    this.path.sample(this.path.length, this.monsterPosition);
     this.monsterYaw = -Math.PI / 2;
     this.actor.setPlacement(this.monsterPosition, this.monsterYaw);
     this.actor.setMotion('bang');
@@ -394,10 +340,8 @@ export class BacteriaEncounter {
       this.shakeLevel = 1;
     }
     this.sound.startVoice();
-    this.entered = true;
-    this.hiddenBeforeEntry = this.hidden;
     this.entryAlong = 0;
-    this.monsterPosition.set(DOOR_BANG_POSITION.x, DOOR_BANG_POSITION.y, DOOR_BANG_POSITION.z);
+    this.path.sample(this.path.length, this.monsterPosition);
     if (this.hidden) {
       this.setPhase('search');
       this.searchStage = 0;
@@ -414,7 +358,7 @@ export class BacteriaEncounter {
     if (this.hidden) {
       // Saw you go in: straight for the closet, then tear it open.
       const arrived = this.walkEntry(dt, CHASE_SPEEDS.apartment);
-      this.actor.setLookTarget(this.target.set(CLOSET.hidePosition.x, APARTMENT_FLOOR_Y + 1.5, CLOSET.hidePosition.z));
+      this.actor.setLookTarget(this.target.set(CLOSET.hidePosition.x, this.host.threshold.y + 1.5, CLOSET.hidePosition.z));
       if (arrived) {
         this.closetTarget = 1.55;
         this.closetSpeed = 22;
@@ -422,6 +366,10 @@ export class BacteriaEncounter {
         this.deathCause = 'closet';
         this.startJumpscare();
       }
+      return;
+    }
+    if (this.entryAlong < this.entryPath.cumulative[1]!) {
+      this.walkEntry(dt, CHASE_SPEEDS.apartment);
       return;
     }
     this.pursue(dt, CHASE_SPEEDS.apartment);
@@ -441,7 +389,7 @@ export class BacteriaEncounter {
   }
 
   private updateSearch(dt: number): void {
-    const closetEye = this.target.set(CLOSET.hidePosition.x, APARTMENT_FLOOR_Y + 1.45, CLOSET.hidePosition.z);
+    const closetEye = this.target.set(CLOSET.hidePosition.x, this.host.threshold.y + 1.45, CLOSET.hidePosition.z);
     if (this.searchStage === 0) {
       // Rushes in, then slows to a broken, sniffing walk.
       const speed = this.entryAlong < 1.6 ? 3.2 : CHASE_SPEEDS.stalk;
@@ -543,7 +491,7 @@ export class BacteriaEncounter {
     }
     this.actor.setPlacement(this.monsterPosition, this.monsterYaw);
     // Key light between the lens and the face, or it is a black blob.
-    this.corridor.chaseLight.position.copy(eye).addScaledVector(toward, distance * 0.45).add(UP.clone().multiplyScalar(0.35));
+    this.creatureLight.position.copy(eye).addScaledVector(toward, distance * 0.45).addScaledVector(UP, .35);
   }
 
   private updateJumpscare(dt: number): void {
@@ -551,7 +499,7 @@ export class BacteriaEncounter {
     this.placeLunge(t);
     // A strobing key light and a blown-out hide: the face must read, for a split second.
     const strobe = Math.abs(Math.sin(t * 26));
-    this.corridor.chaseLight.intensity = 5.5 + strobe * 5;
+    this.creatureLight.intensity = 5.5 + strobe * 5;
     this.actor.setExposure(0.35 + strobe * 0.65);
     if (t > 0.16 && t - dt <= 0.16) this.host.hud.pulseFlash(0.85);
     if (t > 0.42 && t - dt <= 0.42) this.host.hud.pulseFlash(0.9);
@@ -560,8 +508,8 @@ export class BacteriaEncounter {
       this.setPhase('dead');
       this.sound.stopAll(0);
       this.actor.setVisible(false);
-      this.corridor.chaseLight.intensity = 0;
-      this.host.hud.showDeath(true, this.deathCause === 'closet' ? 'Il savait où tu étais.' : 'Retour dans le hall…');
+      this.creatureLight.intensity = 0;
+      this.host.hud.showDeath(true, this.deathCause === 'closet' ? 'Il savait où tu étais.' : 'Retour à l’entrée du couloir…');
     }
   }
 
@@ -580,32 +528,22 @@ export class BacteriaEncounter {
     this.applyClosetAngle();
     if (this.hidden) host.setAvatarHidden(false);
     this.hidden = false;
-    this.entered = false;
-    host.player.teleport(CHASE_CHECKPOINT);
-    this.lookMatrix.lookAt(this.target.set(0, 0, 0), this.heading.set(0, 0, 1), UP);
+    const threshold = host.threshold;
+    host.player.teleport({ x: threshold.x + 1.2, y: threshold.y + PLAYER_CENTER_HEIGHT, z: threshold.z });
+    this.lookMatrix.lookAt(this.target.set(0, 0, 0), this.heading.set(1, 0, 0), UP);
     host.player.setLookQuaternion(this.lookQuaternion.setFromRotationMatrix(this.lookMatrix));
     host.player.setLookLocked(false);
     host.player.setInputEnabled(true);
-    this.setPhase('armed');
+    this.setPhase('dormant');
+    host.onRetry();
   }
 
-  /** Lights, corridor, exterior and hall door back to their ordinary state. */
   private restoreWorld(): void {
-    const host = this.host;
     this.actor.setVisible(false);
     this.actor.setMotion('idle');
     this.actor.setExposure(0);
     this.sound.setDuck(1);
-    this.corridor.setVisible(false);
-    this.corridor.setAll(false, true);
-    this.corridor.update(0, null);
-    this.corridor.resetLightPositions();
-    this.lightBorrowed = false;
-    host.environment.setExteriorClearance(null);
-    host.environment.setRainExclusion(null);
-    host.environment.setPower(1);
-    host.entrance.setOpen(0);
-    this.power = 1;
+    this.creatureLight.intensity = 0;
     this.fov = 0;
   }
 
@@ -628,7 +566,6 @@ export class BacteriaEncounter {
     if (this.hidden && this.phase === 'survived') { this.leaveCloset(); return true; }
     if (!this.canHide(position, direction)) return false;
     this.hidden = true;
-    this.hiddenBeforeEntry = !this.entered;
     this.host.player.setInputEnabled(false);
     this.host.player.setLookLocked(true);
     this.host.setAvatarHidden(true);
@@ -664,8 +601,8 @@ export class BacteriaEncounter {
     this.closetSpeed = 6;
     this.closetTimer = 0.9;
     host.hud.setQuest('Tu as survécu… pour cette nuit.', 'calm');
-    host.onSurvived();
     this.setPhase('dormant');
+    host.onSurvived();
   }
 
   private animateCloset(dt: number): void {
@@ -686,7 +623,7 @@ export class BacteriaEncounter {
   }
 
   private applyClosetAngle(): void {
-    this.host.closet.pivot.rotation.y = this.closetAngle;
+    this.host.closet.pivot.rotation.y = this.host.closet.closedAngle + this.closetAngle;
     this.host.closet.pivot.updateMatrixWorld(true);
   }
 
@@ -711,40 +648,23 @@ export class BacteriaEncounter {
 
   /** Where the player actually sees from: the closet crack while hidden. */
   private viewer(): THREE.Vector3 {
-    return this.hidden ? this.face.set(CLOSET.hidePosition.x, APARTMENT_FLOOR_Y + 1.5, CLOSET.hidePosition.z) : this.eye;
+    return this.hidden ? this.face.set(CLOSET.hidePosition.x, this.host.threshold.y + 1.5, CLOSET.hidePosition.z) : this.eye;
   }
 
   private playerInside(): boolean {
     const position = this.host.player.position;
-    return position.x < APARTMENT_ENTRY_DOOR.wallFaceX - 0.18 && position.y > APARTMENT_FLOOR_Y + 0.3;
+    return position.x < this.host.threshold.x - .15 && position.y > this.host.threshold.y + .3;
   }
 
-  /**
-   * Once the door gives way, the landing tube spills into the dark entry: the
-   * corridor's reveal light is borrowed for it, so the light count never changes.
-   */
-  private lightApartmentEntry(): void {
-    const light = this.corridor.revealLight;
-    const inside = this.phase === 'inside' || this.phase === 'search' || this.phase === 'leaving';
-    if (!inside) {
-      if (this.lightBorrowed) { this.corridor.resetLightPositions(); this.lightBorrowed = false; }
+  private updateCreatureLight(): void {
+    if (this.phase === 'jumpscare') return;
+    if (!this.actor.root.visible) {
+      this.creatureLight.intensity = 0;
       return;
     }
-    this.lightBorrowed = true;
-    light.position.set(APARTMENT_ENTRY_DOOR.centerX + 0.35, APARTMENT_FLOOR_Y + 2.25, APARTMENT_ENTRY_DOOR.centerZ + 0.2);
-    light.intensity = (this.power > 0.5 ? 2.8 : 0.6) * (0.85 + this.noise() * 0.15);
-  }
-
-  private updateHallPower(dt: number): void {
-    if (this.phase === 'reveal') return;
-    // During the chase the whole cage stutters: dips, never a full blackout.
-    this.flickerTimer -= dt;
-    if (this.flickerTimer <= 0) {
-      const dip = this.phase === 'chase' && this.noise() < 0.55;
-      this.power = dip ? 0.08 + this.noise() * 0.25 : 1;
-      this.flickerTimer = dip ? 0.05 + this.noise() * 0.12 : 0.35 + this.noise() * 1.6;
-      this.host.environment.setPower(this.power);
-    }
+    this.creatureLight.position.copy(this.monsterPosition).addScaledVector(UP, 2.8);
+    this.creatureLight.position.x += this.phase === 'reveal' ? .55 : -.55;
+    this.creatureLight.intensity = this.phase === 'reveal' ? 4.8 : 3.7;
   }
 
   private updateSound(): void {
@@ -754,9 +674,8 @@ export class BacteriaEncounter {
     this.cameraRight.crossVectors(this.heading, UP).normalize();
     const toward = this.target.copy(this.monsterPosition).sub(this.eye).setY(0);
     const pan = toward.lengthSq() > 1e-6 ? toward.normalize().dot(this.cameraRight) : 0;
-    const storeys = Math.abs(this.monsterPosition.y - this.feet.y) / STAIRWELL_FLOOR_HEIGHT;
-    const insideSplit = this.playerInside() !== (this.monsterPosition.x < APARTMENT_ENTRY_DOOR.wallFaceX - 0.18);
-    const occlusion = Math.min(1, storeys * 0.22 + (insideSplit && this.host.door.isSecured() ? 0.62 : 0) + (this.hidden ? 0.18 : 0));
+    const insideSplit = this.playerInside() !== (this.monsterPosition.x < this.host.threshold.x - .15);
+    const occlusion = (insideSplit && this.host.door.isSecured() ? .62 : 0) + (this.hidden ? .18 : 0);
     this.sound.updateSpatial(distance, pan, occlusion);
   }
 
@@ -770,13 +689,10 @@ export class BacteriaEncounter {
     return this.seed / 4294967296;
   }
 
-  /** Pause/menu/save: an interrupted scene is never resumed half-way; restart it on load. */
-  get hasSprintHintShown(): boolean { return this.revealHint; }
-
   dispose(): void {
     this.sound.dispose();
     this.restoreWorld();
     this.actor.dispose();
-    this.corridor.dispose();
+    this.creatureLight.removeFromParent();
   }
 }

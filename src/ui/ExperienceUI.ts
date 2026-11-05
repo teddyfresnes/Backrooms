@@ -9,6 +9,8 @@ import {
   detectKeyboardPreset,
   formatKeyLabel,
   isBindableCode,
+  canBindControlAction,
+  isEditableKeyTarget,
   remapControlBinding,
   type ControlAction,
   type KeyboardPreset,
@@ -20,7 +22,8 @@ import {
 } from './settings';
 
 interface UIActions {
-  enter(): void;
+  enter(event?: MouseEvent): void;
+  pause?(): void;
   regenerate(): void;
   returnToMainMenu(): void;
   saveGame?(): boolean | Promise<boolean>;
@@ -197,8 +200,10 @@ export class ExperienceUI {
   private developerPreviewCompleted = 0;
   private developerPreviewTotal = 0;
   private pendingBinding?: ControlAction;
+  private pauseKeyBlockedUntil=0;
   private pendingBindingButton?: HTMLButtonElement;
   private pendingConfirmation?: () => void;
+  private confirmationOrigin?: HTMLElement;
 
   constructor(
     container: HTMLElement,
@@ -219,6 +224,12 @@ export class ExperienceUI {
     this.root.dataset.menuPage = 'home';
     this.root.setAttribute('aria-busy', 'true');
     this.root.innerHTML = `
+      <button type="button" class="pointer-capture" data-ui="capture-pointer" aria-label="Reprendre le contrôle" hidden>
+        <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <rect x="8" y="3" width="16" height="26" rx="8" />
+          <path d="M16 4v10M8 14h16M12 8h4" />
+        </svg>
+      </button>
       <div class="atmosphere-overlay" aria-hidden="true">
         <div class="menu-shade"></div>
         <div class="film-grain"></div>
@@ -237,6 +248,7 @@ export class ExperienceUI {
                     <h2 id="home-title">Random Story</h2>
                   </div>
                 </header>
+                <header class="pause-heading pause-only" hidden><h2 id="pause-title">Pause</h2></header>
                 <div class="menu-actions" aria-label="Actions principales">
                   <div class="continue-action main-menu-only">
                     <button class="menu-action primary" type="button" data-ui="enter" data-ui-main-continue disabled>
@@ -257,14 +269,14 @@ export class ExperienceUI {
                   </button>
 
                   <div class="continue-action pause-only" hidden>
-                    <button class="menu-action primary" type="button" data-ui="enter" disabled>
+                    <button class="menu-action" type="button" data-ui="enter" disabled>
                       <span>Continuer</span>
                     </button>
-                    <button class="continue-more" type="button" data-open-page="saves" aria-label="Ouvrir les sauvegardes">+</button>
                   </div>
                   <button class="menu-action pause-only" type="button" data-ui="save-game" hidden>
                     <span>Sauvegarder</span>
                   </button>
+                  <button class="menu-action pause-only" type="button" data-open-page="saves" hidden><span>Charger une partie</span></button>
                   <button class="menu-action pause-only" type="button" data-open-page="settings" hidden>
                     <span>Paramètres</span>
                   </button>
@@ -365,6 +377,8 @@ export class ExperienceUI {
                       <strong>Volume général</strong>
                       <span class="range-control"><input data-setting="masterVolume" type="range" min="0" max="1" step="0.01" /><output data-output="masterVolume"></output></span>
                     </label>
+                    <label class="setting-row toggle-row"><strong>Sous-titres des voisins</strong><input data-setting="subtitles" type="checkbox" role="switch" /></label>
+                    <label class="setting-row toggle-row"><strong>Indications sonores</strong><input data-setting="soundCaptions" type="checkbox" role="switch" /></label>
                   </fieldset>
 
                   <fieldset id="settings-panel-game" class="settings-card" data-settings-panel="game" role="tabpanel" aria-labelledby="settings-tab-game" hidden>
@@ -395,6 +409,8 @@ export class ExperienceUI {
                     </div>
                     <p class="binding-help" data-ui="binding-help">Sélectionnez une commande, puis appuyez sur une touche.</p>
                     <div class="bindings-grid">${bindingRows}</div>
+                    <p class="object-controls-help">Alternatives permanentes : flèches pour se déplacer, Ctrl pour sauter, 0 ou Pavé 0 pour s’accroupir, Maj droite pour courir, Pavé 1 pour interagir (Verr. Num indifférent). Échap ou P : pause, y compris au PC. Les lettres ne commandent pas le jeu dans un champ de saisie.</p>
+                    <p class="object-controls-help">Objets : interagir ou cliquer pour prendre, interagir pour poser, clic pour lancer. Molette : distance. Clic droit + souris : tourner. La souris oriente la vue uniquement après capture confirmée.</p>
                   </fieldset>
 
                   <fieldset id="settings-panel-developer" class="settings-card developer-settings" data-settings-panel="developer" role="tabpanel" aria-labelledby="settings-tab-developer" hidden>
@@ -453,12 +469,11 @@ export class ExperienceUI {
 
       <section class="confirmation-layer" data-ui="confirmation" role="dialog" aria-modal="true" aria-labelledby="confirmation-title" aria-describedby="confirmation-message" aria-hidden="true" hidden>
         <div class="confirmation-card">
-          <small>CONFIRMATION</small>
           <h2 id="confirmation-title" data-ui="confirmation-title"></h2>
           <p id="confirmation-message" data-ui="confirmation-message"></p>
           <div class="confirmation-actions">
             <button type="button" data-ui="confirmation-cancel">Annuler</button>
-            <button class="danger" type="button" data-ui="confirmation-accept"></button>
+            <button class="confirm-primary" type="button" data-ui="confirmation-accept"></button>
           </div>
         </div>
       </section>
@@ -466,6 +481,7 @@ export class ExperienceUI {
       <section class="hud" data-ui="hud" aria-hidden="true">
         <div class="reticle" aria-hidden="true"><i></i><b></b><span></span><em></em></div>
         <div class="interaction-prompt" data-ui="interaction" aria-hidden="true"><kbd>E</kbd><span></span></div>
+        <div class="carry-hint" data-ui="carry-hint" hidden></div>
         <section class="command-console" data-ui="console" aria-hidden="true">
           <div class="console-shell">
             <div class="chat-history" data-ui="chat-history" aria-live="polite">
@@ -528,6 +544,7 @@ export class ExperienceUI {
     this.developerExporter = this.query('[data-ui="developer-exporter"]');
 
     for (const button of this.enterButtons) button.addEventListener('click', actions.enter);
+    this.query('[data-ui="capture-pointer"]').addEventListener('click', actions.enter);
     this.query('[data-ui="regenerate"]').addEventListener('click', this.requestNewGame);
     this.query('[data-ui="main-menu"]').addEventListener('click', this.requestMainMenu);
     this.confirmationCancel.addEventListener('click', this.closeConfirmation);
@@ -544,7 +561,10 @@ export class ExperienceUI {
     this.developerExporter.addEventListener('wardrobe-preview-complete', this.onPreviewExportComplete);
     this.developerExporter.addEventListener('wardrobe-preview-error', this.onPreviewExportError);
     for (const button of this.root.querySelectorAll<HTMLElement>('[data-open-page]')) {
-      button.addEventListener('click', () => this.showPage(button.dataset.openPage as MenuPage));
+      button.addEventListener('click', () => {
+        this.showPage(button.dataset.openPage as MenuPage);
+        if (button.dataset.openSettings) this.showSettingsCategory(button.dataset.openSettings as SettingsCategory);
+      });
     }
     for (const button of this.root.querySelectorAll<HTMLElement>('[data-back]')) {
       button.addEventListener('click', () => {
@@ -582,6 +602,10 @@ export class ExperienceUI {
     this.root.addEventListener('pointerover', this.onMainMenuPointerOver);
     this.root.addEventListener('click', this.onMainMenuButtonClick, true);
     document.addEventListener('keydown', this.onMenuKeyDown);
+    window.addEventListener('keydown', this.onGameplayPauseKey, true);
+    window.addEventListener('keyup', this.onPauseKeyUp, true);
+    window.addEventListener('blur', this.onGameplayBlur);
+    document.addEventListener('visibilitychange', this.onGameplayVisibility);
     document.addEventListener('fullscreenchange', this.onFullscreenChange);
     this.syncMenuContext();
     this.showSettingsCategory(this.activeSettingsCategory);
@@ -601,6 +625,7 @@ export class ExperienceUI {
   setReady(): void {
     this.readyState = true;
     for (const button of this.enterButtons) button.disabled = false;
+    this.syncContinueAvailability();
     this.root.classList.add('is-ready');
     this.root.setAttribute('aria-busy', 'false');
     this.overlay.setAttribute('aria-hidden', 'false');
@@ -610,6 +635,12 @@ export class ExperienceUI {
   setSaveHistory(summaries: readonly GameSaveSummary[]): void {
     this.saveHistory = [...summaries];
     this.renderSaveHistory();
+    this.syncContinueAvailability();
+  }
+
+  private syncContinueAvailability(): void {
+    const button = this.query<HTMLButtonElement>('[data-ui-main-continue]');
+    button.disabled = !this.readyState || this.saveHistory.length === 0;
   }
 
   setSessionStarted(started: boolean): void {
@@ -643,7 +674,9 @@ export class ExperienceUI {
       this.beginGameplay();
       return;
     }
+    if(this.root.classList.contains('is-playing'))this.pauseKeyBlockedUntil=performance.now()+250;
     this.root.classList.remove('is-playing');
+    this.setPointerCaptureRequired(false);
     this.overlay.setAttribute('aria-hidden', 'false');
     this.overlay.inert = false;
     this.query('[data-ui="hud"]').setAttribute('aria-hidden', 'true');
@@ -654,6 +687,7 @@ export class ExperienceUI {
       this.overlay.setAttribute('aria-label', 'Menu pause');
       this.syncMenuContext();
       this.showPage('home');
+      this.enterButtons.find(button => button.closest('.pause-only'))?.focus({ preventScroll: true });
     }
   }
 
@@ -661,6 +695,13 @@ export class ExperienceUI {
     // The regular HUD is intentionally silent. Runtime details live behind /logs.
   }
 
+  setPointerCaptureRequired(required: boolean): void {
+    this.query('[data-ui="capture-pointer"]').hidden = !required;
+  }
+
+  setCarryHint(label: string | null): void {
+    const hint = this.query<HTMLElement>('[data-ui="carry-hint"]'); hint.textContent = label ?? ''; hint.hidden = !label;
+  }
   setInteraction(label: string | null): void {
     if (label === this.interactionLabel) return;
     this.interactionLabel = label;
@@ -778,6 +819,7 @@ export class ExperienceUI {
 
   private syncMenuContext(): void {
     const paused = this.root.classList.contains('is-paused');
+    this.query('[data-page="home"]').setAttribute('aria-labelledby', paused ? 'pause-title' : 'home-title');
     for (const element of this.root.querySelectorAll<HTMLElement>('.main-menu-only')) {
       element.hidden = paused;
     }
@@ -954,7 +996,7 @@ export class ExperienceUI {
   private readonly onSettingInput = (event: Event): void => {
     const control = event.currentTarget as HTMLInputElement | HTMLSelectElement;
     const key = control.dataset.setting as keyof GameSettings;
-    if (key === 'menuMotion' || key === 'cameraMotion' || key === 'crosshair') {
+    if (key === 'menuMotion' || key === 'cameraMotion' || key === 'crosshair' || key === 'subtitles' || key === 'soundCaptions') {
       this.settings = { ...this.settings, [key]: (control as HTMLInputElement).checked };
     } else if (key === 'fieldOfView' || key === 'lookSensitivity' || key === 'masterVolume' || key === 'brightness') {
       this.settings = { ...this.settings, [key]: Number(control.value) };
@@ -1076,9 +1118,31 @@ export class ExperienceUI {
     this.commitSettings();
   };
 
+  private readonly onGameplayPauseKey = (event: KeyboardEvent): void => {
+    if (!this.readyState || !this.enteredOnce || this.isMainMenuOpen || this.isPaused) return;
+    if (event.code !== 'Escape' && event.code !== 'KeyP') return;
+    if (event.repeat || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.code === 'KeyP' && isEditableKeyTarget(event)) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    this.pauseGameplay();
+  };
+  private pauseGameplay(): void {
+    if (!this.readyState || !this.enteredOnce || this.isMainMenuOpen || this.isPaused) return;
+    if (this.actions.pause) this.actions.pause(); else this.setLocked(false);
+  }
+  private readonly onGameplayBlur = (): void => { this.pauseGameplay(); };
+  private readonly onGameplayVisibility = (): void => { if (document.hidden) this.pauseGameplay(); };
+  private readonly onPauseKeyUp = (event:KeyboardEvent):void => {
+    if(event.code==='Escape'||event.code==='KeyP')this.pauseKeyBlockedUntil=0;
+  };
+
   private readonly onMenuKeyDown = (event: KeyboardEvent): void => {
     if (this.overlay.getAttribute('aria-hidden') === 'true' || this.isConsoleOpen) return;
+    if(this.isPaused&&(event.code==='Escape'||event.code==='KeyP')&&(event.repeat||performance.now()<this.pauseKeyBlockedUntil)){
+      event.preventDefault();event.stopImmediatePropagation();return;
+    }
     if (!this.confirmation.hidden) {
+      event.stopImmediatePropagation();
       if (event.code === 'Escape') {
         event.preventDefault();
         this.closeConfirmation();
@@ -1127,7 +1191,12 @@ export class ExperienceUI {
       }
       return;
     }
+    if (event.code === 'KeyP' && this.isPaused && this.activePage === 'home' && !isEditableKeyTarget(event)
+      && !event.ctrlKey && !event.metaKey && !event.altKey && !event.repeat) {
+      event.preventDefault(); event.stopImmediatePropagation(); this.actions.enter(); return;
+    }
     if (event.code !== 'Escape') return;
+    event.stopImmediatePropagation();
     if (this.activePage !== 'home') {
       event.preventDefault();
       if (this.activePage === 'wardrobe') {
@@ -1144,19 +1213,20 @@ export class ExperienceUI {
   };
 
   private readonly requestNewGame = (): void => {
+    if (!this.enteredOnce && this.saveHistory.length === 0) { this.actions.regenerate(); return; }
     this.showConfirmation(
-      'Commencer une nouvelle partie ?',
-      'Toute progression non sauvegardée dans la partie actuelle sera perdue.',
-      'Nouvelle partie',
+      'Nouvelle partie ?',
+      '',
+      'Commencer',
       this.actions.regenerate,
     );
   };
 
   private readonly requestMainMenu = (): void => {
     this.showConfirmation(
-      'Retourner au menu principal ?',
-      'La progression actuelle sera sauvegardée avant de quitter la partie.',
-      'Quitter la partie',
+      'Quitter la partie ?',
+      'La partie sera sauvegardée.',
+      'Quitter',
       this.actions.returnToMainMenu,
     );
   };
@@ -1167,15 +1237,19 @@ export class ExperienceUI {
     acceptLabel: string,
     action: () => void,
   ): void {
+    this.confirmationOrigin = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
     this.pendingConfirmation = action;
     this.confirmationTitle.textContent = title;
     this.confirmationMessage.textContent = message;
+    this.confirmationMessage.hidden = !message;
+    if (message) this.confirmation.setAttribute('aria-describedby', 'confirmation-message');
+    else this.confirmation.removeAttribute('aria-describedby');
     this.confirmationAccept.textContent = acceptLabel;
     this.confirmation.hidden = false;
     this.confirmation.setAttribute('aria-hidden', 'false');
     this.root.classList.add('confirmation-open');
     this.overlay.inert = true;
-    requestAnimationFrame(() => this.confirmationCancel.focus({ preventScroll: true }));
+    requestAnimationFrame(() => { if (!this.confirmation.hidden && this.root.isConnected) this.confirmationCancel.focus({ preventScroll: true }); });
   }
 
   private readonly closeConfirmation = (): void => {
@@ -1184,6 +1258,7 @@ export class ExperienceUI {
     this.confirmation.setAttribute('aria-hidden', 'true');
     this.root.classList.remove('confirmation-open');
     this.overlay.inert = false;
+    this.confirmationOrigin?.focus({ preventScroll: true }); this.confirmationOrigin = undefined;
   };
 
   private readonly acceptConfirmation = (): void => {
@@ -1216,6 +1291,9 @@ export class ExperienceUI {
   private commitBinding(code: string): void {
     const action = this.pendingBinding;
     if (!action) return;
+    if(!canBindControlAction(action,code)){
+      this.query('[data-ui="binding-help"]').textContent='Cette touche est réservée à une commande secondaire. Choisissez une autre touche.';return;
+    }
     const remapped = remapControlBinding(this.settings.controls, action, code);
     this.settings = { ...this.settings, controls: remapped.bindings };
     this.pendingBindingButton?.classList.remove('listening');
@@ -1326,6 +1404,10 @@ export class ExperienceUI {
     this.root.removeEventListener('pointerover', this.onMainMenuPointerOver);
     this.root.removeEventListener('click', this.onMainMenuButtonClick, true);
     document.removeEventListener('keydown', this.onMenuKeyDown);
+    window.removeEventListener('keydown', this.onGameplayPauseKey, true);
+    window.removeEventListener('keyup', this.onPauseKeyUp, true);
+    window.removeEventListener('blur', this.onGameplayBlur);
+    document.removeEventListener('visibilitychange', this.onGameplayVisibility);
     document.removeEventListener('fullscreenchange', this.onFullscreenChange);
     if (this.chatFadeTimer !== undefined) window.clearTimeout(this.chatFadeTimer);
     if (this.saveStatusTimer !== undefined) window.clearTimeout(this.saveStatusTimer);

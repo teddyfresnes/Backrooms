@@ -1,11 +1,15 @@
+import { CooperativeWork } from '../core/CooperativeWork';
 import * as THREE from 'three';
+import { batchStaticMeshesAsync } from './AsyncStaticBatch';
+import { createEntranceFacade } from './EntranceFacade';
 import { createHallMailbox } from './HallMailbox';
 import { applyMatteSurface } from '../render/MatteSurface';
+import { softenDoorSurface } from '../render/DoorSurface';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { StairwellMaterialSet } from './StairwellMaterials';
 import { StairwellDetails } from './StairwellDetails';
 import { StairwellLightPool } from './StairwellLightPool';
-import { createStairwellWallAtlas, mapStairwellWallUV, type StairwellWall } from './StairwellSurfaceFinish';
+import { createStairwellWallAtlas, createStairwellWallAtlasAsync, mapStairwellWallUV, type StairwellWall } from './StairwellSurfaceFinish';
 import { APARTMENT_ENTRY_DOOR } from '../apartment/layout';
 import type { LightingMode } from '../render/LightingMode';
 import { SeededRandom } from '../world/SeededRandom';
@@ -145,10 +149,10 @@ export const STAIRWELL_LIGHTING_PROFILES: Record<LightingMode, StairwellLighting
     moonColor: 0x7890a5,
     streetLampIntensity: 4.2,
     streetLampColor: 0xffc77d,
-    mainIntensity: 2.65,
+    mainIntensity: 2.2,
     mainColor: 0xfff0d6,
     mainDistance: 5.8,
-    wallIntensity: 1.45,
+    wallIntensity: 1.1,
     wallColor: 0xffefd5,
     wallDistance: 4.8,
   },
@@ -168,6 +172,8 @@ export const STAIRWELL_LIGHTING_PROFILES: Record<LightingMode, StairwellLighting
 
 export class StairwellEnvironment {
   readonly group = new THREE.Group();
+  readonly structure = new THREE.Group();
+  readonly exterior = new THREE.Group();
   readonly furnitureColliders: StaticCollider[] = [];
   readonly rainAudioOpenings: RainOpening[] = [];
   hallEntranceDoor?: THREE.Object3D;
@@ -180,6 +186,7 @@ export class StairwellEnvironment {
   private readonly extraMaterials: THREE.Material[] = [];
   private readonly extraTextures: THREE.Texture[] = [];
   private readonly residentialDetails: StairwellDetails;
+  get doorbells() { return this.residentialDetails.doorbells; }
   private readonly shellMaterial: THREE.MeshStandardMaterial;
   private rainGeometry?: THREE.BufferGeometry;
   private rain?: THREE.LineSegments;
@@ -205,6 +212,9 @@ export class StairwellEnvironment {
     importedMailboxTemplate?: THREE.Object3D,
     importedSecondFloorTableTemplate?: THREE.Object3D,
     windowRainNormalTexture?: THREE.Texture,
+    deferBatch = false,
+    preparedWallAtlas?: THREE.CanvasTexture,
+    deferConstruction = false,
   ) {
     this.importedWindowTemplate = importedWindowTemplate;
     this.importedEntranceDoorTemplate = importedEntranceDoorTemplate;
@@ -213,7 +223,7 @@ export class StairwellEnvironment {
     this.windowRainNormalTexture = windowRainNormalTexture;
     if (windowRainNormalTexture) this.extraTextures.push(windowRainNormalTexture);
     this.group.name = 'russian-residential-stairwell-v17';
-    const wallAtlas = createStairwellWallAtlas();
+    const wallAtlas = preparedWallAtlas ?? createStairwellWallAtlas();
     this.extraTextures.push(wallAtlas);
     this.shellMaterial = materials.upperPlaster.clone();
     this.shellMaterial.name = 'stairwell-worn-masonry';
@@ -224,25 +234,42 @@ export class StairwellEnvironment {
     this.shellMaterial.roughness = .94;
     applyMatteSurface(this.shellMaterial);
     this.extraMaterials.push(this.shellMaterial);
-    this.buildLandingsAndStairs();
-    this.buildShell();
-    this.buildRailings();
-    this.buildFacadeGlazing();
-    // Neighbor apartment doors are cloned from the real imported Sketchfab
-    // front door after that asset loads; do not build the old procedural doors.
-    this.buildUtilities();
-    this.residentialDetails = new StairwellDetails(materials);
-    this.group.add(this.residentialDetails.group);
-    this.furnitureColliders.push(...this.residentialDetails.colliders);
-    this.buildExteriorDoomer();
-    this.buildLighting();
-    batchStaticMeshes(this.group);
+    this.residentialDetails = new StairwellDetails(materials, undefined, deferConstruction);
+    if (!deferConstruction) for (const _step of this.buildSteps()) { /* synchronous compatibility path */ }
+    if (!deferBatch) {
+      batchStaticMeshes(this.structure, 18);
+      batchStaticMeshes(this.exterior, 18);
+    }
     this.configureExteriorShadowCasters();
     this.group.updateMatrixWorld(true);
     this.group.traverse(object => {
       // Moving clouds, LOD branches and the entrance retain their transforms.
       if (object instanceof THREE.Mesh && !object.userData.noBatch) object.matrixAutoUpdate = false;
     });
+  }
+
+  private *buildSteps(): Generator<void> {
+    this.buildLandingsAndStairs(); yield;
+    this.buildShell(); yield;
+    this.buildRailings(); yield;
+    this.buildFacadeGlazing(); yield;
+    this.buildUtilities(); yield;
+    if (this.residentialDetails.group.children.length === 0) yield* this.residentialDetails.buildSteps();
+    this.group.add(this.residentialDetails.group);
+    this.furnitureColliders.push(...this.residentialDetails.colliders);
+    this.structure.name = 'stairwell-replaceable-structure';
+    this.structure.add(...this.group.children);
+    this.buildExteriorDoomer(); yield;
+    this.exterior.name = 'persistent-exterior-weather';
+    this.exterior.add(...this.group.children);
+    this.group.add(this.structure, this.exterior);
+    // Lights stay on the root even when the corridor replaces the structure.
+    // Three's light counts are shader defines; toggling them recompiles every
+    // affected apartment material at the power cut.
+    this.buildLighting(); yield;
+    for(const object of [...this.group.children])if(object instanceof THREE.Mesh)this.structure.add(object);
+    this.configureExteriorShadowCasters();
+    this.group.updateMatrixWorld(true);
   }
 
   private cloneStandardMaterial(
@@ -959,6 +986,12 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
       targetCenterZ - doorCenter.z,
     );
 
+    const doorMaterials = new Map<THREE.Material, THREE.Material>();
+    const doorMaterial = (source: THREE.Material): THREE.Material => {
+      let material = doorMaterials.get(source);
+      if (!material) { material = this.cloneImportedMaterial(source); softenDoorSurface(material); doorMaterials.set(source, material); }
+      return material;
+    };
     hallDoor.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -967,14 +1000,14 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
       mesh.frustumCulled = true;
       if (Array.isArray(mesh.material)) {
         mesh.material = mesh.material.map((material) => {
-          const clone = this.cloneImportedMaterial(material);
+          const clone = doorMaterial(material);
           clone.depthWrite = true;
           clone.depthTest = true;
           clone.needsUpdate = true;
           return clone;
         });
       } else {
-        const clone = this.cloneImportedMaterial(mesh.material);
+        const clone = doorMaterial(mesh.material);
         clone.depthWrite = true;
         clone.depthTest = true;
         clone.needsUpdate = true;
@@ -1219,6 +1252,26 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     ];
     for (const [x, z, w, d] of puddles) {
       this.group.add(makeBox(`puddle-${x}-${z}`, [w, 0.004, d], [x, 0.018, z], puddle, false, false));
+    }
+
+    // The entry camera is outside the stair cage. Continue the actual host
+    // building on both sides, so rear/shoulder views never expose its cut edges.
+    const hostFaceZ = STAIRWELL_BOUNDS.minZ - STAIRWELL_WALL_THICKNESS * .5;
+    this.group.add(createEntranceFacade(facade));
+    for (const side of [-1, 1]) {
+      const wingX = (side < 0 ? STAIRWELL_BOUNDS.minX : STAIRWELL_BOUNDS.maxX) + side * 7;
+      this.group.add(
+        // An exterior skin, not an 11 m solid box through the actual apartment.
+        // That box's east face sealed the doorway from the landing only.
+        makeBox(`host-facade-wing-${side}`, [14.08, STAIRWELL_ROOF_Y, .18], [wingX, STAIRWELL_ROOF_Y * .5, hostFaceZ + .09], facade),
+        makeBox(`host-facade-plinth-${side}`, [14.08, .65, .09], [wingX, .325, hostFaceZ - .035], facadeAccent),
+      );
+      for (let row = 0; row < STAIRWELL_LEVEL_COUNT; row++) {
+        for (let column = 0; column < 5; column++) this.group.add(
+          makeBox(`host-facade-window-${side}-${row}-${column}`, [1.25, 1.55, .035],
+            [wingX - 5.25 + column * 2.6, floorY(row) + 1.65, hostFaceZ - .035], darkWindow, false, false),
+        );
+      }
     }
 
     // Two cheap dark masses fill the apartment's west-window view: one offsets
@@ -1764,6 +1817,16 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     this.localLighting.setBrightness(value);
   }
 
+  setPowerAvailable(available: boolean): void {
+    this.setPower(available ? 1 : 0);
+  }
+
+  showPostOutage(): void {
+    this.structure.visible = false;
+    // Rain, sky, exterior silhouettes and the constant light rig survive.
+    this.exterior.visible = true;
+  }
+
   /** Scripted mains power of the cage fixtures: light sources and their tubes dim together. */
   setPower(power: number): void {
     const value = Math.max(0, Math.min(1, Number.isFinite(power) ? power : 1));
@@ -1929,7 +1992,7 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     }
   }
 
-  static async load(materials: StairwellMaterialSet): Promise<StairwellEnvironment> {
+  static async load(materials: StairwellMaterialSet, signal?: AbortSignal): Promise<StairwellEnvironment> {
     const [
       importedWindowTemplate,
       importedEntranceDoorTemplate,
@@ -1943,14 +2006,25 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
       StairwellEnvironment.loadSecondFloorTableTemplate(),
       StairwellEnvironment.loadWindowRainNormalTexture(),
     ]);
-    return new StairwellEnvironment(
+    const wallAtlas = await createStairwellWallAtlasAsync(signal);
+    signal?.throwIfAborted();
+    const environment = new StairwellEnvironment(
       materials,
       importedWindowTemplate,
       importedEntranceDoorTemplate,
       importedMailboxTemplate,
       importedSecondFloorTableTemplate,
       windowRainNormalTexture,
+      true, wallAtlas, true,
     );
+    try {
+      const work = new CooperativeWork(signal);
+      for (const _step of environment.buildSteps()) await work.checkpoint(true);
+      await batchStaticMeshesAsync(environment.structure, 18, signal);
+      await batchStaticMeshesAsync(environment.exterior, 18, signal);
+      environment.group.traverse(object => { if (object instanceof THREE.Mesh && !object.userData.noBatch) { object.updateMatrix(); object.matrixAutoUpdate = false; } });
+      return environment;
+    } catch (error) { environment.dispose(); throw error; }
   }
 
   dispose(): void {
@@ -1978,6 +2052,7 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
       template.clear();
     }
     disposeObject3D(this.group);
+    this.rainGeometry?.dispose();
     this.moonLight?.shadow.dispose();
     this.streetLampLight?.shadow.dispose();
     this.residentialDetails.dispose();

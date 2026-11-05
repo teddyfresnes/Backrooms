@@ -1,4 +1,5 @@
 import { SeededRandom } from '../world/SeededRandom';
+import { CooperativeWork } from '../core/CooperativeWork';
 import RAPIER from '@dimforge/rapier3d';
 import * as THREE from 'three';
 import type { QuaternionData, StaticCollider, Vec3Data, WorldPlan } from '../world/types';
@@ -48,6 +49,8 @@ export class PhysicsWorld {
     const body = collider.parent();
     return !!body && this.environmentBodies.has(body.handle) && collider.isEnabled() && !collider.isSensor();
   };
+  isInteractionObstacle = (collider: RAPIER.Collider): boolean => this.isEnvironmentCollider(collider)
+    || (!collider.isSensor() && ((collider.collisionGroups() >>> 16) & 0x4000) !== 0);
   getEnvironmentKind(collider: RAPIER.Collider): StaticCollider['kind'] {
     return this.environmentKinds.get(collider.handle) ?? 'wall';
   }
@@ -62,6 +65,21 @@ export class PhysicsWorld {
   private readonly position = new THREE.Vector3();
   private readonly movement = new THREE.Vector3();
   private crouched = false;
+  private disposed = false;
+  private confinedPlayer = false;
+  private scriptedCapsuleKey = '';
+  private readonly beforeStepObservers = new Set<(delta: number) => void>();
+  onBeforeStep(observer: (delta: number) => void): () => void {
+    this.beforeStepObservers.add(observer); return () => { this.beforeStepObservers.delete(observer); };
+  }
+  private notifyBeforeStep(): void { for (const observer of this.beforeStepObservers) observer(this.world.timestep); }
+  private readonly stepObservers = new Set<(delta: number) => void>();
+  /** Contact consumers share the host's fixed tick; they never step Rapier. */
+  onAfterStep(observer: (delta: number) => void): () => void {
+    this.stepObservers.add(observer); return () => { this.stepObservers.delete(observer); };
+  }
+  private notifyStep(): void { for (const observer of this.stepObservers) observer(this.world.timestep); }
+  private readonly disposeAbort = new AbortController();
   private chunkMutationDepth = 0;
   private chunkSynchronizationPending = false;
   private emptyChunkIndexPending = false;
@@ -89,7 +107,8 @@ export class PhysicsWorld {
     );
     this.controller = this.world.createCharacterController(PLAYER_SKIN_WIDTH);
     this.controller.setSlideEnabled(true);
-    this.controller.enableAutostep(0.38, 0.10, false);
+    // Accept the short support strip remaining on an oblique stair approach.
+    this.controller.enableAutostep(0.38, 0.04, false);
     this.controller.enableSnapToGround(0.32);
     this.controller.setMaxSlopeClimbAngle((48 * Math.PI) / 180);
     this.controller.setMinSlopeSlideAngle((54 * Math.PI) / 180);
@@ -162,6 +181,7 @@ export class PhysicsWorld {
     }
   }
 
+  getChunkCollider(key: string, colliderId: string): RAPIER.Collider | undefined { return this.chunkColliders.get(key)?.get(colliderId); }
   setKinematicChunkTransform(
     key: string,
     translation: Vec3Data,
@@ -219,6 +239,59 @@ export class PhysicsWorld {
       this.chunkColliders.set(key, new Map());
       this.requestChunkSynchronization();
     } catch (error) {
+      for (let i = 0; i < body.numColliders(); i++) this.environmentKinds.delete(body.collider(i).handle);
+      this.environmentBodies.delete(body.handle);
+      this.world.removeRigidBody(body);
+      throw error;
+    }
+  }
+
+  async addTrimeshChunkAsync(key: string, meshes: readonly THREE.Mesh[], signal?: AbortSignal): Promise<void> {
+    const work = new CooperativeWork(AbortSignal.any([this.disposeAbort.signal, ...(signal ? [signal] : [])]));
+    await work.checkpoint(true);
+    if (!key) throw new Error('Physics chunk keys cannot be empty.');
+    if (this.chunkBodies.has(key)) throw new Error(`Physics chunk already exists: ${key}`);
+    const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+    const vertex = new THREE.Vector3();
+    try {
+      for (const mesh of meshes) {
+        await work.checkpoint();
+        mesh.updateWorldMatrix(true, false);
+        const geometry = mesh.geometry;
+        const position = geometry.getAttribute('position');
+        if (!position || position.itemSize < 3 || position.count < 3) continue;
+        const vertices = new Float32Array(position.count * 3);
+        for (let index = 0; index < position.count; index += 1) {
+          if (index % 4096 === 0) await work.checkpoint();
+          vertex.fromBufferAttribute(position, index).applyMatrix4(mesh.matrixWorld);
+          vertices[index * 3] = vertex.x;
+          vertices[index * 3 + 1] = vertex.y;
+          vertices[index * 3 + 2] = vertex.z;
+        }
+        let indices: Uint32Array;
+        if (geometry.index) {
+          indices = new Uint32Array(geometry.index.count);
+          for (let index = 0; index < geometry.index.count; index += 1) {
+            if (index % 12288 === 0) await work.checkpoint();
+            indices[index] = geometry.index.getX(index);
+          }
+        } else {
+          const triangleVertexCount = Math.floor(position.count / 3) * 3;
+          indices = new Uint32Array(triangleVertexCount);
+          for (let index = 0; index < triangleVertexCount; index += 1) {
+            if (index % 12288 === 0) await work.checkpoint();
+            indices[index] = index;
+          }
+        }
+        if (indices.length < 3) continue;
+        this.world.createCollider(RAPIER.ColliderDesc.trimesh(vertices, indices).setFriction(0.58).setRestitution(0), body);
+      }
+      this.chunkBodies.set(key, body);
+      this.environmentBodies.add(body.handle);
+      this.chunkColliders.set(key, new Map());
+      this.requestChunkSynchronization();
+    } catch (error) {
+      if (this.disposed) throw error;
       for (let i = 0; i < body.numColliders(); i++) this.environmentKinds.delete(body.collider(i).handle);
       this.environmentBodies.delete(body.handle);
       this.world.removeRigidBody(body);
@@ -375,7 +448,9 @@ export class PhysicsWorld {
     }
     const current = this.playerBody.translation();
     this.playerBody.setNextKinematicTranslation({ x: current.x + allowed.x, y: current.y + allowed.y, z: current.z + allowed.z });
+    this.notifyBeforeStep();
     this.world.step();
+    this.notifyStep();
     this.syncPosition();
     this.movement.set(allowed.x, allowed.y, allowed.z);
     return { position: this.position, grounded, moved: this.movement };
@@ -385,7 +460,9 @@ export class PhysicsWorld {
     const previousTimestep = this.world.timestep;
     try {
       this.world.timestep = Math.max(1 / 240, Math.min(1 / 30, delta));
+      this.notifyBeforeStep();
       this.world.step();
+      this.notifyStep();
     } finally {
       this.world.timestep = previousTimestep;
     }
@@ -491,6 +568,17 @@ export class PhysicsWorld {
   /** Shape changes move the capsule center, never its supporting feet. */
   get crouchCenterOffset(): number { return this.crouched ? CROUCH_CENTER_DROP : 0; }
   get crouchedCenterDrop(): number { return CROUCH_CENTER_DROP; }
+  setScriptedPlayerPose(position: Vec3Data, confined: boolean, shape?: {halfHeight:number;radius:number}): void {
+    this.assertFiniteVector(position, 'scripted player pose');
+    const halfHeight=shape?.halfHeight??(confined?.42:this.crouched?CROUCHED_HALF_HEIGHT:STANDING_HALF_HEIGHT),radius=shape?.radius??(confined?.23:PLAYER_RADIUS);
+    const key=`${halfHeight.toFixed(4)}:${radius.toFixed(4)}`;
+    if(this.confinedPlayer!==confined||this.scriptedCapsuleKey!==key){
+      this.confinedPlayer=confined;this.scriptedCapsuleKey=key;
+      this.playerCollider.setShape(new RAPIER.Capsule(halfHeight,radius));
+    }
+    this.playerBody.setTranslation(position, true); this.playerBody.setNextKinematicTranslation(position);
+    this.world.propagateModifiedBodyPositionsToColliders(); this.syncPosition();
+  }
   setPlayerColliderEnabled(enabled: boolean): void { this.playerCollider.setEnabled(enabled); }
   getStandingPosition(target = new THREE.Vector3()): THREE.Vector3 {
     target.copy(this.position);
@@ -550,6 +638,9 @@ export class PhysicsWorld {
     this.synchronizeChunkChanges();
   }
   dispose(): void {
+    this.stepObservers.clear(); this.beforeStepObservers.clear();
+    this.disposed = true;
+    this.disposeAbort.abort();
     this.controller.free();
     this.chunkBodies.clear();
     this.chunkColliders.clear();

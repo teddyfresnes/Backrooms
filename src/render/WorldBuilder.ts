@@ -148,7 +148,7 @@ const removeWallEndCaps = <T extends THREE.BufferGeometry>(
   return geometry;
 };
 
-const createWallGeometry = (
+export const createWallGeometry = (
   wall: WallSegment,
   capless = false,
   patternScale = 1,
@@ -345,7 +345,7 @@ export const createOpenShaftWallGeometries = (
   return walls.map((wall) => createWallGeometry(wall, true, patternScale));
 };
 
-const createFloorGeometry = (
+export const createFloorGeometry = (
   rects: Rect[],
   y = 0,
   patternScale = 1,
@@ -821,7 +821,7 @@ const createHorizontalJunctionRepairGeometry = (
   return { geometry, patches: occupiedPatches };
 };
 
-const createCeilingGeometry = (
+export const createCeilingGeometry = (
   rect: Rect,
   y: number,
   patternScale = 1,

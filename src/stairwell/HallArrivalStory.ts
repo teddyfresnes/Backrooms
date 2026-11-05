@@ -1,9 +1,21 @@
 import * as THREE from 'three';
-import type { Vec3Data } from '../world/types';
+import type { StaticCollider, Vec3Data } from '../world/types';
 import type { HallArrivalState } from '../core/SaveHistory';
+import { midLandingY, STAIRWELL_LEFT_FLIGHT, STAIRWELL_RIGHT_FLIGHT } from './layout';
 
 export const MAIL_REMINDER = 'Mon courrier… Je dois le récupérer avant de monter.';
 export const HOME_REMINDER = 'Il est temps de rentrer chez moi. Au dernier étage.';
+export const MAIL_REACTION = 'Merde… le rétroviseur. Il ne manquait plus que ça.';
+export const MAIL_STAIR_GATE: StaticCollider = {
+  id: 'arrival-mail-stairs-gate', kind: 'barrier',
+  center: { x: 0, y: midLandingY(0) + 1, z: STAIRWELL_LEFT_FLIGHT.maxZ + .79 }, halfExtents: { x: 2, y: 1, z: .045 },
+};
+export const MAIL_SECOND_FLIGHT_GATE: StaticCollider = {
+  id: 'arrival-mail-second-flight-gate', kind: 'barrier',
+  center: { x: (STAIRWELL_RIGHT_FLIGHT.minX + STAIRWELL_RIGHT_FLIGHT.maxX) / 2, y: midLandingY(0) + 1.1, z: STAIRWELL_RIGHT_FLIGHT.maxZ - .1 },
+  halfExtents: { x: (STAIRWELL_RIGHT_FLIGHT.maxX - STAIRWELL_RIGHT_FLIGHT.minX) / 2, y: 1, z: .045 },
+};
+export const MAIL_SAFE_LANDING = { x: -.9, y: midLandingY(0) + .865, z: STAIRWELL_LEFT_FLIGHT.maxZ + .18 };
 
 interface StoryUI {
   setInteraction(label: string | null): void;
@@ -32,6 +44,13 @@ export class HallArrivalStory {
   private prompted = false;
   private disposed = false;
   private readonly restoredMail: boolean;
+  private collecting = false;
+  private takeElapsed = 0;
+  private reminderCooldown = 0;
+  private stairReminderArmed = true;
+  private mailGaspPlayed: boolean;
+  private readonly letterStart = new THREE.Vector3();
+  private readonly letterTarget = new THREE.Vector3();
 
   constructor(
     private readonly mailbox: THREE.Object3D,
@@ -40,21 +59,24 @@ export class HallArrivalStory {
     private state: HallArrivalState,
     private readonly voice: (cue: 'hmm' | 'gasp') => void,
     private readonly onChange: () => void,
+    private readonly options: { showLetter?(onVisible: () => void): void; mailGaspPlayed?: boolean } = {},
   ) {
     const door = mailbox.getObjectByName('Door_3');
     if (!door) throw new Error('Le portillon du courrier est absent.');
     this.door = door;
     this.closed = door.quaternion.clone();
     this.restoredMail = state === 'mail';
+    this.mailGaspPlayed = options.mailGaspPlayed ?? (state === 'home' || state === 'done');
     this.progress = state === 'home' ? 1 : 0;
-    const meshes: THREE.Mesh[] = [];
-    door.traverse(object => { if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh); });
-    const material = new THREE.LineBasicMaterial({ color: 0xf0d7a4, transparent: true, opacity: .85, depthWrite: false });
-    for (const mesh of meshes) {
-      const edge = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 40), material);
-      edge.matrix.copy(mesh.matrix); edge.matrixAutoUpdate = false; edge.matrixWorldNeedsUpdate = true;
-      this.highlight.add(edge);
-    }
+    // A small marker replaces the old full wire outline.
+    door.updateWorldMatrix(true, true);
+    const bounds = new THREE.Box3().setFromObject(door), center = bounds.getCenter(new THREE.Vector3());
+    center.x = bounds.max.x + .018;
+    const marker = new THREE.Mesh(new THREE.SphereGeometry(.012, 8, 6), new THREE.MeshBasicMaterial({ color: 0xc5d2b8 }));
+    marker.position.copy(door.worldToLocal(center));
+    const worldScale = door.getWorldScale(new THREE.Vector3());
+    marker.scale.set(1 / Math.abs(worldScale.x), 1 / Math.abs(worldScale.y), 1 / Math.abs(worldScale.z));
+    this.highlight.add(marker);
     this.highlight.name = 'mail-recipient-highlight';
     door.add(this.highlight);
     this.highlight.visible = state === 'mail';
@@ -66,41 +88,60 @@ export class HallArrivalStory {
     mailbox.updateMatrixWorld(true);
     // The letter stays in its compartment while the leaf swings on its hinge.
     door.parent!.attach(this.letter);
+    this.letterStart.copy(this.letter.position);
     this.letter.visible = state === 'approach' || state === 'mail';
   }
 
   getState(): HallArrivalState { return this.state; }
+  get isTakingLetter(): boolean { return this.collecting; }
+  get blocksStairs(): boolean { return this.state === 'approach' || this.state === 'mail'; }
+  get hasPlayedMailGasp(): boolean { return this.mailGaspPlayed; }
+
+  tryStairs(position: Readonly<Vec3Data>, motionZ: number): boolean {
+    if (position.z < STAIRWELL_LEFT_FLIGHT.maxZ - .35) this.stairReminderArmed = true;
+    if (!this.blocksStairs || this.collecting || !this.stairReminderArmed || motionZ <= .1 || this.reminderCooldown > 0
+      || position.x < STAIRWELL_LEFT_FLIGHT.minX || position.x > STAIRWELL_LEFT_FLIGHT.maxX
+      || position.y < midLandingY(0) + .7 || position.y > midLandingY(0) + 1.1
+      || position.z < STAIRWELL_LEFT_FLIGHT.maxZ + .23 || position.z > MAIL_STAIR_GATE.center.z) return false;
+    this.reminderCooldown = 2;
+    this.stairReminderArmed = false;
+    this.state = 'mail';
+    this.caption.say(MAIL_REMINDER);
+    if (!this.mailGaspPlayed) { this.mailGaspPlayed = true; this.voice('gasp'); }
+    this.onChange();
+    return true;
+  }
 
   update(delta: number, position: Readonly<Vec3Data>, direction: THREE.Vector3, playing: boolean): void {
     if (this.disposed) return;
     this.caption.update(delta, playing);
     if (!playing) { this.hidePrompt(); return; }
+    this.reminderCooldown = Math.max(0, this.reminderCooldown - delta);
     const lookingAtMail = this.hitsDoor(position, direction);
     if (this.state === 'approach' && position.y < 1.5 && position.z < -1.2 && (position.z > -3.65 || lookingAtMail)) {
       this.state = 'mail';
-      this.caption.say(MAIL_REMINDER);
-      this.voice('hmm');
+      // Make direct collection available, but keep the first reminder and
+      // surprise at the actual landing gate, alongside its recoil.
       this.onChange();
     } else if (this.restoredMail && this.state === 'mail' && this.captionNeedsRestore) {
       this.captionNeedsRestore = false;
       this.caption.say(MAIL_REMINDER);
     }
-    this.highlight.visible = this.state === 'mail';
+    this.highlight.visible = this.state === 'mail' && !this.collecting;
     this.animate(delta);
-    if (this.state === 'mail' && lookingAtMail) {
+    if (this.state === 'mail' && !this.collecting && lookingAtMail) {
       this.ui.setInteraction('Récupérer le courrier'); this.prompted = true;
     } else this.hidePrompt();
   }
   private captionNeedsRestore = true;
 
   interact(position: Readonly<Vec3Data>, direction: THREE.Vector3, playing: boolean): boolean {
-    if (this.disposed || !playing || this.state !== 'mail' || !this.hitsDoor(position, direction)) return false;
-    this.state = 'home';
+    if (this.disposed || !playing || this.state !== 'mail' || this.collecting || !this.hitsDoor(position, direction)) return false;
+    this.collecting = true; this.takeElapsed = 0;
+    this.letterTarget.set(position.x, position.y + .45, position.z).addScaledVector(direction, .45);
+    this.letter.parent!.worldToLocal(this.letterTarget);
     this.highlight.visible = false;
     this.hidePrompt();
-    this.caption.say(HOME_REMINDER);
-    this.voice('gasp');
-    this.onChange();
     return true;
   }
 
@@ -130,11 +171,21 @@ export class HallArrivalStory {
   }
 
   private animate(delta: number): void {
-    if (this.state === 'home') this.progress = Math.min(1, this.progress + Math.max(0, delta) / .7);
+    if (this.collecting) {
+      this.takeElapsed += Math.max(0, delta);
+      this.progress = Math.min(1, this.takeElapsed / .5);
+      const t = THREE.MathUtils.clamp((this.takeElapsed - .3) / .5, 0, 1);
+      this.letter.position.lerpVectors(this.letterStart, this.letterTarget, t * t * (3 - 2 * t));
+      if (this.takeElapsed >= .85) {
+        this.collecting = false; this.state = 'home'; this.letter.visible = false;
+        this.caption.say(MAIL_REACTION); this.onChange();
+        this.options.showLetter?.(() => this.caption.say(MAIL_REACTION));
+      }
+    }
     const eased = 1 - (1 - this.progress) ** 3;
     // The source's local Z is vertical and its existing origin is the hinge.
     this.door.quaternion.copy(this.closed).multiply(this.turn.setFromAxisAngle(this.axis, eased * 1.15));
-    this.letter.visible = this.state === 'approach' || this.state === 'mail' || (this.state === 'home' && this.progress < .5);
+    this.letter.visible = this.state === 'approach' || this.state === 'mail';
   }
 
   private hidePrompt(): void {
@@ -148,10 +199,10 @@ export class HallArrivalStory {
     this.hidePrompt(); this.caption.dispose();
     const materials = new Set<THREE.Material>();
     this.highlight.traverse(object => {
-      const line = object as THREE.LineSegments;
-      if (!line.isLineSegments) return;
-      line.geometry.dispose();
-      for (const material of Array.isArray(line.material) ? line.material : [line.material]) materials.add(material);
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.geometry.dispose();
+      for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) materials.add(material);
     });
     materials.forEach(material => material.dispose());
     this.highlight.removeFromParent();

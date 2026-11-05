@@ -40,6 +40,8 @@ export class StairwellLightPool {
     this.applyProfile();
   }
 
+  setPowered(powered: boolean): void { this.setPower(powered ? 1 : 0); }
+
   /** Scripted mains power (0 = blackout, 1 = normal); stays a scalar, never a light count change. */
   setPower(power: number): void {
     const next = Math.max(0, Math.min(1, Number.isFinite(power) ? power : 1));

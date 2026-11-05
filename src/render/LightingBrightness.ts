@@ -1,6 +1,6 @@
-export const DEFAULT_BRIGHTNESS = 50;
+export const DEFAULT_BRIGHTNESS = 0;
 
-/** Zero is a valid setting. Old saves and malformed values start at 50. */
+/** Zero is a valid setting. Old saves and malformed values start at zero. */
 export const normalizeBrightness = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : DEFAULT_BRIGHTNESS;
 

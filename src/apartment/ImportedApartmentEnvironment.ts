@@ -3,12 +3,17 @@ import { loadApartmentScene } from './LoadApartmentScene';
 import { APARTMENT_MODEL_URL } from './ApartmentAsset';
 import type { ApartmentPreload } from './ApartmentPreload';
 import { resolveLightingBrightness } from '../render/LightingBrightness';
+import { softenDoorSurface } from '../render/DoorSurface';
 import { isApartmentInteriorVisible } from './ApartmentVisibility';
-import { optimizeApartmentSmallProps } from './SmallPropGeometry';
-import { batchStaticMeshes } from '../stairwell/geometry';
+import { optimizeApartmentSmallPropsAsync } from './SmallPropGeometry';
+import { CooperativeWork } from '../core/CooperativeWork';
+import { collectApartmentPickables, type ApartmentPickable } from './ApartmentPickables';
+import { splitApartmentBooks } from './ApartmentBookGeometry';
+import { batchStaticMeshesAsync } from '../stairwell/AsyncStaticBatch';
 import type { StaticCollider } from '../world/types';
 import { floorY, midLandingY, STAIRWELL_BOUNDS, STAIRWELL_LEVEL_COUNT } from '../stairwell/layout';
 import { APARTMENT_ENTRY_DOOR } from './layout';
+import { PLAYER_APARTMENT_DOOR_ID } from './DoorIdentity';
 
 const MODEL_URL = APARTMENT_MODEL_URL;
 
@@ -17,7 +22,9 @@ const MODEL_URL = APARTMENT_MODEL_URL;
 // drift relative to the stairwell again.
 const APARTMENT_ALIGNMENT_Z = 0;
 const ENTRY_OPEN_ANGLE = -Math.PI * 0.52;
-export const APARTMENT_LIGHTS_OFF_SURFACE_FACTOR = 0.14;
+// Darkness comes from the circuit's lights, not from painting every surface
+// black. Keep the albedo so light from the landing can reach the entrance.
+export const APARTMENT_LIGHTS_OFF_SURFACE_FACTOR = 1;
 const APARTMENT_LIGHTS_OFF_EMISSIVE_FACTOR = 0.04;
 
 const SHELL_MESH_NAMES = new Set([
@@ -29,19 +36,14 @@ const SHELL_MESH_NAMES = new Set([
 ]);
 
 const MAJOR_COLLIDER_NAMES = [
-  'cabinets',
   'Refrigirator',
   'Bed',
-  'Desk',
   'Drawer',
   'bathtub',
   'Radiator',
-  'chair',
   'nightstand',
   'trashcan',
   'backpack',
-  'stool',
-  'stool1',
   'can',
 ] as const;
 
@@ -157,6 +159,7 @@ const tintDoorLeafBrown = (root: THREE.Object3D): void => {
       clone.roughness = Math.max(clone.roughness, 0.72);
       clone.metalness = Math.min(clone.metalness, 0.08);
     }
+    softenDoorSurface(clone);
     clone.needsUpdate = true;
     clones.set(source, clone);
     return clone;
@@ -481,6 +484,7 @@ const stabilizeDoorFrame = (root: THREE.Object3D): void => {
       clone.metalness = Math.min(clone.metalness, 0.35);
       if (clone.normalMap) clone.normalScale.multiplyScalar(0.55);
     }
+    softenDoorSurface(clone);
 
     clone.needsUpdate = true;
     clones.set(source, clone);
@@ -661,7 +665,19 @@ export const createApartmentMainLight = (fixtureBox: THREE.Box3): THREE.PointLig
 };
 
 export class ImportedApartmentEnvironment {
+  readonly television?: THREE.Object3D;
+  readonly radio?: THREE.Object3D;
+  readonly stove?: THREE.Object3D;
+  readonly pan?: THREE.Object3D;
+  readonly computer?: THREE.Object3D;
+  readonly computerChair?: THREE.Object3D;
+  readonly fan?: THREE.Object3D;
+  readonly deskLamp?: THREE.Object3D;
+  readonly wardrobe?: THREE.Object3D;
+  readonly wardrobeDoors: THREE.Object3D[];
+  readonly pickables: ApartmentPickable[];
   readonly group = new THREE.Group();
+  get renderWarmupRoot(): THREE.Object3D { return this.model; }
   readonly entryDoor: DoorRuntime;
   readonly closetDoor: DoorRuntime;
   readonly lightSwitch: THREE.Group;
@@ -672,12 +688,23 @@ export class ImportedApartmentEnvironment {
   readonly entrySpawn: THREE.Vector3;
   readonly floorY: number;
   readonly doorCenter: THREE.Vector3;
+  readonly corridorDoorway:{closedBox:THREE.Box3;frameBox:THREE.Box3;outward:THREE.Vector3};
+  private thresholdFloor?:number;
+  get corridorFloorY():number {
+    if(this.thresholdFloor!==undefined)return this.thresholdFloor;
+    const origin=this.doorCenter.clone().addScaledVector(this.corridorDoorway.outward,-.18);origin.y=this.floorY+.7;
+    this.group.updateMatrixWorld(true);
+    const ray=new THREE.Raycaster(origin,new THREE.Vector3(0,-1,0),0,1);
+    const hit=ray.intersectObjects(this.shellColliderMeshes,false).find(h=>h.point.y>=this.floorY-.05&&h.point.y<=this.floorY+.15);
+    return this.thresholdFloor=hit?.point.y??this.floorY;
+  }
   private readonly interiorLights: Array<{ light: THREE.PointLight; intensity: number }>;
   private readonly interiorMaterialStates: InteriorMaterialState[] = [];
   private readonly replacedInteriorMaterials = new Set<THREE.Material>();
   private readonly lightSwitchIndicator: THREE.MeshBasicMaterial;
   private readonly doorLockBolt: THREE.Mesh;
   private interiorLightsEnabled = false;
+  private powerAvailable = true;
   private interiorBrightnessGain = 1;
 
   private constructor(private readonly model: THREE.Object3D) {
@@ -685,6 +712,21 @@ export class ImportedApartmentEnvironment {
     this.group.position.z = APARTMENT_ALIGNMENT_Z;
     this.model.name = 'imported-sketchfab-apartment';
     this.group.add(this.model);
+    this.computer = this.model.getObjectByName('computer');
+    this.computerChair = this.model.getObjectByName('chair');
+    if(this.computerChair)this.computerChair.userData.noBatch=true;
+    if (this.computer) this.computer.userData.noBatch = true;
+    this.television = this.model.getObjectByName('tv');
+    this.radio = this.model.getObjectByName('radio');
+    this.stove = this.model.getObjectByName('stove');
+    this.pan = this.model.getObjectByName('KitchenStuff')?.getObjectByName('pCube113');
+    if (this.pan) this.pan.userData.staticPan = true;
+    this.fan = this.model.children.find(object => object.name === 'ventilator');
+    this.deskLamp = this.model.children.find(object => object.name === 'desk lamp');
+    this.wardrobe = this.model.getObjectByName('Closet');
+    this.wardrobeDoors = ['LeftDoor', 'RightDoor'].map(name => this.model.getObjectByName(name)).filter((o): o is THREE.Object3D => !!o);
+    for (const object of [this.fan, this.deskLamp, this.wardrobe, ...this.wardrobeDoors]) if (object) object.userData.noBatch = true;
+    for (const object of [this.television, this.radio, this.stove, this.pan]) if (object) object.userData.noBatch = true;
 
     this.model.traverse((object) => {
       const mesh = object as THREE.Mesh;
@@ -715,6 +757,10 @@ export class ImportedApartmentEnvironment {
     tintDoorLeafBrown(entryLeaf);
     closeDoorLeafWithBackFace(entryLeaf);
     cloneInteriorDoorHardwareToExterior(entryLeaf);
+    entryLeaf.traverse(object => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.isMesh) for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) softenDoorSurface(material);
+    });
     trimDoorFrameOverhang(entryFrame, APARTMENT_ENTRY_DOOR.width);
     stabilizeDoorFrame(entryFrame);
     this.entryDoor = this.makeDoorRuntime(
@@ -726,6 +772,9 @@ export class ImportedApartmentEnvironment {
     );
     this.doorCenter = this.entryDoor.closedBox.getCenter(new THREE.Vector3());
     this.floorY = this.entryDoor.closedBox.min.y - 0.041;
+    const leafSize=this.entryDoor.closedBox.getSize(new THREE.Vector3());
+    this.corridorDoorway={closedBox:this.entryDoor.closedBox.clone(),frameBox:new THREE.Box3().setFromObject(entryFrame,true),
+      outward:leafSize.x<leafSize.z?new THREE.Vector3(1,0,0):new THREE.Vector3(0,0,1)};
 
     this.windowBlinds = [
       this.createWindowBlind(
@@ -744,6 +793,9 @@ export class ImportedApartmentEnvironment {
     // in the stairwell. These are decorative/static copies only; the player's
     // own front door above remains the sole interactive door.
     this.addNeighborApartmentDoors(entryLeaf, entryFrame);
+    // Assign after cloning: neighbours must never inherit the player's identity.
+    entryLeaf.userData.doorId = PLAYER_APARTMENT_DOOR_ID;
+    this.entryDoor.pivot.userData.doorId = PLAYER_APARTMENT_DOOR_ID;
 
     const bathroomLeaf = requireObject(this.model, 'bathroom_door');
     const closetLeaf = requireObject(this.model, 'closet_door');
@@ -774,7 +826,23 @@ export class ImportedApartmentEnvironment {
       // Physics consumes these original hierarchies after visual preparation.
       mesh.userData.noBatch = true;
     });
+    // The old single AABB enclosed both lower AND wall cabinets, filling the
+    // working space up to the ceiling. These 198 authored triangles keep the
+    // actual countertop, doors and upper cabinets without the invisible wall.
+    for (const name of ['cabinets', 'plank', 'sink', 'stove', 'stoleshnica', 'tv', 'window_edge', 'Desk']) {
+      const root = this.model.getObjectByName(name);
+      if (root) for (const mesh of collectMeshes(root)) {
+        mesh.userData.noBatch = true; this.shellColliderMeshes.push(mesh);
+      }
+    }
 
+    for (const root of [this.pan, this.model.getObjectByName('chess_set')?.getObjectByName('Cube001'), this.wardrobe]) {
+      if (!root) continue;
+      for (const mesh of collectMeshes(root)) {
+        if (this.wardrobeDoors.some(door => { for (let p: THREE.Object3D | null = mesh; p; p = p.parent) if (p === door) return true; return false; })) continue;
+        mesh.userData.noBatch = true; this.shellColliderMeshes.push(mesh);
+      }
+    }
     const furniture: StaticCollider[] = [];
     for (const name of MAJOR_COLLIDER_NAMES) {
       const object = this.model.getObjectByName(name);
@@ -948,15 +1016,21 @@ export class ImportedApartmentEnvironment {
     this.group.add(mainLight);
     this.group.add(this.lightSwitch, this.doorLock);
     this.setInteriorLightsEnabled(false);
-    optimizeApartmentSmallProps(this.model);
-    batchStaticMeshes(this.model, 3.5);
+    splitApartmentBooks(this.model);
+    this.pickables = collectApartmentPickables(this.model);
+  }
+
+  private async prepareRuntime(signal?: AbortSignal): Promise<void> {
+    await new CooperativeWork(signal).checkpoint(true);
+    await optimizeApartmentSmallPropsAsync(this.model, signal);
+    await batchStaticMeshesAsync(this.model, 3.5, signal);
     // Only the static model is frozen. Door, blind and rocker pivots remain dynamic.
     this.model.updateMatrixWorld(true);
     this.model.traverse(object => { object.updateMatrix(); object.matrixAutoUpdate = false; });
   }
 
-  updateVisibility(viewer: THREE.Vector3): void {
-    this.model.visible = isApartmentInteriorVisible(viewer, this.entryDoor.pivot.rotation.y, this.floorY);
+  updateVisibility(viewer: THREE.Vector3, throughPeephole=false): void {
+    this.model.visible = throughPeephole || isApartmentInteriorVisible(viewer, this.entryDoor.pivot.rotation.y, this.floorY);
   }
 
   get areInteriorLightsEnabled(): boolean {
@@ -970,11 +1044,12 @@ export class ImportedApartmentEnvironment {
 
   setInteriorLightsEnabled(enabled: boolean): void {
     this.interiorLightsEnabled = enabled;
+    const powered = enabled && this.powerAvailable;
     this.interiorLights.forEach(({ light, intensity }) => {
-      light.intensity = enabled ? intensity * this.interiorBrightnessGain : 0;
+      light.intensity = powered ? intensity * this.interiorBrightnessGain : 0;
     });
-    const surfaceFactor = enabled ? 1 : APARTMENT_LIGHTS_OFF_SURFACE_FACTOR;
-    const emissiveFactor = enabled ? 1 : APARTMENT_LIGHTS_OFF_EMISSIVE_FACTOR;
+    const surfaceFactor = powered ? 1 : APARTMENT_LIGHTS_OFF_SURFACE_FACTOR;
+    const emissiveFactor = powered ? 1 : this.powerAvailable ? APARTMENT_LIGHTS_OFF_EMISSIVE_FACTOR : 0;
     for (const state of this.interiorMaterialStates) {
       state.material.color.copy(state.litColor).multiplyScalar(surfaceFactor);
       state.material.emissive.copy(state.litEmissive).multiplyScalar(emissiveFactor);
@@ -991,6 +1066,11 @@ export class ImportedApartmentEnvironment {
     this.lightSwitchIndicator.color.setHex(enabled ? 0xd9efaa : 0x8d9879);
   }
 
+  setPowerAvailable(available: boolean): void {
+    this.powerAvailable = available;
+    this.setInteriorLightsEnabled(this.interiorLightsEnabled);
+  }
+
   setEntryDoorLocked(locked: boolean): void {
     this.doorLockBolt.position.z = locked ? -0.052 : 0.012;
   }
@@ -1000,6 +1080,16 @@ export class ImportedApartmentEnvironment {
     blind: THREE.Object3D,
     window: THREE.Object3D,
   ): ApartmentWindowBlindRuntime {
+    blind.traverse(object=>{
+      const mesh=object as THREE.Mesh;if(!mesh.isMesh)return;
+      const cloth=(source:THREE.Material):THREE.Material=>{
+        if(!(source instanceof THREE.MeshStandardMaterial))return source;
+        const material=source.clone();material.name='apartment-blind-cloth';material.metalness=0;material.roughness=.92;
+        material.roughnessMap=null;material.emissive.setHex(0);material.emissiveMap=null;material.lightMap=null;material.envMapIntensity=.1;
+        this.replacedInteriorMaterials.add(source);return material;
+      };
+      mesh.material=Array.isArray(mesh.material)?mesh.material.map(cloth):cloth(mesh.material);
+    });
     const blindBox = preciseBoxFromObject(blind);
     const windowBox = preciseBoxFromObject(window);
     if (blindBox.isEmpty() || windowBox.isEmpty()) {
@@ -1039,6 +1129,7 @@ export class ImportedApartmentEnvironment {
       const material = preserveHardwareFinish
         ? source.clone()
         : suppressApartmentLightGlare(source.clone());
+      if (source.userData.matteRoughness) softenDoorSurface(material);
       if (source.name === 'apartment-main-fixture-luminous') {
         // The glare limiter is correct for walls and furniture, but the actual
         // diffuser must still look powered instead of remaining a grey dome.
@@ -1059,7 +1150,7 @@ export class ImportedApartmentEnvironment {
 
     // Clone only materials that remain inside the apartment. Neighboring door
     // copies were created earlier and keep their normal stairwell calibration.
-    for (const root of [this.model, this.entryDoor.pivot]) {
+    for (const root of [this.model, this.entryDoor.pivot, ...this.windowBlinds.map(blind => blind.pivot)]) {
       root.traverse((object) => {
         const mesh = object as THREE.Mesh;
         if (!mesh.isMesh) return;
@@ -1131,7 +1222,9 @@ export class ImportedApartmentEnvironment {
         const prefix = `${side === -1 ? 'west' : 'east'}-neighbor-door-${level}`;
 
         this.cloneAtWorldMatrix(entryFrame, delta.clone().multiply(sourceFrameWorld), `${prefix}-frame`);
-        this.cloneAtWorldMatrix(entryLeaf, delta.clone().multiply(sourceLeafWorld), `${prefix}-leaf`);
+        const neighborLeaf = this.cloneAtWorldMatrix(entryLeaf, delta.clone().multiply(sourceLeafWorld), `${prefix}-leaf`);
+        // Preserve the actual source hinge through the placement transform.
+        neighborLeaf.userData.neighborHinge = this.entryDoor.pivot.getWorldPosition(new THREE.Vector3()).applyMatrix4(delta).toArray();
       }
     }
 
@@ -1197,7 +1290,10 @@ export class ImportedApartmentEnvironment {
   static async load(signal?: AbortSignal, preload?: ApartmentPreload): Promise<ImportedApartmentEnvironment> {
     const model = await loadApartmentScene(MODEL_URL, signal, preload);
     try {
-      return new ImportedApartmentEnvironment(model);
+      await new CooperativeWork(signal).checkpoint(true);
+      const environment = new ImportedApartmentEnvironment(model);
+      try { await environment.prepareRuntime(signal); return environment; }
+      catch (error) { environment.dispose(); throw error; }
     } catch (error) {
       model.traverse((object) => {
         const mesh = object as THREE.Mesh;

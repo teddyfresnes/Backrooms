@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { PLAYER_APARTMENT_DOOR_ID } from '../apartment/DoorIdentity';
 import { APARTMENT_ENTRY_DOOR } from '../apartment/layout';
 import type { StaticCollider } from '../world/types';
 import { SeededRandom } from '../world/SeededRandom';
@@ -90,7 +91,10 @@ export function createStairwellDetailAtlas(): THREE.CanvasTexture {
 }
 
 /** Static, batchable detail only: no extra lights, shadows, downloads or frame loop. */
+export interface DoorbellTarget { id: string; position: THREE.Vector3; own: boolean }
+
 export class StairwellDetails {
+  readonly doorbells: DoorbellTarget[] = [];
   readonly group = new THREE.Group();
   readonly colliders: StaticCollider[] = [];
   private readonly owned: THREE.Material[] = [];
@@ -100,7 +104,7 @@ export class StairwellDetails {
   private readonly leaf: THREE.MeshStandardMaterial;
   private readonly labels: THREE.MeshStandardMaterial;
 
-  constructor(private readonly base: StairwellMaterialSet, private readonly atlas: THREE.Texture = createStairwellDetailAtlas()) {
+  constructor(private readonly base: StairwellMaterialSet, private readonly atlas: THREE.Texture = createStairwellDetailAtlas(), deferBuild = false) {
     this.group.name = 'stairwell-residential-details';
     this.wood = this.material('stairwell-worn-wood', 0x645340);
     this.iron = this.material('stairwell-aged-enamel', 0xa5a28c, .08);
@@ -110,7 +114,11 @@ export class StairwellDetails {
     this.leaf.side = THREE.DoubleSide;
     this.labels = new THREE.MeshStandardMaterial({ name: 'stairwell-detail-signs', map: atlas, roughness: .95 });
     this.owned.push(this.labels);
-    this.landings(); this.stairs(); this.entrance(); this.residentialCorners();
+    if (!deferBuild) for (const _step of this.buildSteps()) { /* synchronous tools */ }
+  }
+
+  *buildSteps(): Generator<void> {
+    this.landings(); yield; this.stairs(); yield; this.entrance(); yield; this.residentialCorners(); yield;
     this.group.updateMatrixWorld(true);
     this.group.traverse(object => {
       if (object instanceof THREE.Mesh) {
@@ -198,6 +206,9 @@ export class StairwellDetails {
   }
 
   private doorbell(name: string, side: number, y: number, z: number): void {
+    const level = Number(name.split('-')[1]);
+    this.doorbells.push({ id: side<0&&level===STAIRWELL_LEVEL_COUNT-1?PLAYER_APARTMENT_DOOR_ID:`${side < 0 ? 'west' : 'east'}-neighbor-door-${level}-leaf`,
+      position: new THREE.Vector3(side * 1.920, y, z), own: side < 0 && level === STAIRWELL_LEVEL_COUNT - 1 });
     const housing = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedFixtureOutline(.052, .088, .013), {
       depth: .009, bevelEnabled: true, bevelSize: .0015, bevelThickness: .0015, bevelSegments: 1, curveSegments: 3,
     }), this.iron);

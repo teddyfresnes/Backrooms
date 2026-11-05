@@ -2,7 +2,7 @@
   position: fixed;
   bottom: clamp(6.2rem, 13vh, 9rem);
   left: 50%;
-  z-index: 8;
+  z-index: 1811;
   width: min(86vw, 48rem);
   transform: translateX(-50%);
   color: #efeee7;

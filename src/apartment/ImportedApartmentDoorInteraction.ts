@@ -24,6 +24,7 @@ export interface ImportedDoorInteractionOptions {
   onLockChange?: (locked: boolean) => void;
   onSound?: (sound: 'open' | 'close' | 'blocked' | 'lock' | 'unlock') => void;
   onPush?: (delta: Readonly<{ x: number; y: number; z: number }>) => void;
+  beforeOpen?:()=>boolean;
 }
 
 export interface ImportedDoorInteractionUI {
@@ -248,13 +249,12 @@ export class ImportedApartmentDoorInteraction {
 
   update(delta: number, playerPosition: THREE.Vector3, viewDirection: THREE.Vector3, locked: boolean): void {
     const distanceFromClosed = Math.abs(this.currentAngle - this.closedAngle);
-    if (this.state === 'closing' && distanceFromClosed < 0.22 && !this.doorwayClear(playerPosition)) {
-      this.state = 'opening';
-      this.targetAngle = this.options.openAngle;
-    }
+    // An obstruction pauses closing; proximity never commands an opening.
+    const obstructed = this.state === 'closing' && distanceFromClosed < .30 && !this.doorwayClear(playerPosition);
+    if (obstructed) this.angularVelocity = 0;
 
-    if (Math.abs(this.currentAngle - this.targetAngle) > SETTLED_ANGLE_EPSILON
-      || Math.abs(this.angularVelocity) > SETTLED_VELOCITY_EPSILON) {
+    if (!obstructed && (Math.abs(this.currentAngle - this.targetAngle) > SETTLED_ANGLE_EPSILON
+      || Math.abs(this.angularVelocity) > SETTLED_VELOCITY_EPSILON)) {
       // Exact critically damped spring. Unlike the previous exponential lerp,
       // this starts without an abrupt angular-speed jump and still comes to a
       // decisive stop at the jamb. It is also stable across variable frames.
@@ -280,12 +280,7 @@ export class ImportedApartmentDoorInteraction {
           this.state = 'closed';
         }
         if (this.state === 'closing') {
-          if (!this.doorwayClear(playerPosition)) {
-            this.state = 'opening';
-            this.targetAngle = this.options.openAngle;
-          } else {
-            this.state = 'closed';
-          }
+          this.state = 'closed';
         }
       }
       this.pivot.rotation.y = this.currentAngle;
@@ -322,6 +317,7 @@ export class ImportedApartmentDoorInteraction {
       return this.setLocked(!this.doorLocked);
     }
     if (!this.rayHitsDoor(playerPosition, viewDirection)) return false;
+    if((this.state==='closed'||this.state==='closing')&&this.options.beforeOpen?.()===false)return true;
 
     if (this.state === 'closed') {
       if (this.doorLocked) {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import * as THREE from 'three';
-import { HallArrivalStory, HOME_REMINDER, MAIL_REMINDER } from './HallArrivalStory';
+import { HallArrivalStory, MAIL_REACTION, MAIL_REMINDER } from './HallArrivalStory';
 import type { HallArrivalState } from '../core/SaveHistory';
 
 function setup(state: HallArrivalState = 'approach') {
@@ -24,8 +24,8 @@ describe('arrival mail sequence', () => {
     s.story.update(.02, player, forward, true);
     expect(s.voice).not.toHaveBeenCalled();
     s.story.update(.02, new THREE.Vector3(-.4, .865, -3.5), forward, true);
-    expect(s.story.getState()).toBe('mail'); expect(s.voice).toHaveBeenCalledExactlyOnceWith('hmm');
-    expect(s.caption.say).toHaveBeenCalledWith(MAIL_REMINDER);
+    expect(s.story.getState()).toBe('mail'); expect(s.voice).not.toHaveBeenCalled();
+    expect(s.caption.say).not.toHaveBeenCalled();
     expect(s.mailbox.getObjectByName('mail-recipient-highlight')!.visible).toBe(true);
     s.story.update(.02, player, left, true);
     expect(s.ui.setInteraction).toHaveBeenLastCalledWith('Récupérer le courrier');
@@ -33,13 +33,35 @@ describe('arrival mail sequence', () => {
     expect(s.story.interact(player, left, false)).toBe(false);
     const closed = s.door.quaternion.clone();
     expect(s.story.interact(player, left, true)).toBe(true);
-    expect(s.story.getState()).toBe('home'); expect(s.caption.say).toHaveBeenLastCalledWith(HOME_REMINDER);
-    expect(s.voice).toHaveBeenLastCalledWith('gasp'); expect(s.change).toHaveBeenCalledTimes(2);
-    for (let i=0; i<40; i++) s.story.update(.02, player, left, true);
+    expect(s.story.getState()).toBe('mail'); expect(s.story.blocksStairs).toBe(true);
+    expect(s.voice).not.toHaveBeenCalledWith('gasp');
+    for (let i=0; i<50; i++) s.story.update(.02, player, left, true);
+    expect(s.story.getState()).toBe('home'); expect(s.caption.say).toHaveBeenLastCalledWith(MAIL_REACTION);
+    expect(s.voice).not.toHaveBeenCalled(); expect(s.change).toHaveBeenCalledTimes(2);
     expect(s.door.quaternion.angleTo(closed)).toBeCloseTo(1.15);
-    expect(s.story.interact(player, left, true)).toBe(false); expect(s.voice).toHaveBeenCalledTimes(2);
+    expect(s.story.interact(player, left, true)).toBe(false); expect(s.voice).not.toHaveBeenCalled();
     s.story.dispose(); expect(s.caption.dispose).toHaveBeenCalledOnce();
     expect(s.mailbox.getObjectByName('mail-recipient-highlight')).toBeUndefined();
+  });
+
+  it('plays the gasp only on the first landing attempt and rearms only the text after returning down', () => {
+    const s = setup('mail'), stair = new THREE.Vector3(-.8, 2.305, 1.5);
+    expect(s.story.blocksStairs).toBe(true);
+    expect(s.story.tryStairs(stair, -1)).toBe(false);
+    expect(s.story.tryStairs(stair, 1)).toBe(true);
+    expect(s.voice).toHaveBeenCalledExactlyOnceWith('gasp');
+    expect(s.story.tryStairs(stair, 1)).toBe(false);
+    for (let i = 0; i < 110; i++) s.story.update(.02, stair, forward, true);
+    expect(s.story.tryStairs(stair, 1)).toBe(false);
+    s.story.tryStairs(new THREE.Vector3(-.8, 1.9, .6), -1);
+    expect(s.story.tryStairs(stair, 1)).toBe(true); expect(s.voice).toHaveBeenCalledTimes(1);
+    expect(s.caption.say).toHaveBeenLastCalledWith(MAIL_REMINDER);
+    expect(s.story.interact(player, left, true)).toBe(true);
+    for (let i = 0; i < 30; i++) s.story.update(.02, player, left, true);
+    expect(s.story.blocksStairs).toBe(true); expect(s.voice).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 20; i++) s.story.update(.02, player, left, true);
+    expect(s.story.blocksStairs).toBe(false); expect(s.voice).toHaveBeenLastCalledWith('gasp');
+    s.story.dispose();
   });
 
   it('respects pause, other floors, distance, an obstructing cabinet, and old/completed saves', () => {

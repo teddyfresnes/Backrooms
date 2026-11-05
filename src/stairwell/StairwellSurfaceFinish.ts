@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CooperativeWork } from '../core/CooperativeWork';
 import { SeededRandom } from '../world/SeededRandom';
 import { STAIRWELL_BOUNDS, STAIRWELL_ROOF_Y } from './layout';
 import { containsPaint, stairwellPaintPatches } from './StairwellPaintLayout';
@@ -10,7 +11,7 @@ const TILE_HEIGHT = 512;
 const GUTTER = 4;
 
 /** Opaque finish baked once: no layered wall faces, transparency or shader noise. */
-export function createStairwellWallAtlas(): THREE.CanvasTexture {
+function* paintWallAtlas(): Generator<void, THREE.CanvasTexture> {
   const canvas = document.createElement('canvas');
   canvas.width = TILE_WIDTH * 2; canvas.height = TILE_HEIGHT * 2;
   const ctx = canvas.getContext('2d');
@@ -28,6 +29,7 @@ export function createStairwellWallAtlas(): THREE.CanvasTexture {
 
     // Old roller coats, broad damp blooms and repairs are part of the albedo.
     for (let stain = 0; stain < 55; stain++) {
+      yield;
       const x = random.float(0, TILE_WIDTH), y = random.float(0, TILE_HEIGHT);
       const radius = random.float(15, 110);
       const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
@@ -73,6 +75,7 @@ export function createStairwellWallAtlas(): THREE.CanvasTexture {
       ctx.stroke();
     }
     for (let grain = 0; grain < 13000; grain++) {
+      if (grain % 256 === 0) yield;
       ctx.fillStyle = random.chance(.5) ? 'rgba(39,37,29,.035)' : 'rgba(245,234,207,.045)';
       ctx.fillRect(random.int(0, TILE_WIDTH - 1), random.int(0, TILE_HEIGHT - 1), 1, 1);
     }
@@ -82,6 +85,20 @@ export function createStairwellWallAtlas(): THREE.CanvasTexture {
   texture.name = 'stairwell-worn-wall-atlas'; texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 2;
   return texture;
+}
+
+export function createStairwellWallAtlas(): THREE.CanvasTexture {
+  const work = paintWallAtlas();
+  let result = work.next();
+  while (!result.done) result = work.next();
+  return result.value;
+}
+
+export async function createStairwellWallAtlasAsync(signal?: AbortSignal): Promise<THREE.CanvasTexture> {
+  const work = new CooperativeWork(signal), painting = paintWallAtlas();
+  let result = painting.next();
+  while (!result.done) { await work.checkpoint(); result = painting.next(); }
+  return result.value;
 }
 
 /** All adjacent shell pieces use one continuous wall chart, including lintels. */
