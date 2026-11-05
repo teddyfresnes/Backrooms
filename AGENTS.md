@@ -78,6 +78,19 @@ build couvrent déjà le risque.
 - Tout objet GPU, écouteur, worker ou collider créé doit avoir un chemin de
   nettoyage dans `dispose()` ou au démontage du chunk.
 
+## Nettoyage avant livraison
+
+- Mettre les essais dans un répertoire temporaire ou ignoré par Git. En fin de
+  tâche, retirer les fichiers d’essai, logs, captures, builds et archives
+  intermédiaires créés pour la tâche qui ne servent plus.
+- Sur Backrooms, privilégier `main` quand la tâche le permet. Créer une branche
+  ou un worktree temporaire seulement si nécessaire. Une fois les commits
+  intégrés, retirer les branches locales et worktrees temporaires créés pour la
+  tâche. Demander l’accord avant de supprimer une branche distante.
+- Relire `git status --short` et le diff avant de livrer. Préserver les
+  fichiers et modifications préexistants, les commits non intégrés et les
+  livrables demandés. Signaler ce qui doit rester pour reprendre le travail.
+
 ## Entretien documentaire léger
 
 Mettre à jour la documentation seulement si une modification change :
