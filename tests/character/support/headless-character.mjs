@@ -5,6 +5,7 @@ import { readFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 const root=fileURLToPath(new URL('../../../',import.meta.url));
+export const testAssetRoot=process.env.CHARACTER_TEST_ASSET_ROOT??path.join(root,'public');
 const out=path.join(root,'.character-test-dist/headless-character.mjs');
 mkdirSync(path.dirname(out),{recursive:true});
 await build({entryPoints:[path.join(root,'src/character/CharacterRuntime.ts')],outfile:out,bundle:true,platform:'node',format:'esm',packages:'external',loader:{'.css':'empty'},plugins:[{
@@ -17,8 +18,8 @@ for(const key of ['window','document','HTMLElement','HTMLCanvasElement','MouseEv
 globalThis.requestAnimationFrame=()=>0;globalThis.cancelAnimationFrame=()=>{};
 window.HTMLCanvasElement.prototype.getContext=function(){return new Proxy({canvas:this,getImageData:()=>({data:new Uint8ClampedArray(this.width*this.height*4)}),createImageData:()=>({data:new Uint8ClampedArray(this.width*this.height*4)}),createLinearGradient:()=>({addColorStop(){}}),createRadialGradient:()=>({addColorStop(){}}),createPattern:()=>({setTransform(){}})}, {get:(t,k)=>t[k]??(()=>{}),set:(t,k,v)=>(t[k]=v,true)});};
 THREE.TextureLoader.prototype.load=function(url,onLoad){const texture=new THREE.Texture();queueMicrotask(()=>onLoad?.(texture));return texture;};
-THREE.FileLoader.prototype.load=function(url,onLoad,_progress,onError){try{const data=readFileSync(path.join(root,'public',url));const result=this.responseType==='json'?JSON.parse(data.toString('utf8')):this.responseType==='text'?data.toString('utf8'):data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength);queueMicrotask(()=>onLoad(result));}catch(e){queueMicrotask(()=>onError?.(e));}};
-globalThis.fetch=async url=>{try{const pathname=new URL(String(url),'http://localhost').pathname;return new Response(readFileSync(path.join(root,'public',decodeURIComponent(pathname))));}catch{return new Response(null,{status:404});}};
+THREE.FileLoader.prototype.load=function(url,onLoad,_progress,onError){try{const data=readFileSync(path.join(testAssetRoot,url));const result=this.responseType==='json'?JSON.parse(data.toString('utf8')):this.responseType==='text'?data.toString('utf8'):data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength);queueMicrotask(()=>onLoad(result));}catch(e){queueMicrotask(()=>onError?.(e));}};
+globalThis.fetch=async url=>{try{const pathname=new URL(String(url),'http://localhost').pathname;return new Response(readFileSync(path.join(testAssetRoot,decodeURIComponent(pathname))));}catch{return new Response(null,{status:404});}};
 export const {CharacterRuntime}=await import(out);
 const { PhysicsWorld } = await import(path.join(root,'.character-test-dist/physics/PhysicsWorld.js'));
 const { PlayerController } = await import(path.join(root,'.character-test-dist/player/PlayerController.js'));

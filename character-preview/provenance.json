@@ -1,0 +1,12 @@
+{
+  "sourceCommit": "5b6194362753a4363d1f65a36e22e3d9200622a7",
+  "assets": 80,
+  "fbx": 70,
+  "jsonBytes": 12853765,
+  "gzipBytes": 4580815,
+  "gzipSha256": "51e85e50d84a647f61e6105f72c80298ab89439e55ef85273018b875dea6138e",
+  "parts": 26,
+  "embeddedMaterialTextures": 0,
+  "bloodTextures": "existing-procedural-fallback",
+  "animationResampling": false
+}

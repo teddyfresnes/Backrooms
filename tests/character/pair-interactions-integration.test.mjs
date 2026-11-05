@@ -33,7 +33,9 @@ test('the paired picker keeps aim fixed with the ordinary cursor when pointer lo
   ready();lab.player.controls.isLocked=false;lab.player.fallbackPlaying=true;key('Tab');
   const before=lab.player.getLookQuaternion().clone();
   for(const [x,y] of [[200,120],[350,180]])lab.host.canvas.dispatchEvent(new MouseEvent('mousemove',{clientX:x,clientY:y,bubbles:true,cancelable:true}));
-  assert.ok(before.angleTo(lab.player.getLookQuaternion())<1e-8);
+  // Identical quaternions can have angleTo(self) ≈ 3e-8 through dot rounding.
+  // Component equality checks that cursor events have changed nothing at all.
+  assert.deepEqual(lab.player.getLookQuaternion().toArray(),before.toArray());
   assert.equal(lab.emoteMenu.isOpen,true);lab.player.controls.isLocked=true;lab.player.fallbackPlaying=false;
 });
 test('Tab keeps solo emotes when the person is out of reach',()=>{

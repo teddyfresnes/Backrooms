@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-31",
+  "project_id": "appgprj_6ad38cbd518c81918ef345d5a1eb55fc",
+  "version_number": 23,
+  "version_id": "appgprj_6ad38cbd518c81918ef345d5a1eb55fc~appgver_c86cecf2bc888191b394f073fa4f8132",
+  "deployment_id": "appgdep_6ae60e51b15c8191847e4ee55497746f",
+  "status": "succeeded",
+  "url": "https://backrooms-integre.teddykoeh.chatgpt.site",
+  "access_mode": "custom",
+  "current_user_role": "owner",
+  "site_source_commit": "599378b3945e9d49d7d3bef9d39e86dd40939381",
+  "github_implementation_commit": "21237f8a761332224c5faa2f539f9a932ccc1815",
+  "github_validation_commit": "c49b6b954afceac8aa284c4bdf1051e7eceb8d6f",
+  "publication_method": "source_build_after_local_packaging_failure",
+  "local_packaging": {
+    "completed": false,
+    "attempts": 3,
+    "first_error": "Missing /tmp; repaired with a workspace-local TMPDIR.",
+    "subsequent_error": "Two tar attempts stopped because staged files changed while being read.",
+    "local_archive_saved": false,
+    "archive_upload_attempted": false
+  },
+  "published_archive": {
+    "archive_format": "tar",
+    "sediment_file_id": "file_00000000905881f7b37a6f97e2f6e84c",
+    "content_hash": "sha256:a2aa4bc9c50934e328fe77288613dd07e41eb19126672c8f4f596d19c7d306e6",
+    "size_bytes": 267448320,
+    "file_count": 3082
+  },
+  "hosting_budget": {
+    "static_files": 3081,
+    "static_file_bytes": 264648003,
+    "static_limit_bytes": 265289728,
+    "published_tar_limit_bytes": 268435456,
+    "published_tar_limit_passed": true
+  },
+  "validation": {
+    "main_test_files": 13,
+    "main_tests_passed": 98,
+    "hosted_test_files": 5,
+    "hosted_tests_passed": 21,
+    "main_typescript_passed": true,
+    "hosted_production_build_passed": true,
+    "main_full_asset_build_run": false,
+    "main_checkout_sparse": true,
+    "runtime_files_matching_main_and_hosted_source": 12,
+    "images_bytes": 454748,
+    "apartment_lossless": true,
+    "wardrobe_objects_verified": 148,
+    "clothing_files_lossless": 148,
+    "visual_webgl_verified": false,
+    "audio_listening_verified": false,
+    "preview_blocker": "Managed preview service unavailable: /tmp/sites-previewd/requests missing."
+  },
+  "report": "NEW_GAME_CINEMATIC_VALIDATION.md",
+  "asset_manifest": "new-game-intro-assets.json",
+  "pull_request": "https://github.com/teddyfresnes/Backrooms/pull/2"
+}

@@ -6,6 +6,9 @@ import { CharacterEditor } from './CharacterEditor'
 import { CHARACTER_OPTIONS } from './characterOptions'
 import { useCharacterState } from '../state/CharacterState'
 import { makeDefaultCharacter } from '../state/defaults'
+import { siteAudio } from '../../../audio/SiteAudio'
+
+vi.mock('../../../audio/SiteAudio',()=>({siteAudio:{stopVoice:vi.fn(),unlock:vi.fn(async()=>true),playVoice:vi.fn()}}))
 
 const viewport = vi.hoisted(() => ({ current: null as null | {
   modelKey: number; externalLoading: boolean; onCharacterReady: (revision: number) => void
@@ -24,6 +27,7 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await act(() => root.unmount())
   document.body.innerHTML = ''
   localStorage.clear()
+  vi.useRealTimers()
 })
 
 async function mount() {
@@ -47,6 +51,20 @@ async function choose(host: HTMLElement, label: string) {
 }
 
 describe('wardrobe selection while a character is loading', () => {
+  it('selects and persists a voice without changing body geometry, and previews the chosen recordings', async()=>{
+    vi.useFakeTimers()
+    const host=await mount();
+    await act(()=>{ [...host.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='Modifier')!.click() });
+    const body=useCharacterState.getState().config.body;
+    const radio=[...host.querySelectorAll<HTMLInputElement>('input[type="radio"]')].find(input=>input.parentElement!.textContent==='Meghan Christian')!;
+    await act(()=>radio.click());
+    expect(useCharacterState.getState().config.voiceId).toBe('meghan');
+    expect(useCharacterState.getState().config.body).toBe(body);
+    await act(async()=>{ await vi.advanceTimersByTimeAsync(300) });
+    expect(JSON.parse(localStorage.getItem('character-studio/current/v4')!).voiceId).toBe('meghan');
+    await act(()=>{ [...host.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='Écouter la voix')!.click() });
+    expect(siteAudio.playVoice).toHaveBeenLastCalledWith('meghan','hmm');
+  });
   it('accepts rapid preset replacements and only the latest readiness clears the loading state', async () => {
     const host = await mount()
     const first = await choose(host, CHARACTER_OPTIONS[1].label)

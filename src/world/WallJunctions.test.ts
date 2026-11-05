@@ -36,6 +36,19 @@ function expectCollidersMatch(plan: WorldPlan) {
 }
 
 describe('clean architectural wall junctions', () => {
+  it('closes narrow near-miss T joints and niche returns on the exact face of a taller host', () => {
+    const plan = planWith([
+      wall('host', { x: 4, orientation: 'z', thickness: 1, height: 3.2 }),
+      wall('ordinary', { x: 1.725, z: -2, length: 3.45 }),
+      wall('niche-return', { x: 2.225, z: 2, length: 2.45, thickness: .2, height: 2.74, detail: 'recess' }),
+    ]);
+    cleanWallJunctions(plan);
+    for (const id of ['ordinary', 'niche-return']) {
+      const w = plan.walls.find(w => w.id === id)!;
+      expect(w.x + w.length / 2).toBeCloseTo(3.5);
+    }
+    expectCollidersMatch(plan);
+  });
   it.each([-1, 1].flatMap(x => [-1, 1].map(z => [x, z])))('closes the recessed L corner in quadrant %s, %s with matching collisions', (sx, sz) => {
     const plan = planWith([
       wall('horizontal', { x: -sx * 2, length: 4, thickness: 1.2 }),
@@ -64,7 +77,7 @@ describe('clean architectural wall junctions', () => {
     expectCollidersMatch(plan);
   });
 
-  it('makes centimetre shoulders rare while preserving deterministic variation', () => {
+  it('removes accidental shoulders for every seed, preserving deterministic architecture', () => {
     let retained = 0;
     for (let i = 0; i < 240; i++) {
       const make = () => planWith([
@@ -78,8 +91,7 @@ describe('clean architectural wall junctions', () => {
       else expect(plan.walls[1]!.thickness).toBe(1);
       expectCollidersMatch(plan);
     }
-    expect(retained).toBeGreaterThan(0);
-    expect(retained).toBeLessThan(20);
+    expect(retained).toBe(0);
   });
 
   it('removes buried pilaster strips, keeping real columns and visible architectural bays', () => {

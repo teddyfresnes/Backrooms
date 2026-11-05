@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyMatteSurface } from '../render/MatteSurface';
 
 export interface StairwellMaterialSet {
   upperPlaster: THREE.MeshStandardMaterial;
@@ -245,6 +246,8 @@ export class StairwellMaterials {
       }),
     };
 
+    for (const name of ['upperPlaster', 'lowerPaint', 'landingTerrazzo', 'stairTerrazzo', 'slabUnderside', 'ceiling'] as const)
+      applyMatteSurface(materials[name], [.82, .98]);
     nameMaterials(materials);
     const textures = [plaster, paint, terrazzo, concrete, door, metal, rail, pipe]
       .flatMap((set) => [set.color, set.normal, set.roughness]);

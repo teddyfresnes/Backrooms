@@ -7,7 +7,7 @@ import type {
   WallSegment,
   WorldPlan,
 } from '../world/types';
-import { rectCenter } from '../world/types';
+import { pointInRect, rectCenter } from '../world/types';
 
 export type GraffitiKind = 'message' | 'symbol' | 'direction';
 export type GraffitiSymbol =
@@ -237,7 +237,7 @@ const wallCenterDistance = (
 const eligibleGraffitiWalls = (plan: WorldPlan): WallSegment[] =>
   plan.walls.filter((wall) =>
     wall.kind === 'wallpaper' &&
-    Math.abs(wall.bottom) < 0.12 &&
+    (plan.spatial ? plan.rooms.some(r => Math.abs((r.floorY ?? 0) - wall.bottom) < .2 && pointInRect(wall.x, wall.z, r.bounds, -.2)) : Math.abs(wall.bottom) < 0.12) &&
     wall.height >= 1.9 &&
     wall.length >= 2.35 &&
     wall.detail !== 'upper-shell' &&
@@ -329,7 +329,7 @@ const makePlacement = (
   const wallAlong = wall.orientation === 'x' ? wall.x : wall.z;
   const centerY = Math.min(
     wall.bottom + wall.height - height * 0.5 - 0.22,
-    rng.float(0.72 + height * 0.5, 1.48 + height * 0.5),
+    (plan.spatial ? wall.bottom : 0) + rng.float(0.72 + height * 0.5, 1.48 + height * 0.5),
   );
   return {
     id: `graffiti-${index}-${wall.id}`,
@@ -377,13 +377,15 @@ export const selectWallGraffiti = (plan: WorldPlan): WallGraffitiPlacement[] => 
     (feature): feature is GridPitFeature | StairSocketFeature =>
       feature.kind === 'grid-pit' ||
       (feature.kind === 'stair-socket' && !feature.inherited && (feature.baseY ?? 0) === 0),
-  );
+  ).map(feature => ({ id: feature.id, kind: feature.kind, center: targetCenter(feature) }));
+  const regional = (plan.spatial?.landmarks ?? []).filter(l => l.kind.startsWith('escalier-') || l.kind === 'ouverture-haute').sort((a, b) => Math.hypot(a.position.x - plan.spawn.x, a.position.z - plan.spawn.z) - Math.hypot(b.position.x - plan.spawn.x, b.position.z - plan.spawn.z))[0];
+  if (regional) targets.push({ id: `regional/${regional.kind}`, kind: regional.kind === 'ouverture-haute' ? 'grid-pit' : 'stair-socket', center: regional.position });
 
   for (const feature of targets) {
     const targetRng = rng.fork(`target:${feature.id}`);
     const chance = feature.kind === 'stair-socket' ? 0.24 : 0.17;
     if (!targetRng.chance(chance)) continue;
-    const center = targetCenter(feature);
+    const center = feature.center;
     const seriesCount = targetRng.chance(0.28) ? 2 : 1;
     for (let series = 0; series < seriesCount; series += 1) {
       const wall = findDirectionWall(candidates, usedWallIds, center, targetRng.fork(`wall:${series}`));

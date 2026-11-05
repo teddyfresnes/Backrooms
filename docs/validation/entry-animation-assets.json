@@ -1,0 +1,24 @@
+{
+  "user_provided": true,
+  "source_meshes_excluded": true,
+  "encoding": "Original Float32 tracks; redundant keys optimized, base64 arrays, gzip.",
+  "runtime": "assets/cinematics/entry-motion.bin",
+  "bytes": 303095,
+  "sha256": "18e324cc51ab5285d30baeb24ca051af995e9f039f54ad220d28ab409aa822f5",
+  "sources": [
+    {
+      "id": "code",
+      "source": "Entering Code.fbx",
+      "source_sha256": "a28c2739665887a18c44e316ecd77fceb4a19dd586d3d67b2eea9ea20cedb13f",
+      "duration": 7.5,
+      "tracks": 53
+    },
+    {
+      "id": "door",
+      "source": "Opening Door Inwards.fbx",
+      "source_sha256": "1cd8447d02a5731d86242260dfc7328ec413e0c6a4ff69066451b6236867bb9b",
+      "duration": 6.366666793823242,
+      "tracks": 53
+    }
+  ]
+}

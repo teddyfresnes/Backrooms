@@ -14,7 +14,6 @@ export function makeDefaultCharacter(): CharacterConfig {
   return {
     id: 'preset-thomas',
     name: 'Thomas',
-    voiceId: 'alex-brodie',
     baseAssetId: 'makehuman-hm08',
     body: {
       ...morphDefaults('body'),

@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { loadApartmentScene } from './LoadApartmentScene';
+import { APARTMENT_MODEL_URL } from './ApartmentAsset';
+import type { ApartmentPreload } from './ApartmentPreload';
+import { resolveLightingBrightness } from '../render/LightingBrightness';
 import { isApartmentInteriorVisible } from './ApartmentVisibility';
 import { optimizeApartmentSmallProps } from './SmallPropGeometry';
 import { batchStaticMeshes } from '../stairwell/geometry';
@@ -6,7 +10,7 @@ import type { StaticCollider } from '../world/types';
 import { floorY, midLandingY, STAIRWELL_BOUNDS, STAIRWELL_LEVEL_COUNT } from '../stairwell/layout';
 import { APARTMENT_ENTRY_DOOR } from './layout';
 
-const MODEL_URL = '/assets/imported-apartment/apartment.json';
+const MODEL_URL = APARTMENT_MODEL_URL;
 
 // The user's latest Three.js Editor export already contains the requested
 // apartment alignment. Do not add another runtime offset or the doorway will
@@ -673,6 +677,7 @@ export class ImportedApartmentEnvironment {
   private readonly lightSwitchIndicator: THREE.MeshBasicMaterial;
   private readonly doorLockBolt: THREE.Mesh;
   private interiorLightsEnabled = false;
+  private interiorBrightnessGain = 1;
 
   private constructor(private readonly model: THREE.Object3D) {
     this.group.name = 'imported-sketchfab-apartment-runtime';
@@ -947,10 +952,15 @@ export class ImportedApartmentEnvironment {
     return this.interiorLightsEnabled;
   }
 
+  setBrightness(value: number): void {
+    this.interiorBrightnessGain = resolveLightingBrightness(value).relativeGain;
+    this.setInteriorLightsEnabled(this.interiorLightsEnabled);
+  }
+
   setInteriorLightsEnabled(enabled: boolean): void {
     this.interiorLightsEnabled = enabled;
     this.interiorLights.forEach(({ light, intensity }) => {
-      light.intensity = enabled ? intensity : 0;
+      light.intensity = enabled ? intensity * this.interiorBrightnessGain : 0;
     });
     const surfaceFactor = enabled ? 1 : APARTMENT_LIGHTS_OFF_SURFACE_FACTOR;
     const emissiveFactor = enabled ? 1 : APARTMENT_LIGHTS_OFF_EMISSIVE_FACTOR;
@@ -1173,9 +1183,8 @@ export class ImportedApartmentEnvironment {
     };
   }
 
-  static async load(): Promise<ImportedApartmentEnvironment> {
-    const loader = new THREE.ObjectLoader();
-    const model = await loader.loadAsync(MODEL_URL);
+  static async load(signal?: AbortSignal, preload?: ApartmentPreload): Promise<ImportedApartmentEnvironment> {
+    const model = await loadApartmentScene(MODEL_URL, signal, preload);
     try {
       return new ImportedApartmentEnvironment(model);
     } catch (error) {

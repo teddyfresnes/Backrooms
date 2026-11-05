@@ -81,15 +81,6 @@ button:focus-visible, input:focus-visible { outline:2px solid #fff3a6; outline-o
 .sex-row button { height:36px; border:1px solid var(--border); border-radius:2px; background:transparent; color:var(--muted); font-size:10px; }
 .sex-row button.selected { border-color:rgba(229,211,108,.5); background:var(--accent-soft); color:#fff3a6; }
 
-.voice-picker { display:flex; flex-direction:column; gap:7px; }
-.voice-picker-label { color:#cac6b2; font-size:10px; font-weight:520; }
-.voice-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; }
-.voice-grid button { min-width:0; min-height:48px; display:flex; flex-direction:column; justify-content:center; gap:3px; padding:7px 9px; border:1px solid var(--border); border-radius:2px; background:transparent; color:var(--muted); text-align:left; }
-.voice-grid button:hover { border-color:var(--border-strong); color:var(--text); }
-.voice-grid button.selected { border-color:rgba(229,211,108,.5); background:var(--accent-soft); color:#fff3a6; }
-.voice-grid button span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; }
-.voice-grid button small { color:var(--muted-2); font-size:8px; }
-
 .compact-slider { display:flex; flex-direction:column; gap:7px; padding:7px 0 11px; border-bottom:1px solid rgba(245,240,216,.055); }
 .compact-slider > span { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .compact-slider b { color:#cac6b2; font-size:10px; font-weight:520; }
@@ -786,3 +777,12 @@ button:focus-visible, input:focus-visible { outline:2px solid #fff3a6; outline-o
   font-size: 10px;
   letter-spacing: .015em;
 }
+
+.wardrobe-voices { margin: 0 0 1.4rem; padding: 0; border: 0; }
+.wardrobe-voices legend { margin-bottom: .7rem; font-weight: 600; }
+.wardrobe-voice-options { display: grid; grid-template-columns: 1fr 1fr; gap: .65rem; }
+.wardrobe-voice-options label { display: flex; align-items: center; gap: .55rem; font-size: .85rem; cursor: pointer; }
+.wardrobe-voice-options input { accent-color: #d2cfb2; }
+.wardrobe-voice-preview { display: flex; flex-wrap: wrap; gap: .5rem; margin: .9rem 0 .6rem; }
+.wardrobe-voices small { font-size: .65rem; opacity: .6; }
+.wardrobe-voices a { color: inherit; }

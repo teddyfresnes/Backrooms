@@ -1,4 +1,13 @@
+import { ArchitectureDebug, type ArchitectureDebugMode } from './ArchitectureDebug';
+import { baseboardExclusions } from '../world/BaseboardZones';
+import { mountArchitectureBatch, prepareSpatialArchitecture, type SpatialArchitectureBuffers } from './SpatialArchitectureBuffers';
+import { ceilingFixturePose } from './CeilingFixture';
+import { createWalkableGeometry } from './WalkableGeometry';
+import { setRegionalLightNeighbor, createRegionalLightField, type RegionalLightData, type RegionalLightField } from './RegionalLighting';
+import { applySurfaceLighting } from './SurfaceLighting';
 import * as THREE from 'three';
+import { DEFAULT_BRIGHTNESS, resolveLightingBrightness } from './LightingBrightness';
+import { applyMatteSurface } from './MatteSurface';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { MaterialSet } from './MaterialLibrary';
 import {
@@ -14,6 +23,7 @@ import {
   applyZonalLighting,
   createZonalMaterialSet,
   pinZonalLightingStoryHeight,
+  setZonalBrightness,
 } from './ZonalLighting';
 import type { ZonalLightingContext } from './ZonalLighting';
 import { createGraffitiMesh, selectWallGraffiti } from './WallGraffiti';
@@ -1390,12 +1400,21 @@ const DEFAULT_SURFACE_STYLE: SurfaceStyle = {
 
 export interface WorldViewOptions {
   lightingMode?: LightingMode;
+  brightness?: number;
   bakedLightMaps?: BakedLightMapData;
+  regionalLightData?: RegionalLightData;
+  architectureData?: SpatialArchitectureBuffers;
+  architectureOnly?: boolean;
 }
 
 export class WorldView {
   readonly group = new THREE.Group();
-  readonly ready: Promise<void>;
+  private architectureDebug?: ArchitectureDebug;
+  private readonly initialReady: Promise<void>;
+  private detailReady?: Promise<void>;
+  private previewOnly: boolean;
+  get ready(): Promise<void> { return this.detailReady ?? this.initialReady; }
+  get architectureOnly(): boolean { return this.previewOnly; }
   private readonly emitterMesh: THREE.InstancedMesh;
   private readonly fixtureSlots: LightSlot[];
   private readonly previewMaterials: Pick<
@@ -1411,13 +1430,15 @@ export class WorldView {
   private readonly distantCeilingMaterial: THREE.MeshStandardMaterial;
   private readonly previewFixtureGlowMaterial: THREE.MeshBasicMaterial;
   private readonly lightingContext?: ZonalLightingContext;
+  private readonly legacyBrightnessDefaults = new Map<THREE.MeshStandardMaterial, { lightMap: number; emissive: number }>();
   private readonly bakedLightMaps?: BakedLightMaps;
   private readonly ownedMaterials: THREE.Material[];
   private readonly animatedFogMaterials: THREE.ShaderMaterial[] = [];
   private readonly graffitiTextures: THREE.CanvasTexture[] = [];
   private readonly graffitiMaterials: THREE.MeshBasicMaterial[] = [];
+  private readonly regionalLightField?: RegionalLightField;
   private readonly surfaceStyle: SurfaceStyle;
-  private readonly propLayer: WorldPropLayer;
+  private propLayer: WorldPropLayer;
   private readonly doorLayer: WorldDoorLayer;
 
   constructor(
@@ -1425,19 +1446,24 @@ export class WorldView {
     sourceMaterials: MaterialSet,
     options: WorldViewOptions = {},
   ) {
+    this.previewOnly = options.architectureOnly ?? false;
     this.group.name = `world-${plan.seed}`;
+    this.regionalLightField = plan.spatial && options.lightingMode !== 'legacy' ? createRegionalLightField(plan, options.regionalLightData) : undefined;
     if (options.lightingMode === 'legacy') {
       this.bakedLightMaps = createBakedLightMaps(plan, options.bakedLightMaps);
       const baked = createBakedMaterialSet(sourceMaterials, this.bakedLightMaps, plan.size);
       this.materials = baked.materials;
       this.ownedMaterials = baked.ownedMaterials;
     } else {
-      const zonal = createZonalMaterialSet(sourceMaterials, plan);
+      const zonal = createZonalMaterialSet(sourceMaterials, plan, this.regionalLightField);
       this.materials = zonal.materials;
       this.lightingContext = zonal.context;
       this.ownedMaterials = zonal.ownedMaterials;
     }
     this.surfaceStyle = plan.surfaceStyle ?? DEFAULT_SURFACE_STYLE;
+    for (const material of [this.materials.floor, this.materials.wall, this.materials.plaster, this.materials.ceiling, this.materials.baseboard]) {
+      if (!plan.spatial) applySurfaceLighting(material, plan);
+    }
     this.materials.wall.color.multiplyScalar(this.surfaceStyle.wallTint);
     this.materials.plaster.color.multiplyScalar(this.surfaceStyle.wallTint);
     this.materials.floor.color.multiplyScalar(this.surfaceStyle.floorTint);
@@ -1508,15 +1534,15 @@ export class WorldView {
       ...Object.values(this.previewMaterials),
     );
     this.fixtureSlots = plan.lights;
-    this.buildArchitecture();
+    if (plan.spatial) this.buildSpatialArchitecture(options.architectureData); else this.buildArchitecture();
     this.buildEpicStructures();
-    this.buildWallGraffiti();
+    if (!this.previewOnly) this.buildWallGraffiti();
     this.buildRaisedZones();
     this.buildLowPassages();
     this.emitterMesh = this.buildFixtures();
     this.buildPitFeatures();
     this.buildStairs();
-    this.buildCeilingDamage();
+    if (!this.previewOnly) this.buildCeilingDamage();
     this.buildImpossibleVista();
     if (this.bakedLightMaps) {
       this.group.traverse((object) => {
@@ -1527,9 +1553,26 @@ export class WorldView {
     }
     this.doorLayer = new WorldDoorLayer(plan, this.lightingContext ?? null);
     this.group.add(this.doorLayer.group);
-    this.propLayer = new WorldPropLayer(plan, this.lightingContext ?? null);
+    this.propLayer = new WorldPropLayer(this.previewOnly ? { ...plan, propPlacements: [] } : plan, this.lightingContext ?? null);
     this.group.add(this.propLayer.group);
-    this.ready = Promise.all([this.doorLayer.ready, this.propLayer.ready]).then(() => undefined);
+    for (const material of this.ownedMaterials) if (material instanceof THREE.MeshStandardMaterial) {
+      applyMatteSurface(material);
+      if (!this.lightingContext) this.legacyBrightnessDefaults.set(material, { lightMap: material.lightMapIntensity, emissive: material.emissiveIntensity });
+    }
+    this.setBrightness(options.brightness ?? DEFAULT_BRIGHTNESS);
+    this.initialReady = Promise.all([this.doorLayer.ready, this.propLayer.ready]).then(() => undefined);
+  }
+
+  /** Keep the existing architecture and lighting when the player approaches. */
+  promoteDetails(): Promise<void> {
+    if (!this.previewOnly) return this.ready;
+    this.previewOnly = false;
+    this.buildWallGraffiti(); this.buildCeilingDamage();
+    this.propLayer.dispose();
+    this.propLayer = new WorldPropLayer(this.plan, this.lightingContext ?? null);
+    this.group.add(this.propLayer.group);
+    this.detailReady = Promise.all([this.initialReady, this.propLayer.ready]).then(() => undefined);
+    return this.detailReady;
   }
 
   private buildWallGraffiti(): void {
@@ -1548,7 +1591,13 @@ export class WorldView {
     if (group.children.length > 0) this.group.add(group);
   }
 
+  private buildSpatialArchitecture(supplied?: SpatialArchitectureBuffers): void {
+    for (const batch of supplied ?? prepareSpatialArchitecture(this.plan))
+      makeMesh(mountArchitectureBatch(batch), this.materials[batch.material], batch.name, this.group);
+  }
+
   private buildArchitecture(): void {
+    if (this.plan.spatial) { this.buildSpatialArchitecture(); return; }
     const wallGeometries: THREE.BufferGeometry[] = [];
     const lowerWallGeometries: THREE.BufferGeometry[] = [];
     const shaftCarpetGeometries: THREE.BufferGeometry[] = [];
@@ -1614,7 +1663,7 @@ export class WorldView {
     }
     const portalLintelHasHighCeilingOnBothSides = (wall: WallSegment): boolean =>
       wall.detail === 'upper-portal-lintel' && lintelGroups.get(wall.id) === true;
-    const districtFloorElevations = elevationFeatures.map((feature) => feature.elevation);
+    const districtFloorElevations = [...elevationFeatures.map((feature) => feature.elevation), ...(this.plan.topology?.surfaces.filter(s => s.profile.kind === 'flat').map(s => s.profile.kind === 'flat' ? s.profile.y : 0) ?? [])];
     const isInsideBaseboardlessZone = (x: number, z: number): boolean =>
       baseboardlessZones.some((zone) => pointInRect(x, z, zone, 0.02));
     const baseboardlessClaimsForWall = (
@@ -1625,49 +1674,30 @@ export class WorldView {
       const wallMin = alongCenter - wall.length * 0.5;
       const wallMax = alongCenter + wall.length * 0.5;
       const sampleOffset = wall.thickness * 0.5 + 0.04;
-      const claims = baseboardlessZones.flatMap((zone) => {
-        const crossMin = wall.orientation === 'x' ? zone.minZ : zone.minX;
-        const crossMax = wall.orientation === 'x' ? zone.maxZ : zone.maxX;
-        const min = Math.max(
-          wallMin,
-          wall.orientation === 'x' ? zone.minX : zone.minZ,
-        );
-        const max = Math.min(
-          wallMax,
-          wall.orientation === 'x' ? zone.maxX : zone.maxZ,
-        );
-        if (max - min <= 0.02) return [];
-        return ([-1, 1] as const).flatMap((side) => {
-          const sampleFixed = fixed + side * sampleOffset;
-          if (sampleFixed < crossMin + 0.02 || sampleFixed > crossMax - 0.02) return [];
-          return [{ min, max, side }];
-        });
-      }).sort((left, right) => left.side - right.side || left.min - right.min);
-      const merged: Array<{ min: number; max: number; side: -1 | 1 }> = [];
-      for (const claim of claims) {
-        const previous = merged[merged.length - 1];
-        if (
-          previous &&
-          previous.side === claim.side &&
-          claim.min <= previous.max + 0.02
-        ) {
-          previous.max = Math.max(previous.max, claim.max);
-        } else {
-          merged.push({ ...claim });
-        }
-      }
-      return merged;
+      return ([-1, 1] as const).flatMap(side => baseboardExclusions(
+        baseboardlessZones, wall.orientation, fixed + side * sampleOffset, wallMin, wallMax, .02,
+      ).map(claim => ({ ...claim, side })));
     };
     const elevationClaimsForWall = (
       wall: WallSegment,
     ): Array<{ min: number; max: number; elevation: number; side: -1 | 1 }> => {
-      if (Math.abs(wall.bottom) > 0.12) return [];
+      if (Math.abs(wall.bottom) > 1.2) return [];
       const alongCenter = wall.orientation === 'x' ? wall.x : wall.z;
       const fixed = wall.orientation === 'x' ? wall.z : wall.x;
       const wallMin = alongCenter - wall.length * 0.5;
       const wallMax = alongCenter + wall.length * 0.5;
       const sampleOffset = wall.thickness * 0.5 + 0.04;
-      const claims = elevationFeatures.flatMap((feature) =>
+      const floorClaims = this.plan.topology?.surfaces.filter(s => s.profile.kind === 'flat' && s.layer.endsWith('ground')).flatMap(s => {
+        const p = s.bounds, min = Math.max(wallMin, wall.orientation === 'x' ? p.minX : p.minZ), max = Math.min(wallMax, wall.orientation === 'x' ? p.maxX : p.maxZ);
+        if (max - min <= .02 || s.profile.kind !== 'flat') return [];
+        const elevation = s.profile.y;
+        return ([-1, 1] as const).flatMap(side => {
+          const x = wall.orientation === 'x' ? (min + max) / 2 : fixed + side * sampleOffset;
+          const z = wall.orientation === 'z' ? (min + max) / 2 : fixed + side * sampleOffset;
+          return pointInRect(x, z, p, -.02) ? [{ min, max, elevation, side }] : [];
+        });
+      }) ?? [];
+      const claims = [...floorClaims, ...elevationFeatures.flatMap((feature) =>
         (feature.platformRects ?? [feature.platformBounds]).flatMap((platform) => {
           const crossMin = wall.orientation === 'x' ? platform.minZ : platform.minX;
           const crossMax = wall.orientation === 'x' ? platform.maxZ : platform.maxX;
@@ -1686,7 +1716,7 @@ export class WorldView {
             return [{ min, max, elevation: feature.elevation, side }];
           });
         })
-      ).sort((left, right) => left.side - right.side || left.min - right.min);
+      )].sort((left, right) => left.side - right.side || left.min - right.min);
       const merged: Array<{
         min: number;
         max: number;
@@ -1794,9 +1824,9 @@ export class WorldView {
           const alongCenter = (min + max) * 0.5;
           const trimDepth = side === undefined ? wall.thickness + 0.055 : 0.055;
           const trim = new THREE.BoxGeometry(
-            alongX ? length + 0.025 : trimDepth,
+            alongX ? length : trimDepth,
             0.115,
-            alongX ? trimDepth : length + 0.025,
+            alongX ? trimDepth : length,
           );
           trim.translate(
             alongX
@@ -1938,7 +1968,7 @@ export class WorldView {
       this.group,
     );
 
-    const floorGeometry = createFloorGeometry(
+    const floorGeometry = this.plan.topology ? (mergeOrSingle(this.plan.topology.surfaces.map(s => createWalkableGeometry(s, 'top', this.surfaceStyle.floorPatternScale, this.surfaceStyle.floorQuarterTurn))) ?? new THREE.BufferGeometry()) : createFloorGeometry(
       this.plan.floorRects,
       0,
       this.surfaceStyle.floorPatternScale,
@@ -1950,7 +1980,11 @@ export class WorldView {
     floor.matrixAutoUpdate = false;
     floor.updateMatrix();
     this.group.add(floor);
-    if ((this.plan.floorOpenings?.length ?? 0) > 0) {
+    if (this.plan.topology) {
+      makeMesh(mergeOrSingle(this.plan.topology.surfaces.map(s => createWalkableGeometry(s, 'underside', this.surfaceStyle.ceilingPatternScale))), this.materials.ceiling, 'walkable-slab-undersides', this.group);
+      makeMesh(mergeOrSingle(this.plan.topology.surfaces.map(s => createWalkableGeometry(s, 'sides', this.surfaceStyle.wallPatternScale))), this.materials.wall, 'walkable-slab-sides', this.group);
+    }
+    if (!this.plan.topology && (this.plan.floorOpenings?.length ?? 0) > 0) {
       makeMesh(
         mergeOrSingle(this.plan.floorRects.map((rect) =>
           createCeilingGeometry(rect, -0.12, this.surfaceStyle.ceilingPatternScale)
@@ -1978,7 +2012,7 @@ export class WorldView {
         room.ceilingHeight > this.plan.wallHeight + 0.1 &&
         !endlessAbyssRoomIds.has(room.id),
     );
-    const inheritedCeilingOpenings = [...getInfiniteChunkCeilingOpenings(this.plan)];
+    const inheritedCeilingOpenings = [...getInfiniteChunkCeilingOpenings(this.plan), ...(this.plan.topology?.reservations?.filter(v => v.top > this.plan.wallHeight - .1).map(v => v.bounds) ?? [])];
     const stairCeilingOpenings = this.plan.stairCeilingOpenings ?? [];
     // A portal adjoining a normal-height room continues that room's ceiling.
     // Between two high rooms, the lintel keeps its wallpaper bottom cap instead,
@@ -2184,7 +2218,7 @@ export class WorldView {
         this.group,
       );
     }
-    if (this.bakedLightMaps) {
+    if (this.bakedLightMaps && !this.plan.topology) {
       const floorJunctionRepair = createHorizontalJunctionRepairGeometry(
         this.plan.walls,
         this.plan.floorRects,
@@ -3119,6 +3153,7 @@ export class WorldView {
   }
 
   private buildRaisedZones(): void {
+    if (this.plan.spatial) return; // Regional features already own their authoritative surfaces and solids.
     const features = this.plan.features.filter(
       (feature): feature is RaisedZoneFeature => feature.kind === 'raised-zone',
     );
@@ -3203,6 +3238,7 @@ export class WorldView {
   }
 
   private buildLowPassages(): void {
+    if (this.plan.spatial) return; // Regional features already own their authoritative surfaces and solids.
     const features = this.plan.features.filter(
       (feature): feature is SqueezeViewFeature => feature.kind === 'squeeze-view',
     );
@@ -3245,7 +3281,7 @@ export class WorldView {
           )
         ));
       }
-      if (feature.hump) {
+      if (feature.hump && !this.plan.topology) {
         floorGeometries.push(
           createFloorGeometry(
             [feature.hump.platformBounds],
@@ -3374,10 +3410,8 @@ export class WorldView {
     const quaternion = new THREE.Quaternion();
     const scale = new THREE.Vector3();
     const position = new THREE.Vector3();
-    const axis = new THREE.Vector3(0, 1, 0);
     this.fixtureSlots.forEach((slot, index) => {
-      quaternion.setFromAxisAngle(axis, slot.rotation);
-      position.set(slot.x, slot.ceilingY - 0.036, slot.z);
+      ceilingFixturePose(this.plan, slot, position, quaternion);
       // A dead slot represents a missing fluorescent panel, not a bright
       // white rectangle that merely stopped illuminating the room.
       scale.set(
@@ -3395,6 +3429,7 @@ export class WorldView {
   }
 
   private buildPitFeatures(): void {
+    if (this.plan.spatial) return; // Regional features already own their authoritative surfaces and solids.
     const features = this.plan.features.filter((feature): feature is GridPitFeature => feature.kind === 'grid-pit');
     const sideGeometries: THREE.BufferGeometry[] = [];
     const abyssSideGeometries: THREE.BufferGeometry[] = [];
@@ -3515,6 +3550,7 @@ export class WorldView {
   }
 
   private buildStairs(): void {
+    if (this.plan.spatial) return; // Regional features already own their authoritative surfaces and solids.
     const stairFeatures = this.plan.features.filter(
       (feature): feature is StairSocketFeature => feature.kind === 'stair-socket',
     );
@@ -4079,8 +4115,29 @@ export class WorldView {
     this.doorLayer.update(delta);
   }
 
+  setArchitectureDebug(mode: ArchitectureDebugMode): void {
+    this.architectureDebug ??= new ArchitectureDebug(this.group, this.plan);
+    this.architectureDebug.setMode(mode);
+  }
+
+  setLightNeighbor(dx: number, dz: number, data?: RegionalLightData, yOffset = 0): void {
+    if (this.regionalLightField) setRegionalLightNeighbor(this.regionalLightField, dx, dz, data, yOffset);
+  }
+
   setWorldOffset(offset: Readonly<THREE.Vector3>): void {
     this.lightingContext?.worldOffset.copy(offset);
+    this.regionalLightField?.offset.copy(offset);
+  }
+
+  setBrightness(value: number): void {
+    if (this.lightingContext) setZonalBrightness(this.lightingContext, value);
+    else {
+      const gain = resolveLightingBrightness(value).relativeGain;
+      for (const [material, baseline] of this.legacyBrightnessDefaults) {
+        material.lightMapIntensity = baseline.lightMap * gain;
+        material.emissiveIntensity = baseline.emissive * gain;
+      }
+    }
   }
 
   getInteraction(
@@ -4155,15 +4212,19 @@ export class WorldView {
   }
 
   dispose(): void {
+    this.architectureDebug?.dispose();
     this.doorLayer.dispose();
     this.propLayer.dispose();
     this.group.traverse((object) => {
       if (object instanceof THREE.Mesh || object instanceof THREE.InstancedMesh) object.geometry.dispose();
     });
     this.ownedMaterials.forEach((material) => material.dispose());
+    this.legacyBrightnessDefaults.clear();
     this.graffitiMaterials.forEach((material) => material.dispose());
     this.graffitiTextures.forEach((texture) => texture.dispose());
     this.lightingContext?.lightField.dispose();
+    this.regionalLightField?.texture.dispose();
+    this.regionalLightField?.lighting.dispose();
     this.bakedLightMaps?.general.dispose();
     this.bakedLightMaps?.ceiling.dispose();
     this.group.removeFromParent();

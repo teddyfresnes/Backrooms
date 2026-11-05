@@ -152,8 +152,8 @@ describe('zonal fluorescent materials', () => {
     expect(shader.fragmentShader).toContain('blackoutInfluence');
     expect(shader.fragmentShader).not.toContain('lightMapTexel');
     expect(shader.fragmentShader).toContain('mix(lightPoolMin, lightPoolMax, localExposure)');
-    expect((shader.uniforms.lightPoolMin as THREE.IUniform<number>).value).toBeCloseTo(0.5);
-    expect((shader.uniforms.lightPoolMax as THREE.IUniform<number>).value).toBeCloseTo(1.42);
+    expect((shader.uniforms.lightPoolMin as THREE.IUniform<number>).value).toBeCloseTo(0.72);
+    expect((shader.uniforms.lightPoolMax as THREE.IUniform<number>).value).toBeCloseTo(1.85);
     expect((shader.uniforms.litGain as THREE.IUniform<number>).value).toBeCloseTo(1.02);
     expect((shader.uniforms.verticalRelief as THREE.IUniform<number>).value).toBeCloseTo(0.12);
 

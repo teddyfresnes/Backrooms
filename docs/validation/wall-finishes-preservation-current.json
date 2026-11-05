@@ -1,0 +1,69 @@
+{
+  "baseline": "/workspace/scratch/6fa16f3b1be0/Backrooms-wall-baseline",
+  "columns": 512,
+  "retained": 193,
+  "oldFamilies": {
+    "squeeze-view": 149,
+    "grid-pit": 25,
+    "liminal-pit": 19
+  },
+  "added": 0,
+  "newFamilies": {},
+  "newDepths": {},
+  "datums": 512,
+  "atria": 23,
+  "monuments": [
+    {
+      "index": 5,
+      "owner": {
+        "x": 7,
+        "z": 6,
+        "story": 0
+      },
+      "identical": true
+    },
+    {
+      "index": 1,
+      "owner": {
+        "x": 7,
+        "z": 30,
+        "story": 0
+      },
+      "identical": true
+    },
+    {
+      "index": 3,
+      "owner": {
+        "x": 23,
+        "z": 6,
+        "story": 0
+      },
+      "identical": true
+    },
+    {
+      "index": 4,
+      "owner": {
+        "x": 23,
+        "z": 22,
+        "story": 0
+      },
+      "identical": true
+    },
+    {
+      "index": 2,
+      "owner": {
+        "x": 7,
+        "z": 14,
+        "story": 0
+      },
+      "identical": true
+    }
+  ],
+  "actualBsp": {
+    "owners": 32,
+    "walkableArea": 334909.6984988355,
+    "bspArea": 280539.0424101316,
+    "hallArea": 46315.9255632046
+  },
+  "errors": []
+}

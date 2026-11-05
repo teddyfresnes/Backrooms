@@ -1,0 +1,115 @@
+{
+  "node": "v24.19.0",
+  "seeds": [
+    "VERTICAL-PROMPT-AUDIT-0",
+    "VERTICAL-PROMPT-AUDIT-1",
+    "VERTICAL-PROMPT-AUDIT-2",
+    "VERTICAL-PROMPT-AUDIT-3"
+  ],
+  "startupMs": 103.90453899999999,
+  "modes": {
+    "cold-modern": {
+      "generationMs": {
+        "median": 261.95165700000007,
+        "p95": 356.763867
+      },
+      "bakeMs": {
+        "median": 62.93875000000003,
+        "p95": 73.12295300000005
+      },
+      "geometryMs": {
+        "median": 143.073803,
+        "p95": 182.14245299999993
+      },
+      "roundTripMs": {
+        "median": 464.14272800000003,
+        "p95": 619.420891
+      },
+      "transferAndDispatchMs": {
+        "median": 16.303854,
+        "p95": 17.57582100000002
+      },
+      "heapBytes": {
+        "median": 85545984,
+        "p95": 109277984
+      },
+      "clonedBytes": {
+        "median": 2028117,
+        "p95": 2593642
+      },
+      "lightBufferBytes": {
+        "median": 184320,
+        "p95": 184320
+      }
+    },
+    "warm-modern": {
+      "generationMs": {
+        "median": 69.27817200000027,
+        "p95": 98.61346700000013
+      },
+      "bakeMs": {
+        "median": 49.328665999999885,
+        "p95": 56.27955299999985
+      },
+      "geometryMs": {
+        "median": 141.59640200000013,
+        "p95": 163.1876010000001
+      },
+      "roundTripMs": {
+        "median": 295.7985739999999,
+        "p95": 309.0303210000002
+      },
+      "transferAndDispatchMs": {
+        "median": 15.348897999999735,
+        "p95": 27.235881999999947
+      },
+      "heapBytes": {
+        "median": 90674552,
+        "p95": 118586720
+      },
+      "clonedBytes": {
+        "median": 2028117,
+        "p95": 2593642
+      },
+      "lightBufferBytes": {
+        "median": 184320,
+        "p95": 184320
+      }
+    },
+    "cold-legacy": {
+      "generationMs": {
+        "median": 185.0110850000001,
+        "p95": 198.2810139999997
+      },
+      "bakeMs": {
+        "median": 555.1351289999998,
+        "p95": 596.6085579999999
+      },
+      "geometryMs": {
+        "median": 117.40990099999999,
+        "p95": 193.31428200000028
+      },
+      "roundTripMs": {
+        "median": 914.0638650000001,
+        "p95": 962.961871
+      },
+      "transferAndDispatchMs": {
+        "median": 15.03432100000009,
+        "p95": 16.231446000000233
+      },
+      "heapBytes": {
+        "median": 79255944,
+        "p95": 131649896
+      },
+      "clonedBytes": {
+        "median": 2028117,
+        "p95": 2593642
+      },
+      "lightBufferBytes": {
+        "median": 401408,
+        "p95": 401408
+      }
+    }
+  },
+  "limitation": "Node worker_threads CPU/structured-clone proxy; no browser Worker scheduling, GPU, draw calls or frame latency."
+}

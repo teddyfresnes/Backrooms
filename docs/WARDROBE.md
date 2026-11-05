@@ -15,7 +15,7 @@ Le code local `1234` déverrouille l'export batch des aperçus : les personnages
 sont rendus avec le runtime MakeHuman puis téléchargés dans un ZIP WebP.
 
 Navigation :
-- la catégorie Général conserve une voix dans `CharacterConfig`, filtrée selon le sexe biologique ; sélectionner une voix joue une confirmation aléatoire comme aperçu ;
+- la catégorie Général conserve une voix dans `CharacterConfig`, utilisée par la cinématique. Sélectionner une voix joue une confirmation aléatoire. Deux boutons permettent aussi d’écouter la voix et le souffle ;
 - personnage par défaut + six alternatives ;
 - `Modifier` ouvre une seule interface ;
 - catégories simples communes : Général, Peau, Yeux, Coiffure, Sourcils, Cils, Haut, Bas, Chaussures ;

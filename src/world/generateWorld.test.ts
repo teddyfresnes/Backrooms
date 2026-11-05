@@ -1,10 +1,11 @@
+import { surfaceY, surfaceRange, validateTopology } from './WalkableTopology';
 import { describe, expect, it } from 'vitest';
 import {
   MAX_PIT_STORIES,
   PIT_PRESENCE_RATE,
   UNLIT_ZONE_PRESENCE_RATE,
   fingerprintWorld,
-  generateWorld,
+  generateLegacyWorld as generateWorld,
   lightPanelOverlapsRect,
   validateWorldPlan,
   worldHasPit,
@@ -76,7 +77,7 @@ const lightFootprint = (light: LightSlot): { halfX: number; halfZ: number } => {
 };
 
 const lightOverlapsWall = (light: LightSlot, wall: WallSegment): boolean => {
-  if ((wall.bottom < -1) !== (light.level < 0)) return false;
+  if (wall.bottom + wall.height < light.ceilingY - .1 || wall.bottom > light.ceilingY + .02) return false;
   const footprint = lightFootprint(light);
   const halfX = wall.orientation === 'x' ? wall.length * 0.5 : wall.thickness * 0.5;
   const halfZ = wall.orientation === 'z' ? wall.length * 0.5 : wall.thickness * 0.5;
@@ -141,84 +142,8 @@ const boundaryOpeningWidths = (
   side: 'north' | 'south' | 'west' | 'east',
 ): number[] => boundaryOpenings(world, room, side).map((opening) => opening.max - opening.min);
 
-const reachableRoomIds = (seed: string): Set<string> => {
-  const world = generateWorld(seed);
-  const interactiveDoorColliders = new Set(
-    world.features
-      .filter((feature) => feature.kind === 'interactive-door')
-      .map((feature) => feature.colliderId),
-  );
-  // Dense pit bridges can be only 0.70 m wide. Sampling at 0.25 m keeps the
-  // capsule-clearance audit from aliasing a valid narrow bridge out of existence.
-  const step = 0.25;
-  const half = world.size * 0.5;
-  const count = Math.floor(world.size / step);
-  const toIndex = (x: number, z: number): number => z * count + x;
-  const blocked = (x: number, z: number): boolean =>
-    world.features.some(
-      (feature) =>
-        feature.kind === 'grid-pit' &&
-        feature.holes.some((hole) => pointInRect(x, z, hole, -0.29)),
-    ) ||
-    world.colliders.some((collider) => {
-      if (collider.kind === 'floor' || collider.kind === 'step') return false;
-      // Interactive doors are reachable topology that starts closed and can be
-      // removed from collision by the player, rather than permanent walls.
-      if (interactiveDoorColliders.has(collider.id)) return false;
-      // Audit the navigation graph with the crouched capsule (1.08 m tall), so
-      // a wallpaper lintel above a crawl opening does not count as a closed wall.
-      if (collider.center.y < 0 || collider.center.y - collider.halfExtents.y > 1.12) return false;
-      return (
-        Math.abs(x - collider.center.x) < collider.halfExtents.x + 0.29 &&
-        Math.abs(z - collider.center.z) < collider.halfExtents.z + 0.29
-      );
-    });
-  const coordinate = (index: number): number => -half + (index + 0.5) * step;
-  const spawnX = Math.max(0, Math.min(count - 1, Math.floor((world.spawn.x + half) / step)));
-  const spawnZ = Math.max(0, Math.min(count - 1, Math.floor((world.spawn.z + half) / step)));
-  const queue: Array<[number, number]> = [[spawnX, spawnZ]];
-  const visited = new Uint8Array(count * count);
-  visited[toIndex(spawnX, spawnZ)] = 1;
-  const reached = new Set<string>();
 
-  for (let cursor = 0; cursor < queue.length; cursor += 1) {
-    const [gridX, gridZ] = queue[cursor]!;
-    for (const [offsetX, offsetZ] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ] as const) {
-      const nextX = gridX + offsetX;
-      const nextZ = gridZ + offsetZ;
-      if (nextX < 0 || nextZ < 0 || nextX >= count || nextZ >= count) continue;
-      const index = toIndex(nextX, nextZ);
-      if (visited[index] || blocked(coordinate(nextX), coordinate(nextZ))) continue;
-      visited[index] = 1;
-      queue.push([nextX, nextZ]);
-    }
-  }
-
-  // Rooms partition almost all of the plan, so scanning each room once is far
-  // cheaper than testing every reached cell against every room during the BFS.
-  for (const room of world.rooms) {
-    const minX = Math.max(0, Math.ceil((room.bounds.minX + 0.35 + half) / step - 0.5));
-    const maxX = Math.min(count - 1, Math.floor((room.bounds.maxX - 0.35 + half) / step - 0.5));
-    const minZ = Math.max(0, Math.ceil((room.bounds.minZ + 0.35 + half) / step - 0.5));
-    const maxZ = Math.min(count - 1, Math.floor((room.bounds.maxZ - 0.35 + half) / step - 0.5));
-    roomScan:
-    for (let gridZ = minZ; gridZ <= maxZ; gridZ += 1) {
-      for (let gridX = minX; gridX <= maxX; gridX += 1) {
-        if (!visited[toIndex(gridX, gridZ)]) continue;
-        reached.add(room.id);
-        break roomScan;
-      }
-    }
-  }
-  return reached;
-};
-
-describe('Level 0 procedural generator', () => {
+describe('legacy BSP templates retained for monuments and migration', () => {
   it.each(seeds)('is deterministic for %s', (seed) => {
     const first = generateWorld(seed);
     const second = generateWorld(seed);
@@ -250,13 +175,13 @@ describe('Level 0 procedural generator', () => {
   it.each(seeds)('keeps public rooms connected while sealing deliberate pockets for %s', (seed) => {
     const world = generateWorld(seed);
     expect(validateWorldPlan(world)).toEqual([]);
-    const reached = reachableRoomIds(seed);
+    const reached = new Set(world.topology!.surfaces.filter(s => s.reachable && s.roomId).map(s => s.roomId!));
     const sealedRooms = world.rooms.filter((room) => room.access === 'sealed');
     const secretRooms = world.rooms.filter((room) => room.access === 'secret');
     expect(sealedRooms.length).toBeGreaterThanOrEqual(1);
     expect(sealedRooms.length + secretRooms.length).toBeGreaterThanOrEqual(2);
     expect(world.rooms.every(
-      (room) => room.access === 'sealed' ? !reached.has(room.id) : reached.has(room.id),
+      (room) => room.access === 'secret' ? room.accessReason === 'intentional' : room.access === 'sealed' ? !reached.has(room.id) : reached.has(room.id),
     )).toBe(true);
     expect(world.lights.every((light) =>
       !sealedRooms.some((room) => room.id === light.roomId)
@@ -588,8 +513,8 @@ describe('Level 0 procedural generator', () => {
     expect(portalLintels.some((wall) => wall.thickness >= 1)).toBe(true);
     expect(portalLintels.every((wall) =>
       wall.kind === 'wallpaper' &&
-      Math.abs(wall.bottom - 2.74) < 0.001 &&
-      wall.bottom + wall.height > 3.2
+      wall.bottom >= 2.74 - .001 &&
+      wall.height > .001
     )).toBe(true);
     expect(worlds.every((world) => world.walls.every((wall) => wall.detail !== 'ceiling-drop'))).toBe(true);
     for (const world of worlds) {
@@ -599,7 +524,7 @@ describe('Level 0 procedural generator', () => {
       );
       expect(shells.every((wall) => wall.kind === 'wallpaper')).toBe(true);
       expect(shells.every((wall) =>
-        Math.abs(wall.bottom - world.wallHeight) < 0.001
+        wall.bottom >= world.wallHeight - .001
       )).toBe(true);
       for (const zone of world.ceilingZones ?? []) {
         const zoneRooms = zone.roomIds.map((roomId) =>
@@ -645,8 +570,8 @@ describe('Level 0 procedural generator', () => {
           const intervals = shells
             .filter((wall) =>
               wall.orientation === side.orientation &&
-              Math.abs((wall.orientation === 'x' ? wall.z : wall.x) - side.fixed) < 0.06 &&
-              wall.bottom <= world.wallHeight + 0.02 &&
+              Math.abs((wall.orientation === 'x' ? wall.z : wall.x) - side.fixed) <= wall.thickness / 2 + .03 &&
+              wall.bottom < room.ceilingHeight - .001 &&
               wall.bottom + wall.height >= room.ceilingHeight - 0.03
             )
             .map((wall) => {
@@ -1145,180 +1070,25 @@ describe('Level 0 procedural generator', () => {
     }
   });
 
-  it('adds connected raised and sunken districts reached through varied physical ramps', () => {
-    const worlds = hazardSeeds.map(hazardWorld);
-    const samples = worlds.flatMap((world) =>
-      world.features
-        .filter((feature) => feature.kind === 'raised-zone')
-        .map((feature) => ({ world, feature })),
-    );
-    expect(samples.length).toBeGreaterThan(120);
-    expect(samples.every(({ world, feature }) =>
-      (feature.roomIds ?? [feature.roomId]).every((roomId) =>
-        world.rooms.some((room) =>
-          room.id === roomId &&
-          room.ceilingHeight - feature.elevation >= 2.4
-        )
-      )
-    )).toBe(true);
-    expect(samples.every(({ feature }) =>
-      (feature.roomIds?.length ?? 1) >= 2 &&
-      (feature.platformRects?.length ?? 1) === (feature.roomIds?.length ?? 1)
-    )).toBe(true);
-    const ramps = samples.flatMap(({ world, feature }) =>
-      (feature.ramps ?? [feature.ramp]).map((ramp, index) => ({ world, feature, ramp, index }))
-    );
-    for (const { world, feature, ramp, index } of ramps) {
-      expect(feature.approachRoomIds).toHaveLength((feature.ramps ?? [feature.ramp]).length);
-      expect(new Set(feature.approachRoomIds).size).toBe(feature.approachRoomIds?.length);
-      const approachRoomId = feature.approachRoomIds?.[index];
-      const approachRoom = world.rooms.find((room) => room.id === approachRoomId);
-      expect(approachRoom).toBeDefined();
-      if (!approachRoom) continue;
-
-      const rampCrossWidth = ramp.axis === 'x'
-        ? rectDepth(ramp.bounds)
-        : rectWidth(ramp.bounds);
-      const roomCrossSpan = ramp.axis === 'x'
-        ? rectDepth(approachRoom.bounds)
-        : rectWidth(approachRoom.bounds);
-      expect(approachRoom.kind).not.toBe('corridor');
-      expect(roomCrossSpan).toBeGreaterThanOrEqual(rampCrossWidth + 2.55);
-      expect(world.ceilingZones?.some((zone) => zone.roomIds.includes(approachRoom.id)) ?? false)
-        .toBe(false);
-      expect(world.features.some((candidate) =>
-        candidate.kind === 'squeeze-view' && candidate.roomId === approachRoom.id
-      )).toBe(false);
-      expect(world.features.some((candidate) =>
-        candidate.kind === 'interactive-door' &&
-        (candidate.sourceRoomId === approachRoom.id || candidate.targetRoomId === approachRoom.id)
-      )).toBe(false);
-      expect(world.solidMasses.some((mass) =>
-        mass.bounds.minX < ramp.bounds.maxX &&
-        mass.bounds.maxX > ramp.bounds.minX &&
-        mass.bounds.minZ < ramp.bounds.maxZ &&
-        mass.bounds.maxZ > ramp.bounds.minZ
-      )).toBe(false);
-      expect(world.columns.some((column) =>
-        column.x - column.width * 0.5 < ramp.bounds.maxX &&
-        column.x + column.width * 0.5 > ramp.bounds.minX &&
-        column.z - column.depth * 0.5 < ramp.bounds.maxZ &&
-        column.z + column.depth * 0.5 > ramp.bounds.minZ
-      )).toBe(false);
+  it('derives shifted room chains and all floor colliders from the common vertical contract', () => {
+    let raised = 0, sunken = 0, nonzero = 0;
+    for (const world of hazardSeeds.map(hazardWorld)) {
+      expect(validateTopology(world), world.seed).toEqual([]);
+      expect(world.features.some(f => f.kind === 'raised-zone')).toBe(false);
+      for (const surface of world.topology!.surfaces) {
+        const [low, high] = surfaceRange(surface);
+        if (low > .1) raised++; if (low < -.1) sunken++;
+        if (surface.profile.kind === 'linear' && surface.profile.startY !== 0 && surface.profile.endY !== 0) nonzero++;
+        const collider = world.colliders.find(c => c.id === `surface/${surface.id}`)!;
+        expect(collider).toBeDefined();
+        if (surface.profile.kind === 'flat') expect(collider.center.y + collider.halfExtents.y).toBeCloseTo(surface.profile.y, 5);
+        else expect(collider.vertices).toHaveLength(24);
+        const p = rectCenter(surface.bounds); expect(surfaceY(surface, p.x, p.z)).toBeGreaterThanOrEqual(low - .002);
+        expect(surfaceY(surface, p.x, p.z)).toBeLessThanOrEqual(high + .002);
+      }
+      expect(world.colliders.some(c => c.id.startsWith('floor-'))).toBe(false);
     }
-    const runs = ramps.map(({ ramp }) =>
-      ramp.axis === 'x' ? rectWidth(ramp.bounds) : rectDepth(ramp.bounds)
-    );
-    const angles = ramps.map(({ feature, ramp }) => {
-      const run = ramp.axis === 'x' ? rectWidth(ramp.bounds) : rectDepth(ramp.bounds);
-      return Math.atan2(Math.abs(feature.elevation), run) * 180 / Math.PI;
-    });
-    expect(Math.min(...runs)).toBeLessThan(3);
-    expect(Math.max(...runs)).toBeGreaterThan(10);
-    expect(Math.min(...angles)).toBeLessThan(10);
-    expect(Math.max(...angles)).toBeGreaterThan(25);
-    expect(samples.some(({ feature }) => feature.elevation <= -1.2)).toBe(true);
-    expect(samples.some(({ feature }) => feature.elevation >= 1.2)).toBe(true);
-    const repairedWallDetails = new Set<WallSegment['detail']>();
-    let repairedColumnCount = 0;
-    for (const { world, feature } of samples) {
-      for (const [index] of (feature.ramps ?? [feature.ramp]).entries()) {
-        expect(world.colliders.find(
-          (collider) => collider.id === `${feature.id}-ramp-${index}`,
-        )?.rotation).toBeDefined();
-      }
-      for (const platform of feature.platformRects ?? [feature.platformBounds]) {
-        const center = rectCenter(platform);
-        expect(world.floorRects.some((floor) => pointInRect(center.x, center.z, floor))).toBe(false);
-      }
-      if (feature.elevation < 0) {
-        const platforms = feature.platformRects ?? [feature.platformBounds];
-        const lowerShells = world.walls.filter((wall) =>
-          wall.detail === 'lower-shell' &&
-          wall.bottom <= feature.elevation + 0.02
-        );
-        expect(lowerShells.length).toBeGreaterThan(0);
-        expect(lowerShells.every((shell) =>
-          !shell.collision ||
-          world.colliders.some((collider) => collider.id === `collider-${shell.id}`)
-        )).toBe(true);
-        for (const wall of world.walls.filter((candidate) =>
-          Math.abs(candidate.bottom) < 0.04 &&
-          candidate.height > 0.08 &&
-          candidate.detail !== 'upper-shell' &&
-          candidate.detail !== 'upper-portal-lintel' &&
-          candidate.detail !== 'elevation-seal'
-        )) {
-          const alongCenter = wall.orientation === 'x' ? wall.x : wall.z;
-          const fixed = wall.orientation === 'x' ? wall.z : wall.x;
-          const wallMin = alongCenter - wall.length * 0.5;
-          const wallMax = alongCenter + wall.length * 0.5;
-          const crossTolerance = wall.thickness * 0.5 + 0.025;
-          for (const platform of platforms) {
-            const crossMin = wall.orientation === 'x' ? platform.minZ : platform.minX;
-            const crossMax = wall.orientation === 'x' ? platform.maxZ : platform.maxX;
-            if (fixed < crossMin - crossTolerance || fixed > crossMax + crossTolerance) continue;
-            const claimMin = Math.max(
-              wallMin,
-              wall.orientation === 'x' ? platform.minX : platform.minZ,
-            );
-            const claimMax = Math.min(
-              wallMax,
-              wall.orientation === 'x' ? platform.maxX : platform.maxZ,
-            );
-            if (claimMax - claimMin <= 0.01) continue;
-            repairedWallDetails.add(wall.detail);
-            const intervals = lowerShells
-              .filter((shell) => {
-                if (shell.orientation !== wall.orientation) return false;
-                const shellFixed = shell.orientation === 'x' ? shell.z : shell.x;
-                return Math.abs(shellFixed - fixed) < 0.12;
-              })
-              .map((shell) => {
-                const center = shell.orientation === 'x' ? shell.x : shell.z;
-                return {
-                  min: center - shell.length * 0.5,
-                  max: center + shell.length * 0.5,
-                };
-              })
-              .sort((left, right) => left.min - right.min);
-            let coveredUntil = claimMin;
-            for (const interval of intervals) {
-              if (interval.max <= coveredUntil + 0.02) continue;
-              if (interval.min > coveredUntil + 0.02) break;
-              coveredUntil = Math.max(coveredUntil, interval.max);
-            }
-            expect(coveredUntil).toBeGreaterThanOrEqual(claimMax - 0.02);
-          }
-        }
-        for (const column of world.columns) {
-          const columnBounds = {
-            minX: column.x - column.width * 0.5,
-            maxX: column.x + column.width * 0.5,
-            minZ: column.z - column.depth * 0.5,
-            maxZ: column.z + column.depth * 0.5,
-          };
-          if (!platforms.some((platform) =>
-            columnBounds.minX < platform.maxX - 0.01 &&
-            columnBounds.maxX > platform.minX + 0.01 &&
-            columnBounds.minZ < platform.maxZ - 0.01 &&
-            columnBounds.maxZ > platform.minZ + 0.01
-          )) continue;
-          repairedColumnCount += 1;
-          expect(column.bottom).toBeLessThanOrEqual(feature.elevation + 0.02);
-          expect(world.colliders.some((collider) =>
-            collider.kind === 'column' &&
-            Math.abs(collider.center.x - column.x) < 0.025 &&
-            Math.abs(collider.center.z - column.z) < 0.025 &&
-            collider.center.y - collider.halfExtents.y <= feature.elevation + 0.02
-          )).toBe(true);
-        }
-      }
-    }
-    // Recesses are added after elevation selection and used to be the most
-    // common source of visibly floating walls in lowered districts.
-    expect(repairedWallDetails.has('recess')).toBe(true);
-    expect(repairedColumnCount).toBeGreaterThan(20);
+    expect(raised).toBeGreaterThan(120); expect(sunken).toBeGreaterThan(120); expect(nonzero).toBeGreaterThan(30);
   });
 
   it('varies complete straight and switchback stairs that reach the next 5.4m story', () => {

@@ -51,6 +51,26 @@ d'onglet masqué. Les retours au menu principal ne rejouent pas l'introduction.
 `public/assets/audio/music/playlist.json` référence les morceaux disponibles ;
 un morceau est tiré au hasard par démarrage et conservé aux retours au menu.
 
+`NewGameIntro` accompagne uniquement les nouvelles parties (y compris Continuer
+sans sauvegarde). Les zooms/fondus des six WebP passent par le compositeur ; le
+texte et les frappes suivent le temps visible. Pendant les photos, seul le worker
+prépare l'appartement et conserve ses buffers. Après `intro.finished`, le routeur
+importe/construit le runtime sous un indicateur de chargement. `ApartmentPreload.take`
+transfère alors les tableaux à `LoadApartmentScene` ; toute annulation termine le worker.
+Après le warmup, `ArrivalCinematic` anime un clone du personnage choisi avec les
+deux clips fournis et le vrai vantail de porte. La dernière caméra rejoint la POV
+de `CharacterRuntime` avant de rendre les commandes et d'autoriser la sauvegarde.
+`SiteAudio` conserve le morceau pendant photos, attente et plans 3D ; il l'atténue
+uniquement au raccord POV. Une sauvegarde chargée contourne ce prologue. Voir
+`docs/validation/ENTRY_CINEMATIC_VALIDATION_20261031.md` pour les contrats et limites.
+
+`HallArrivalStory` possède l'objectif courrier, le portillon `Door_3`, sa surbrillance
+et l'enveloppe ; il utilise le vrai pivot du modèle et le prompt d'interaction commun.
+`NarrativeCaption` écrit sans son sur le temps joué du runtime, sans boucle autonome.
+`SaveHistory.arrivalState` conserve approche/courrier/récupération ; les sauvegardes
+antérieures sans ce champ ignorent l'objectif. Les cinq voix et leurs deux réactions
+sont choisies dans Général du garde-robe et persistées dans le profil du personnage.
+
 Dans le garde-robe, la géométrie et les poses inverses du squelette restent dans
 les coordonnées locales de `CharacterRoot`. Après un morph ou une calibration,
 `rebindMakeHumanSkeleton` retire la transformation monde de la racine des poses
@@ -74,7 +94,11 @@ progression visuelle et audio ; l’entrée directe masque le menu sans transiti
 avant que cet écran soit retiré, afin qu’aucune frame du menu ne fuite en jeu.
 Le contrat central du labyrinthe reste `WorldPlan` dans `src/world/types.ts` ;
 la génération ne crée que des données et le rendu et la physique les consomment
-séparément.
+séparément. Le chemin ordinaire passe par `RegionalPlan` → `SpatialConnectors` →
+`SpatialWorld`, avant les détails. L’adresse `story` ne donne pas l’altitude du sol.
+Le pipeline historique complet reste explicite pour les monuments et les reproductions
+brutes. Son BSP est également réutilisé sur 224 m dans les plateaux ordinaires ;
+les réservations régionales précèdent la matérialisation aux altitudes finales.
 
 ## Responsabilités
 

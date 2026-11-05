@@ -72,10 +72,10 @@ export const getStairSlabs = (stairs: StairSocketFeature): StairSlab[] => {
         };
 
   if ((stairs.layout ?? 'switchback') === 'straight') {
-    const stepRun = flightRun / STAIR_TOTAL_STEPS;
-    const rise = STAIR_STORY_RISE / STAIR_TOTAL_STEPS;
+    const stepRun = flightRun / ((stairs.stepsPerFlight ?? STAIR_STEPS_PER_FLIGHT) * 2);
+    const rise = (stairs.rise ?? STAIR_STORY_RISE) / ((stairs.stepsPerFlight ?? STAIR_STEPS_PER_FLIGHT) * 2);
     const flightWidth = crossSpan;
-    for (let index = 0; index < STAIR_TOTAL_STEPS; index += 1) {
+    for (let index = 0; index < ((stairs.stepsPerFlight ?? STAIR_STEPS_PER_FLIGHT) * 2); index += 1) {
       const longCenter = startLong + direction * stepRun * (index + 0.5);
       slabs.push({
         bounds: rectFor(longCenter, stepRun, crossCenter, flightWidth),
@@ -90,19 +90,19 @@ export const getStairSlabs = (stairs: StairSocketFeature): StairSlab[] => {
     slabs.push({
       bounds: rectFor(topLandingCenter, landingDepth, crossCenter, flightWidth),
       bottom: baseY,
-      top: baseY + STAIR_STORY_RISE,
+      top: baseY + (stairs.rise ?? STAIR_STORY_RISE),
       kind: 'top-landing',
     });
     return slabs;
   }
 
-  const stepRun = flightRun / STAIR_STEPS_PER_FLIGHT;
-  const rise = STAIR_STORY_RISE / STAIR_TOTAL_STEPS;
+  const stepRun = flightRun / (stairs.stepsPerFlight ?? STAIR_STEPS_PER_FLIGHT);
+  const rise = (stairs.rise ?? STAIR_STORY_RISE) / ((stairs.stepsPerFlight ?? STAIR_STEPS_PER_FLIGHT) * 2);
   const gap = switchbackGap(stairs, crossSpan);
   const laneWidth = Math.max(1.12, (crossSpan - gap) * 0.5);
   const firstCross = crossCenter - (laneWidth + gap) * 0.5;
   const secondCross = crossCenter + (laneWidth + gap) * 0.5;
-  for (let index = 0; index < STAIR_STEPS_PER_FLIGHT; index += 1) {
+  for (let index = 0; index < (stairs.stepsPerFlight ?? STAIR_STEPS_PER_FLIGHT); index += 1) {
     const longCenter = startLong + direction * stepRun * (index + 0.5);
     slabs.push({
       bounds: rectFor(longCenter, stepRun, firstCross, laneWidth),
@@ -116,17 +116,17 @@ export const getStairSlabs = (stairs: StairSocketFeature): StairSlab[] => {
   slabs.push({
     bounds: rectFor(farLandingCenter, landingDepth, crossCenter, crossSpan),
     bottom: baseY,
-    top: baseY + STAIR_STORY_RISE * 0.5,
+    top: baseY + (stairs.rise ?? STAIR_STORY_RISE) * 0.5,
     kind: 'mid-landing',
   });
 
   const secondStart = positive ? longMax - landingDepth : longMin + landingDepth;
-  for (let index = 0; index < STAIR_STEPS_PER_FLIGHT; index += 1) {
+  for (let index = 0; index < (stairs.stepsPerFlight ?? STAIR_STEPS_PER_FLIGHT); index += 1) {
     const longCenter = secondStart - direction * stepRun * (index + 0.5);
     slabs.push({
       bounds: rectFor(longCenter, stepRun, secondCross, laneWidth),
       bottom: baseY,
-      top: baseY + STAIR_STORY_RISE * 0.5 + rise * (index + 1),
+      top: baseY + (stairs.rise ?? STAIR_STORY_RISE) * 0.5 + rise * (index + 1),
       kind: 'step',
     });
   }
@@ -135,7 +135,7 @@ export const getStairSlabs = (stairs: StairSocketFeature): StairSlab[] => {
   slabs.push({
     bounds: rectFor(topLandingCenter, landingDepth, secondCross, laneWidth),
     bottom: baseY,
-    top: baseY + STAIR_STORY_RISE,
+    top: baseY + (stairs.rise ?? STAIR_STORY_RISE),
     kind: 'top-landing',
   });
   return slabs;
@@ -149,7 +149,7 @@ export const getStairCageWalls = (
   const positive = stairs.heading.endsWith('+');
   const baseY = stairs.baseY ?? 0;
   const wallThickness = 0.16;
-  const upperFloorY = baseY + STAIR_STORY_RISE;
+  const upperFloorY = baseY + (stairs.rise ?? STAIR_STORY_RISE);
   const lowerCeilingY = Math.min(
     upperFloorY,
     baseY + Math.max(0, lowerCeilingHeight),
@@ -186,7 +186,7 @@ export const getStairCageWalls = (
             maxZ: stairs.bounds.minZ,
           },
           bottom: baseY,
-          top: baseY + STAIR_STORY_RISE,
+          top: baseY + (stairs.rise ?? STAIR_STORY_RISE),
           kind: 'outer',
         },
         {
@@ -197,7 +197,7 @@ export const getStairCageWalls = (
             maxZ: stairs.bounds.maxZ + wallThickness,
           },
           bottom: baseY,
-          top: baseY + STAIR_STORY_RISE,
+          top: baseY + (stairs.rise ?? STAIR_STORY_RISE),
           kind: 'outer',
         },
       ]
@@ -210,7 +210,7 @@ export const getStairCageWalls = (
             maxZ: stairs.bounds.maxZ,
           },
           bottom: baseY,
-          top: baseY + STAIR_STORY_RISE,
+          top: baseY + (stairs.rise ?? STAIR_STORY_RISE),
           kind: 'outer',
         },
         {
@@ -221,7 +221,7 @@ export const getStairCageWalls = (
             maxZ: stairs.bounds.maxZ,
           },
           bottom: baseY,
-          top: baseY + STAIR_STORY_RISE,
+          top: baseY + (stairs.rise ?? STAIR_STORY_RISE),
           kind: 'outer',
         },
       ];
@@ -253,7 +253,7 @@ export const getStairCageWalls = (
               maxZ: longMax - landingDepth,
             },
         bottom: baseY,
-        top: baseY + STAIR_STORY_RISE,
+        top: baseY + (stairs.rise ?? STAIR_STORY_RISE),
         kind: 'divider',
       });
     }
@@ -345,29 +345,29 @@ export const getStairCollisionShapes = (
   if ((stairs.layout ?? 'switchback') === 'straight') {
     return [
       flightShape(
-        slabs.slice(0, STAIR_TOTAL_STEPS),
+        slabs.slice(0, ((stairs.stepsPerFlight ?? STAIR_STEPS_PER_FLIGHT) * 2)),
         baseY,
         firstRiseDirection,
-        STAIR_STORY_RISE,
+        (stairs.rise ?? STAIR_STORY_RISE),
       ),
       landingShape(topLanding, 'top-landing'),
     ];
   }
 
-  const firstFlight = slabs.slice(0, STAIR_STEPS_PER_FLIGHT);
-  const midLanding = slabs[STAIR_STEPS_PER_FLIGHT]!;
+  const firstFlight = slabs.slice(0, (stairs.stepsPerFlight ?? STAIR_STEPS_PER_FLIGHT));
+  const midLanding = slabs[(stairs.stepsPerFlight ?? STAIR_STEPS_PER_FLIGHT)]!;
   const secondFlight = slabs.slice(
-    STAIR_STEPS_PER_FLIGHT + 1,
-    STAIR_TOTAL_STEPS + 1,
+    (stairs.stepsPerFlight ?? STAIR_STEPS_PER_FLIGHT) + 1,
+    ((stairs.stepsPerFlight ?? STAIR_STEPS_PER_FLIGHT) * 2) + 1,
   );
   return [
-    flightShape(firstFlight, baseY, firstRiseDirection, STAIR_STORY_RISE * 0.5),
+    flightShape(firstFlight, baseY, firstRiseDirection, (stairs.rise ?? STAIR_STORY_RISE) * 0.5),
     landingShape(midLanding, 'mid-landing'),
     flightShape(
       secondFlight,
-      baseY + STAIR_STORY_RISE * 0.5,
+      baseY + (stairs.rise ?? STAIR_STORY_RISE) * 0.5,
       -firstRiseDirection as 1 | -1,
-      STAIR_STORY_RISE * 0.5,
+      (stairs.rise ?? STAIR_STORY_RISE) * 0.5,
     ),
     landingShape(topLanding, 'top-landing'),
   ];

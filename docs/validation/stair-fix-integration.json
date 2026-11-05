@@ -1,0 +1,383 @@
+{
+  "planVersion": 14,
+  "compositions": {
+    "single": 169,
+    "landing": 35
+  },
+  "moundAccess": {
+    "opposed": 14,
+    "single": 30
+  },
+  "seeds": [
+    "REGIONAL-AUDIT-0",
+    "REGIONAL-AUDIT-1",
+    "REGIONAL-AUDIT-2",
+    "REGIONAL-AUDIT-3",
+    "REGIONAL-AUDIT-4",
+    "REGIONAL-AUDIT-5",
+    "REGIONAL-AUDIT-6",
+    "REGIONAL-AUDIT-7",
+    "REGIONAL-AUDIT-8",
+    "REGIONAL-AUDIT-9",
+    "REGIONAL-AUDIT-10",
+    "REGIONAL-AUDIT-11",
+    "REGIONAL-AUDIT-12",
+    "REGIONAL-AUDIT-13",
+    "REGIONAL-AUDIT-14",
+    "REGIONAL-AUDIT-15",
+    "REGIONAL-AUDIT-16",
+    "REGIONAL-AUDIT-17",
+    "REGIONAL-AUDIT-18",
+    "REGIONAL-AUDIT-19",
+    "REGIONAL-AUDIT-20",
+    "REGIONAL-AUDIT-21",
+    "REGIONAL-AUDIT-22",
+    "REGIONAL-AUDIT-23",
+    "REGIONAL-AUDIT-24",
+    "REGIONAL-AUDIT-25",
+    "REGIONAL-AUDIT-26",
+    "REGIONAL-AUDIT-27",
+    "REGIONAL-AUDIT-28",
+    "REGIONAL-AUDIT-29",
+    "REGIONAL-AUDIT-30",
+    "REGIONAL-AUDIT-31",
+    "REGIONAL-AUDIT-32",
+    "REGIONAL-AUDIT-33",
+    "REGIONAL-AUDIT-34",
+    "REGIONAL-AUDIT-35",
+    "REGIONAL-AUDIT-36",
+    "REGIONAL-AUDIT-37",
+    "REGIONAL-AUDIT-38",
+    "REGIONAL-AUDIT-39",
+    "REGIONAL-AUDIT-40",
+    "REGIONAL-AUDIT-41",
+    "REGIONAL-AUDIT-42",
+    "REGIONAL-AUDIT-43",
+    "REGIONAL-AUDIT-44",
+    "REGIONAL-AUDIT-45",
+    "REGIONAL-AUDIT-46",
+    "REGIONAL-AUDIT-47",
+    "REGIONAL-AUDIT-48",
+    "REGIONAL-AUDIT-49",
+    "REGIONAL-AUDIT-50",
+    "REGIONAL-AUDIT-51",
+    "REGIONAL-AUDIT-52",
+    "REGIONAL-AUDIT-53",
+    "REGIONAL-AUDIT-54",
+    "REGIONAL-AUDIT-55",
+    "REGIONAL-AUDIT-56",
+    "REGIONAL-AUDIT-57",
+    "REGIONAL-AUDIT-58",
+    "REGIONAL-AUDIT-59",
+    "REGIONAL-AUDIT-60",
+    "REGIONAL-AUDIT-61",
+    "REGIONAL-AUDIT-62",
+    "REGIONAL-AUDIT-63",
+    "TRANSITION-HOLDOUT-0",
+    "TRANSITION-HOLDOUT-1",
+    "TRANSITION-HOLDOUT-2",
+    "TRANSITION-HOLDOUT-3",
+    "TRANSITION-HOLDOUT-4",
+    "TRANSITION-HOLDOUT-5",
+    "TRANSITION-HOLDOUT-6",
+    "TRANSITION-HOLDOUT-7",
+    "TRANSITION-HOLDOUT-8",
+    "TRANSITION-HOLDOUT-9",
+    "TRANSITION-HOLDOUT-10",
+    "TRANSITION-HOLDOUT-11",
+    "TRANSITION-HOLDOUT-12",
+    "TRANSITION-HOLDOUT-13",
+    "TRANSITION-HOLDOUT-14",
+    "TRANSITION-HOLDOUT-15",
+    "TRANSITION-HOLDOUT-16",
+    "TRANSITION-HOLDOUT-17",
+    "TRANSITION-HOLDOUT-18",
+    "TRANSITION-HOLDOUT-19",
+    "TRANSITION-HOLDOUT-20",
+    "TRANSITION-HOLDOUT-21",
+    "TRANSITION-HOLDOUT-22",
+    "TRANSITION-HOLDOUT-23",
+    "TRANSITION-HOLDOUT-24",
+    "TRANSITION-HOLDOUT-25",
+    "TRANSITION-HOLDOUT-26",
+    "TRANSITION-HOLDOUT-27",
+    "TRANSITION-HOLDOUT-28",
+    "TRANSITION-HOLDOUT-29",
+    "TRANSITION-HOLDOUT-30",
+    "TRANSITION-HOLDOUT-31"
+  ],
+  "corpus": {
+    "fixed": 64,
+    "holdout": 32
+  },
+  "families": {
+    "squeeze-view/room-network/network": 13,
+    "grid-pit": 7,
+    "raised-zone": 85,
+    "squeeze-view/wall-breach/flush": 8,
+    "squeeze-view/wall-breach/projecting": 3,
+    "interactive-door": 1
+  },
+  "examples": {
+    "escalier-regional": {
+      "seed": "REGIONAL-AUDIT-0",
+      "owner": {
+        "x": 0,
+        "z": 0,
+        "story": 0
+      },
+      "position": {
+        "x": -53.10426217128989,
+        "z": -42,
+        "y": 1.3024999999999982
+      }
+    },
+    "passage-accroupi": {
+      "seed": "REGIONAL-AUDIT-0",
+      "owner": {
+        "x": 0,
+        "z": 0,
+        "story": 0
+      },
+      "position": {
+        "x": 4.096252585947513,
+        "y": 2.5149999999999997,
+        "z": 14
+      }
+    },
+    "trous-historiques": {
+      "seed": "REGIONAL-AUDIT-1",
+      "owner": {
+        "x": 0,
+        "z": 0,
+        "story": 0
+      },
+      "position": {
+        "x": 32.69372743938584,
+        "y": -2.835,
+        "z": -14
+      }
+    },
+    "rampe-regionale": {
+      "seed": "REGIONAL-AUDIT-2",
+      "owner": {
+        "x": 0,
+        "z": 0,
+        "story": 0
+      },
+      "position": {
+        "x": 52.048568211402745,
+        "z": -14,
+        "y": 2.815
+      }
+    },
+    "escalier-bridge": {
+      "seed": "REGIONAL-AUDIT-2",
+      "owner": {
+        "x": 0,
+        "z": 0,
+        "story": 0
+      },
+      "position": {
+        "x": 21.879439848056062,
+        "y": 2.7649999999999997,
+        "z": 4.221503926697187
+      },
+      "destination": {
+        "x": 21.879439848056062,
+        "z": 24.128496073302813,
+        "y": -8.035
+      }
+    },
+    "galerie-bridge": {
+      "seed": "REGIONAL-AUDIT-2",
+      "owner": {
+        "x": 0,
+        "z": 0,
+        "story": 0
+      },
+      "position": {
+        "x": 14,
+        "y": 2.7649999999999997,
+        "z": 1.5
+      }
+    },
+    "salle-en-gradins": {
+      "seed": "REGIONAL-AUDIT-4",
+      "owner": {
+        "x": 0,
+        "z": 0,
+        "story": 0
+      },
+      "position": {
+        "x": -51.58333333333333,
+        "z": -42,
+        "y": 0.2645514275506138
+      }
+    },
+    "monticule-massif": {
+      "seed": "REGIONAL-AUDIT-4",
+      "owner": {
+        "x": 0,
+        "z": 0,
+        "story": 0
+      },
+      "position": {
+        "x": 6.41,
+        "z": -42,
+        "y": 0.4111027313023805
+      }
+    },
+    "passage-mural": {
+      "seed": "REGIONAL-AUDIT-6",
+      "owner": {
+        "x": 0,
+        "z": 0,
+        "story": 0
+      },
+      "position": {
+        "x": -50.97179072513245,
+        "y": 6.565,
+        "z": -14
+      }
+    },
+    "ouverture-haute": {
+      "seed": "REGIONAL-AUDIT-7",
+      "owner": {
+        "x": 0,
+        "z": 0,
+        "story": 0
+      },
+      "position": {
+        "x": -14,
+        "z": -55.25,
+        "y": 1.815
+      },
+      "destination": {
+        "x": -14,
+        "z": -49.25,
+        "y": -3.585
+      }
+    },
+    "galerie-u": {
+      "seed": "REGIONAL-AUDIT-28",
+      "owner": {
+        "x": 0,
+        "z": 0,
+        "story": 0
+      },
+      "position": {
+        "x": 14,
+        "y": 5.215,
+        "z": -26.5
+      }
+    },
+    "escalier-u": {
+      "seed": "REGIONAL-AUDIT-34",
+      "owner": {
+        "x": 0,
+        "z": 0,
+        "story": 0
+      },
+      "position": {
+        "x": 51.82485838469584,
+        "y": 7.465,
+        "z": -53.69878261226695
+      },
+      "destination": {
+        "x": 48.67700992955361,
+        "z": -54.048782612266955,
+        "y": -3.335000000000001
+      }
+    },
+    "saut-passerelle": {
+      "seed": "TRANSITION-HOLDOUT-3",
+      "owner": {
+        "x": -1,
+        "z": -1,
+        "story": -1
+      },
+      "position": {
+        "x": 7.660000000000001,
+        "z": -8.162739073219708,
+        "y": -5.484999999999999
+      },
+      "destination": {
+        "x": 10.260000000000002,
+        "y": -5.484999999999999,
+        "z": -8.162739073219708
+      }
+    },
+    "escalier-l": {
+      "seed": "TRANSITION-HOLDOUT-3",
+      "owner": {
+        "x": -1,
+        "z": -1,
+        "story": -1
+      },
+      "position": {
+        "x": 23.436345895309934,
+        "y": -5.484999999999999,
+        "z": -25.435964632197283
+      },
+      "destination": {
+        "x": 2.2140353678027167,
+        "z": -4.563654104690068,
+        "y": -16.285
+      }
+    },
+    "galerie-l": {
+      "seed": "TRANSITION-HOLDOUT-3",
+      "owner": {
+        "x": -1,
+        "z": -1,
+        "story": -1
+      },
+      "position": {
+        "x": 14,
+        "y": -5.484999999999999,
+        "z": -26.5
+      }
+    }
+  },
+  "roomShapes": [
+    "28x28x10.8",
+    "28x28x5.4",
+    "28x56x10.8",
+    "28x56x5.4",
+    "56x28x10.8",
+    "56x28x5.4",
+    "56x56x10.8"
+  ],
+  "transitionLength": {
+    "min": 2.599999999999998,
+    "median": 6.159754989342765,
+    "p95": 8.03248873199336,
+    "max": 8.172792715998362
+  },
+  "transitionWidth": {
+    "min": 4,
+    "median": 4.8,
+    "p95": 5.6,
+    "max": 5.6
+  },
+  "transitionGrade": {
+    "min": 0.01041389914896491,
+    "median": 0.36790473241847915,
+    "p95": 0.9400000000000004,
+    "max": 0.9400000000000023
+  },
+  "transitionRise": {
+    "min": 0.04999999999999982,
+    "median": 2.325,
+    "p95": 6.325,
+    "max": 7.25
+  },
+  "ordinaryBspRoomFootprintShare": 0.7919089827440091,
+  "externalLinks": 1442,
+  "sourceHoles": 90,
+  "voidSources": 1,
+  "reliefs": 85,
+  "uvTriangles": 843194,
+  "errors": []
+}

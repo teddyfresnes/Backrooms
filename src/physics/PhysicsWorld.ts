@@ -19,11 +19,11 @@ const addStaticCollider = (
   body: RAPIER.RigidBody,
   source: StaticCollider,
 ): RAPIER.Collider => {
-  const description = RAPIER.ColliderDesc.cuboid(
+  const description = (source.vertices && source.indices ? RAPIER.ColliderDesc.trimesh(new Float32Array(source.vertices), new Uint32Array(source.indices)) : source.vertices ? RAPIER.ColliderDesc.convexHull(new Float32Array(source.vertices))! : RAPIER.ColliderDesc.cuboid(
     source.halfExtents.x,
     source.halfExtents.y,
     source.halfExtents.z,
-  )
+  ))
     .setTranslation(source.center.x, source.center.y, source.center.z)
     .setFriction(source.kind === 'floor' || source.kind === 'step' ? 0.82 : 0.45)
     .setRestitution(0);
@@ -64,6 +64,7 @@ export class PhysicsWorld {
   private crouched = false;
   private chunkMutationDepth = 0;
   private chunkSynchronizationPending = false;
+  private emptyChunkIndexPending = false;
 
   private constructor(plan: WorldPlan) {
     this.gameplayRandom = new SeededRandom(plan.seed).fork('physics-gameplay');
@@ -100,6 +101,11 @@ export class PhysicsWorld {
   }
 
   static async create(plan: WorldPlan): Promise<PhysicsWorld> { return new PhysicsWorld(plan); }
+  canStandAt(center: Vec3Data): boolean {
+    return !this.world.intersectionWithShape(center, IDENTITY_ROTATION,
+      new RAPIER.Capsule(STANDING_HALF_HEIGHT, PLAYER_RADIUS), undefined, undefined,
+      this.playerCollider, this.playerBody, this.isEnvironmentCollider);
+  }
   hasChunk(key: string): boolean { return this.chunkBodies.has(key); }
 
   addChunk(key: string, colliders: readonly StaticCollider[], offset: Vec3Data): void {
@@ -226,6 +232,7 @@ export class PhysicsWorld {
     for (let i = 0; i < body.numColliders(); i++) this.environmentKinds.delete(body.collider(i).handle);
     this.environmentBodies.delete(body.handle);
     this.world.removeRigidBody(body);
+    if (this.environmentKinds.size === 0) this.emptyChunkIndexPending = true;
     this.chunkBodies.delete(key);
     this.chunkColliders.delete(key);
     this.requestChunkSynchronization();
@@ -517,7 +524,27 @@ export class PhysicsWorld {
       throw new Error(`Invalid ${label}: expected finite coordinates.`);
     }
   }
-  private synchronizeChunkChanges(): void { this.world.step(); }
+  private synchronizeChunkChanges(): void {
+    if (this.emptyChunkIndexPending) {
+      this.emptyChunkIndexPending = false;
+      if (this.environmentKinds.size === 0) {
+        // No environment leaf survives. Start a fresh query tree instead of
+        // retaining Rapier's empty BVH across complete streamed scene reloads.
+        // Controllers retain this wrapper. Replace only its owned raw tree.
+        const broadPhase = this.world.broadPhase;
+        const RawBroadPhase = broadPhase.raw.constructor as new () => typeof broadPhase.raw;
+        broadPhase.free(); broadPhase.raw = new RawBroadPhase();
+        this.world.colliders.forEach(c => { const enabled = c.isEnabled(); if (enabled) { c.setEnabled(false); c.setEnabled(true); } });
+      }
+    }
+    // Rapier refreshes its query BVH during step(). A stream mount is not a
+    // gameplay tick: advancing 1/60 here accelerated every active ragdoll once
+    // more whenever a layer appeared. A zero-time synchronization only updates
+    // the collision structures; the fixed-step driver owns elapsed time.
+    const previousTimestep = this.world.timestep;
+    try { this.world.timestep = 0; this.world.step(); }
+    finally { this.world.timestep = previousTimestep; }
+  }
   private requestChunkSynchronization(): void {
     if (this.chunkMutationDepth > 0) { this.chunkSynchronizationPending = true; return; }
     this.synchronizeChunkChanges();

@@ -1,0 +1,41 @@
+{
+  "planVersion": 15,
+  "general": {
+    "total": 586,
+    "passed": 585,
+    "failed": 1
+  },
+  "vertical": {
+    "total": 96,
+    "passed": 96
+  },
+  "characterCoverage": {
+    "unique": 639,
+    "passed": 638,
+    "failedTests": [
+      "crouch start, direction changes and braking retain continuous appuis in first-person at 120 fps"
+    ],
+    "segments": [
+      {
+        "log": "atrium-character.log",
+        "passed": 602,
+        "failed": 1,
+        "hasFinalSummary": false
+      },
+      {
+        "log": "atrium-character-tail.log",
+        "passed": 36,
+        "failed": 0,
+        "hasFinalSummary": true
+      }
+    ]
+  },
+  "visualQA": "unavailable: sites-previewd mailbox missing",
+  "builds": {
+    "repositoryTypescript": "passed",
+    "repositoryVite": "passed",
+    "site": "passed"
+  },
+  "wardrobeObjectsVerified": 148,
+  "clothingFilesLossless": 148
+}

@@ -75,7 +75,7 @@ test('standing on a body stays still, and a real impact/recovery removes its sup
   body.applyGroundKickImpact(new THREE.Vector3(0, 0, 1), 1, false, new THREE.Vector3(center.x, center.y, center.z));
   assert.equal(support.isEnabled(), false);
   body.suspendForRecovery();
-  assert.equal(support.isEnabled(), false);
+  assert.equal(support.isValid(), false);
 });
 
 test('player collision filtering still blocks the standing opponent', () => {

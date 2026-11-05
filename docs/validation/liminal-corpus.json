@@ -1,0 +1,702 @@
+{
+  "records": [
+    {
+      "corpus": "ORDINARY",
+      "requested": 320,
+      "spatial": 320,
+      "quietOwners": 137,
+      "modes": {
+        "lower-maze": 49,
+        "rooms": 4870,
+        "terrace": 38,
+        "gallery": 44,
+        "void": 15
+      },
+      "styles": {
+        "maze": 4423,
+        "hall": 332,
+        "pillars": 261
+      },
+      "families": {
+        "arcade": 106,
+        "grouped-passages": 160,
+        "partial-gallery": 9,
+        "offset-well": 2,
+        "sunken-court": 3,
+        "paired-wells": 3,
+        "fault": 1
+      },
+      "compositions": {
+        "two-clusters": 28,
+        "right-cluster": 19,
+        "high-windows": 31,
+        "rhythm": 22,
+        "wide-and-small": 35,
+        "single": 37,
+        "rect-rhythm": 24,
+        "mixed": 38,
+        "mixed-levels": 32,
+        "end": 5,
+        "opposed": 2,
+        "side": 1,
+        "corner": 1
+      },
+      "stairs": {
+        "0": 9
+      },
+      "depths": {
+        "27": 1,
+        "54": 1,
+        "16.200000000000003": 1,
+        "5.4": 3,
+        "10.8": 3
+      },
+      "bspArea": 2770982.9015760496,
+      "walkableArea": 3317859.530931283,
+      "openingWidths": {
+        "min": 1.6833333333333371,
+        "max": 5.924216241668908
+      },
+      "openingHeights": {
+        "min": 1.1,
+        "max": 3.3497090931632556
+      },
+      "fractionalElevations": {
+        "min": 1.1662869283463806,
+        "max": 1.3748296846635641
+      },
+      "geometryOwnersInspected": 183,
+      "trianglesAudited": 2236710,
+      "maxMaterialBatches": 10,
+      "actualDestinations": 51,
+      "completeGalleryStacks": 9,
+      "stackOwners": 25,
+      "stackStairs": {
+        "0": 24,
+        "1": 1
+      },
+      "stackFractionalElevations": {
+        "min": 1.0435978980269285,
+        "max": 2.1819418117403986
+      }
+    },
+    {
+      "corpus": "HOLDOUT",
+      "requested": 160,
+      "spatial": 160,
+      "quietOwners": 64,
+      "modes": {
+        "void": 15,
+        "rooms": 2410,
+        "terrace": 18,
+        "gallery": 22,
+        "lower-maze": 33
+      },
+      "styles": {
+        "maze": 2207,
+        "hall": 168,
+        "pillars": 123
+      },
+      "families": {
+        "arcade": 63,
+        "grouped-passages": 76,
+        "offset-well": 1,
+        "partial-gallery": 11,
+        "fault": 1,
+        "sunken-court": 2,
+        "paired-wells": 2
+      },
+      "compositions": {
+        "rhythm": 13,
+        "two-clusters": 15,
+        "single": 11,
+        "mixed-levels": 18,
+        "rect-rhythm": 12,
+        "high-windows": 17,
+        "wide-and-small": 16,
+        "right-cluster": 24,
+        "side": 4,
+        "mixed": 13,
+        "corner": 1,
+        "end": 2,
+        "opposed": 4
+      },
+      "stairs": {
+        "0": 11
+      },
+      "depths": {
+        "5.4": 4,
+        "10.8": 1,
+        "16.200000000000003": 1
+      },
+      "bspArea": 1383913.3643303877,
+      "walkableArea": 1648034.352194383,
+      "openingWidths": {
+        "min": 1.6833333333333371,
+        "max": 5.785993502475323
+      },
+      "openingHeights": {
+        "min": 1.1,
+        "max": 3.379999999999999
+      },
+      "fractionalElevations": {
+        "min": 1.3652229950297627,
+        "max": 2.0559301046654586
+      },
+      "geometryOwnersInspected": 96,
+      "trianglesAudited": 1188711,
+      "maxMaterialBatches": 10,
+      "actualDestinations": 40,
+      "completeGalleryStacks": 11,
+      "stackOwners": 31,
+      "stackStairs": {
+        "0": 31
+      },
+      "stackFractionalElevations": {
+        "min": 0.8955979709979147,
+        "max": 2.167457655118778
+      }
+    }
+  ],
+  "examples": {
+    "two-clusters": {
+      "seed": "LIMINAL-ORDINARY-0",
+      "address": {
+        "x": -1,
+        "z": -1,
+        "story": -2
+      },
+      "id": "chunk--1:-1:-2/cell/-3/-1/-2/liminal-wall",
+      "position": {
+        "x": -117.35265932000063,
+        "z": -80.91718919647633,
+        "y": -2.835000000000001
+      },
+      "bounds": {
+        "minZ": 28,
+        "maxZ": 47.962934310883284,
+        "minX": -4.55265932000062,
+        "maxX": -3.4291310676681483
+      },
+      "sides": [],
+      "levels": [
+        7.1
+      ],
+      "stairs": 0
+    },
+    "right-cluster": {
+      "seed": "LIMINAL-ORDINARY-0",
+      "address": {
+        "x": -1,
+        "z": -1,
+        "story": -2
+      },
+      "id": "chunk--1:-1:-2/cell/-2/-1/-2/liminal-wall",
+      "position": {
+        "x": -91.31197411746253,
+        "z": -78.93842230211013,
+        "y": -2.835000000000001
+      },
+      "bounds": {
+        "minZ": 28.6,
+        "maxZ": 56,
+        "minX": 21.488025882537478,
+        "maxX": 22.28905691311229
+      },
+      "sides": [],
+      "levels": [
+        7.1
+      ],
+      "stairs": 0
+    },
+    "high-windows": {
+      "seed": "LIMINAL-ORDINARY-1",
+      "address": {
+        "x": 0,
+        "z": -1,
+        "story": -1
+      },
+      "id": "chunk-0:-1:-1/cell/1/-4/-1/liminal-wall",
+      "position": {
+        "x": -8.944996757893817,
+        "z": -158.08416716936046,
+        "y": -3.9850000000000003
+      },
+      "bounds": {
+        "minZ": -56,
+        "maxZ": -31.775000000000002,
+        "minX": -8.144996757893816,
+        "maxX": -7.149727101386517
+      },
+      "sides": [],
+      "levels": [
+        0.55
+      ],
+      "stairs": 0
+    },
+    "rhythm": {
+      "seed": "LIMINAL-ORDINARY-2",
+      "address": {
+        "x": 1,
+        "z": -1,
+        "story": 0
+      },
+      "id": "chunk-1:-1:0/cell/4/-2/0/liminal-wall",
+      "position": {
+        "x": 64.88125,
+        "z": -105.93476807612343,
+        "y": -3.7349999999999994
+      },
+      "bounds": {
+        "minX": -51,
+        "maxX": -36.275,
+        "minZ": 6.865231923876566,
+        "maxZ": 7.928711182997798
+      },
+      "sides": [],
+      "levels": [
+        -4.6
+      ],
+      "stairs": 0
+    },
+    "wide-and-small": {
+      "seed": "LIMINAL-ORDINARY-3",
+      "address": {
+        "x": -1,
+        "z": 0,
+        "story": 1
+      },
+      "id": "chunk--1:0:1/cell/-2/3/1/liminal-wall",
+      "position": {
+        "x": -101.49008555031091,
+        "z": 38.8,
+        "y": 1.115
+      },
+      "bounds": {
+        "minZ": 28,
+        "maxZ": 56,
+        "minX": 11.309914449689092,
+        "maxX": 12.138126420060285
+      },
+      "sides": [],
+      "levels": [
+        -5.15
+      ],
+      "stairs": 0
+    },
+    "single": {
+      "seed": "LIMINAL-ORDINARY-5",
+      "address": {
+        "x": 1,
+        "z": 0,
+        "story": -2
+      },
+      "id": "chunk-1:0:-2/cell/6/0/-2/liminal-wall",
+      "position": {
+        "x": 121.03706531090546,
+        "z": -41.7,
+        "y": -6.835000000000001
+      },
+      "bounds": {
+        "minZ": -55.400000000000006,
+        "maxZ": -28,
+        "minX": 9.837065310905455,
+        "maxX": 10.494515417924848
+      },
+      "sides": [],
+      "levels": [
+        3.1
+      ],
+      "stairs": 0
+    },
+    "rect-rhythm": {
+      "seed": "LIMINAL-ORDINARY-6",
+      "address": {
+        "x": -1,
+        "z": 1,
+        "story": -1
+      },
+      "id": "chunk--1:1:-1/cell/-4/6/-1/liminal-wall",
+      "position": {
+        "x": -158.37342986504626,
+        "z": 129.51182464859448,
+        "y": -7.834999999999999
+      },
+      "bounds": {
+        "minZ": 13.799999999999997,
+        "maxZ": 27.349999999999994,
+        "minX": -45.57342986504627,
+        "maxX": -44.902179106959004
+      },
+      "sides": [],
+      "levels": [
+        -3.3
+      ],
+      "stairs": 0
+    },
+    "mixed": {
+      "seed": "LIMINAL-ORDINARY-11",
+      "address": {
+        "x": 1,
+        "z": -1,
+        "story": -1
+      },
+      "id": "chunk-1:-1:-1/cell/5/-3/-1/liminal-wall",
+      "position": {
+        "x": 99.34821428579744,
+        "z": -128.413841345915,
+        "y": -2.1350000000000007
+      },
+      "bounds": {
+        "minX": -17.35,
+        "maxX": 0,
+        "minZ": -15.613841345914988,
+        "maxZ": -14.709401930039167
+      },
+      "sides": [],
+      "levels": [
+        2.4
+      ],
+      "stairs": 0
+    },
+    "mixed-levels": {
+      "seed": "LIMINAL-ORDINARY-23",
+      "address": {
+        "x": 1,
+        "z": 0,
+        "story": 1
+      },
+      "id": "chunk-1:0:1/cell/7/2/1/liminal-wall",
+      "position": {
+        "x": 162.49630559782264,
+        "z": 12.020996777759866,
+        "y": 5.215000000000001
+      },
+      "bounds": {
+        "minZ": 8.674999999999997,
+        "maxZ": 18.225,
+        "minX": 51.296305597822645,
+        "maxX": 52.22094566064654
+      },
+      "sides": [],
+      "levels": [
+        -1.05
+      ],
+      "stairs": 0
+    },
+    "gallery-end": {
+      "seed": "LIMINAL-ORDINARY-40",
+      "address": {
+        "x": 0,
+        "z": 0,
+        "story": -2
+      },
+      "id": "chunk-0:0:-2/cell/2/2/-2/liminal",
+      "position": {
+        "x": 14,
+        "z": 0.8,
+        "y": -17.335000000000004
+      },
+      "bounds": {
+        "minX": 0,
+        "maxX": 56,
+        "minZ": 0,
+        "maxZ": 28
+      },
+      "sides": [
+        "north"
+      ],
+      "levels": [
+        -7.4
+      ],
+      "stairs": 0,
+      "lowerPosition": {
+        "x": 28,
+        "z": 14,
+        "y": -22.735000000000003
+      },
+      "lowerOwner": {
+        "x": 0,
+        "z": 0,
+        "story": -3
+      }
+    },
+    "gallery-opposed": {
+      "seed": "LIMINAL-ORDINARY-42",
+      "address": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "id": "chunk--1:1:0/cell/-4/4/0/liminal",
+      "position": {
+        "x": -154,
+        "z": 56.8,
+        "y": 5.965
+      },
+      "bounds": {
+        "minX": -56,
+        "maxX": 0,
+        "minZ": -56,
+        "maxZ": -28
+      },
+      "sides": [
+        "east",
+        "west"
+      ],
+      "levels": [
+        5.1
+      ],
+      "stairs": 0,
+      "lowerPosition": {
+        "x": -140,
+        "z": 70,
+        "y": -4.835000000000001
+      },
+      "lowerOwner": {
+        "x": -1,
+        "z": 1,
+        "story": -2
+      }
+    },
+    "fractional-stair": {
+      "seed": "LIMINAL-ORDINARY-42",
+      "address": {
+        "x": -1,
+        "z": 1,
+        "story": -2
+      },
+      "id": "chunk--1:1:-2/cell/-4/4/-2/liminal",
+      "levels": [
+        5.1,
+        7.281941811740398
+      ],
+      "positions": [
+        {
+          "x": -148.9116261309295,
+          "z": 65.74741532793641,
+          "y": -2.820899866085787
+        },
+        {
+          "x": -139.84817552831555,
+          "z": 65.74741532793641,
+          "y": -4.835000000000001
+        }
+      ]
+    },
+    "offset-well": {
+      "seed": "LIMINAL-ORDINARY-73",
+      "address": {
+        "x": 0,
+        "z": -1,
+        "story": 1
+      },
+      "id": "chunk-0:-1:1/cell/0/-4/1/liminal-pit",
+      "position": {
+        "x": -50.6,
+        "z": -154,
+        "y": 11.865
+      },
+      "bounds": {
+        "minX": -51.4,
+        "maxX": -32.6,
+        "minZ": -51.4,
+        "maxZ": -32.6
+      },
+      "depth": 16.200000000000003,
+      "holes": [
+        {
+          "minX": -46.76537515574601,
+          "maxX": -41.936413495545274,
+          "minZ": -42.581099247094244,
+          "maxZ": -37.54191315500066,
+          "depth": 16.200000000000003,
+          "kind": "drop",
+          "stories": 3
+        }
+      ]
+    },
+    "sunken-court": {
+      "seed": "LIMINAL-ORDINARY-80",
+      "address": {
+        "x": 1,
+        "z": 1,
+        "story": -2
+      },
+      "id": "chunk-1:1:-2/cell/6/5/-2/liminal-pit",
+      "position": {
+        "x": 126,
+        "z": 89.4,
+        "y": -16.985000000000003
+      },
+      "bounds": {
+        "minX": 4.6,
+        "maxX": 23.4,
+        "minZ": -23.4,
+        "maxZ": -4.6
+      },
+      "depth": 54,
+      "holes": [
+        {
+          "minX": 4.85,
+          "maxX": 23.15,
+          "minZ": -19.95654425593093,
+          "maxZ": -4.85,
+          "depth": 54,
+          "kind": "void",
+          "stories": 10
+        }
+      ]
+    },
+    "paired-wells": {
+      "seed": "LIMINAL-ORDINARY-81",
+      "address": {
+        "x": -1,
+        "z": -1,
+        "story": -1
+      },
+      "id": "chunk--1:-1:-1/cell/-3/-4/-1/liminal-pit",
+      "position": {
+        "x": -134.6,
+        "z": -154,
+        "y": -7.635
+      },
+      "bounds": {
+        "minX": -23.4,
+        "maxX": -4.6,
+        "minZ": -51.4,
+        "maxZ": -32.6
+      },
+      "depth": 5.4,
+      "holes": [
+        {
+          "minX": -18.59046603627503,
+          "maxX": -15.10171118788421,
+          "minZ": -43.744377424195406,
+          "maxZ": -40.255622575804594,
+          "depth": 5.4,
+          "kind": "drop",
+          "stories": 1
+        },
+        {
+          "minX": -12.898288812115789,
+          "maxX": -9.40953396372497,
+          "minZ": -43.744377424195406,
+          "maxZ": -40.255622575804594,
+          "depth": 5.4,
+          "kind": "drop",
+          "stories": 1
+        }
+      ]
+    },
+    "gallery-side": {
+      "seed": "LIMINAL-ORDINARY-82",
+      "address": {
+        "x": 0,
+        "z": -1,
+        "story": 0
+      },
+      "id": "chunk-0:-1:0/cell/2/-4/0/liminal",
+      "position": {
+        "x": 14,
+        "z": -167.2,
+        "y": -1.635
+      },
+      "bounds": {
+        "minX": 0,
+        "maxX": 28,
+        "minZ": -56,
+        "maxZ": 0
+      },
+      "sides": [
+        "north"
+      ],
+      "levels": [
+        -2.5
+      ],
+      "stairs": 0,
+      "lowerPosition": {
+        "x": 14,
+        "z": -140,
+        "y": -12.435
+      },
+      "lowerOwner": {
+        "x": 0,
+        "z": -1,
+        "story": -2
+      }
+    },
+    "fault": {
+      "seed": "LIMINAL-ORDINARY-172",
+      "address": {
+        "x": 0,
+        "z": -1,
+        "story": 0
+      },
+      "id": "chunk-0:-1:0/cell/2/-1/0/liminal-pit",
+      "position": {
+        "x": 5.3999999999999995,
+        "z": -70,
+        "y": -3.1849999999999996
+      },
+      "bounds": {
+        "minX": 4.6,
+        "maxX": 23.4,
+        "minZ": 32.6,
+        "maxZ": 51.4
+      },
+      "depth": 10.8,
+      "holes": [
+        {
+          "minX": 6.620124478405343,
+          "maxX": 21.379875521594656,
+          "minZ": 40.075398101564495,
+          "maxZ": 42.44281125152484,
+          "depth": 10.8,
+          "kind": "drop",
+          "stories": 2
+        }
+      ]
+    },
+    "gallery-corner": {
+      "seed": "LIMINAL-ORDINARY-276",
+      "address": {
+        "x": -1,
+        "z": 1,
+        "story": -1
+      },
+      "id": "chunk--1:1:-1/cell/-3/4/-1/liminal",
+      "position": {
+        "x": -126,
+        "z": 56.8,
+        "y": -10.735000000000001
+      },
+      "bounds": {
+        "minX": -28,
+        "maxX": 0,
+        "minZ": -56,
+        "maxZ": -28
+      },
+      "sides": [
+        "east",
+        "south"
+      ],
+      "levels": [
+        -6.2
+      ],
+      "stairs": 0,
+      "lowerPosition": {
+        "x": -126,
+        "z": 70,
+        "y": -16.135
+      },
+      "lowerOwner": {
+        "x": -1,
+        "z": 1,
+        "story": -2
+      }
+    }
+  },
+  "errors": [],
+  "limits": "CPU plans, render buffers and actual destination surfaces. Rapier traversal is covered by tests. No observed WebGL FPS or screenshots."
+}

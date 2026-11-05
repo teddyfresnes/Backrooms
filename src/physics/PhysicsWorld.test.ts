@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
+import RAPIER from '@dimforge/rapier3d';
 
 vi.mock('@dimforge/rapier3d', async () =>
   import('../../node_modules/@dimforge/rapier3d/rapier.js'),
@@ -591,6 +592,41 @@ describe('PhysicsWorld chunk ownership', () => {
     expect(step).toHaveBeenCalledTimes(1);
     expect(castDown(physics, -4, 2)).not.toBeNull();
     expect(castDown(physics, 4, 2)).not.toBeNull();
+  });
+
+  it('refreshes streamed collision queries without advancing an airborne actor', async () => {
+    const physics = await createPhysics();
+    const body = physics.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 8, 0).setLinvel(2, -12, 1));
+    physics.world.createCollider(RAPIER.ColliderDesc.ball(.15), body);
+    physics.stepDynamics(1 / 60);
+    const position = { ...body.translation() }, velocity = { ...body.linvel() }, timestep = physics.world.timestep;
+    for (let cycle = 0; cycle < 12; cycle++) {
+      physics.batchChunkChanges(() => {
+        physics.addChunk('arrival', [floorCollider('arrival-floor')], { x: 0, y: -2, z: 0 });
+        physics.addChunk('neighbour', [floorCollider('other-floor', 8)], { x: 0, y: 0, z: 0 });
+      });
+      expect(castDown(physics, 0, 1)?.timeOfImpact).toBeCloseTo(3, 5);
+      expect(body.translation()).toEqual(position); expect(body.linvel()).toEqual(velocity);
+      physics.batchChunkChanges(() => { physics.removeChunk('arrival'); physics.removeChunk('neighbour'); });
+      expect(body.translation()).toEqual(position); expect(body.linvel()).toEqual(velocity);
+      expect(physics.world.timestep).toBe(timestep);
+    }
+    physics.stepDynamics(1 / 60); expect(body.translation().y).toBeLessThan(position.y);
+    expect(Number.isFinite(body.linvel().y)).toBe(true);
+  });
+
+  it('unlinks native impulse joints before reclaiming a retired articulated actor', async () => {
+    const physics=await createPhysics(),initial={bodies:physics.world.bodies.len(),colliders:physics.world.colliders.len(),joints:physics.world.impulseJoints.len()};
+    for(let cycle=0;cycle<20;cycle++){
+      const bodies=Array.from({length:4},(_,i)=>{const b=physics.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(i*.3,4,0));physics.world.createCollider(RAPIER.ColliderDesc.ball(.12),b);return b;});
+      const joints=bodies.slice(1).map((body,i)=>physics.world.createImpulseJoint(RAPIER.JointData.spherical({x:.15,y:0,z:0},{x:-.15,y:0,z:0}),bodies[i]!,body,true));
+      physics.stepDynamics(1/60);
+      for(const body of bodies)body.setEnabled(false);
+      for(const joint of joints)physics.world.removeImpulseJoint(joint,false);
+      for(const body of bodies)physics.world.removeRigidBody(body);
+      physics.stepDynamics(1/60);
+      expect({bodies:physics.world.bodies.len(),colliders:physics.world.colliders.len(),joints:physics.world.impulseJoints.len()}).toEqual(initial);
+    }
   });
 
   it('treats collider centers as local coordinates when setting a chunk offset', async () => {

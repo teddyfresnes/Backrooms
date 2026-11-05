@@ -58,6 +58,17 @@ const backroomsInput = (playTimeSeconds = 120): BackroomsGameSaveInput => ({
 });
 
 describe('game save history', () => {
+  it('round-trips optional versioned surface anchors while accepting old payloads', () => {
+    for (const height of [-.8, .225, .9, 1.8]) {
+      const storage = new MemoryStorage(), input = backroomsInput();
+      const surface = { version: 1, id: 'chunk--2:7:1/vertical/ramp-1', layer: 'chunk--2:7:1/ground' };
+      const saved = writeGameSave(storage, { ...input, payload: { ...input.payload, localPosition: { x: 14, y: height + .865, z: -22 }, surface } });
+      expect(saved.ok).toBe(true); if (!saved.ok) throw new Error('save rejected');
+      const loaded = loadGameSave(storage, saved.save.id);
+      expect(loaded?.experienceId === 'backrooms' ? loaded.payload.surface : undefined).toEqual(surface);
+    }
+    expect(writeGameSave(new MemoryStorage(), backroomsInput()).ok).toBe(true);
+  });
   it('round-trips both strict payload variants and exposes compact summaries', () => {
     const storage = new MemoryStorage();
     const russian = writeGameSave(
@@ -281,4 +292,18 @@ describe('game save history', () => {
       reason: 'invalid-save',
     });
   });
+});
+
+it('round-trips every mail objective state while preserving old saves and rejecting unknown stages', () => {
+  const storage = new MemoryStorage();
+  for (const arrivalState of ['approach', 'mail', 'home', 'done'] as const) {
+    const input = russianInput();
+    const result = writeGameSave(storage, { ...input, payload: { ...input.payload, windowBlindsOpen: [true, false], arrivalState } });
+    expect(result.ok).toBe(true);
+    if(result.ok) expect(loadGameSave(storage,result.save.id)?.payload).toMatchObject({arrivalState});
+  }
+  const legacy=writeGameSave(storage,russianInput());expect(legacy.ok).toBe(true);
+  if(legacy.ok) expect(loadGameSave(storage,legacy.save.id)?.payload).not.toHaveProperty('arrivalState');
+  const invalid={...russianInput(),payload:{...russianInput().payload,windowBlindsOpen:[true,true],arrivalState:'unknown'}};
+  expect(writeGameSave(storage,invalid as unknown as RussianStairwellGameSaveInput).ok).toBe(false);
 });

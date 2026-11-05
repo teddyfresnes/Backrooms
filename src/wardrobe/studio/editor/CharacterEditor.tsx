@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AssetLibrary, useAssetLibrary } from '../assets/AssetLibrary'
+import { VoicePicker } from './VoicePicker'
 import { MORPHS } from '../core/morphs'
 import { EXPRESSION_PULSE_INTERVAL_MS, expressionPulseMs, FACIAL_EXPRESSIONS, type FacialExpressionId } from '../core/expressions'
 import { morphUiModel, sexFromGenderMorph } from '../core/humanMeasurements'
@@ -12,7 +13,6 @@ import { ColorSwatches } from '../ui/components/ColorSwatches'
 import { MorphPad } from '../ui/components/MorphPad'
 import { CHARACTER_OPTIONS, type CharacterOption } from './characterOptions'
 import { PresetThumbnailGenerator } from './PresetThumbnailGenerator'
-import { randomConfirmationUrl, voicesForSex } from '../audio/voices'
 
 const EYES = ['#6c8da8', '#5f7d55', '#7a5a42', '#3c4a57', '#2d2622']
 
@@ -216,31 +216,12 @@ function PadGrid({ children }: { children: ReactNode }) {
 function GeneralEditor() {
   const body = useCharacterState((s) => s.config.body)
   const name = useCharacterState((s) => s.config.name)
-  const voiceId = useCharacterState((s) => s.config.voiceId)
   const setName = useCharacterState((s) => s.setName)
   const setSex = useCharacterState((s) => s.setSex)
-  const setVoice = useCharacterState((s) => s.setVoice)
-  const previewRef = useRef<HTMLAudioElement | null>(null)
   const sex = sexFromGenderMorph(body.gender)
-
-  useEffect(() => () => {
-    previewRef.current?.pause()
-    previewRef.current = null
-  }, [])
-
-  const selectVoice = (nextVoiceId: typeof voiceId) => {
-    setVoice(nextVoiceId)
-    previewRef.current?.pause()
-    const url = randomConfirmationUrl(nextVoiceId)
-    if (!url) return
-    const preview = new Audio(url)
-    preview.volume = 0.82
-    previewRef.current = preview
-    void preview.play().catch(() => {})
-  }
-
   return <div className="simple-content">
     <h3>Général</h3>
+    <VoicePicker />
     <label className="character-name-field">
       <span>Nom du personnage</span>
       <input type="text" maxLength={32} value={name} placeholder="Custom" onChange={(event) => setName(event.target.value)} />
@@ -248,21 +229,6 @@ function GeneralEditor() {
     <div className="sex-row">
       <button type="button" className={sex === 'female' ? 'selected' : ''} onClick={() => setSex('female')}>Femme</button>
       <button type="button" className={sex === 'male' ? 'selected' : ''} onClick={() => setSex('male')}>Homme</button>
-    </div>
-    <div className="voice-picker">
-      <span className="voice-picker-label">Voix</span>
-      <div className="voice-grid">
-        {voicesForSex(sex).map((voice) => <button
-          key={voice.id}
-          type="button"
-          className={voice.id === voiceId ? 'selected' : ''}
-          aria-pressed={voice.id === voiceId}
-          onClick={() => selectVoice(voice.id)}
-        >
-          <span>{voice.label}</span>
-          <small>Aperçu aléatoire</small>
-        </button>)}
-      </div>
     </div>
     {['age', 'height', 'weight', 'muscle', 'bodyFat', 'proportions'].map((key) => <CompactSlider key={key} morphKey={key} />)}
   </div>
@@ -348,8 +314,8 @@ function SimpleEditor({ category, advanced }: { category: SimpleCategory; advanc
   const { manifest } = useAssetLibrary()
   const appearance = useCharacterState((s) => s.config.appearance)
   const setAppearance = useCharacterState((s) => s.setAppearance)
-  if (!manifest) return null
   if (category === 'general') return <GeneralEditor />
+  if (!manifest) return null
   if (category === 'skin') return <div className="simple-content"><h3>Peau</h3><MaterialButtons materials={manifest.skins} selected={appearance.skinMaterialId} originalLabel="Standard" onSelect={(id) => setAppearance('skinMaterialId', id)} /></div>
   if (category === 'eyes') return <EyeEditor advanced={advanced} />
   if (category === 'hair') return <HairEditor />

@@ -28,6 +28,8 @@ export class CharacterEnvironment {
   private readonly queryShape = new RAPIER.Cuboid(3, 3, 3);
   private readonly sphere = new RAPIER.Ball(.1);
   private readonly sweepVelocity = new THREE.Vector3();
+  private readonly overlapOrigin = new THREE.Vector3();
+  private readonly overlapNormal = new THREE.Vector3();
   constructor(private readonly physics: PhysicsWorld) {}
   raycast(raycaster: THREE.Raycaster): EnvironmentHit[] {
     const near = Math.max(0, raycaster.near);
@@ -53,6 +55,27 @@ export class CharacterEnvironment {
     out.center.copy(from).addScaledVector(this.sweepVelocity, hit.time_of_impact);
     out.normal.set(hit.normal1.x, hit.normal1.y, hit.normal1.z).normalize();
     return true;
+  }
+  /** Recover a query volume already touching a floor, corner or moving door.
+   * Resolve the deepest real contact, then query again; never push a body. */
+  resolveSphereOverlap(center: THREE.Vector3, radius: number, maxCorrection = .45): boolean {
+    this.sphere.radius = radius;
+    this.overlapOrigin.copy(center);
+    for (let iteration = 0; iteration < 8; iteration++) {
+      let depth = 0;
+      this.physics.world.intersectionsWithShape(center, { x: 0, y: 0, z: 0, w: 1 }, this.sphere, collider => {
+        const contact = collider.contactShape(this.sphere, center, { x: 0, y: 0, z: 0, w: 1 }, .002);
+        if (contact && -contact.distance > depth) {
+          depth = -contact.distance;
+          this.overlapNormal.set(contact.normal1.x, contact.normal1.y, contact.normal1.z);
+        }
+        return true;
+      }, undefined, undefined, undefined, undefined, this.physics.isEnvironmentCollider);
+      if (depth < .0001) return true;
+      center.addScaledVector(this.overlapNormal, depth + .002);
+      if (center.distanceToSquared(this.overlapOrigin) > maxCorrection * maxCorrection) return false;
+    }
+    return false;
   }
   /** Find a supported place on this floor, with a clear path from the player. */
   findPartnerSpawn(origin: THREE.Vector3, facing: THREE.Vector3): THREE.Vector3 | null {

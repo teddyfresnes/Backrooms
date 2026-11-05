@@ -16,6 +16,7 @@ import {
   STAIRWELL_STEPS_PER_FLIGHT,
   floorY,
   STAIRWELL_FLIGHT_COUNT,
+  STAIRWELL_SPAWN,
 } from './layout';
 
 const activeWorlds: PhysicsWorld[] = [];
@@ -25,6 +26,15 @@ afterEach(() => {
 });
 
 describe('Russian stairwell physics', () => {
+  it('starts just inside the entrance and walks freely toward the first flight', async () => {
+    const physics = await PhysicsWorld.create(createStairwellPlan()); activeWorlds.push(physics);
+    expect(physics.getPosition().z).toBeCloseTo(STAIRWELL_SPAWN.z, 4);
+    expect(physics.getPosition().z).toBeLessThan(-4.8);
+    for (let tick = 0; tick < 40; tick++) physics.move({ x: 0, y: -.015, z: .04 });
+    expect(physics.getPosition().z).toBeGreaterThan(-3.7);
+    expect(physics.getPosition().y).toBeCloseTo(.865, 2);
+  });
+
   it('walks the Rapier player up the first real stair flight to its mid landing', async () => {
     const plan = createStairwellPlan();
     const firstFlight = plan.colliders.filter((collider) =>
