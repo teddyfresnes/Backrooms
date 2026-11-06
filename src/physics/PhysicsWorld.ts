@@ -452,6 +452,32 @@ export class PhysicsWorld {
         grounded ||= this.controller.computedGrounded();
       }
     }
+    // Pressed against a wall or railing on stairs, the part of the request that
+    // points into the wall makes Rapier's autostep fail on every riser. Retry
+    // once with that component removed (pure tangent along the wall).
+    if (requestedHorizontal > 0.005 && Math.hypot(allowed.x, allowed.z) < requestedHorizontal * 0.6
+      && this.controller.numComputedCollisions() > 0) {
+      let x = desiredDelta.x, z = desiredDelta.z, walls = 0;
+      for (let i = 0; i < this.controller.numComputedCollisions(); i++) {
+        const normal = this.controller.computedCollision(i)?.normal1;
+        if (!normal || Math.abs(normal.y) > 0.3) continue;
+        const length = Math.hypot(normal.x, normal.z);
+        if (length < 1e-4) continue;
+        const nx = normal.x / length, nz = normal.z / length, into = x * nx + z * nz;
+        if (into < 0) { x -= nx * into; z -= nz * into; walls++; }
+      }
+      const tangent = Math.hypot(x, z);
+      // Only grazing contacts: a head-on riser or wall leaves no tangent to follow.
+      if (walls > 0 && tangent > requestedHorizontal * 0.3 && tangent < requestedHorizontal * 0.999) {
+        this.controller.computeColliderMovement(this.playerCollider,
+          { x, y: desiredDelta.y, z }, undefined, this.playerCollider.collisionGroups());
+        const retry = this.controller.computedMovement();
+        if (Math.hypot(retry.x, retry.z) > Math.hypot(allowed.x, allowed.z) + 1e-5) {
+          allowed = { x: retry.x, y: retry.y, z: retry.z };
+          grounded = this.controller.computedGrounded();
+        }
+      }
+    }
     const current = this.playerBody.translation();
     this.playerBody.setNextKinematicTranslation({ x: current.x + allowed.x, y: current.y + allowed.y, z: current.z + allowed.z });
     this.notifyBeforeStep();

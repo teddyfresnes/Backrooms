@@ -84,11 +84,16 @@ const flightRailing = (id: string, x: number, lowZ: number, highZ: number, lowY:
   const inset = 0.09;
   const run = highZ - lowZ, rise = highY - lowY, length = Math.hypot(run, rise);
   const angle = Math.atan2(rise, Math.abs(run)) * (run > 0 ? -1 : 1);
-  const centerZ = (lowZ + highZ) * 0.5, centerY = (lowY + highY) * 0.5 + 0.49;
+  // The plate reaches 0.98 m above the tread line and, crucially, 0.36 m below
+  // it (more than two risers). Its underside used to follow the tread line, so
+  // it overhung each tread by up to half a riser: a capsule pressed against the
+  // rail met that edge as a ceiling and autostep could no longer lift it.
+  const above = 0.98, below = 0.36, half = (above + below) * 0.5;
+  const centerZ = (lowZ + highZ) * 0.5, centerY = (lowY + highY) * 0.5 + above - half;
   return {
     id, kind: 'barrier',
     center: { x, y: centerY, z: centerZ },
-    halfExtents: { x: 0.04, y: 0.49 * Math.cos(Math.abs(angle)), z: Math.max(0.05, length * 0.5 - inset) },
+    halfExtents: { x: 0.04, y: half * Math.cos(Math.abs(angle)), z: Math.max(0.05, length * 0.5 - inset) },
     rotation: { x: Math.sin(angle / 2), y: 0, z: 0, w: Math.cos(angle / 2) },
   };
 };
