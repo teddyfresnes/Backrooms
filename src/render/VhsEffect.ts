@@ -15,40 +15,46 @@ float vhsHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.545
 // effect that both transforms UVs and samples neighbours (convolution).
 vec2 vhsDistort(vec2 uv) {
   float i = vhsIntensity;
+  float i2 = i * i;
   float frame = floor(vhsTime * 24.0);
-  // Fine per-line wobble, always a little present.
-  uv.x += (vhsHash(vec2(floor(uv.y * vhsResolution.y * 0.5), frame)) - 0.5) * (0.0009 + 0.006 * i);
-  // Torn bands: a few rows slide sideways, more and wider as it worsens.
+  // Per-line wobble: invisible at rest, grows with the disturbance.
+  uv.x += (vhsHash(vec2(floor(gl_FragCoord.y * 0.5), frame)) - 0.5) * 0.007 * i2;
+  // Torn bands: a few rows slide sideways, only once it gets bad.
   float row = floor(uv.y * 36.0 + floor(vhsTime * 7.0));
-  float torn = step(0.985 - 0.2 * i * i, vhsHash(vec2(row, frame)));
+  float torn = step(1.0 - 0.2 * i2, vhsHash(vec2(row, frame))) * smoothstep(0.25, 0.5, i);
   uv.x += torn * (vhsHash(vec2(frame, row)) - 0.5) * 0.12 * i;
   // A violent picture rolls vertically for a moment.
-  uv.y += i * i * 0.035 * step(0.93, vhsHash(vec2(frame * 0.37, 2.0))) * sin(vhsTime * 31.0);
+  uv.y += i2 * 0.035 * step(0.93, vhsHash(vec2(frame * 0.37, 2.0))) * sin(vhsTime * 31.0) * smoothstep(0.4, 0.7, i);
   return clamp(uv, 0.0, 1.0);
 }
 
+// At the passive level (~0.1) only a fine colour-preserving grain and a hair
+// of chroma fringing remain: no desaturation, no band, no scanline moire.
 void mainImage(const in vec4 inputColor, const in vec2 baseUv, out vec4 outputColor) {
   float i = vhsIntensity;
+  float i2 = i * i;
   float frame = floor(vhsTime * 24.0);
   vec2 uv = vhsDistort(baseUv);
-  float shift = 0.0011 + 0.014 * i * i;
+  float shift = 0.0006 + 0.014 * i2;
   vec3 color = vec3(
     texture2D(inputBuffer, clamp(uv + vec2(shift, 0.0), 0.0, 1.0)).r,
     texture2D(inputBuffer, uv).g,
     texture2D(inputBuffer, clamp(uv - vec2(shift * 1.3, 0.0), 0.0, 1.0)).b
   );
-  // Tape bleed: slightly washed, cold.
+  // Tape bleed: washed and cold, only when disturbed.
   float luma = dot(color, vec3(0.299, 0.587, 0.114));
-  color = mix(color, vec3(luma) * vec3(0.94, 1.0, 1.04), 0.12 + 0.3 * i);
-  // Scanlines.
-  color *= 1.0 - (0.05 + 0.2 * i) * (0.5 + 0.5 * sin(uv.y * vhsResolution.y * 3.14159));
-  // Snow.
-  color += (vhsHash(uv * vhsResolution + frame * 17.0) - 0.5) * (0.03 + 0.3 * i);
-  // A bright tracking line crawling up, and black dropouts when it is bad.
+  color = mix(color, vec3(luma) * vec3(0.94, 1.0, 1.04), 0.4 * i2);
+  // Scanlines on real pixel rows (no moire), only when disturbed.
+  color *= 1.0 - 0.22 * i2 * mod(floor(gl_FragCoord.y), 2.0);
+  // Grain keeps the colour; grey snow only when disturbed.
+  float grain = vhsHash(gl_FragCoord.xy + frame * 17.0) - 0.5;
+  color *= 1.0 + grain * 0.05;
+  color += grain * 0.32 * i2;
+  // A bright tracking line crawling up, and black dropouts, when it is bad.
   float crawl = fract(vhsTime * 0.11);
-  color += smoothstep(0.012, 0.0, abs(uv.y - crawl)) * (0.05 + 0.4 * i);
+  color += smoothstep(0.012, 0.0, abs(uv.y - crawl)) * 0.4 * smoothstep(0.3, 0.6, i);
   float dropout = step(0.997 - 0.02 * i, vhsHash(vec2(floor(uv.y * 120.0), frame)));
-  color = mix(color, vec3(0.0), dropout * i);
+  color = mix(color, vec3(0.0), dropout * smoothstep(0.3, 0.6, i));
   outputColor = vec4(max(color, 0.0), inputColor.a);
 }
 `;
