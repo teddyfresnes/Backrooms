@@ -1,0 +1,72 @@
+import type { ApartmentLoadEvent } from '../apartment/LoadPackedApartment';
+export type LoadProgressCallback = (progress: number, phase?: string) => void;
+export const ENTRY_LOAD_TASKS = {
+  network: { weight: 32, label: 'Téléchargement des ressources' },
+  decode: { weight: 10, label: 'Décompression' },
+  materials: { weight: 5, label: 'Textures' },
+  scene: { weight: 12, label: 'Création de la scène' },
+  physics: { weight: 8, label: 'Préparation de la physique' },
+  character: { weight: 12, label: 'Préparation du personnage' },
+  audio: { weight: 8, label: 'Préparation du son' },
+  gpu: { weight: 11, label: 'Préparation de l’affichage' },
+  ready: { weight: 2, label: 'Prêt' },
+} as const;
+export type EntryLoadTask = keyof typeof ENTRY_LOAD_TASKS;
+
+/** Completed work, never elapsed-time interpolation. Parallel phase durations
+ * deliberately overlap; the report includes wall time rather than summing them. */
+export class LoadProgress {
+  private readonly started = performance.now();
+  private readonly progress = new Map<EntryLoadTask, number>();
+  private readonly begins = new Map<EntryLoadTask, number>();
+  private readonly timings: Partial<Record<EntryLoadTask, number>> = {};
+  private readonly operationsMs: Record<string, number> = {};
+  private phase = 'Préparation';
+  private downloadBytes?: { received: number; total?: number };
+  private listener: LoadProgressCallback = () => {};
+  apartment(event: ApartmentLoadEvent): void {
+    if (event.progress === 0) this.start(event.phase);
+    if (event.receivedBytes !== undefined) this.downloadBytes = { received: event.receivedBytes, total: event.totalBytes };
+    if (event.progress !== undefined) this.report(event.phase, event.progress);
+    if (event.durationMs !== undefined) this.timings[event.phase] = event.durationMs;
+  }
+  subscribe(listener: LoadProgressCallback): void { this.listener = listener; this.emit(); }
+  start(task: EntryLoadTask): void {
+    if (!this.begins.has(task)) this.begins.set(task, performance.now());
+    this.phase = ENTRY_LOAD_TASKS[task].label; this.emit();
+  }
+  report(task: EntryLoadTask, value: number, phase?: string): void {
+    if (!Number.isFinite(value)) return;
+    const next = Math.max(this.progress.get(task) ?? 0, Math.min(1, Math.max(0, value)));
+    this.progress.set(task, next);
+    if (next === 1) this.end(task);
+    else if (phase) this.phase = phase;
+    this.emit();
+  }
+  end(task: EntryLoadTask): void {
+    const begin = this.begins.get(task);
+    if (begin === undefined) return;
+    this.timings[task] = (this.timings[task] ?? 0) + performance.now() - begin;
+    this.begins.delete(task);
+    const next = (['network','decode','materials','scene','physics','character','gpu','audio'] as EntryLoadTask[]).find(id => this.begins.has(id));
+    this.phase = next ? ENTRY_LOAD_TASKS[next].label : 'Finalisation';
+  }
+  complete(task: EntryLoadTask): void { this.report(task, 1); }
+  recordOperation(name: string, durationMs: number): void { this.operationsMs[name] = (this.operationsMs[name] ?? 0) + durationMs; }
+  async measure<T>(task: EntryLoadTask, work: () => Promise<T>): Promise<T> {
+    this.start(task); const value = await work(); this.complete(task); return value;
+  }
+  private emit(): void {
+    const fraction = Object.entries(ENTRY_LOAD_TASKS).reduce((sum, [id, task]) => sum + task.weight * (this.progress.get(id as EntryLoadTask) ?? 0), 0) / 100;
+    this.listener(fraction, this.phase);
+  }
+  finish(): void {
+    this.phase = 'Prêt';
+    this.complete('ready');
+    const resources = performance.getEntriesByType('resource').filter(entry => entry.startTime >= this.started) as PerformanceResourceTiming[];
+    const report = { apartmentBytes: this.downloadBytes, totalMs: performance.now() - this.started, phasesMs: { ...this.timings }, operationsMs: { ...this.operationsMs },
+      resources: resources.map(entry => ({ url: entry.name, durationMs: entry.duration, transferredBytes: entry.transferSize, decodedBytes: entry.decodedBodySize })) };
+    Object.assign(window, { __BACKROOMS_LOAD__: report });
+    console.info('[loading]', report);
+  }
+}

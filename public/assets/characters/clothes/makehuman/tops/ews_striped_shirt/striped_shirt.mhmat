@@ -1,0 +1,31 @@
+# MakeHuman Material definition
+
+name stripemat
+
+ambientColor 0.0 0.0 0.0
+diffuseColor 1.0 1.0 1.0
+specularColor 0.1 0.1 0.1
+shininess 0.7
+emissiveColor 0.0 0.0 0.0
+opacity 1.0
+translucency 0.0
+
+shadeless False
+wireframe False
+transparent False
+alphaToCoverage True
+backfaceCull True
+depthless False
+castShadows True
+receiveShadows True
+
+diffuseTexture stripes.webp
+
+shaderConfig ambientOcclusion true
+shaderConfig normal true
+shaderConfig bump false
+shaderConfig displacement false
+shaderConfig vertexColors false
+shaderConfig spec false
+shaderConfig transparency true
+shaderConfig diffuse true

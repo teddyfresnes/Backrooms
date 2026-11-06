@@ -1,0 +1,71 @@
+{
+  "date": "2026-10-29",
+  "baseline_commit": "33f73c2f8960dbf1f8679171d618cb7f8198987c",
+  "code_commit": "19fd5a5b64c495efacd2ff8abbd2b135886536fa",
+  "general": {
+    "command": "npm test -- --maxWorkers=2",
+    "files": 84,
+    "passed": 659,
+    "failed": 1,
+    "total": 660,
+    "duration_seconds": 254.67,
+    "preexisting_failure": "ImportedApartmentIntegration: root name expected ImportedApartmentScene_v1.19.2, actual russian_cigarette_pack(1).glb",
+    "baseline_file_result": {
+      "passed": 14,
+      "failed": 1,
+      "total": 15
+    }
+  },
+  "targeted": {
+    "passed": 38,
+    "total": 38,
+    "actual_rapier_cases": 2
+  },
+  "hosted_targeted": {
+    "passed": 39,
+    "total": 39
+  },
+  "builds": {
+    "typescript": "passed",
+    "github_source": "passed",
+    "hosted": "passed"
+  },
+  "hosting": [
+    {
+      "staticFiles": 3075,
+      "totalBytes": 264181004,
+      "maxFileBytes": 16777216,
+      "apartmentOriginalBytes": 349270200,
+      "apartmentLossless": true,
+      "entryAssetsPresent": true
+    },
+    {
+      "wardrobeObjectsVerified": 148,
+      "clothingFilesLossless": 148,
+      "manifestAssetsPresent": true
+    }
+  ],
+  "geometry": {
+    "owners": 24,
+    "probes": 58183,
+    "bare_probes": 748,
+    "errors": 0,
+    "reference_coverage_errors": 332,
+    "reference_missing_metres": 232.82898620397
+  },
+  "preservation": {
+    "slots": 512,
+    "retained_proposals": 193,
+    "monuments_identical": 5
+  },
+  "performance_plan_identity": {
+    "identical": 24,
+    "total": 24
+  },
+  "visual": {
+    "verified": false,
+    "reason": "sites-previewd mailbox unavailable at /tmp/sites-previewd/requests"
+  },
+  "character_suite_rerun": false
+}
+

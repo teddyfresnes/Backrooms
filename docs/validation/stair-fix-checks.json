@@ -1,0 +1,36 @@
+{
+  "general": {
+    "total": 579,
+    "passed": 578,
+    "failed": 1
+  },
+  "vertical": {
+    "total": 89,
+    "passed": 89
+  },
+  "character": {
+    "total": 639,
+    "passed": 638,
+    "failed": 1
+  },
+  "characterIsolated": {
+    "total": 21,
+    "passed": 20,
+    "failed": 1
+  },
+  "builds": {
+    "repository": "passed",
+    "site": "passed"
+  },
+  "gpuVisualQA": "unavailable: supervised preview infrastructure missing /tmp/sites-previewd/requests",
+  "baselineCharacterIsolated": {
+    "total": 21,
+    "passed": 21,
+    "failed": 0
+  },
+  "baselineApartmentTest": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1
+  }
+}

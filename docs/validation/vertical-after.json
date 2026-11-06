@@ -1,0 +1,149 @@
+{
+  "node": "v24.19.0",
+  "seeds": [
+    "VERTICAL-PROMPT-AUDIT-0",
+    "VERTICAL-PROMPT-AUDIT-1",
+    "VERTICAL-PROMPT-AUDIT-2",
+    "VERTICAL-PROMPT-AUDIT-3",
+    "VERTICAL-PROMPT-AUDIT-4",
+    "VERTICAL-PROMPT-AUDIT-5",
+    "VERTICAL-PROMPT-AUDIT-6",
+    "VERTICAL-PROMPT-AUDIT-7",
+    "VERTICAL-PROMPT-AUDIT-8",
+    "VERTICAL-PROMPT-AUDIT-9",
+    "VERTICAL-PROMPT-AUDIT-10",
+    "VERTICAL-PROMPT-AUDIT-11",
+    "VERTICAL-PROMPT-AUDIT-12",
+    "VERTICAL-PROMPT-AUDIT-13",
+    "VERTICAL-PROMPT-AUDIT-14",
+    "VERTICAL-PROMPT-AUDIT-15",
+    "VERTICAL-PROMPT-AUDIT-16",
+    "VERTICAL-PROMPT-AUDIT-17",
+    "VERTICAL-PROMPT-AUDIT-18",
+    "VERTICAL-PROMPT-AUDIT-19",
+    "VERTICAL-PROMPT-AUDIT-20",
+    "VERTICAL-PROMPT-AUDIT-21",
+    "VERTICAL-PROMPT-AUDIT-22",
+    "VERTICAL-PROMPT-AUDIT-23"
+  ],
+  "limitations": "Headless architecture without prop meshes, graffiti, textures or GPU. Physics includes the generated colliders. Material batches are not measured draw calls. JS heap excludes WASM/GPU memory.",
+  "reproductionGeometry": {
+    "point": {
+      "x": -44,
+      "z": -2.5
+    },
+    "footY": 0,
+    "mesh": "office-drop-ceiling",
+    "meshCeilingY": 2.740000009536743,
+    "meshClearance": 2.740000009536743,
+    "standingCapsuleBlocked": false
+  },
+  "finite": {
+    "generationMs": {
+      "median": 62.61919499999999,
+      "p95": 120.14093600000001
+    },
+    "cloneMs": {
+      "median": 3.5709489999999278,
+      "p95": 6.700717999999824
+    },
+    "architecturalPrepareMs": {
+      "median": 39.71265600000015,
+      "p95": 70.46915200000001
+    },
+    "physicsMountMs": {
+      "median": 4.283778999999868,
+      "p95": 7.249974000000066
+    },
+    "jsonBytes": {
+      "median": 403749,
+      "p95": 514592
+    },
+    "colliders": {
+      "median": 582,
+      "p95": 779
+    },
+    "triangles": {
+      "median": 16180,
+      "p95": 21836
+    },
+    "materialBatches": {
+      "median": 17,
+      "p95": 31
+    },
+    "sampledHeapPeakBytes": 116780944,
+    "retainedHeapDeltaBytes": 3549080
+  },
+  "infiniteCold": {
+    "generationMs": {
+      "median": 479.8677200000002,
+      "p95": 558.1009620000004
+    },
+    "cloneMs": {
+      "median": 3.974312000000282,
+      "p95": 5.3730259999974805
+    },
+    "architecturalPrepareMs": {
+      "median": 57.79898300000059,
+      "p95": 128.25950399999965
+    },
+    "physicsMountMs": {
+      "median": 4.5808150000011665,
+      "p95": 10.043499999999767
+    },
+    "jsonBytes": {
+      "median": 541925,
+      "p95": 810374
+    },
+    "colliders": {
+      "median": 698,
+      "p95": 1173
+    },
+    "triangles": {
+      "median": 22520,
+      "p95": 40664
+    },
+    "materialBatches": {
+      "median": 25,
+      "p95": 36
+    },
+    "sampledHeapPeakBytes": 146906056,
+    "retainedHeapDeltaBytes": 12572056
+  },
+  "infiniteWarm": {
+    "generationMs": {
+      "median": 84.93724600000132,
+      "p95": 147.98551699999734
+    },
+    "cloneMs": {
+      "median": 3.855617000001075,
+      "p95": 6.28997999999774
+    },
+    "architecturalPrepareMs": {
+      "median": 53.92200799999773,
+      "p95": 126.63547199999812
+    },
+    "physicsMountMs": {
+      "median": 4.769231999998738,
+      "p95": 8.138857000001735
+    },
+    "jsonBytes": {
+      "median": 541925,
+      "p95": 810374
+    },
+    "colliders": {
+      "median": 698,
+      "p95": 1173
+    },
+    "triangles": {
+      "median": 22520,
+      "p95": 40664
+    },
+    "materialBatches": {
+      "median": 25,
+      "p95": 36
+    },
+    "sampledHeapPeakBytes": 179418984,
+    "retainedHeapDeltaBytes": -1754064
+  }
+}

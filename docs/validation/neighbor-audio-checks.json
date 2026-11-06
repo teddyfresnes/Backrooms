@@ -1,0 +1,439 @@
+{
+  "files": [
+    {
+      "file": "assets/audio/neighbors/alex/miscellaneous-13.ogg",
+      "duration": 0.913021,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/miscellaneous-15.ogg",
+      "duration": 0.77175,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-1.ogg",
+      "duration": 0.502438,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-10.ogg",
+      "duration": 0.658938,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-2.ogg",
+      "duration": 0.809354,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-3.ogg",
+      "duration": 0.542083,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-4.ogg",
+      "duration": 0.749375,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-5.ogg",
+      "duration": 0.671125,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-6.ogg",
+      "duration": 0.671125,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-7.ogg",
+      "duration": 0.823583,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-8.ogg",
+      "duration": 0.702646,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-9.ogg",
+      "duration": 1.436375,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/miscellaneous-13.ogg",
+      "duration": 1.249458,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/miscellaneous-15.ogg",
+      "duration": 2.272583,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-1.ogg",
+      "duration": 0.360792,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-10.ogg",
+      "duration": 0.473167,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-2.ogg",
+      "duration": 0.632229,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-3.ogg",
+      "duration": 0.498208,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-4.ogg",
+      "duration": 0.938125,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-5.ogg",
+      "duration": 0.957625,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-6.ogg",
+      "duration": 0.464646,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-7.ogg",
+      "duration": 0.923375,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-8.ogg",
+      "duration": 0.540146,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-9.ogg",
+      "duration": 0.847646,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/miscellaneous-13.ogg",
+      "duration": 0.541438,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/miscellaneous-15.ogg",
+      "duration": 1.219333,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-1.ogg",
+      "duration": 0.461938,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-10.ogg",
+      "duration": 0.646563,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-2.ogg",
+      "duration": 0.646563,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-3.ogg",
+      "duration": 0.597333,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-4.ogg",
+      "duration": 1.286604,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-5.ogg",
+      "duration": 0.917354,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-6.ogg",
+      "duration": 0.597333,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-7.ogg",
+      "duration": 1.065063,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-8.ogg",
+      "duration": 0.818875,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-9.ogg",
+      "duration": 0.917354,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/miscellaneous-13.ogg",
+      "duration": 0.795521,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/miscellaneous-15.ogg",
+      "duration": 1.014938,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-1.ogg",
+      "duration": 0.494833,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-10.ogg",
+      "duration": 0.603708,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-2.ogg",
+      "duration": 0.732375,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-3.ogg",
+      "duration": 0.544333,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-4.ogg",
+      "duration": 1.016146,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-5.ogg",
+      "duration": 0.679583,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-6.ogg",
+      "duration": 0.692792,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-7.ogg",
+      "duration": 0.795083,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-8.ogg",
+      "duration": 0.659813,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-9.ogg",
+      "duration": 0.841292,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/miscellaneous-13.ogg",
+      "duration": 0.655646,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/miscellaneous-15.ogg",
+      "duration": 0.597938,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-1.ogg",
+      "duration": 0.525313,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-10.ogg",
+      "duration": 0.567625,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-2.ogg",
+      "duration": 0.827021,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-3.ogg",
+      "duration": 0.673521,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-4.ogg",
+      "duration": 0.88525,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-5.ogg",
+      "duration": 0.927625,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-6.ogg",
+      "duration": 0.721146,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-7.ogg",
+      "duration": 0.97525,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-8.ogg",
+      "duration": 0.673521,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-9.ogg",
+      "duration": 1.218771,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/interactions/knock-wood.ogg",
+      "duration": 0.774313,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    },
+    {
+      "file": "assets/audio/interactions/apartment-bell.ogg",
+      "duration": 4.0065,
+      "codec": "opus",
+      "channels": 1,
+      "decode": "pass"
+    }
+  ],
+  "listening_validation": false
+}

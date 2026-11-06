@@ -1,0 +1,179 @@
+# Vérification proportionnée
+
+Le but est de trouver vite les erreurs sans exécuter toute la matrice à chaque
+édition.
+
+## Échelle de validation
+
+1. Pendant l’itération, lancer un test par son nom :
+
+   ```powershell
+   npx vitest run src/world/InfiniteWorld.test.ts -t "préfixe du nom"
+   ```
+
+2. Avant livraison, lancer le fichier de test du sous-système :
+
+   ```powershell
+   npx vitest run src/core/WorldStream.test.ts
+   ```
+
+3. Lancer `npm run build` si TypeScript, imports, worker, assets ou rendu ont
+   changé.
+4. Réserver `npm run validate` à une demande explicite de validation complète
+   ou à un risque transversal que les tests ciblés ne couvrent pas.
+
+Un seul passage réussi suffit tant que ses entrées n'ont pas changé. Ne pas
+enchaîner test ciblé, suite globale, `validate` et nouveau build par habitude.
+Documentation seule : `git diff --check`. Choisir dans la matrice uniquement
+les lignes touchées ; benchmarks et audits sont des outils de diagnostic,
+pas des conditions systématiques de livraison.
+
+Les tests de génération auditent des centaines de plans et disposent d’un
+timeout de 30 secondes par test. Une durée élevée n’indique pas à elle seule un
+blocage.
+
+## Matrice par changement
+
+| Changement | Test ciblé | Complément |
+|---|---|---|
+| BSP, salles, murs, features | `generateWorld.test.ts` | `InfiniteWorld.test.ts` si chunk/vertical |
+| Frontière, biome, étage, héritage | `InfiniteWorld.test.ts` | `WorldBuilder.test.ts` si visible |
+| Sol, rampe, marche, collider | `PhysicsWorld.test.ts` | test génération + rendu concerné |
+| Géométrie ou caps | `WorldBuilder.test.ts` | `npm run build` |
+| Champ zonal/blackout | `ZonalLighting.test.ts` | `WorldBuilder.test.ts` si matériaux/géométrie |
+| Mode classique / bake | `BakedLighting.test.ts` | `WorldBuilder.test.ts` + build |
+| Streaming/offset/préfetch | `WorldStream.test.ts` | `InfiniteWorld.test.ts` |
+| Contrôleur joueur | `PlayerController.test.ts` | `PhysicsWorld.test.ts` si collision |
+| Personnage, Tab, caméra, ragdoll et relevés | `npm run test:character` | `CharacterEnvironment.test.ts`, puis les deux scènes |
+| Props | `PropPlacement.test.ts` | build + contrôle visuel si nouvel asset |
+| Qualité/post-FX | `AdaptiveQuality.test.ts` | contrôle visuel |
+| UI/audio/styles | test disponible, sinon build | contrôle navigateur |
+| Historique de sauvegarde | `SaveHistory.test.ts` | accueil sans/avec save + rechargement des deux runtimes |
+| Escalier/appartement | tests `src/stairwell` et `src/apartment` | `PhysicsWorld.test.ts` + contrôle visuel |
+| Porte du hall / route Backrooms | `HallExitInteraction.test.ts`, `ExperienceRouting.test.ts` | descente au RDC + interaction E |
+
+`npm run validate` inclut les essais du personnage sur les véritables FBX,
+avec Three.js, Rapier et un DOM hors écran. Seule la surface WebGL est absente ;
+ces essais ne remplacent pas le contrôle visuel en navigateur.
+
+## Contrôle navigateur
+
+Pour un changement visuel ou d’interaction :
+
+1. lancer `npm run dev` ;
+2. ouvrir `http://127.0.0.1:4173/?seed=SEED-STABLE` ;
+3. attendre que `window.__BACKROOMS__.ready` soit vrai ;
+4. vérifier la console, le HUD et la zone modifiée ;
+5. conserver le même seed pour comparer avant/après.
+
+Seulement si les sauvegardes ou le routage changent : partir sans stockage local
+et vérifier que **Continuer** ouvre un historique vide.
+Lancer une partie, déplacer/orienter le joueur, ouvrir la porte et utiliser
+**Sauvegarder** dans le menu de pause : la nouvelle ligne doit restaurer pose,
+vue et porte. Masquer la page ou ouvrir la pause ne doit créer aucune autosave.
+Franchir ensuite la porte du hall : une seule autosave **Niveau 0** doit apparaître
+après le chargement. Corrompre une entrée pour confirmer qu’elle est ignorée sans
+erreur console ni requête asset 404.
+
+`window.__BACKROOMS__` expose le même snapshot structuré que `/logs` : session,
+position et orientation joueur, chunk et génération courants, objet regardé,
+performances, qualité, streaming et physique. Les alias historiques (`seed`,
+`fps`, `drawCalls`, `chunks`…) restent disponibles à la racine. Utiliser
+`/logs`, `/noclip` et `/locate` pour documenter ou atteindre une zone sans
+modifier temporairement le code. Si l'infrastructure d'aperçu est indisponible,
+le signaler sans installer un autre navigateur ni répéter les tentatives.
+
+`npm run benchmark:stairwell -- chemin.json` mesure séparément la préparation du
+modèle réel, une montée Rapier vérifiée, la porte, le ciblage/portage du whisky,
+la transition et la vague de lampes. Pour une campagne de mesures demandée,
+répéter dans trois processus par source ;
+premier usage et p95 des passages suivants sont séparés. Les images et le canvas
+sont inertes : ce sont des coûts CPU de composants, jamais des frames WebGL.
+La comparaison et les limites sont dans `docs/validation/stairwell-performance.json`.
+En navigateur, relever aussi `__BACKROOMS_LOAD__.operationsMs` et les frames GPU ;
+un contexte WebGL indisponible interdit de conclure à l'absence de freezes GPU.
+
+## Avant de conclure
+
+- Relire `git diff --check`.
+- Vérifier que seuls les fichiers attendus ont changé avec `git status --short`.
+- Signaler clairement les tests exécutés et ceux qui ne l’ont pas été.
+- Ne pas corriger ou reformater les modifications utilisateur hors périmètre.
+
+Pour les volumes de transition, `node scripts/audit-transition-volumes.mjs 64
+chemin.json` compare les vrais triangles worker et colliders Rapier sur 64 seeds
+ordinaires et 32 de réserve, avec les propriétaires supérieurs réellement montés.
+Après compilation headless par `scripts/test-character.mjs`,
+`node scripts/profile-regional-fall.mjs chemin.json` mesure la chute FBX régionale
+à 30/60/120 Hz. `FALL_PROFILE_WORLD` peut fixer le même module monde entre deux
+sources ; le hash complet des plans doit alors être identique. Ces mesures sont CPU.
+
+
+Pour les changements de hauteur, `npm run test:vertical` couvre les plans
+régionaux ordinaires, les parcours Three/Rapier, les ouvertures monumentales,
+les deux modes de rendu, les sauvegardes et les cycles de montage/démontage.
+`npm run audit:vertical` vérifie 256 seeds et huit voisinages de 5×5 chunks avec
+des objectifs de distribution déclarés avant le relevé. Les anciens tests BSP
+restent explicitement sur le générateur legacy utilisé par les monuments.
+`RegionalBsp.test.ts` mesure le vrai chemin ordinaire et contrôle 32 seeds de
+connectivité physique des surfaces, sans assimiler les noms de familles à des formes.
+`RegionalLighting.test.ts` vérifie l’invariance par translation, plus de trois couches,
+le transfert des buffers worker et le nettoyage des deux textures modernes,
+les changements d'indice de couche et les raccords lumineux entre chunks.
+`ArchitectureSeams.test.ts` intersecte les triangles Float32 finaux de 16 seeds
+entre tous les matériaux ; ses essais synthétiques couvrent les joues inclinées
+et les interfaces internes. `SpatialArchitectureBuffers.test.ts` vérifie le
+transfert avec détachement, les bornes et la réutilisation des tableaux après
+promotion/démontage. `npm run benchmark:streaming` sépare préparation worker et
+montage sur 24 seeds et conserve un hash complet de chaque plan ; passer le
+chemin d'un ancien checkout pour employer exactement le même harnais.
+`npm run benchmark:worker -- 4` fait un smoke test réduit des vrais transferts
+Node dans les trois modes ; sans argument, le corpus reste de 24 seeds.
+
+`npm run benchmark:vertical` compare 24 seeds identiques : médiane/P95,
+clonage, JSON, architecture Three, montage Rapier et mémoire JS.
+`npm run benchmark:worker` mesure le même travail dans un worker Node avec
+transfert réel par clonage structuré et bake classique. Ce proxy ne mesure pas
+l’ordonnancement des Workers du navigateur. Aucun de ces benchmarks ne mesure
+GPU ou draw calls. Exécuter les mesures avant/après sans charge concurrente.
+Voir [TRANSITION_VALIDATION.md](../validation/TRANSITION_VALIDATION.md) pour v13
+et [REGIONAL_VALIDATION.md](../REGIONAL_VALIDATION.md) pour la référence antérieure.
+
+Les tests `TransitionLayout`, `TransitionMount`, `SpatialFeaturesPhysical`,
+`ArchitecturalUV` et `ArchitectureDebug` protègent les transitions v13, les
+trous réintégrés et les ressources des diagnostics. La séparation entre toit et
+étage supérieur se mesure au même point horizontal, y compris sur un toit incliné.
+`TransitionIsolation` et `PrismExposure` couvrent la sélection espacée v14,
+la volée unique, les vrais appuis, les bandes verticales sans recouvrement,
+le dégagement raycasté dans la géométrie finale et les coins des diffuseurs.
+`CeilingEnvelope.test.ts` reproduit le plafond de `LATE-OFFICE-1950` avec
+raycasts Three et contacts Rapier, vérifie les bandes et la portée des reliefs.
+`TransitionEnvelope.test.ts` protège les raccords aux plafonds BSP, l'enveloppe
+canonique et le dégagement sous les quatre coins des diffuseurs.
+`FluorescentFixture.test.ts` vérifie la neutralité HDR et le débit lumineux CPU,
+avec les valeurs blackout inchangées ; cela ne remplace pas une mesure WebGL.
+`LightingBrightness`, `WorldBrightness` et `settings.brightness` vérifient les
+bornes, le véritable curseur DOM, les holders de shader et les montages futurs,
+y compris une modification pendant une bascule de mode asynchrone. Les tests
+`StairwellRendering` sondent les sept paliers pendant les changements de hauteur
+de l'observateur. `ApartmentBrightness` protège la priorité de l'interrupteur.
+Ces sondes CPU ne prouvent ni l'apparence du bloom ni le coût GPU des sept sources.
+`SpatialBaseboards.test.ts` raycaste les bandes finales aux angles, exclusions,
+sols inclinés et coutures ; il couvre aussi les résidus post-découpe et leurs
+colliders. `SpatialFinishesPhysical` compare les contacts de sol réparés dans les
+buffers transférés et Rapier. `node scripts/audit-wall-finishes.mjs [ancien-checkout]`
+contrôle 24 seeds : chaque intervalle de contour, faces courtes comprises, est
+sondé au plus tous les 2 m, avec zones nues, supports, triangles et conservation
+des features/lumières. Le harnais indépendant est `tests/support/finish-audit.ts`.
+Il ne mesure pas le GPU. Voir [la validation actuelle](../validation/WALL_FINISH_VALIDATION_20261029.md).
+Le rapport [STAIR_FIX_VALIDATION.md](../validation/STAIR_FIX_VALIDATION.md)
+distingue les contrôles CPU du contrôle visuel WebGL.
+`AtriumEnvelope` vérifie les quatre niveaux, les parois porteuses, les tunnels
+d’entrée, leurs luminaires et les chutes entre terrasses. `SpatialVisibility`
+teste la priorité au regard, le budget et le cache des réponses worker ;
+`WorldPreview` vérifie la promotion des détails sans reconstruire l’architecture
+ou la lumière. Voir [ATRIUM_VALIDATION.md](../validation/ATRIUM_VALIDATION.md).
+
+Les arches et galeries ordinaires sont couvertes par `ArchitecturalOpenings.test.ts`
+et `LiminalGeneration.test.ts`. Leurs audits sont décrits dans
+[LIMINAL_ARCHITECTURE.md](LIMINAL_ARCHITECTURE.md).

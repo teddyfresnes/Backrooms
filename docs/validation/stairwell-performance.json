@@ -1,0 +1,2929 @@
+{
+  "baselineSourceSha": "1106344520b6c33bd2b3500bc90f20411f92ba94",
+  "profileScriptSha256": "70200b0d9d057922e9d0a3a49cbbd5afa3e6c436c7bf0f36d02ff5a4f7ccb63b",
+  "method": "Three independent Node processes per source, sequential, same dependencies. Each run records first use and repeat p95. Real shipped model/material parameters and Rapier; inert texture images and 2D canvas; no renderer, network, audio playback or full animated character. CPU operation durations are not browser frame times.",
+  "unverified": [
+    "total browser loading time",
+    "WebGL shader compilation and driver buffer uploads",
+    "GPU frame times",
+    "visual darkness/blinds from real pixels",
+    "auditory rain continuity"
+  ],
+  "environmentEvidence": "Published v45 Chrome: WebGL context creation failed, GL_RENDERER=Disabled. Managed preview daemon unavailable.",
+  "summaryMedianOfRuns": {
+    "before": {
+      "apartmentCompressedBytes": 69123066,
+      "decompressionCpuMs": 544.3026340000001,
+      "binaryDecodeCpuMs": 203.77973100000008,
+      "apartmentPrepareWallMs": 2311.4488579999997,
+      "apartmentPrepareMaxTaskGapMs": 20.94007600000009,
+      "geometryBufferBytes": 37429706,
+      "outageSwapCpuMs": 3.0307140000004438,
+      "stairClimbCpu": {
+        "firstMs": 4.030621999999767,
+        "repeatP95Ms": 0.4655400000001464,
+        "maxMs": 4.030621999999767
+      },
+      "doorOpeningCpu": {
+        "firstMs": 4.62149700000009,
+        "repeatP95Ms": 0.4372370000000956,
+        "maxMs": 4.62149700000009
+      },
+      "whiskyTargetCpu": {
+        "firstMs": 7.224542999999812,
+        "repeatP95Ms": 8.511825999999928,
+        "maxMs": 12.66773699999976
+      },
+      "whiskyGrabCpu": {
+        "firstMs": 6.99970200000007,
+        "repeatP95Ms": 6.294644999999946,
+        "maxMs": 6.99970200000007
+      },
+      "whiskyCarriedTickCpu": {
+        "firstMs": 24.00552500000049,
+        "repeatP95Ms": 21.48452399999951,
+        "maxMs": 27.224019000000226
+      },
+      "corridorLightAnimationCpu": {
+        "firstMs": 0.19934199999988778,
+        "repeatP95Ms": 0.008436000000074273,
+        "maxMs": 0.19934199999988778
+      }
+    },
+    "after": {
+      "apartmentCompressedBytes": 61909258,
+      "decompressionCpuMs": 431.503565,
+      "binaryDecodeCpuMs": 171.16325099999995,
+      "apartmentPrepareWallMs": 403.180658,
+      "apartmentPrepareMaxTaskGapMs": 13.199998999999934,
+      "geometryBufferBytes": 37429706,
+      "outageSwapCpuMs": 2.0664120000001276,
+      "stairClimbCpu": {
+        "firstMs": 3.5562059999999747,
+        "repeatP95Ms": 0.42975400000000263,
+        "maxMs": 3.5562059999999747
+      },
+      "doorOpeningCpu": {
+        "firstMs": 4.131351999999879,
+        "repeatP95Ms": 0.4537880000000314,
+        "maxMs": 4.131351999999879
+      },
+      "whiskyTargetCpu": {
+        "firstMs": 1.0669640000000982,
+        "repeatP95Ms": 0.6600139999998191,
+        "maxMs": 1.276004999999941
+      },
+      "whiskyGrabCpu": {
+        "firstMs": 1.183420999999953,
+        "repeatP95Ms": 0.34610700000007455,
+        "maxMs": 1.183420999999953
+      },
+      "whiskyCarriedTickCpu": {
+        "firstMs": 4.111544999999978,
+        "repeatP95Ms": 1.4196629999999004,
+        "maxMs": 4.111544999999978
+      },
+      "corridorLightAnimationCpu": {
+        "firstMs": 0.2996299999999792,
+        "repeatP95Ms": 0.007644999999911306,
+        "maxMs": 0.2996299999999792
+      }
+    }
+  },
+  "runs": {
+    "before": [
+      {
+        "limitation": "CPU only, real shipped geometry/material definitions and Rapier; inert images/2D canvas; no WebGL, network or full character runtime.",
+        "apartmentCompressedBytes": 69123066,
+        "decompressionCpuMs": 544.3026340000001,
+        "binaryDecodeCpuMs": 284.4276380000001,
+        "objectAssemblyCpuMs": 36.34265499999992,
+        "apartmentConstructCpuMs": 299.16662799999995,
+        "apartmentPrepareWallMs": 2725.786051,
+        "apartmentPrepareMaxTaskGapMs": 20.94007600000009,
+        "stairwellConstructCpuMs": 236.3964850000002,
+        "shellCollidersCpuMs": 14.498457000000599,
+        "furnitureCollidersCpuMs": 0.7147260000001552,
+        "allPropsMountCpuMs": 211.5570149999994,
+        "corridorConstructCpuMs": 3.377371999999923,
+        "doorOpeningCpu": {
+          "firstMs": 4.62149700000009,
+          "repeatP95Ms": 0.4372370000000956,
+          "maxMs": 4.62149700000009,
+          "count": 150
+        },
+        "stairClimbCpu": {
+          "firstMs": 3.497986999999739,
+          "repeatP95Ms": 0.407191000000239,
+          "maxMs": 3.497986999999739,
+          "count": 240
+        },
+        "stairClimbEnd": [
+          -1.050133466720581,
+          2.3049886226654053,
+          2.8457398414611816
+        ],
+        "whiskyReachable": true,
+        "whiskyTargetCpu": {
+          "firstMs": 9.188632999999754,
+          "repeatP95Ms": 8.298930999999357,
+          "maxMs": 12.66773699999976,
+          "count": 60
+        },
+        "whiskyGrabCpu": {
+          "firstMs": 6.99970200000007,
+          "repeatP95Ms": 6.294644999999946,
+          "maxMs": 6.99970200000007,
+          "count": 2
+        },
+        "whiskyCarriedTickCpu": {
+          "firstMs": 24.00552500000049,
+          "repeatP95Ms": 21.48452399999951,
+          "maxMs": 29.60806700000012,
+          "count": 90
+        },
+        "lightTopologyBefore": {
+          "DirectionalLight": 1,
+          "SpotLight": 1,
+          "PointLight": 8
+        },
+        "outageSwapCpuMs": 3.0533269999996264,
+        "lightTopologyAfter": {
+          "PointLight": 1
+        },
+        "corridorLightAnimationCpu": {
+          "firstMs": 0.19934199999988778,
+          "repeatP95Ms": 0.008436000000074273,
+          "maxMs": 0.19934199999988778,
+          "count": 240
+        },
+        "doorRays": [
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.2314831738315586,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.2678817157830606,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.3042802577345618,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6314831738315587,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6678817157830608,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.7042802577345619,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.131670240245096,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1685168261684415,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": 0,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0952716982935948,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1321182842169395,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0588731563420932,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.0957197422654383,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.3829499549313538,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.5735672908987144,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.7641846268660746,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.7829499549313543,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.9735672908987145,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1641846268660752,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.9689504042832913,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.0170500450686464,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": 0,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.7783330683159302,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.8264327091012853,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.5877157323485704,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6358153731339256,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": 0,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": []
+          }
+        ],
+        "geometryBufferBytes": 37429706,
+        "blindMaterials": [
+          [
+            {
+              "type": "MeshStandardMaterial",
+              "name": "M_MainParts",
+              "emissive": 0,
+              "intensity": 1
+            }
+          ],
+          [
+            {
+              "type": "MeshStandardMaterial",
+              "name": "M_MainParts",
+              "emissive": 0,
+              "intensity": 1
+            }
+          ]
+        ]
+      },
+      {
+        "limitation": "CPU only, real shipped geometry/material definitions and Rapier; inert images/2D canvas; no WebGL, network or full character runtime.",
+        "apartmentCompressedBytes": 69123066,
+        "decompressionCpuMs": 536.788912,
+        "binaryDecodeCpuMs": 203.77973100000008,
+        "objectAssemblyCpuMs": 29.456587999999897,
+        "apartmentConstructCpuMs": 94.01960499999996,
+        "apartmentPrepareWallMs": 2311.4488579999997,
+        "apartmentPrepareMaxTaskGapMs": 40.101720000000114,
+        "stairwellConstructCpuMs": 175.27445699999998,
+        "shellCollidersCpuMs": 13.14017899999999,
+        "furnitureCollidersCpuMs": 0.6998479999997471,
+        "allPropsMountCpuMs": 188.481452,
+        "corridorConstructCpuMs": 3.5383539999997993,
+        "doorOpeningCpu": {
+          "firstMs": 5.917558999999983,
+          "repeatP95Ms": 0.43561399999998685,
+          "maxMs": 5.917558999999983,
+          "count": 150
+        },
+        "stairClimbCpu": {
+          "firstMs": 4.472559000000274,
+          "repeatP95Ms": 0.5348300000000563,
+          "maxMs": 4.472559000000274,
+          "count": 240
+        },
+        "stairClimbEnd": [
+          -1.050133466720581,
+          2.3049886226654053,
+          2.8457398414611816
+        ],
+        "whiskyReachable": true,
+        "whiskyTargetCpu": {
+          "firstMs": 7.224542999999812,
+          "repeatP95Ms": 9.99090299999989,
+          "maxMs": 12.744489000000613,
+          "count": 60
+        },
+        "whiskyGrabCpu": {
+          "firstMs": 7.732432000000699,
+          "repeatP95Ms": 6.6825300000000425,
+          "maxMs": 7.732432000000699,
+          "count": 2
+        },
+        "whiskyCarriedTickCpu": {
+          "firstMs": 27.224019000000226,
+          "repeatP95Ms": 22.599739000000227,
+          "maxMs": 27.224019000000226,
+          "count": 90
+        },
+        "lightTopologyBefore": {
+          "DirectionalLight": 1,
+          "SpotLight": 1,
+          "PointLight": 8
+        },
+        "outageSwapCpuMs": 2.8622000000004846,
+        "lightTopologyAfter": {
+          "PointLight": 1
+        },
+        "corridorLightAnimationCpu": {
+          "firstMs": 0.16430700000000797,
+          "repeatP95Ms": 0.008404999999584106,
+          "maxMs": 0.17151100000046426,
+          "count": 240
+        },
+        "doorRays": [
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.2314831738315586,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.2678817157830606,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.3042802577345618,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6314831738315587,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6678817157830608,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.7042802577345619,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.131670240245096,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1685168261684415,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": 0,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0952716982935948,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1321182842169395,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0588731563420932,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.0957197422654383,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.3829499549313538,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.5735672908987144,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.7641846268660746,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.7829499549313543,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.9735672908987145,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1641846268660752,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.9689504042832913,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.0170500450686464,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": 0,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.7783330683159302,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.8264327091012853,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.5877157323485704,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6358153731339256,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": 0,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": []
+          }
+        ],
+        "geometryBufferBytes": 37429706,
+        "blindMaterials": [
+          [
+            {
+              "type": "MeshStandardMaterial",
+              "name": "M_MainParts",
+              "emissive": 0,
+              "intensity": 1
+            }
+          ],
+          [
+            {
+              "type": "MeshStandardMaterial",
+              "name": "M_MainParts",
+              "emissive": 0,
+              "intensity": 1
+            }
+          ]
+        ]
+      },
+      {
+        "limitation": "CPU only, real shipped geometry/material definitions and Rapier; inert images/2D canvas; no WebGL, network or full character runtime.",
+        "apartmentCompressedBytes": 69123066,
+        "decompressionCpuMs": 546.296454,
+        "binaryDecodeCpuMs": 193.57634600000006,
+        "objectAssemblyCpuMs": 22.902995000000033,
+        "apartmentConstructCpuMs": 119.3470319999999,
+        "apartmentPrepareWallMs": 2192.600495,
+        "apartmentPrepareMaxTaskGapMs": 18.03113099999996,
+        "stairwellConstructCpuMs": 218.72376600000007,
+        "shellCollidersCpuMs": 12.873991999999816,
+        "furnitureCollidersCpuMs": 0.582358000000113,
+        "allPropsMountCpuMs": 97.38448199999993,
+        "corridorConstructCpuMs": 3.4506099999998696,
+        "doorOpeningCpu": {
+          "firstMs": 4.285087999999632,
+          "repeatP95Ms": 0.4422170000002552,
+          "maxMs": 4.285087999999632,
+          "count": 150
+        },
+        "stairClimbCpu": {
+          "firstMs": 4.030621999999767,
+          "repeatP95Ms": 0.4655400000001464,
+          "maxMs": 4.030621999999767,
+          "count": 240
+        },
+        "stairClimbEnd": [
+          -1.050133466720581,
+          2.3049886226654053,
+          2.8457398414611816
+        ],
+        "whiskyReachable": true,
+        "whiskyTargetCpu": {
+          "firstMs": 7.112340000000131,
+          "repeatP95Ms": 8.511825999999928,
+          "maxMs": 10.338780999999926,
+          "count": 60
+        },
+        "whiskyGrabCpu": {
+          "firstMs": 6.776182999999946,
+          "repeatP95Ms": 5.92229800000041,
+          "maxMs": 6.776182999999946,
+          "count": 2
+        },
+        "whiskyCarriedTickCpu": {
+          "firstMs": 23.60436000000027,
+          "repeatP95Ms": 19.663587000000007,
+          "maxMs": 23.60436000000027,
+          "count": 90
+        },
+        "lightTopologyBefore": {
+          "DirectionalLight": 1,
+          "SpotLight": 1,
+          "PointLight": 8
+        },
+        "outageSwapCpuMs": 3.0307140000004438,
+        "lightTopologyAfter": {
+          "PointLight": 1
+        },
+        "corridorLightAnimationCpu": {
+          "firstMs": 0.2035200000000259,
+          "repeatP95Ms": 0.015239000000292435,
+          "maxMs": 0.2035200000000259,
+          "count": 240
+        },
+        "doorRays": [
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.2314831738315586,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.2678817157830606,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.3042802577345618,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6314831738315587,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6678817157830608,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.7042802577345619,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.131670240245096,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1685168261684415,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": 0,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0952716982935948,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1321182842169395,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0588731563420932,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.0957197422654383,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.3829499549313538,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.5735672908987144,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.7641846268660746,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.7829499549313543,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.9735672908987145,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1641846268660752,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.9689504042832913,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.0170500450686464,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": 0,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.7783330683159302,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.8264327091012853,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.5877157323485704,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6358153731339256,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 1.2099999904632568,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "static-batch-exterior-facade",
+                "distance": 0.6099999904632569,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": 0,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": []
+          }
+        ],
+        "geometryBufferBytes": 37429706,
+        "blindMaterials": [
+          [
+            {
+              "type": "MeshStandardMaterial",
+              "name": "M_MainParts",
+              "emissive": 0,
+              "intensity": 1
+            }
+          ],
+          [
+            {
+              "type": "MeshStandardMaterial",
+              "name": "M_MainParts",
+              "emissive": 0,
+              "intensity": 1
+            }
+          ]
+        ]
+      }
+    ],
+    "after": [
+      {
+        "limitation": "CPU only, real shipped geometry/material definitions and Rapier; inert images/2D canvas; no WebGL, network or full character runtime.",
+        "apartmentCompressedBytes": 61909258,
+        "decompressionCpuMs": 436.02722199999994,
+        "binaryDecodeCpuMs": 169.78459299999997,
+        "objectAssemblyCpuMs": 21.747344999999996,
+        "apartmentConstructCpuMs": 97.07973100000004,
+        "apartmentPrepareWallMs": 415.10821699999997,
+        "apartmentPrepareMaxTaskGapMs": 10.895704000000023,
+        "stairwellConstructCpuMs": 199.76515900000004,
+        "shellCollidersCpuMs": 14.215218999999934,
+        "furnitureCollidersCpuMs": 0.6067839999998341,
+        "allPropsMountCpuMs": 109.88388099999997,
+        "corridorConstructCpuMs": 2.7789840000000368,
+        "doorOpeningCpu": {
+          "firstMs": 3.9379409999999098,
+          "repeatP95Ms": 0.4537880000000314,
+          "maxMs": 3.9379409999999098,
+          "count": 150
+        },
+        "stairClimbCpu": {
+          "firstMs": 3.473602000000028,
+          "repeatP95Ms": 0.42975400000000263,
+          "maxMs": 3.473602000000028,
+          "count": 240
+        },
+        "stairClimbEnd": [
+          -1.050133466720581,
+          2.3049886226654053,
+          2.8457398414611816
+        ],
+        "whiskyReachable": true,
+        "whiskyTargetCpu": {
+          "firstMs": 1.0794579999999314,
+          "repeatP95Ms": 0.8050339999999778,
+          "maxMs": 1.1181699999999637,
+          "count": 60
+        },
+        "whiskyGrabCpu": {
+          "firstMs": 4.5605299999999716,
+          "repeatP95Ms": 0.838657000000012,
+          "maxMs": 4.5605299999999716,
+          "count": 2
+        },
+        "whiskyCarriedTickCpu": {
+          "firstMs": 4.111544999999978,
+          "repeatP95Ms": 1.4196629999999004,
+          "maxMs": 4.111544999999978,
+          "count": 90
+        },
+        "lightTopologyBefore": {
+          "DirectionalLight": 1,
+          "SpotLight": 1,
+          "PointLight": 8
+        },
+        "outageSwapCpuMs": 2.486517000000049,
+        "lightTopologyAfter": {
+          "DirectionalLight": 1,
+          "SpotLight": 1,
+          "PointLight": 8
+        },
+        "corridorLightAnimationCpu": {
+          "firstMs": 0.3214299999999639,
+          "repeatP95Ms": 0.0071029999999154825,
+          "maxMs": 0.3214299999999639,
+          "count": 240
+        },
+        "doorRays": [
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.2314831738315586,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.2683297597549041,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.2678817157830606,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.3047283017064053,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.3042802577345618,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.341126843657907,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6314831738315587,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.6683297597549043,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6678817157830608,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.7047283017064054,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.7042802577345619,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.741126843657907,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.131670240245096,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1685168261684415,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": 0,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0952716982935948,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1321182842169395,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0588731563420932,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.0957197422654383,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.3829499549313538,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.4310495957167089,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.5735672908987144,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.6216669316840695,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.7641846268660746,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.8122842676514297,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.7829499549313543,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.8310495957167094,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.9735672908987145,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0216669316840696,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1641846268660752,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.2122842676514303,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.9689504042832913,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.0170500450686464,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": 0,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.7783330683159302,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.8264327091012853,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.5877157323485704,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6358153731339256,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": 0,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": 0,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": 0,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": []
+          }
+        ],
+        "geometryBufferBytes": 37429706,
+        "blindMaterials": [
+          [
+            {
+              "type": "MeshStandardMaterial",
+              "name": "apartment-blind-cloth-light-responsive",
+              "emissive": 0,
+              "intensity": 0
+            }
+          ],
+          [
+            {
+              "type": "MeshStandardMaterial",
+              "name": "apartment-blind-cloth-light-responsive",
+              "emissive": 0,
+              "intensity": 0
+            }
+          ]
+        ]
+      },
+      {
+        "limitation": "CPU only, real shipped geometry/material definitions and Rapier; inert images/2D canvas; no WebGL, network or full character runtime.",
+        "apartmentCompressedBytes": 61909258,
+        "decompressionCpuMs": 394.49507600000004,
+        "binaryDecodeCpuMs": 171.16325099999995,
+        "objectAssemblyCpuMs": 21.839698,
+        "apartmentConstructCpuMs": 83.718659,
+        "apartmentPrepareWallMs": 391.37588200000005,
+        "apartmentPrepareMaxTaskGapMs": 13.199998999999934,
+        "stairwellConstructCpuMs": 200.21251600000005,
+        "shellCollidersCpuMs": 12.863632000000052,
+        "furnitureCollidersCpuMs": 0.45179399999983616,
+        "allPropsMountCpuMs": 117.32587200000012,
+        "corridorConstructCpuMs": 2.2662659999998596,
+        "doorOpeningCpu": {
+          "firstMs": 4.226750000000038,
+          "repeatP95Ms": 0.4567930000000615,
+          "maxMs": 4.226750000000038,
+          "count": 150
+        },
+        "stairClimbCpu": {
+          "firstMs": 3.5562059999999747,
+          "repeatP95Ms": 0.4031640000000607,
+          "maxMs": 3.5562059999999747,
+          "count": 240
+        },
+        "stairClimbEnd": [
+          -1.050133466720581,
+          2.3049886226654053,
+          2.8457398414611816
+        ],
+        "whiskyReachable": true,
+        "whiskyTargetCpu": {
+          "firstMs": 1.0669640000000982,
+          "repeatP95Ms": 0.6600139999998191,
+          "maxMs": 3.3864790000000085,
+          "count": 60
+        },
+        "whiskyGrabCpu": {
+          "firstMs": 0.7707409999998163,
+          "repeatP95Ms": 0.16810499999996864,
+          "maxMs": 0.7707409999998163,
+          "count": 2
+        },
+        "whiskyCarriedTickCpu": {
+          "firstMs": 3.245775999999978,
+          "repeatP95Ms": 0.9036489999998594,
+          "maxMs": 3.245775999999978,
+          "count": 90
+        },
+        "lightTopologyBefore": {
+          "DirectionalLight": 1,
+          "SpotLight": 1,
+          "PointLight": 8
+        },
+        "outageSwapCpuMs": 2.0664120000001276,
+        "lightTopologyAfter": {
+          "DirectionalLight": 1,
+          "SpotLight": 1,
+          "PointLight": 8
+        },
+        "corridorLightAnimationCpu": {
+          "firstMs": 0.15764500000000226,
+          "repeatP95Ms": 0.007644999999911306,
+          "maxMs": 0.15764500000000226,
+          "count": 240
+        },
+        "doorRays": [
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.2314831738315586,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.2683297597549041,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.2678817157830606,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.3047283017064053,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.3042802577345618,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.341126843657907,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6314831738315587,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.6683297597549043,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6678817157830608,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.7047283017064054,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.7042802577345619,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.741126843657907,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.131670240245096,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1685168261684415,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": 0,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0952716982935948,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1321182842169395,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0588731563420932,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.0957197422654383,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.3829499549313538,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.4310495957167089,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.5735672908987144,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.6216669316840695,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.7641846268660746,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.8122842676514297,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.7829499549313543,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.8310495957167094,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.9735672908987145,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0216669316840696,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1641846268660752,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.2122842676514303,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.9689504042832913,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.0170500450686464,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": 0,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.7783330683159302,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.8264327091012853,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.5877157323485704,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6358153731339256,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": 0,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": 0,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": 0,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": []
+          }
+        ],
+        "geometryBufferBytes": 37429706,
+        "blindMaterials": [
+          [
+            {
+              "type": "MeshStandardMaterial",
+              "name": "apartment-blind-cloth-light-responsive",
+              "emissive": 0,
+              "intensity": 0
+            }
+          ],
+          [
+            {
+              "type": "MeshStandardMaterial",
+              "name": "apartment-blind-cloth-light-responsive",
+              "emissive": 0,
+              "intensity": 0
+            }
+          ]
+        ]
+      },
+      {
+        "limitation": "CPU only, real shipped geometry/material definitions and Rapier; inert images/2D canvas; no WebGL, network or full character runtime.",
+        "apartmentCompressedBytes": 61909258,
+        "decompressionCpuMs": 431.503565,
+        "binaryDecodeCpuMs": 181.256214,
+        "objectAssemblyCpuMs": 37.242035999999985,
+        "apartmentConstructCpuMs": 107.4314159999999,
+        "apartmentPrepareWallMs": 403.180658,
+        "apartmentPrepareMaxTaskGapMs": 16.691717000000153,
+        "stairwellConstructCpuMs": 186.58027100000004,
+        "shellCollidersCpuMs": 13.35927700000002,
+        "furnitureCollidersCpuMs": 0.4446419999999307,
+        "allPropsMountCpuMs": 117.964835,
+        "corridorConstructCpuMs": 2.487028999999893,
+        "doorOpeningCpu": {
+          "firstMs": 4.131351999999879,
+          "repeatP95Ms": 0.4083530000000337,
+          "maxMs": 4.131351999999879,
+          "count": 150
+        },
+        "stairClimbCpu": {
+          "firstMs": 3.687351999999919,
+          "repeatP95Ms": 0.568623000000116,
+          "maxMs": 3.687351999999919,
+          "count": 240
+        },
+        "stairClimbEnd": [
+          -1.050133466720581,
+          2.3049886226654053,
+          2.8457398414611816
+        ],
+        "whiskyReachable": true,
+        "whiskyTargetCpu": {
+          "firstMs": 1.055782999999792,
+          "repeatP95Ms": 0.6508260000000519,
+          "maxMs": 1.276004999999941,
+          "count": 60
+        },
+        "whiskyGrabCpu": {
+          "firstMs": 1.183420999999953,
+          "repeatP95Ms": 0.34610700000007455,
+          "maxMs": 1.183420999999953,
+          "count": 2
+        },
+        "whiskyCarriedTickCpu": {
+          "firstMs": 5.213524000000007,
+          "repeatP95Ms": 1.536542000000054,
+          "maxMs": 5.213524000000007,
+          "count": 90
+        },
+        "lightTopologyBefore": {
+          "DirectionalLight": 1,
+          "SpotLight": 1,
+          "PointLight": 8
+        },
+        "outageSwapCpuMs": 2.015185999999858,
+        "lightTopologyAfter": {
+          "DirectionalLight": 1,
+          "SpotLight": 1,
+          "PointLight": 8
+        },
+        "corridorLightAnimationCpu": {
+          "firstMs": 0.2996299999999792,
+          "repeatP95Ms": 0.012512999999898966,
+          "maxMs": 0.2996299999999792,
+          "count": 240
+        },
+        "doorRays": [
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.2314831738315586,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.2683297597549041,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.2678817157830606,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.3047283017064053,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.3042802577345618,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.341126843657907,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6314831738315587,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.6683297597549043,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6678817157830608,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.7047283017064054,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.7042802577345619,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.741126843657907,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.131670240245096,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1685168261684415,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": 0,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0952716982935948,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1321182842169395,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.15,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0588731563420932,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.0957197422654383,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.3829499549313538,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.4310495957167089,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": 0,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.5735672908987144,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.6216669316840695,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.7641846268660746,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.8122842676514297,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.7829499549313543,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.8310495957167094,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": 0,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.9735672908987145,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.0216669316840696,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.1641846268660752,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 1.2122842676514303,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.9689504042832913,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 1.0170500450686464,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": 0,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.7783330683159302,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.8264327091012853,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -0.7,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": [
+              {
+                "name": "DOOR_M_MainParts_0",
+                "distance": 0.5877157323485704,
+                "material": "MeshStandardMaterial"
+              },
+              {
+                "name": "front-door-authored-back-face",
+                "distance": 0.6358153731339256,
+                "material": "MeshStandardMaterial"
+              }
+            ]
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": -0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": 0,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -0.8,
+            "z": 0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": -0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": 0,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -1.4,
+            "z": 0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": -0.22,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": 0,
+            "hits": []
+          },
+          {
+            "angle": -1.6336281798666925,
+            "x": -3.2,
+            "z": 0.22,
+            "hits": []
+          }
+        ],
+        "geometryBufferBytes": 37429706,
+        "blindMaterials": [
+          [
+            {
+              "type": "MeshStandardMaterial",
+              "name": "apartment-blind-cloth-light-responsive",
+              "emissive": 0,
+              "intensity": 0
+            }
+          ],
+          [
+            {
+              "type": "MeshStandardMaterial",
+              "name": "apartment-blind-cloth-light-responsive",
+              "emissive": 0,
+              "intensity": 0
+            }
+          ]
+        ]
+      }
+    ]
+  },
+  "saveCompatibility": {
+    "schemaVersionUnchanged": 2,
+    "allPickableIdentitiesUnchanged": true,
+    "pickables": 89,
+    "furnitureColliderIdentitiesUnchanged": true,
+    "doorBoundsAndBlindScalesUnchanged": true,
+    "identitiesSha256": "e40a8a7f2bb9253c6a8d95fb4539c79d7f5f226dc34e1b7c8166deb2fa35f115"
+  },
+  "validation": {
+    "unitAssertionsPassedAcrossSuiteAndReruns": 902,
+    "characterAssertionsPassed": 663,
+    "initialUnitRun": {
+      "passed": 897,
+      "timedOut": 2,
+      "suiteImportFailure": 1
+    },
+    "reruns": {
+      "RegionalArchitecture": {
+        "passed": 1,
+        "durationMs": 24860
+      },
+      "RegionalPhysical": {
+        "passed": 1,
+        "durationMs": 79280
+      },
+      "RuntimeInputLifecycle": {
+        "passed": 3,
+        "note": "Updated stale test isolation for the previously added apartment systems; the same import failure was reproduced on baseline source."
+      }
+    },
+    "build": "passed: TypeScript, Vite, hashes/size of all apartment pack parts, entry and wardrobe asset checks",
+    "saveCompatibility": "original save schema version and stable identities retained",
+    "browserQa": "unavailable: WebGL context creation fails with GL_RENDERER=Disabled; managed preview daemon unavailable"
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "node": "v24.19.0",
+  "seeds": [
+    "VERTICAL-PROMPT-AUDIT-0",
+    "VERTICAL-PROMPT-AUDIT-1",
+    "VERTICAL-PROMPT-AUDIT-2",
+    "VERTICAL-PROMPT-AUDIT-3",
+    "VERTICAL-PROMPT-AUDIT-4",
+    "VERTICAL-PROMPT-AUDIT-5",
+    "VERTICAL-PROMPT-AUDIT-6",
+    "VERTICAL-PROMPT-AUDIT-7",
+    "VERTICAL-PROMPT-AUDIT-8",
+    "VERTICAL-PROMPT-AUDIT-9",
+    "VERTICAL-PROMPT-AUDIT-10",
+    "VERTICAL-PROMPT-AUDIT-11",
+    "VERTICAL-PROMPT-AUDIT-12",
+    "VERTICAL-PROMPT-AUDIT-13",
+    "VERTICAL-PROMPT-AUDIT-14",
+    "VERTICAL-PROMPT-AUDIT-15",
+    "VERTICAL-PROMPT-AUDIT-16",
+    "VERTICAL-PROMPT-AUDIT-17",
+    "VERTICAL-PROMPT-AUDIT-18",
+    "VERTICAL-PROMPT-AUDIT-19",
+    "VERTICAL-PROMPT-AUDIT-20",
+    "VERTICAL-PROMPT-AUDIT-21",
+    "VERTICAL-PROMPT-AUDIT-22",
+    "VERTICAL-PROMPT-AUDIT-23"
+  ],
+  "startupMs": 104.162591,
+  "modes": {
+    "cold-modern": {
+      "generationMs": {
+        "median": 488.50866399999904,
+        "p95": 628.7728349999998
+      },
+      "bakeMs": {
+        "median": 0.006138999999848238,
+        "p95": 0.014051000000108615
+      },
+      "roundTripMs": {
+        "median": 492.83174899999904,
+        "p95": 635.5183260000003
+      },
+      "transferAndDispatchMs": {
+        "median": 4.452586999999767,
+        "p95": 8.323555000000852
+      },
+      "heapBytes": {
+        "median": 64881960,
+        "p95": 92889136
+      },
+      "clonedBytes": {
+        "median": 541925,
+        "p95": 810374
+      }
+    },
+    "warm-modern": {
+      "generationMs": {
+        "median": 84.22278599999845,
+        "p95": 133.71535499999845
+      },
+      "bakeMs": {
+        "median": 0.0025840000016614795,
+        "p95": 0.003023999997822102
+      },
+      "roundTripMs": {
+        "median": 88.74556600000142,
+        "p95": 138.92250200000126
+      },
+      "transferAndDispatchMs": {
+        "median": 4.396319999999832,
+        "p95": 6.778893999999127
+      },
+      "heapBytes": {
+        "median": 69758424,
+        "p95": 103676832
+      },
+      "clonedBytes": {
+        "median": 541925,
+        "p95": 810374
+      }
+    },
+    "cold-legacy": {
+      "generationMs": {
+        "median": 460.35059999999794,
+        "p95": 540.5727190000034
+      },
+      "bakeMs": {
+        "median": 692.0287470000039,
+        "p95": 1093.0672689999992
+      },
+      "roundTripMs": {
+        "median": 1186.8117330000023,
+        "p95": 1567.6098979999952
+      },
+      "transferAndDispatchMs": {
+        "median": 5.271827000004123,
+        "p95": 10.342358000001695
+      },
+      "heapBytes": {
+        "median": 70972272,
+        "p95": 97757112
+      },
+      "clonedBytes": {
+        "median": 541925,
+        "p95": 810374
+      }
+    }
+  },
+  "limitation": "Node worker_threads CPU/structured-clone proxy; no browser Worker scheduling, GPU, draw calls or frame latency."
+}

@@ -1,0 +1,16 @@
+.narrative-caption {
+  position: fixed;
+  bottom: clamp(6.2rem, 13vh, 9rem);
+  left: 50%;
+  z-index: 1811;
+  width: min(86vw, 48rem);
+  transform: translateX(-50%);
+  color: #efeee7;
+  font: 400 clamp(.95rem, 1.45vw, 1.2rem)/1.7 'JetBrains Mono Variable', monospace;
+  text-align: center;
+  text-wrap: balance;
+  text-shadow: 0 2px 5px #000, 0 0 22px #000;
+  pointer-events: none;
+}
+.narrative-caption[hidden] { display: none; }
+.narrative-caption-announcement { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

@@ -1,0 +1,96 @@
+{
+  "generatedAt": "2026-08-18T15:27:36.587Z",
+  "renderer": "MakeHuman runtime / breathing-pose",
+  "files": [
+    {
+      "id": "thomas",
+      "name": "Thomas",
+      "file": "previews/thomas.webp"
+    },
+    {
+      "id": "emma",
+      "name": "Emma",
+      "file": "previews/emma.webp"
+    },
+    {
+      "id": "lucas",
+      "name": "Lucas",
+      "file": "previews/lucas.webp"
+    },
+    {
+      "id": "claire",
+      "name": "Claire",
+      "file": "previews/claire.webp"
+    },
+    {
+      "id": "kenji",
+      "name": "Kenji",
+      "file": "previews/kenji.webp"
+    },
+    {
+      "id": "mei",
+      "name": "Mei",
+      "file": "previews/mei.webp"
+    },
+    {
+      "id": "diego",
+      "name": "Diego",
+      "file": "previews/diego.webp"
+    },
+    {
+      "id": "sofia",
+      "name": "Sofia",
+      "file": "previews/sofia.webp"
+    },
+    {
+      "id": "julien",
+      "name": "Julien",
+      "file": "previews/julien.webp"
+    },
+    {
+      "id": "lea",
+      "name": "Léa",
+      "file": "previews/lea.webp"
+    },
+    {
+      "id": "minho",
+      "name": "Minho",
+      "file": "previews/minho.webp"
+    },
+    {
+      "id": "valentina",
+      "name": "Valentina",
+      "file": "previews/valentina.webp"
+    },
+    {
+      "id": "malik",
+      "name": "Malik",
+      "file": "previews/malik.webp"
+    },
+    {
+      "id": "nia",
+      "name": "Nia",
+      "file": "previews/nia.webp"
+    },
+    {
+      "id": "amara",
+      "name": "Amara",
+      "file": "previews/amara.webp"
+    },
+    {
+      "id": "vincent",
+      "name": "Vincent",
+      "file": "previews/vincent.webp"
+    },
+    {
+      "id": "aicha",
+      "name": "Aïcha",
+      "file": "previews/aicha.webp"
+    },
+    {
+      "id": "hana",
+      "name": "Hana",
+      "file": "previews/hana.webp"
+    }
+  ]
+}

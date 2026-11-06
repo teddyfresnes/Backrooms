@@ -1,0 +1,21 @@
+import * as THREE from 'three';
+import { expect, it, vi } from 'vitest';
+vi.mock('@dimforge/rapier3d', () => ({ default: { Ray: class {} } }));
+import { ApartmentComputerInteraction } from './ApartmentComputerInteraction';
+import type { PhysicsWorld } from '../physics/PhysicsWorld';
+it('uses the real monitor mesh, respects walls, distance and visibility, and cleans up its prompt', () => {
+  const target = new THREE.Mesh(new THREE.BoxGeometry(.5, .4, .3), new THREE.MeshBasicMaterial());
+  target.position.set(0, 1.6, -1.3); target.updateMatrixWorld(true);
+  const camera = new THREE.PerspectiveCamera(); camera.position.set(0, 1.6, 0); camera.updateMatrixWorld();
+  const castRay = vi.fn<() => { timeOfImpact: number } | null>(() => null);
+  const physics = { world: { castRay }, isEnvironmentCollider: () => true } as unknown as PhysicsWorld;
+  const ui = { setInteraction: vi.fn() }, open = vi.fn();
+  const interaction = new ApartmentComputerInteraction(target, camera, physics, ui, open);
+  interaction.update(.1, true); expect(ui.setInteraction).toHaveBeenLastCalledWith('Utiliser le PC');
+  expect(interaction.interact()).toBe(true); expect(open).toHaveBeenCalledOnce();
+  castRay.mockReturnValue({ timeOfImpact: .3 }); expect(interaction.interact()).toBe(false);
+  castRay.mockReturnValue(null); camera.position.z = 4; expect(interaction.interact()).toBe(false);
+  camera.position.z = 0; target.visible = false; expect(interaction.interact()).toBe(false);
+  target.visible = true; interaction.update(.1, true); interaction.dispose(); expect(ui.setInteraction).toHaveBeenLastCalledWith(null);
+  target.geometry.dispose(); (target.material as THREE.Material).dispose();
+});

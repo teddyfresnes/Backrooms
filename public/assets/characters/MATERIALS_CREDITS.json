@@ -1,0 +1,166 @@
+{
+  "skins": [
+    {
+      "id": "mh-skin-blindsaypatten_uniform_skin_texture",
+      "label": "Uniforme Texture",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-bobby_03_young_female_hairless",
+      "label": "03 Jeune Femme Naturelle",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-callharvey3d_midtoned_female",
+      "label": "Médium Femme",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-cutoff3d_indian_female_enhanced",
+      "label": "Indienne Femme Détaillée",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-cutoff3d_indian_female_skin",
+      "label": "Indienne Femme",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-darthfurby_caucasian_female",
+      "label": "Claire Femme",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-flower-angel_red_head_skin",
+      "label": "Rouge Rousse",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-nyloseth_zoeyskin",
+      "label": "Zoey",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-onlytheghosts_middle_aged_eurasian_female",
+      "label": "Mature Eurasienne Femme",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-onlytheghosts_old_eurasian_female",
+      "label": "Ancien Eurasienne Femme",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-onlytheghosts_young_eurasian_female",
+      "label": "Jeune Eurasienne Femme",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-saltycowdawg_genuine_caucasian_female_with_genitals",
+      "label": "Naturelle Claire Femme",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-skalldyrssuppe_creamy_female",
+      "label": "Crème Femme",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-spreadcore_alana_caucasian_female_with_genitals_skin",
+      "label": "Alana Claire Femme",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_female_bronze",
+      "label": "Clair Femme Bronzé",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_female_bronze_with_makeup",
+      "label": "Clair Femme Bronzé Maquillage",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_female_freckles",
+      "label": "Clair Femme Taches de rousseur",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_female_ginger",
+      "label": "Clair Femme Roux",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_female_ginger_2",
+      "label": "Clair Femme Roux 2",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_female_ginger_with_makeup",
+      "label": "Clair Femme Roux Maquillage",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_female_with_violet_makeup",
+      "label": "Clair Femme Violet Maquillage",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_with_makeup",
+      "label": "Clair Maquillage",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-skin-toigo_light_skin_with_natural_makeup",
+      "label": "Clair Naturel Maquillage",
+      "license": "CC0"
+    }
+  ],
+  "hairMaterialFamiliesExposed": [
+    "braid01",
+    "long01",
+    "short02"
+  ],
+  "beards": [
+    {
+      "id": "mh-beard-culturalibre_faun_beard",
+      "label": "Barbe faune",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-beard-grinsegold_beard_sigmund_wip",
+      "label": "Barbe Sigmund",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-beard-rehmanpolanski_beard_viking",
+      "label": "Barbe viking",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-beard-rehmanpolanski_moustache_viking",
+      "label": "Moustache viking",
+      "license": "CC0"
+    },
+    {
+      "id": "mh-beard-wdg_scruffy_beard",
+      "label": "Barbe courte",
+      "license": "CC0"
+    }
+  ],
+  "hairMaterialFamiliesProvided": {
+    "braid01": 10,
+    "long01": 10,
+    "ponytail01": 9,
+    "short02": 6,
+    "short04": 8,
+    "bob01": 8,
+    "bob02": 13,
+    "short01": 3
+  },
+  "hairMaterialFamiliesIncluded": {
+    "braid01": 10,
+    "long01": 10,
+    "short02": 6
+  }
+}

@@ -1,0 +1,24 @@
+# MakeHuman Material definition
+
+name lightfemaleskinMaterial
+
+// Color shading attributes
+diffuseColor  1 0.95 0.85
+specularColor  0.02745 0.02745 0.02745
+shininess 1
+opacity 0
+
+// Textures and properties
+diffuseTexture young_lightskinned_female_diffuse_ginger.webp
+
+// Shader programme
+shader data/shaders/glsl/phong
+shaderParam litsphereTexture data/litspheres/lit_standard_skin.png
+
+// Configure built-in shader defines
+shaderConfig diffuse true
+shaderConfig bump false
+shaderConfig normal  false
+shaderConfig displacement  false
+shaderConfig spec  false
+shaderConfig vertexColors false

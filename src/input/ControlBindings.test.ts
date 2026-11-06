@@ -1,0 +1,61 @@
+import { describe, expect, it } from 'vitest';
+import {
+  controlCodeFromKeyboardEvent,
+  defaultControlBindings,
+  detectKeyboardPreset,
+  formatKeyLabel,
+  remapControlBinding,
+  sanitizeControlBindings,
+} from './ControlBindings';
+
+describe('control bindings', () => {
+  it('provides complete AZERTY and QWERTY presets', () => {
+    const azerty = defaultControlBindings('azerty');
+    const qwerty = defaultControlBindings('qwerty');
+
+    expect(azerty).toMatchObject({ forward: 'KeyZ', left: 'KeyQ' });
+    expect(qwerty).toMatchObject({ forward: 'KeyW', left: 'KeyA' });
+    expect(detectKeyboardPreset(azerty)).toBe('azerty');
+    expect(detectKeyboardPreset(qwerty)).toBe('qwerty');
+  });
+
+  it('keeps valid custom bindings and rejects incomplete or conflicting data', () => {
+    const custom = { ...defaultControlBindings(), interact: 'KeyF' };
+
+    expect(sanitizeControlBindings(custom)).toEqual(custom);
+    expect(detectKeyboardPreset(custom)).toBeNull();
+    expect(sanitizeControlBindings({ ...custom, jump: 'KeyF' })).toEqual(defaultControlBindings());
+    expect(sanitizeControlBindings({ ...custom, crouch: 'ShiftRight' })).toEqual(defaultControlBindings());
+    expect(sanitizeControlBindings({ interact: 'KeyF' })).toEqual(defaultControlBindings());
+  });
+
+  it('formats physical keyboard codes for the menu', () => {
+    expect(formatKeyLabel('KeyZ')).toBe('Z');
+    expect(formatKeyLabel('Space')).toBe('Espace');
+    expect(formatKeyLabel('ControlRight')).toBe('Ctrl');
+    expect(formatKeyLabel('ArrowUp')).toBe('↑');
+  });
+
+  it('uses the typed letter for alphabetic bindings across keyboard layouts', () => {
+    expect(controlCodeFromKeyboardEvent({ code: 'KeyW', key: 'z' })).toBe('KeyZ');
+    expect(controlCodeFromKeyboardEvent({ code: 'KeyA', key: 'q' })).toBe('KeyQ');
+    expect(controlCodeFromKeyboardEvent({ code: 'KeyW', key: 'w' })).toBe('KeyW');
+    expect(controlCodeFromKeyboardEvent({ code: 'Space', key: ' ' })).toBe('Space');
+  });
+
+  it('swaps occupied keys instead of creating a conflict', () => {
+    const original = defaultControlBindings();
+    const result = remapControlBinding(original, 'jump', 'KeyE');
+
+    expect(result.swappedAction).toBe('interact');
+    expect(result.bindings.jump).toBe('KeyE');
+    expect(result.bindings.interact).toBe('Space');
+    expect(original.jump).toBe('Space');
+  });
+  it('keeps permanent alternatives and pause from being reassigned to a conflicting action',()=>{
+    const original=defaultControlBindings();
+    for(const [action,code]of [['forward','ControlRight'],['jump','Numpad0'],['left','ArrowUp'],['interact','KeyP']] as const)
+      expect(remapControlBinding(original,action,code).bindings).toEqual(original);
+    expect(remapControlBinding(original,'jump','ControlRight').bindings.jump).toBe('ControlRight');
+  });
+});

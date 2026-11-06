@@ -1,0 +1,527 @@
+{
+  "baseline": "/workspace/scratch/6fa16f3b1be0/Backrooms-finishes-baseline",
+  "records": [
+    {
+      "seed": "WALL-FINISH-HOLDOUT-0",
+      "address": {
+        "x": -1,
+        "z": -1,
+        "story": -2
+      },
+      "spatial": true,
+      "walls": 302,
+      "rooms": 146,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 13854,
+      "batches": 9,
+      "baseboards": 877,
+      "finishProbes": 27,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-1",
+      "address": {
+        "x": 0,
+        "z": -1,
+        "story": -1
+      },
+      "spatial": true,
+      "walls": 306,
+      "rooms": 139,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 14641,
+      "batches": 9,
+      "baseboards": 902,
+      "finishProbes": 25,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-2",
+      "address": {
+        "x": 1,
+        "z": -1,
+        "story": 0
+      },
+      "spatial": true,
+      "walls": 252,
+      "rooms": 109,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 12989,
+      "batches": 9,
+      "baseboards": 686,
+      "finishProbes": 25,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-3",
+      "address": {
+        "x": -1,
+        "z": 0,
+        "story": 1
+      },
+      "spatial": true,
+      "walls": 298,
+      "rooms": 92,
+      "bareRooms": 0,
+      "features": {
+        "squeeze-view": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 9765,
+      "batches": 9,
+      "baseboards": 588,
+      "finishProbes": 15,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-4",
+      "address": {
+        "x": 0,
+        "z": 0,
+        "story": -2
+      },
+      "spatial": true,
+      "walls": 376,
+      "rooms": 136,
+      "bareRooms": 0,
+      "features": {
+        "squeeze-view": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 17414,
+      "batches": 10,
+      "baseboards": 1019,
+      "finishProbes": 27,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-5",
+      "address": {
+        "x": 1,
+        "z": 0,
+        "story": -1
+      },
+      "spatial": true,
+      "walls": 177,
+      "rooms": 94,
+      "bareRooms": 0,
+      "features": {
+        "raised-zone": 2
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 7897,
+      "batches": 9,
+      "baseboards": 467,
+      "finishProbes": 25,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-6",
+      "address": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "spatial": true,
+      "walls": 306,
+      "rooms": 135,
+      "bareRooms": 5,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 13626,
+      "batches": 9,
+      "baseboards": 780,
+      "finishProbes": 24,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-7",
+      "address": {
+        "x": 0,
+        "z": 1,
+        "story": 1
+      },
+      "spatial": true,
+      "walls": 107,
+      "rooms": 43,
+      "bareRooms": 0,
+      "features": {
+        "raised-zone": 6
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 5694,
+      "batches": 9,
+      "baseboards": 336,
+      "finishProbes": 31,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-8",
+      "address": {
+        "x": 1,
+        "z": 1,
+        "story": -2
+      },
+      "spatial": true,
+      "walls": 222,
+      "rooms": 116,
+      "bareRooms": 0,
+      "features": {
+        "squeeze-view": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 13049,
+      "batches": 10,
+      "baseboards": 708,
+      "finishProbes": 22,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-9",
+      "address": {
+        "x": -1,
+        "z": -1,
+        "story": -1
+      },
+      "spatial": true,
+      "walls": 246,
+      "rooms": 110,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 12653,
+      "batches": 9,
+      "baseboards": 761,
+      "finishProbes": 28,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-10",
+      "address": {
+        "x": 0,
+        "z": -1,
+        "story": 0
+      },
+      "spatial": true,
+      "walls": 430,
+      "rooms": 136,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 16663,
+      "batches": 9,
+      "baseboards": 1011,
+      "finishProbes": 26,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-11",
+      "address": {
+        "x": 1,
+        "z": -1,
+        "story": 1
+      },
+      "spatial": true,
+      "walls": 284,
+      "rooms": 111,
+      "bareRooms": 0,
+      "features": {
+        "grid-pit": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 11977,
+      "batches": 9,
+      "baseboards": 691,
+      "finishProbes": 24,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-12",
+      "address": {
+        "x": -1,
+        "z": 0,
+        "story": -2
+      },
+      "spatial": true,
+      "walls": 200,
+      "rooms": 97,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 11850,
+      "batches": 9,
+      "baseboards": 629,
+      "finishProbes": 28,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-13",
+      "address": {
+        "x": 0,
+        "z": 0,
+        "story": -1
+      },
+      "spatial": true,
+      "walls": 312,
+      "rooms": 103,
+      "bareRooms": 4,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 10983,
+      "batches": 9,
+      "baseboards": 644,
+      "finishProbes": 16,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-14",
+      "address": {
+        "x": 1,
+        "z": 0,
+        "story": 0
+      },
+      "spatial": true,
+      "walls": 205,
+      "rooms": 96,
+      "bareRooms": 8,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 9536,
+      "batches": 9,
+      "baseboards": 478,
+      "finishProbes": 24,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-15",
+      "address": {
+        "x": -1,
+        "z": 1,
+        "story": 1
+      },
+      "spatial": true,
+      "walls": 54,
+      "rooms": 18,
+      "bareRooms": 0,
+      "features": {
+        "raised-zone": 10
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 4037,
+      "batches": 9,
+      "baseboards": 155,
+      "finishProbes": 30,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-16",
+      "address": {
+        "x": 0,
+        "z": 1,
+        "story": -2
+      },
+      "spatial": true,
+      "walls": 343,
+      "rooms": 125,
+      "bareRooms": 7,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 13486,
+      "batches": 9,
+      "baseboards": 778,
+      "finishProbes": 16,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-17",
+      "address": {
+        "x": 1,
+        "z": 1,
+        "story": -1
+      },
+      "spatial": true,
+      "walls": 212,
+      "rooms": 101,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 9670,
+      "batches": 9,
+      "baseboards": 592,
+      "finishProbes": 26,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-18",
+      "address": {
+        "x": -1,
+        "z": -1,
+        "story": 0
+      },
+      "spatial": true,
+      "walls": 334,
+      "rooms": 120,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 13783,
+      "batches": 9,
+      "baseboards": 847,
+      "finishProbes": 18,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-19",
+      "address": {
+        "x": 0,
+        "z": -1,
+        "story": 1
+      },
+      "spatial": true,
+      "walls": 238,
+      "rooms": 115,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 11537,
+      "batches": 9,
+      "baseboards": 701,
+      "finishProbes": 30,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-20",
+      "address": {
+        "x": 1,
+        "z": -1,
+        "story": -2
+      },
+      "spatial": true,
+      "walls": 100,
+      "rooms": 62,
+      "bareRooms": 0,
+      "features": {
+        "raised-zone": 5
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 5272,
+      "batches": 9,
+      "baseboards": 296,
+      "finishProbes": 30,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-21",
+      "address": {
+        "x": -1,
+        "z": 0,
+        "story": -1
+      },
+      "spatial": true,
+      "walls": 339,
+      "rooms": 129,
+      "bareRooms": 7,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 14916,
+      "batches": 9,
+      "baseboards": 838,
+      "finishProbes": 27,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-22",
+      "address": {
+        "x": 0,
+        "z": 0,
+        "story": 0
+      },
+      "spatial": true,
+      "walls": 306,
+      "rooms": 122,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 13644,
+      "batches": 9,
+      "baseboards": 853,
+      "finishProbes": 18,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-23",
+      "address": {
+        "x": 1,
+        "z": 0,
+        "story": 1
+      },
+      "spatial": true,
+      "walls": 298,
+      "rooms": 132,
+      "bareRooms": 8,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "openingsUnchanged": true,
+      "triangles": 13103,
+      "batches": 9,
+      "baseboards": 786,
+      "finishProbes": 24,
+      "cleanupIdempotent": true
+    }
+  ],
+  "errors": [],
+  "limitation": "CPU geometry and plan audit. No screenshot seed was supplied; the image is represented by synthetic regression fixtures. No WebGL/GPU/FPS validation."
+}

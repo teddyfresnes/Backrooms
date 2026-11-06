@@ -1,0 +1,586 @@
+[
+  {
+    "id": "mh-top-elvs_crude_t-shirt_male",
+    "label": "T-shirt homme",
+    "author": "Elvaerwyn",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1416",
+    "description": "A version of the Crude T-shirt for female models by Joel Palmius for Male Makehuman models. Basic Template included. Do as you wish with it."
+  },
+  {
+    "id": "mh-top-joepal_crude_t-shirt_female",
+    "label": "T-shirt femme",
+    "author": "Joel Palmius",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/894",
+    "description": "Seems I forgot to upload this one when I made the crude series. The crude series of clothes are intended as starting points for further development. They are mostly low-poly and intended for subdivision and may therefore look a bit clunky inside MakeHuman . Each piece comes with a plain diffuse texture where the faces have been painted plain white. If you modify or texture paint one of the pieces in this series and want to share just upload it again here as if you were the original author of it."
+  },
+  {
+    "id": "mh-top-namuhekam_male_polo_shirt",
+    "label": "Polo",
+    "author": "namuhekam",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/2909",
+    "description": "Basic polo shirt for men. Use a subdivision modifier to improve the appearance of the geometry. Also fits females with additional tweaking to the mesh. Greater deformations in extremes on muscle slider. It has not been tested in older versions of MakeHuman."
+  },
+  {
+    "id": "mh-top-skalldyrssuppe_tube_top_funky_colors",
+    "label": "Top bandeau",
+    "author": "skalldyrssuppe",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/975",
+    "description": "this is my first clothes-entry im still a beginner so it has some problems when using specialized topology if anyone know how to correct this i would really appreciate some help. the 'bump' file is not a bump its the original unwrap so you can make your own diffuse"
+  },
+  {
+    "id": "mh-top-toigo_basic_tucked_t-shirt",
+    "label": "T-shirt rentré",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1203",
+    "description": "This is a basic T-shirt with the bottom hemline scaled so that the shirt looks tucked into pants. It was made for adult male humans but will fit other average humans. A subsurf of at least two is recommended. I designed it to be worn with my Wool Pants -- seen in example pic -- http://www.makehumancommunity.org/clothes/wool_pants.html but with a little adjustment it can also be paired with other bottoms. The bump texture is needed for realism. Several other colors are in Materials. Illustration was rendered with subsurf set to two. Model Jerome is also wearing Mindfront's Shoes Monk Strap male http://www.makehumancommunity.org/clothes/shoes_monk_strap_male.html"
+  },
+  {
+    "id": "mh-top-toigo_bodice-style_top",
+    "label": "Corsage",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1667",
+    "description": "This is a bodice-style top that will fit most female humans. Some slight adjustments may be needed for senior and plus-size humans. I have included diffuse specular and normal maps and the .mhmat file should get them all imported into Blender where their properties can be adjusted according to preference and render engine. Kendra is also wearing my Tiered Skirt Mini http://www.makehumancommunity.org/clothes/tiered_skirt_mini.html "
+  },
+  {
+    "id": "mh-top-toigo_camisole_top",
+    "label": "Caraco",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1726",
+    "description": "This is a camisole-style top that will fit female and mostly female humans. It was made with Blender's cloth simulator. A diffuse texture is included. Illustration shows top with subsurf of two and some slight adjustments were made around the waist to fit the top over the skirt. Kira is also wearing Jeans skirt by punbkduck http://www.makehumancommunity.org/clothes/jeans_skirt.html ."
+  },
+  {
+    "id": "mh-top-toigo_fisherman_sweater",
+    "label": "Pull marin",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1187",
+    "description": "This is a fisherman knit sweater designed for adult males but will fit other average humans. The texture comes with a normal map which is essential to make the sweater look more sweater-like. Five other colors are available in Materials. Illustration model Hal is also wearing Mindfront's M Trousers 01 which can be found here: http://www.makehumancommunity.org/clothes/m_trousers_01.html"
+  },
+  {
+    "id": "mh-top-toigo_keyhole_tank_top",
+    "label": "Top goutte",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1606",
+    "description": "This is a keyhole style tank top that fits most female humans. It was made using Blender's cloth sewing springs. Recommended modifiers: Solidify .1 in/.25 cm -1 only rim and Subsurf 1 will do but 2 is better . Six more materials are available in Materials. Yvonne is also wearing Tight Jeans by punkduck."
+  },
+  {
+    "id": "mh-top-toigo_turtleneck_halter_top",
+    "label": "Top col roulé",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1642",
+    "description": "This is turtleneck halter top which is meant to be matched with my tiered skirt http://www.makehumancommunity.org/clothes/tiered_skirt.html but can be worn with any kind of bottoms or none at all if that's your thing . It will fit most female humans and even some males. The neck area may need slight adjusting on toddler senior and/or plus-size humans. Both the skirt and top use the same diffuse texture. Six other colors are available in Materials."
+  },
+  {
+    "id": "mh-top-elvs_hooded_sweat_jacket1",
+    "label": "Sweat zippé",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1450",
+    "description": "A hooded sweat jacket with zip front for female makehuman models. Hood is in the down position zip is up. Fits with a tight fitting shirt underneath it. Basic texture included."
+  },
+  {
+    "id": "mh-top-elvs_male_boho_top1",
+    "label": "Top bohème",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1808",
+    "description": "A bohemian inspired top for makehuman male models. Quad model and one simple texture included."
+  },
+  {
+    "id": "mh-top-elvs_male_shirt_tie_tucked1",
+    "label": "Chemise + cravate",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1799",
+    "description": "A shirt for male makehuman models consisting of a tie and tucked in bottom. Quad based model and one simple texture included."
+  },
+  {
+    "id": "mh-top-elvs_male_shirt_untucked_bd1",
+    "label": "Chemise sortie",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1800",
+    "description": "A shirt for makehuman male models consisting of a buttoned untucked shirt. Quad based model and one simple texture included."
+  },
+  {
+    "id": "mh-top-ews_striped_shirt",
+    "label": "Chemise rayée",
+    "author": "EWS",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1229",
+    "description": "My first piece of clothing I ever made. It's a striped wool croptop kind of shirt with long sleeves."
+  },
+  {
+    "id": "mh-top-janexx_old_female_sweater",
+    "label": "Pull usé",
+    "author": "janexx",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/2767",
+    "description": "A sweater for female models - worn out with patches in a handpainted style. Diffuse and normal map provided."
+  },
+  {
+    "id": "mh-top-mindfront_cardigan_long_open_front",
+    "label": "Cardigan long",
+    "author": "Mindfront",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1528",
+    "description": "Tags: Female Sweater Cardigan. Long open-front cardigan. Loose knitted net fabric uses the alpha channel for transparency. Looks best with at least one level of subsurf. In Blender use the Solidify modifier with thickness about 3mm fill rim and only rim to give the fabric some thickness. The preview image is rendered in Blender Cycles and I used proportional edit and sculpt to adjust the cardigan to fit the character and pose."
+  },
+  {
+    "id": "mh-top-mindfront_knitted_sweater_01",
+    "label": "Pull tricot 1",
+    "author": "Mindfront",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/660",
+    "description": "Tags: Sweater. Unisex hand knitted sweater. The normal map looks better at lower strength. In Blender use the 'solidify' modifier with 'Thickness' about 4mm and 'Fill Rim' and 'Only Rim' to give it some thickness. Preview image rendered in Blender Cycles."
+  },
+  {
+    "id": "mh-top-mindfront_knitted_sweater_02",
+    "label": "Pull tricot 2",
+    "author": "Mindfront",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/661",
+    "description": "Tags: Sweater. Unisex hand knitted sweater. In Blender use the 'solidify' modifier with 'Thickness' about 4mm and 'Fill Rim' and 'Only Rim' to give it some thickness. Preview image rendered in Blender Cycles."
+  },
+  {
+    "id": "mh-top-mindfront_lusekofta",
+    "label": "Pull nordique",
+    "author": "Mindfront",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1527",
+    "description": "Tags: Female Sweater Cardigan. A Norwegian cardigan 'Lusekofte' ends with an 'a' in Swedish machine knitted wool and front black stripes made of velvet. I found it in a closet never used and wanted to make a virtual version before giving it away. The buttons on the real sweater is loosely fixed with a thread and the buttonholes is a knitted loop. I decided not to add the knitted buttonholes as they wont show behind the buttons. The mesh is low poly and looks best with at least one level of subsurf. I use the slot for displacement for the metal mask texture. In Blender use the Solidify modifier with thickness about 3mm fill rim and only rim to give the fabric some thickness. The preview image is rendered in Blender Cycles."
+  },
+  {
+    "id": "mh-top-punkduck_deathnote_t-shirt",
+    "label": "T-shirt graphique",
+    "author": "punkduck",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/810",
+    "description": "This T-Shirt featuring the japanese manga series 'death note' is made by o4saken. My only work are a few fixes I added a delete group and I upload everything so it should work with MakeHuman directly. The shirt was originally build for a male character but also works for females. Maybe you also have to fix a few vertices in Blender when you combine it with pants. For females it should work with the tight jeans. Please mention o4saken as the real author. The litsphere is used to make the normal map visible. I added diffuse map and normal-map but not the spec-map because it consists of a pattern which is not identical with the cloth itself . For the example picture it was sufficient to connect diffuse-map and glossy shader ... Thanx a lot for this work o4saken "
+  },
+  {
+    "id": "mh-top-punkduck_lace_up_blouse",
+    "label": "Blouse lacée",
+    "author": "punkduck",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1775",
+    "description": "A long sleeve lace up blouse with a collar which is similar to Edwardian or Victorian style. I used it in combination with the costume leggings with leather texture . It also works with the tight jeans. No delete groups are used because it is 25 transparent looks more transparent in MakeHuman than in Blender . To get the best effect in Blender you should work with translucence. A node setup is appended as a bump texture"
+  },
+  {
+    "id": "mh-top-punkduck_off-shoulder_long-sleeve_top",
+    "label": "Top épaules nues",
+    "author": "punkduck",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/791",
+    "description": "This is a rather interesting piece of cloth. It is 10 transparent so no delete-groups are used. The shirt is designed to fit to the tight jeans and the strapless bra. You may change the small rings to a shiny material in Blender. In Makehuman the leather litsphere is used to make the normal-map visible."
+  },
+  {
+    "id": "mh-top-drednicolson_asymmetric_tunic_and_sash",
+    "label": "Tunique asymétrique",
+    "author": "DredNicolson",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/409",
+    "description": "A sleeveless woman's tunic with asymmetric seams and hem with a sash around the hips. Fitted on the female base human. The diffuse texture is derived from GIMP's built-in Wildflowers pattern and one of my really old procedural textures where I was attempting to make wood and not succeeding makes pretty good stripes though . The normal and specular maps come from a desaturated fabric photo and an old pattern where I literally modelled thread with lots and lots of tiny cylinders. A grayscale bump map was baked first then I used that to bake normals. Most skirts/pants/underwear should fit underneath with no or minor clipping and there's enough mesh density in the chest area to fit most ahem cup sizes. Known Issues - Minor clipping or odd deformations occur in front of the armpits when the shoulders are rolled you can see it on the Benchmark or other extreme arm poses . For now it's easy enough to hot-fix in Blender until I figure out which helper verts are the guilty party. Plans - Add a tie for the sash. This might be better done as a separate accessory."
+  },
+  {
+    "id": "mh-top-drednicolson_short-tail_camo_tee",
+    "label": "T-shirt camo",
+    "author": "DredNicolson",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/433",
+    "description": "A casual shirt with the tail not quite reaching the hips fully modeled seams and a camouflage pattern. Fitted on the female base human. Works okay for males too albeit with a 'shrunk in the wash' look. The camo was created with procedural textures multiplied down with a light AO map and then baked to an image. The specular map emphasizes self-shadowing in the seams. The normal map simulates individual stitches to produce a fabric-like sheen. The effect is more like satin than cotton but close enough. The chest area readily adapts to standard breast targets though minor clipping can occur with extreme combinations. Known Issues - A bit of ugly deformation in the armpits. Can be hot-fixed in Blender with Subsurf and Corrective Smooth modifiers."
+  },
+  {
+    "id": "mh-top-elvs_disco_top2",
+    "label": "Top disco",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/2580",
+    "description": "A stylized draped draped silk scarf blouse for makehuman female models. Tri mesh. One texture setup included."
+  },
+  {
+    "id": "mh-top-elvs_disco_top_1_butterfly",
+    "label": "Top disco papillon",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/2584",
+    "description": "A stylized disco top for makehuman female models in a butterfly pattern. Tri mesh. One texture setup included. Due to butterfly arm shape the posing is not the best makehuman side on this one unfortunately."
+  },
+  {
+    "id": "mh-top-elvs_ladies_tank1",
+    "label": "Débardeur femme",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1447",
+    "description": "A tank top with narrow straps for female makehuman models utilizes delete groups on chest area distortion is minimal even on large chest sizes. One Camo texture included."
+  },
+  {
+    "id": "mh-top-elvs_lara_tank1",
+    "label": "Débardeur Lara",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/2635",
+    "description": " Request Lara Croft Tomb raider 2001 movie edition costume pieces. A top for makehuman female models consisting of a tank top. Tri mesh. One texture setup included."
+  },
+  {
+    "id": "mh-top-elvs_male_athletic_tank1",
+    "label": "Débardeur sport",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1431",
+    "description": "A simple loose tank for makehuman male models."
+  },
+  {
+    "id": "mh-top-elvs_male_logo_tshirt1",
+    "label": "T-shirt logo",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1661",
+    "description": "A model for makehuman male models consisting of a tshirt with various logo textures. One logo included with upload elvware several to follow in this tradition. This is a tri mesh but loads in Makehuman the same. Fan art textures for the community. Feel free to upload your own or hit me up with any ideas in pm. Shirt has armpit issues that persist in posing. Edited for use with trousers in overlapping by Punkduck ty."
+  },
+  {
+    "id": "mh-top-elvs_male_muscle_shirt1",
+    "label": "Débardeur muscle",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1803",
+    "description": "A shirt for makehuman male models with short sleeves and tight fitting. Quad based model and one simple texture included."
+  },
+  {
+    "id": "mh-top-elvs_male_tankshirt1",
+    "label": "Débardeur homme",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1804",
+    "description": "A male shirt with tank style for makehuman models. Quad based model and one simple texture included."
+  },
+  {
+    "id": "mh-top-elvs_ruffle_sleeve_peasant_blouse_1",
+    "label": "Blouse volantée",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1256",
+    "description": "Loose fitting peasant blouse for female makehuman models."
+  },
+  {
+    "id": "mh-top-mindfront_tank_top_01",
+    "label": "Débardeur",
+    "author": "Mindfront",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/341",
+    "description": "Tags: Casual Sport. If you use Blender Tip 1: After import tweak the clothing with the sculpt tool the clay and smooth brush with low strength to get rid of eventually ugly deformation and make the final fitness. Tip 2: Use the Solidify modifier thickness 1mm fill Only Rim to give the fabric some thickness. As usual I have not made any effort in the material settings."
+  },
+  {
+    "id": "mh-top-punkduck_high_neck_crop_top",
+    "label": "Crop top col haut",
+    "author": "punkduck",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1088",
+    "description": "A sleeveless high neck crop top created by request. Delete groups are used and a normal map is supplied. An additional white texture is also available in the materials. A leggings costume leggings using the same pattern is also available."
+  },
+  {
+    "id": "mh-top-punkduck_retro_top",
+    "label": "Top rétro",
+    "author": "punkduck",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/781",
+    "description": "This is a typical 50s top. In reality it is convertible from a square neckline to a off shoulder neckline. It should be combined with the retro polka dot skirt. Normal map is added to create the pleats of the sleeves. The normal map is made visible by using the leather litsphere. In Blender the litsphere does not matter. Delete groups are used."
+  },
+  {
+    "id": "mh-top-punkduck_sleeveless_crop_top",
+    "label": "Crop top sans manches",
+    "author": "punkduck",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/925",
+    "description": "This crop top should fit to most of the dresses. This 'initial' version is colored white like most of the t-shirts you can buy so it could be simply changed to a new color or pattern. Delete groups are use. You should connect the input of the glossy shader to the output of the image texture."
+  },
+  {
+    "id": "mh-top-punkduck_sleeveless_shirt",
+    "label": "Chemise sans manches",
+    "author": "punkduck",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/440",
+    "description": "The sleeveless shirt should be used for female characters. You may combine it with the jeans or minirock. As a material I tried a combination of normal-map and diffuse-texture which works in MH itself. So I took the leather litsphere. When you export it to blender the litsphere does not matter because the materials and textures are added as always. I added a picture in the forum tutorials/coloring white texture... how you change the material in Blender cycles to display every color you want and also how to change the details. The shirt uses the delete-group. All 5 buttons of the shirt resize geometrically Scale down the 4th button when you use bigger cup-sizes in Blender. Select all buttons in Blender and attach a new more shiny material e.g. put a math-node 0.5 clamp between fresnel and mix-shader ."
+  },
+  {
+    "id": "mh-top-punkduck_spaghetti_strap_tank_top",
+    "label": "Top fines bretelles",
+    "author": "punkduck",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/459",
+    "description": "This tank top is designed for the jeans skirt. Maybe you have to make some corrections in Blender because I tried to let it not appear too bulky. When you combine it with the short jeans or tight jeans there IS additional work to do in Blender. As a material I tried a combination of normal-map and diffuse-texture which works in MH itself. So I took the leather litsphere. When you export it to blender the litsphere does not matter because the materials and textures are added as always. I added a picture in the forum tutorials/coloring white texture... how you change the material in Blender cycles to display every color you want. The shirt uses the delete-group."
+  },
+  {
+    "id": "mh-top-punkduck_tube_top",
+    "label": "Top bandeau",
+    "author": "punkduck",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/420",
+    "description": "The tube top should work for most female characters. As a material I tried a combination of normal-map and diffuse-texture which works in MH itself. So I took the leather litsphere. When you export it to blender the litsphere does not matter because the materials and textures are added as always. I only add a white diffuse texture. I added a picture in the forum tutorials/coloring white texture... how you change the material in Blender cycles to display every color you want and also how to change the details. The tube top uses the delete-group."
+  },
+  {
+    "id": "mh-top-punkduck_v_neck_top",
+    "label": "Top col V",
+    "author": "punkduck",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/419",
+    "description": "This v-neck t-shirt is designed to fit to the tight jeans and short jeans for females. For all of my three models this works fine but it could be that you have to change faces for your models. The v-neck top uses the delete-group. As a material I tried a combination of normal-map and diffuse-texture which works in MH itself. So I took the leather litsphere. When you export it to blender the litsphere does not matter because the materials and textures are added as always. I only add a white diffuse texture. I added a picture in the forum tutorials/coloring white texture... how you change the material in Blender cycles to display every color you want and also how to change the details."
+  },
+  {
+    "id": "mh-bottom-cortu_cargo_pants",
+    "label": "Pantalon cargo",
+    "author": "Cortu",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/2798",
+    "description": "Simple low slung green cargo pants."
+  },
+  {
+    "id": "mh-bottom-cortu_jeans_shorts",
+    "label": "Short jean",
+    "author": "Cortu",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/2800",
+    "description": "Jean shorts."
+  },
+  {
+    "id": "mh-bottom-toigo_harem_pants",
+    "label": "Pantalon harem",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1728",
+    "description": "This is a pair of harem-style pants that were made with Blender's cloth simulator. They will fit female and mostly female humans though some adjustment may be needed for toddler senior and plus-size humans. A diffuse texture is included. Illustration shows pants with subsurf of two. Kira is also wearing Sleeveless Crop Top by punkduck http://www.makehumancommunity.org/clothes/sleeveless_crop_top.html which was color adjusted in Blender Green 1.2 Blue 1.2 Brightness 0.6 ."
+  },
+  {
+    "id": "mh-bottom-toigo_wool_pants",
+    "label": "Pantalon laine",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1194",
+    "description": "This is a pair of wool pants designed for male humans but will fit other average humans too. Several other colors are in Materials. Illustration also pictures Shoes Monk Strap male by Mindfront. http://www.makehumancommunity.org/clothes/shoes_monk_strap_male.html"
+  },
+  {
+    "id": "mh-bottom-elvs_disco_pants_double_ruffles",
+    "label": "Disco double volant",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/2578",
+    "description": "A pair of stylized vintage disco pants for makehuman female models. Tri mesh. One vibrant texture setup included."
+  },
+  {
+    "id": "mh-bottom-elvs_disco_pants_single_ruffles",
+    "label": "Disco volant",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/2579",
+    "description": "A stylized vintage disco era pant for makehuman female models. Tri mesh. One texture setup included."
+  },
+  {
+    "id": "mh-bottom-elvs_disco_pants_skinny",
+    "label": "Disco slim",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/2583",
+    "description": "A pant for makehuman female models in a stylized late disco era skinny pant style. Tri mesh One texture setup included."
+  },
+  {
+    "id": "mh-bottom-elvs_gored_elephant_pants",
+    "label": "Pantalon évasé",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/2577",
+    "description": "A pair of stylized vintage Elephant pants for makehuman female models. Tri mesh. One texture setup included."
+  },
+  {
+    "id": "mh-bottom-elvs_jeans_bootcut",
+    "label": "Jean bootcut",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1798",
+    "description": "A pair of jeans for makehuman males with wide bootcut legs. One simple texture included."
+  },
+  {
+    "id": "mh-bottom-elvs_jeans_straight_leg",
+    "label": "Jean droit",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1802",
+    "description": "A pair of jeans for makehuman male models with straight legs. One simple texture included-quad based model."
+  },
+  {
+    "id": "mh-bottom-elvs_male_trouser",
+    "label": "Pantalon homme",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1796",
+    "description": "A dress pant for male makehuman models in quads. One simple texture included."
+  },
+  {
+    "id": "mh-bottom-elvs_male_trouser_with_chain",
+    "label": "Pantalon chaîne",
+    "author": "Elvaerwyn",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1805",
+    "description": "A pair of trousers for male makehuman models with chain. Quad model and one simple texture included."
+  },
+  {
+    "id": "mh-bottom-mindfront_female_trousers_1",
+    "label": "Pantalon femme",
+    "author": "Mindfront",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/790",
+    "description": "Tags: Female Trousers Jeans Pants. Jeans with embroidery for female makehuman character. There is already great female jeans made by punkduck but as I made this for a future scene I thought they may be useful for somebody else. This time I did the whole belt area as tre vertex hard body to minimize deformation of the belt and buckle thereof fitness adjustments around that area may be necessary when posing. Some texture and mesh distortion may occur between the legs in some poses. In Blender use the 'solidify' modifier with 'Thickness' about 3mm and 'Fill Rim' and 'Only Rim' to give the fabric some thickness. Preview image rendered in Blender Cycles with 'tennis shoes' by punkduck and the top 'floral' by o4saken."
+  },
+  {
+    "id": "mh-bottom-mindfront_male_trousers_1",
+    "label": "Pantalon homme 1",
+    "author": "Mindfront",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/746",
+    "description": "Tags: Male Trousers Jeans Pants. Loose fit slightly dirty jeans for male makehuman character. Some texture and mesh distortion may occur between the legs in some poses. They are ment to be used with at least one level subsurf. In Blender use the 'solidify' modifier with 'Thickness' about 3mm and 'Fill Rim' and 'Only Rim' to give the fabric some thickness. Preview image rendered in Blender Cycles and with subsurf level 2."
+  },
+  {
+    "id": "mh-bottom-mindfront_male_trousers_2",
+    "label": "Pantalon homme 2",
+    "author": "Mindfront",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1497",
+    "description": "Tags: Male Trousers Pants. Soft thick suit trousers with simple texture. These trousers was original not made for MakeHuman and unnecessary high poly. In Blender use the 'solidify' modifier with 'Thickness' about 3mm and 'Fill Rim' and 'Only Rim' to give the fabric some thickness."
+  },
+  {
+    "id": "mh-bottom-punkduck_female_tight_jeans",
+    "label": "Jean slim",
+    "author": "punkduck",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/391",
+    "description": "A pair of tight jeans with a lot of details like pockets seams etc. Delete groups are used. The textures can also be used for the short jeans. Edit: A normal-map is added. Best way to use the material in Blender: duplicate it and use a less glossy version for the fabric e.g. connect input color of glossy shader to output of diffuse texture you can also delete the fresnel and use a fixed value instead use the glossy version for the buttons set roughness of glossy shader to a low value . Change: I added the 'delete_verts' to the end of the .mhclo file. If you do not want them simply throw these lines away."
+  },
+  {
+    "id": "mh-bottom-punkduck_male_classic_jeans",
+    "label": "Jean classique",
+    "author": "punkduck",
+    "license": "CC-BY",
+    "source": "http://www.makehumancommunity.org/node/1655",
+    "description": "A classic black jeans for males the texture should look like this jeans is new and not yet washed. A second blue texture will be added to the materials. Also a belt is added to the clothes folder to fit to this jeans. A normalmap is added. Feel free to assign rivets and button to a glossy shader in Blender."
+  },
+  {
+    "id": "mh-shoes-cortu_floppy_overknee_shoes",
+    "label": "Bottes hautes souples",
+    "author": "Cortu",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/2803",
+    "description": "A shoe that goes over the knee."
+  },
+  {
+    "id": "mh-shoes-cortu_t-bar",
+    "label": "T-bar",
+    "author": "Cortu",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/2801",
+    "description": "A pair of t-bar shoes."
+  },
+  {
+    "id": "mh-shoes-culturalibre_male_boots",
+    "label": "Bottes homme",
+    "author": "culturalibre",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/2548",
+    "description": "Brown boots for male model.Original by Roachburn.Downloaded from: https://www.blendswap.com/blend/17623"
+  },
+  {
+    "id": "mh-shoes-grinsegold_female_pirate_boots",
+    "label": "Bottes pirate",
+    "author": "grinsegold",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/211",
+    "description": "Adaptation from a blendswap mesh quick and durty more like a test. The knees shouldn't be covered that much i guess but as i said - quick and dirty. This is far from being low poly but he made nice textures. The last texture the displacement texture is a bump map for scratches."
+  },
+  {
+    "id": "mh-shoes-scailman_gogo_platform_boots",
+    "label": "Bottes plateforme",
+    "author": "scailman",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1467",
+    "description": "White gogo platform boots"
+  },
+  {
+    "id": "mh-shoes-scailman_semitransparent_water_boots",
+    "label": "Bottes de pluie",
+    "author": "scailman",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1778",
+    "description": "Simple semitransparent blue water boots."
+  },
+  {
+    "id": "mh-shoes-toigo_ankle_boots_female",
+    "label": "Bottines",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1738",
+    "description": "This is a pair of ankle boots that will fit most female humans. I have included diffuse specular and normal maps and the .mhmat file should get them all imported into Blender where their properties can be adjusted according to preference and render engine. Illustration shows shoes with subsurf of two and a mean crease of one around the heel and sole edge loops."
+  },
+  {
+    "id": "mh-shoes-toigo_ankle_boots_male",
+    "label": "Bottines homme",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1743",
+    "description": "This is a pair of ankle boots that will fit most male humans. I have included diffuse specular and normal maps and the .mhmat file should get them all imported into Blender where their properties can be adjusted according to preference and render engine. These boots have the same UV mapping as my Ankle Boots http://www.makehumancommunity.org/clothes/ankle_boots.html . Illustration shows boots with subsurf of two and a mean crease of one around the heel and sole edge loops."
+  },
+  {
+    "id": "mh-shoes-toigo_ballet_flats",
+    "label": "Ballerines",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1734",
+    "description": "This is a pair of women's ballet-style flats. They will fit most female humans around ages 15-50 without much adjustment. I have included diffuse specular and normal maps and the .mhmat file should get them all imported into Blender where their properties can be adjusted according to preference and render engine. Illustration shows shoes with subsurf of two and a mean crease of one around the heel edge loops."
+  },
+  {
+    "id": "mh-shoes-toigo_ballet_flats_with_bows",
+    "label": "Ballerines nœud",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1735",
+    "description": "This is a pair of women's ballet-style flats with bows. They will fit most female humans around ages 15-50 without much adjustment. I have included diffuse specular and normal maps and the .mhmat file should get them all imported into Blender where their properties can be adjusted according to preference and render engine. Illustration shows shoes with subsurf of two and a mean crease of one around the heel edge loops."
+  },
+  {
+    "id": "mh-shoes-toigo_ballet_flats_with_flowers",
+    "label": "Ballerines fleurs",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1736",
+    "description": "This is a pair of women's ballet-style flats with flowers. They will fit most female humans around ages 15-50 without much adjustment. I have included diffuse specular and normal maps and the .mhmat file should get them all imported into Blender where their properties can be adjusted according to preference and render engine. Illustration shows shoes with subsurf of two and a mean crease of one around the heel edge loops."
+  },
+  {
+    "id": "mh-shoes-toigo_flats",
+    "label": "Chaussures plates",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1117",
+    "description": "Classic flat shoes for women. Five more colors are available in Materials."
+  },
+  {
+    "id": "mh-shoes-toigo_mj_cloth_shoes",
+    "label": "Chaussures toile",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1700",
+    "description": "This is a pair of very low poly shoes 556 vertices 278 per shoe that will fit a wide range of humans but fit best on mostly female humans above age four. Of course the shoes will need a subdivision surface of at least two three or four is even better and creasing on key edge loops -- as shown in the illustration. I have created a forum thread with a more detailed explanation of the edge loops... http://www.makehumancommunity.org/forum/viewtopic.php?f=4&t=16689 I have included diffuse specular and normal maps and the .mhmat file should get them all imported into Blender where their properties can be adjusted according to preference and render engine. Two additional colors are available in Materials."
+  },
+  {
+    "id": "mh-shoes-toigo_stiletto_booties",
+    "label": "Bottines talon",
+    "author": "MargaretToigo",
+    "license": "CC0",
+    "source": "http://www.makehumancommunity.org/node/1694",
+    "description": "This is a pair of booties with stiletto heels. They will fit average female -- age weight muscle height and proportions -- humans. I have included diffuse specular and normal maps and the .mhmat file should get them all imported into Blender where their properties can be adjusted according to preference and render engine. Four additional colors are available in Materials."
+  }
+]

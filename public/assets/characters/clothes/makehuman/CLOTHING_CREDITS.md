@@ -1,0 +1,86 @@
+# Crédits vêtements MakeHuman
+
+Ces crédits restent dans le projet et ne sont pas affichés dans le menu.
+
+- **T-shirt camo** — DredNicolson — CC-BY — http://www.makehumancommunity.org/node/433
+- **Tunique asymétrique** — DredNicolson — CC-BY — http://www.makehumancommunity.org/node/409
+- **Chemise rayée** — EWS — CC-BY — http://www.makehumancommunity.org/node/1229
+- **Blouse volantée** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/1256
+- **Chemise + cravate** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/1799
+- **Chemise sortie** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/1800
+- **Disco double volant** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/2578
+- **Disco slim** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/2583
+- **Disco volant** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/2579
+- **Débardeur Lara** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/2635
+- **Débardeur femme** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/1447
+- **Débardeur homme** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/1804
+- **Débardeur muscle** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/1803
+- **Débardeur sport** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/1431
+- **Jean bootcut** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/1798
+- **Jean droit** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/1802
+- **Pantalon chaîne** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/1805
+- **Pantalon homme** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/1796
+- **Pantalon évasé** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/2577
+- **Sweat zippé** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/1450
+- **T-shirt logo** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/1661
+- **Top bohème** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/1808
+- **Top disco** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/2580
+- **Top disco papillon** — Elvaerwyn — CC-BY — http://www.makehumancommunity.org/node/2584
+- **Cardigan long** — Mindfront — CC-BY — http://www.makehumancommunity.org/node/1528
+- **Débardeur** — Mindfront — CC-BY — http://www.makehumancommunity.org/node/341
+- **Pantalon femme** — Mindfront — CC-BY — http://www.makehumancommunity.org/node/790
+- **Pantalon homme 1** — Mindfront — CC-BY — http://www.makehumancommunity.org/node/746
+- **Pantalon homme 2** — Mindfront — CC-BY — http://www.makehumancommunity.org/node/1497
+- **Pull nordique** — Mindfront — CC-BY — http://www.makehumancommunity.org/node/1527
+- **Pull tricot 1** — Mindfront — CC-BY — http://www.makehumancommunity.org/node/660
+- **Pull tricot 2** — Mindfront — CC-BY — http://www.makehumancommunity.org/node/661
+- **Bottes héroïne 4** — culturalibre — CC-BY — http://www.makehumancommunity.org/node/2464
+- **Pull usé** — janexx — CC-BY — http://www.makehumancommunity.org/node/2767
+- **Blouse lacée** — punkduck — CC-BY — http://www.makehumancommunity.org/node/1775
+- **Chemise sans manches** — punkduck — CC-BY — http://www.makehumancommunity.org/node/440
+- **Crop top col haut** — punkduck — CC-BY — http://www.makehumancommunity.org/node/1088
+- **Crop top sans manches** — punkduck — CC-BY — http://www.makehumancommunity.org/node/925
+- **Jean classique** — punkduck — CC-BY — http://www.makehumancommunity.org/node/1655
+- **Jean slim** — punkduck — CC-BY — http://www.makehumancommunity.org/node/391
+- **T-shirt graphique** — punkduck — CC-BY — http://www.makehumancommunity.org/node/810
+- **Top bandeau** — punkduck — CC-BY — http://www.makehumancommunity.org/node/420
+- **Top col V** — punkduck — CC-BY — http://www.makehumancommunity.org/node/419
+- **Top fines bretelles** — punkduck — CC-BY — http://www.makehumancommunity.org/node/459
+- **Top rétro** — punkduck — CC-BY — http://www.makehumancommunity.org/node/781
+- **Top épaules nues** — punkduck — CC-BY — http://www.makehumancommunity.org/node/791
+- **Bottes hautes souples** — Cortu — CC0 — http://www.makehumancommunity.org/node/2803
+- **Pantalon cargo** — Cortu — CC0 — http://www.makehumancommunity.org/node/2798
+- **Short jean** — Cortu — CC0 — http://www.makehumancommunity.org/node/2800
+- **T-bar** — Cortu — CC0 — http://www.makehumancommunity.org/node/2801
+- **T-shirt homme** — Elvaerwyn — CC0 — http://www.makehumancommunity.org/node/1416
+- **T-shirt femme** — Joel Palmius — CC0 — http://www.makehumancommunity.org/node/894
+- **Ballerines** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1734
+- **Ballerines fleurs** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1736
+- **Ballerines nœud** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1735
+- **Bottines** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1738
+- **Bottines homme** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1743
+- **Bottines talon** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1694
+- **Caraco** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1726
+- **Chaussures plates** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1117
+- **Chaussures toile** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1700
+- **Corsage** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1667
+- **Pantalon harem** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1728
+- **Pantalon laine** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1194
+- **Pull marin** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1187
+- **T-shirt rentré** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1203
+- **Top col roulé** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1642
+- **Top goutte** — MargaretToigo — CC0 — http://www.makehumancommunity.org/node/1606
+- **Bottes homme** — culturalibre — CC0 — http://www.makehumancommunity.org/node/2548
+- **Bottes héros 1** — culturalibre — CC0 — http://www.makehumancommunity.org/node/2081
+- **Bottes héros 2** — culturalibre — CC0 — http://www.makehumancommunity.org/node/2132
+- **Bottes héros 3** — culturalibre — CC0 — http://www.makehumancommunity.org/node/2138
+- **Bottes héros 4** — culturalibre — CC0 — http://www.makehumancommunity.org/node/2167
+- **Bottes héros 5** — culturalibre — CC0 — http://www.makehumancommunity.org/node/2424
+- **Bottes héroïne 1** — culturalibre — CC0 — http://www.makehumancommunity.org/node/2155
+- **Bottes héroïne 2** — culturalibre — CC0 — http://www.makehumancommunity.org/node/2181
+- **Bottes héroïne 3** — culturalibre — CC0 — http://www.makehumancommunity.org/node/2187
+- **Bottes pirate** — grinsegold — CC0 — http://www.makehumancommunity.org/node/211
+- **Polo** — namuhekam — CC0 — http://www.makehumancommunity.org/node/2909
+- **Bottes de pluie** — scailman — CC0 — http://www.makehumancommunity.org/node/1778
+- **Bottes plateforme** — scailman — CC0 — http://www.makehumancommunity.org/node/1467
+- **Top bandeau** — skalldyrssuppe — CC0 — http://www.makehumancommunity.org/node/975

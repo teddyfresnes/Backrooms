@@ -1,0 +1,34 @@
+{
+  "encoding": "WebP lossless, exact transparent RGB",
+  "textures": [
+    {
+      "source": "/assets/blood/blood-decal-a.png",
+      "runtime": "/assets/blood/blood-decal-a.webp",
+      "sourceBytes": 2625982,
+      "runtimeBytes": 1691598,
+      "sourceSha256": "2f625d3ce46c723c54f3a78a94cd54aef808ef2480b470dd70bf7b6fdbb42c14",
+      "runtimeSha256": "ae3430ff9b8859f32f105f4069add948d58d28793aa2c122cc63980f65d44edc",
+      "rgbaSha256": "62d1b4eca864ee3e0e9ad033572d3722c0eac2861af5f385f616df67c8475048",
+      "dimensions": [
+        1600,
+        1200
+      ],
+      "pixelsIdentical": true
+    },
+    {
+      "source": "/assets/mpfb/textures/sss.png",
+      "runtime": "/assets/mpfb/textures/sss.webp",
+      "sourceBytes": 1452584,
+      "runtimeBytes": 867540,
+      "sourceSha256": "d433f15c7240c5b0c91c6fafa482d9c380504efd6ad4d1504b4d7da32d1eec42",
+      "runtimeSha256": "85827c98a052a5b3dea370b6edcf6b3a6ab5bbe8a6ee44803aedd2d74ca742dd",
+      "rgbaSha256": "d61d55a92ac4a493d612c30082a65f9297f50451a66a37f00918b621545fb84d",
+      "dimensions": [
+        2048,
+        2048
+      ],
+      "pixelsIdentical": true
+    }
+  ],
+  "bytesSaved": 1519428
+}

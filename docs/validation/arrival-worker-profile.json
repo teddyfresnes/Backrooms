@@ -1,0 +1,14 @@
+{
+  "originalBytes": 349270200,
+  "sourceSha256": "1b1864ff763676e6fa4bc0b66e0ae2d854a7bf9ef3e61990d2c9f6fce7067dda",
+  "geometries": 267,
+  "images": 56,
+  "transferBuffers": 1287,
+  "transferredBytes": 72719584,
+  "decodeMs": 2362.778546,
+  "prepareMs": 104.05140200000005,
+  "objectHierarchyUnchanged": true,
+  "mainHeartbeatTicks": 255,
+  "mainHeartbeatMaxGapMs": 13.126945000000433,
+  "kind": "Node worker CPU proxy; does not measure WebGL/GPU or browser FPS"
+}

@@ -1,0 +1,205 @@
+# Génération du monde
+
+## Points d’entrée
+
+- `src/world/types.ts` : contrat `WorldPlan` et types de features.
+- `src/world/SeededRandom.ts` : unique source de hasard.
+- `src/world/generateWorld.ts` : plan local fini de 112 m.
+- `src/world/InfiniteWorld.ts` : adaptation du plan en chunk infini.
+- `src/world/EpicStructures.ts` : pavage et contrat des monuments `epic1` à `epic5`.
+- `src/world/StairLayout.ts` : géométrie partagée des escaliers.
+- `src/world/FeatureRegistry.ts` : proposition de features enregistrées.
+- `src/world/PropPlacement.ts` : props rares, après la topologie finale.
+
+Dans les gros fichiers, chercher le symbole concerné et la fin du pipeline :
+
+```powershell
+rg -n "export const generateWorld|validateWorldPlan|fingerprintWorld" src/world/generateWorld.ts
+rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/InfiniteWorld.ts
+```
+
+## Ordre du pipeline
+
+Le pipeline ordinaire (plan version 18, topologie/spatial version 2) est :
+
+1. `RegionalPlan` choisit les districts mondiaux et leurs datums signés ;
+2. il réserve les atria sur deux à quatre adresses verticales. Les galeries
+   classiques gardent leur phase historique ; les salles en gradins ont une
+   phase de six adresses pour accueillir trois ou quatre niveaux sans chevauchement ;
+3. `RegionalPlan.hasRegionalTransition` sélectionne les raccords isolés entre
+   datums différents (au plus un par cellule, centres espacés d’au moins 49 m).
+   `SpatialConnectors` et `TransitionLayout` déduisent les parcours et paliers
+   stables. `SpatialTemplates` résout les plafonds BSP réels aux deux extrémités
+   et les parois canoniques : volée ouverte, adossée ou chambre justifiée ; `SpatialFeatures` réserve les anciens trous et
+   passages, avec leurs vrais propriétaires source/arrivée ;
+4. `SpatialWorld` réutilise `generateBspArchitecture` sur des domaines canoniques
+   de 224 m (2×2 chunks), puis matérialise aux datums finaux les pièces historiques,
+   murs épais, détails et plafonds ; les grandes familles restent minoritaires ;
+5. `SpatialRelief` ajoute les socles et terrasses pleins au sol porteur ;
+6. `BspConnectivity` ouvre les partitions ordinaires qui isolent une poche après
+   découpe ; le graphe distingue les portes à ouvrir (`requiresDoorId`), les vues
+   et les chutes. Les petits rectangles de dallage ne sont pas des obstacles.
+   `SpatialWallJunctions` nettoie les résidus ordinaires après les réservations et
+   portes, avant la reconstruction des sols. `StructuralSupports` réconcilie les coques et linteaux avec leurs
+   vrais appuis après les réservations et portes. `CeilingEnvelope` ferme les
+   décrochements de plafond entre volumes de même datum, par bandes de propriétaire ;
+7. `LiminalArchitecture` ajoute les rares parois percées après les réparations BSP,
+   puis les sols et finitions sont recalculés ; `generateInfiniteChunk` applique palette,
+   props et préfixes. Voir [le vocabulaire liminal](LIMINAL_ARCHITECTURE.md) pour
+   les arches, galeries partielles et nouvelles fosses.
+
+Voir [les contrats de transition](../TRANSITION_INTEGRATION.md) pour les plafonds
+continus, les salles de plusieurs cellules et la conservation des anciennes features.
+`AtriumEnvelope` partage les retraits successifs, passages et soubassements entre
+tous les propriétaires. `SteppedAtrium` matérialise les galeries intermédiaires
+et leurs chutes dirigées. Les parois des galeries classiques descendent aussi
+jusqu’au vrai bas ; les ouvertures sont soustraites en volume.
+
+La génération ne lit jamais un voisin déjà produit. Les interfaces viennent des
+mêmes cellules mondiales des deux côtés. Le pas d’adresse 5,4 m est une translation
+entre propriétaires ; les sols locaux suivent les datums régionaux, pas zéro.
+
+`generateLegacyWorld` et `generateLegacyInfiniteChunk` conservent le pipeline complet et les
+contrats des monuments et de `RAW_LOCAL_`. `structuralOnly` utilise ce pipeline
+pour les résumés historiques. Ses règles de raised-zone, coques hautes et previews
+ci-dessous restent propres à ce chemin. Les tests BSP l’appellent explicitement ;
+ils ne mesurent pas la distribution ordinaire actuelle. `RegionalBsp.test.ts`
+contrôle cette dernière, y compris les épaisseurs, les continuations de pièces
+et la connexion des sols aux vraies circulations. Le cache de 32 domaines BSP
+est vidé avec `clearInfiniteWorldCaches`.
+
+Les biomes visuels occupent des macro-zones 2×2 stables sur tous les étages.
+Le jaune ordinaire couvre 70 % des macro-zones ; rouge, blanc et jaune sombre
+en couvrent chacun 10 %. Le jaune sombre conserve les textures et l’ambiance chaude, avec les mêmes
+diffuseurs blancs neutres ; son profil d’éclairage moderne reste plus faible.
+
+## Invariants
+
+### Déterminisme
+
+- Utiliser `rootRng.fork('nom-stable')` par décision indépendante.
+- Éviter de réutiliser un même flux RNG dans deux systèmes sans rapport :
+  l’ajout d’un tirage déplacerait tous les résultats suivants.
+- Une modification volontaire de l’algorithme global peut nécessiter une hausse
+  de `GENERATOR_VERSION`.
+- `fingerprintWorld()` et les tests multi-seeds détectent les dérives.
+
+### Cohérence physique
+
+- Un mur avec collision doit avoir un collider correspondant.
+- `cleanWallJunctions` précède les coques hautes/basses : raccords en L fermés,
+  faces alignées lorsque l'écart ne fait que quelques centimètres, suppression
+  des fragments et pilastres presque enfouis. Leurs colliders suivent exactement
+  les nouvelles dimensions. Les défauts ne bénéficient plus d'une exception
+  aléatoire. Les petits écarts des retours de niche rejoignent le vrai mur porteur ;
+  monuments, limites de chunks, portes et autres détails dédiés sont protégés.
+- `RoomRecord.baseboards` porte la finition de la pièce BSP canonique, conservée
+  dans ses fragments. Les zones spatiales sans plinthes ont un `floorY` afin de
+  ne pas effacer un autre niveau. Une exclusion historique sans altitude reste
+  applicable par face/intervalle. `SpatialBaseboards` consomme les contours et
+  sols finaux, y compris façades, piliers, passages bas et parois de galerie.
+- Le nettoyage spatial final ferme aussi les L/T recréés par les découpes.
+  `WallSegment.junctionRole` protège colonnes, masses et appuis lors du passage
+  au worker. `SpatialFloorContacts` ferme uniquement les contacts sol/mur de
+  moins de 5 mm, après les dernières découpes, hors vides/réservations et sans
+  franchir une limite de propriétaire. Sol visible et collider viennent du même
+  patch ; les niches et les tolérances du rendu ne sont pas modifiées.
+- Une ouverture de sol ne doit conserver aucun collider de sol en dessous.
+- `floorRects` décrit le sol effectivement rendu et praticable.
+- Les rampes et marches ont une géométrie visuelle et des formes Rapier issues
+  des mêmes dimensions.
+- Les sols ordinaires viennent de `WalkableTopology.ts`, sans doublon à Y=0.
+  `floorY` est un datum ; `ceilingHeight` reste une altitude absolue locale.
+  Voir [le contrat vertical](../VERTICAL_TOPOLOGY.md) pour couches, profils,
+  volumes, budgets, priorités régionales, migrations et tests physiques.
+- Une coque de plafond haut rejoint exactement le sommet du mur bas. Un linteau
+  de portail garde le dégagement du profil desservi et le rendu soustrait son empreinte
+  du plafond voisin. Sa sous-face suit le dégagement du sol desservi : elle
+  continue le plafond si au moins une pièce adjacente est basse, mais emploie le
+  papier peint si les deux pièces ont un plafond haut. Si le wrapper rabaisse ensuite
+  la pièce à cause d’une ouverture verticale ou d’une façade incomplète, il
+  supprime aussi chaque fragment de `upper-shell` / `upper-portal-lintel` qui ne
+  borde plus aucune pièce haute. Dans le générateur fini, la coque est redécoupée
+  contre les murs finaux : toute portée devenue libre après les dégagements de
+  portail doit être un linteau, jamais un `upper-shell` flottant.
+- Après mutation de murs ou de zones verticales, appeler le helper de
+  reconstruction prévu au bon endroit plutôt que patcher un seul tableau.
+- Le dégagement d’arrivée d’une ouverture de plafond s’applique après les
+  escaliers hérités et murs de bordure, afin qu’aucune géométrie
+  ajoutée tardivement ne puisse reboucher partiellement le passage. Les chunks
+  monumentaux conservent leur propre contrat vertical et ne sont pas retaillés.
+- Une `interactive-door` remplace un vrai segment de mur par deux jambages et
+  un linteau. Son collider représente l’état fermé : les audits de topologie
+  permanente doivent l’ignorer, puis le runtime le désactive pendant l’ouverture.
+- Un `wall-breach` conserve deux profils : `projecting` pour l’ancien tunnel
+  court et `flush` pour une ouverture directement découpée dans la cloison.
+  Les passages `flush` sérialisent leur empreinte réelle dans `passageRects` ;
+  `bounds` n’est que leur rectangle englobant et ne doit pas servir à remplir
+  les coins vides d’un coude ou d’un embranchement. Certaines ouvertures
+  `flush` atteignent 3,2 m de large. Lorsqu’elles terminent sur un `PassageHole`,
+  leur plafond descend systématiquement à hauteur d’accroupissement avant le
+  puits ; une partie des variantes larges force cette terminaison.
+- Les trous terminaux d’un cul-de-sac `flush` occupent toute la largeur du
+  passage. Leurs colliders doivent être ajoutés au plan mutable, avant
+  l’affectation finale de `world.colliders`.
+
+### Topologie verticale
+
+- Taille de chunk : `INFINITE_CHUNK_SIZE = 112`.
+- Pas d’adresse : `INFINITE_STORY_PITCH = 5.4`, sans datum de sol implicite.
+- `spatial.owner` possède ses données, pas tous les volumes de sa colonne. Un
+  atrium traverse trois adresses ; son bas est un vrai plan `lower-maze`.
+- `spatial.dependencies` désigne les propriétaires réels à charger. Les anciennes
+  previews ci-dessous concernent uniquement le pipeline legacy des monuments.
+- `floorOpenings`, `ceilingOpenings`, `lowerPreviewOpenings` et
+  `stairCeilingOpenings` ont des rôles distincts ; ne pas les fusionner.
+- `StairSocketFeature.layout` choisit une volée `straight` ou un demi-tour
+  `switchback`; ce dernier utilise `switchbackJoin` (`joined` ou `divider`).
+  `StairLayout.ts` reste la source commune du rendu et des colliders.
+- Les `PassageHole` des passages accroupis sont de vrais puits : `drop`
+  rejoint le palier de l’étage inférieur et `void` propage son ouverture comme
+  un puits profond. Leur aperçu local vient de `PassageHoleLayout.ts`.
+- Les ouvertures héritées sont dérivées de chunks canoniques voisins. Tester au
+  moins une paire d’étages, pas uniquement un plan isolé.
+- Une gaine profonde ne doit rester exposée que dans son étage source et son
+  étage d’arrivée. Dans chaque étage seulement traversé, ses ouvertures actives
+  sont regroupées dans un enclos fermé, ancré à deux limites d’une salle dès
+  que la trame intermédiaire le permet. Toutes les ouvertures d’un même
+  `grid-pit` partagent une destination : 1 à 5 étages plus bas, ou un vide
+  mortel. Leur motif emploie une grille complète, symétrique et de taille
+  homogène dans la salle.
+Les contrats du pavage épique et des variantes `epic1` à `epic5` sont décrits
+dans [Monuments historiques](WORLD_MONUMENTS.md).
+
+### Identifiants et sérialisation
+
+- Les IDs locaux doivent être uniques et stables.
+- `prefixPlanIds()` doit préfixer chaque nouvel ID et toute référence vers un ID.
+- Pour une porte, cela inclut `sourceRoomId`, `targetRoomId` et `colliderId`.
+- Les métadonnées stockées en `WeakMap` disparaissent lors du passage worker.
+  Toute donnée nécessaire au rendu après clonage structuré doit aussi être
+  sérialisée dans `WorldPlan`.
+
+## Où modifier selon le besoin
+
+| Besoin | Commencer par |
+|---|---|
+| Nouvelle donnée ou feature | `types.ts`, puis `docs/ADDING_FEATURES.md` |
+| Forme des salles/portes | `SpatialWorld.ts`, `generateBspArchitecture` et `BspConnectivity.ts` |
+| Frontières entre chunks | `RegionalPlan.ts`, `getCanonicalEdgeGates`, `SpatialWorld.ts` |
+| Puits ou étages | `generateWorld.ts`, `InfiniteWorld.ts`, `StairLayout.ts` |
+| Monument `epicN` | `EpicStructures.ts`, puis `WorldBuilder.ts` et `WorldStream.ts` |
+| Biome/topologie régionale | `getInfiniteBiome()` / `applyBiome()` |
+| Palette de surfaces | `getInfiniteVisualBiome()` / `applyVisualBiome()` ; palette et `surfaceStyle` restent stables dans une même colonne verticale |
+| Props | `PropCatalog.ts` et `PropPlacement.ts`, après topologie héritée ; réserver les scènes aux grandes salles |
+
+## Validation minimale
+
+- Génération locale : `npx vitest run src/world/generateWorld.test.ts`
+- Contrats de chunks/étages : `npx vitest run src/world/InfiniteWorld.test.ts`
+- Props : `npx vitest run src/world/PropPlacement.test.ts`
+- Toute modification de type : ajouter `npm run build`
+
+Ces suites auditent beaucoup de seeds et peuvent être lentes. Utiliser
+temporairement `-t "nom exact du test"` pendant l’itération, puis exécuter le
+fichier complet avant la livraison.

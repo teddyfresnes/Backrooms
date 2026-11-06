@@ -1,0 +1,40 @@
+# Material definition for redMaterial
+
+name redMaterial
+description Mens_boho_top1elv material
+ambientColor 1.0 1.0 1.0
+diffuseColor 0.762 0.6818 0.8
+specularColor 0.5 0.5 0.5
+shininess 0.0
+emissiveColor 0.0 0.0 0.0
+opacity 1.0
+translucency 0.0
+
+shadeless False
+wireframe False
+transparent False
+alphaToCoverage True
+backfaceCull False
+depthless False
+
+castShadows True
+
+receiveShadows True
+
+diffuseTexture bohotop1.webp
+
+shader shaders/glsl/litsphere
+
+shaderParam litsphereTexture litspheres/lit_matte.png
+shaderParam AdditiveShading 0.0
+
+shaderDefine CALC_NORMAL_Z
+
+shaderConfig diffuse True
+shaderConfig bump False
+shaderConfig normal False
+shaderConfig displacement False
+shaderConfig spec False
+shaderConfig vertexColors False
+shaderConfig transparency True
+shaderConfig ambientOcclusion True

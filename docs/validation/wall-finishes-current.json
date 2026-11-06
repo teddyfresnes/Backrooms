@@ -1,0 +1,1049 @@
+{
+  "baseline": "/workspace/scratch/6fa16f3b1be0/Backrooms-wall-baseline",
+  "records": [
+    {
+      "seed": "WALL-FINISH-HOLDOUT-0",
+      "address": {
+        "x": -1,
+        "z": -1,
+        "story": -2
+      },
+      "spatial": true,
+      "walls": 367,
+      "rooms": 146,
+      "bareRooms": 0,
+      "features": {
+        "liminal-architecture": 2
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 3190,
+        "bare": 0,
+        "supportedMetres": 3492.227362430877,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 12,
+        "equipped": 3190,
+        "bare": 0,
+        "supportedMetres": 3492.227362430877,
+        "missingMetres": 8.870105714257875,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 0,
+        "floorContacts": 2
+      },
+      "triangles": 14384,
+      "batches": 9,
+      "baseboards": 902,
+      "finishProbes": 25,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-1",
+      "address": {
+        "x": 0,
+        "z": -1,
+        "story": -1
+      },
+      "spatial": true,
+      "walls": 356,
+      "rooms": 140,
+      "bareRooms": 0,
+      "features": {
+        "liminal-architecture": 2
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 3180,
+        "bare": 0,
+        "supportedMetres": 3541.7694608425427,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 4,
+        "equipped": 3181,
+        "bare": 0,
+        "supportedMetres": 3542.5944608425425,
+        "missingMetres": 3.502290414087497,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 2,
+        "floorContacts": 0
+      },
+      "triangles": 15180,
+      "batches": 9,
+      "baseboards": 924,
+      "finishProbes": 23,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-2",
+      "address": {
+        "x": 1,
+        "z": -1,
+        "story": 0
+      },
+      "spatial": true,
+      "walls": 252,
+      "rooms": 109,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2380,
+        "bare": 0,
+        "supportedMetres": 2821.0132845101252,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 1,
+        "equipped": 2380,
+        "bare": 0,
+        "supportedMetres": 2821.0132845101252,
+        "missingMetres": 1.3652499796357063,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 0,
+        "floorContacts": 1
+      },
+      "triangles": 12712,
+      "batches": 9,
+      "baseboards": 659,
+      "finishProbes": 25,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-3",
+      "address": {
+        "x": -1,
+        "z": 0,
+        "story": 1
+      },
+      "spatial": true,
+      "walls": 298,
+      "rooms": 92,
+      "bareRooms": 0,
+      "features": {
+        "squeeze-view": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2184,
+        "bare": 0,
+        "supportedMetres": 2491.917976613387,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 52,
+        "equipped": 2181,
+        "bare": 0,
+        "supportedMetres": 2491.917116965038,
+        "missingMetres": 41.18775939305783,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 1,
+        "floorContacts": 3
+      },
+      "triangles": 9797,
+      "batches": 9,
+      "baseboards": 608,
+      "finishProbes": 15,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-4",
+      "address": {
+        "x": 0,
+        "z": 0,
+        "story": -2
+      },
+      "spatial": true,
+      "walls": 389,
+      "rooms": 136,
+      "bareRooms": 0,
+      "features": {
+        "liminal-architecture": 1,
+        "squeeze-view": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 3287,
+        "bare": 0,
+        "supportedMetres": 3472.34647680865,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 8,
+        "equipped": 3287,
+        "bare": 0,
+        "supportedMetres": 3472.34647680865,
+        "missingMetres": 7.042544185928989,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 0,
+        "floorContacts": 0
+      },
+      "triangles": 17402,
+      "batches": 10,
+      "baseboards": 1004,
+      "finishProbes": 22,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-5",
+      "address": {
+        "x": 1,
+        "z": 0,
+        "story": -1
+      },
+      "spatial": true,
+      "walls": 177,
+      "rooms": 95,
+      "bareRooms": 0,
+      "features": {
+        "liminal-pit": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 1703,
+        "bare": 0,
+        "supportedMetres": 2112.3411385385675,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 0,
+        "equipped": 1703,
+        "bare": 0,
+        "supportedMetres": 2112.3411385385675,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 0,
+        "floorContacts": 0
+      },
+      "triangles": 7868,
+      "batches": 9,
+      "baseboards": 467,
+      "finishProbes": 25,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-6",
+      "address": {
+        "x": -1,
+        "z": 1,
+        "story": 0
+      },
+      "spatial": true,
+      "walls": 377,
+      "rooms": 135,
+      "bareRooms": 5,
+      "features": {
+        "liminal-architecture": 2
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2843,
+        "bare": 107,
+        "supportedMetres": 3140.7402601303825,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 14,
+        "equipped": 2842,
+        "bare": 107,
+        "supportedMetres": 3140.6402601303826,
+        "missingMetres": 15.492502480186516,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 4,
+        "floorContacts": 0
+      },
+      "triangles": 14333,
+      "batches": 9,
+      "baseboards": 810,
+      "finishProbes": 18,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-7",
+      "address": {
+        "x": 0,
+        "z": 1,
+        "story": 1
+      },
+      "spatial": true,
+      "walls": 107,
+      "rooms": 43,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 821,
+        "bare": 0,
+        "supportedMetres": 1090.158342285283,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 0,
+        "equipped": 821,
+        "bare": 0,
+        "supportedMetres": 1090.158342285283,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 0,
+        "floorContacts": 0
+      },
+      "triangles": 4940,
+      "batches": 8,
+      "baseboards": 336,
+      "finishProbes": 31,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-8",
+      "address": {
+        "x": 1,
+        "z": 1,
+        "story": -2
+      },
+      "spatial": true,
+      "walls": 222,
+      "rooms": 116,
+      "bareRooms": 0,
+      "features": {
+        "squeeze-view": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2235,
+        "bare": 0,
+        "supportedMetres": 2657.612817440946,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 0,
+        "equipped": 2236,
+        "bare": 0,
+        "supportedMetres": 2657.612817440946,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 2,
+        "floorContacts": 0
+      },
+      "triangles": 12462,
+      "batches": 10,
+      "baseboards": 654,
+      "finishProbes": 22,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-9",
+      "address": {
+        "x": -1,
+        "z": -1,
+        "story": -1
+      },
+      "spatial": true,
+      "walls": 246,
+      "rooms": 110,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2651,
+        "bare": 0,
+        "supportedMetres": 3091.2241593056774,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 0,
+        "equipped": 2651,
+        "bare": 0,
+        "supportedMetres": 3091.2241593056774,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 0,
+        "floorContacts": 0
+      },
+      "triangles": 12709,
+      "batches": 9,
+      "baseboards": 759,
+      "finishProbes": 28,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-10",
+      "address": {
+        "x": 0,
+        "z": -1,
+        "story": 0
+      },
+      "spatial": true,
+      "walls": 520,
+      "rooms": 136,
+      "bareRooms": 0,
+      "features": {
+        "liminal-architecture": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 3431,
+        "bare": 0,
+        "supportedMetres": 3755.589297540923,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 38,
+        "equipped": 3431,
+        "bare": 0,
+        "supportedMetres": 3755.714297540924,
+        "missingMetres": 24.68133509056642,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 2,
+        "floorContacts": 0
+      },
+      "triangles": 17248,
+      "batches": 9,
+      "baseboards": 1037,
+      "finishProbes": 16,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-11",
+      "address": {
+        "x": 1,
+        "z": -1,
+        "story": 1
+      },
+      "spatial": true,
+      "walls": 280,
+      "rooms": 111,
+      "bareRooms": 0,
+      "features": {
+        "grid-pit": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2395,
+        "bare": 0,
+        "supportedMetres": 2848.0948766882757,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 30,
+        "equipped": 2395,
+        "bare": 0,
+        "supportedMetres": 2848.0948766882766,
+        "missingMetres": 13.604455830362857,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 4,
+        "changed": 0,
+        "floorContacts": 0
+      },
+      "triangles": 12053,
+      "batches": 9,
+      "baseboards": 706,
+      "finishProbes": 23,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-12",
+      "address": {
+        "x": -1,
+        "z": 0,
+        "story": -2
+      },
+      "spatial": true,
+      "walls": 215,
+      "rooms": 97,
+      "bareRooms": 0,
+      "features": {
+        "liminal-architecture": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2058,
+        "bare": 0,
+        "supportedMetres": 2219.6377910102765,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 0,
+        "equipped": 2058,
+        "bare": 0,
+        "supportedMetres": 2219.6377910102783,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 0,
+        "floorContacts": 0
+      },
+      "triangles": 11920,
+      "batches": 9,
+      "baseboards": 605,
+      "finishProbes": 24,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-13",
+      "address": {
+        "x": 0,
+        "z": 0,
+        "story": -1
+      },
+      "spatial": true,
+      "walls": 310,
+      "rooms": 103,
+      "bareRooms": 4,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2497,
+        "bare": 78,
+        "supportedMetres": 2886.3397804172864,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 33,
+        "equipped": 2495,
+        "bare": 78,
+        "supportedMetres": 2886.258927129085,
+        "missingMetres": 18.70000000000001,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 2,
+        "changed": 2,
+        "floorContacts": 0
+      },
+      "triangles": 11014,
+      "batches": 9,
+      "baseboards": 651,
+      "finishProbes": 17,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-14",
+      "address": {
+        "x": 1,
+        "z": 0,
+        "story": 0
+      },
+      "spatial": true,
+      "walls": 257,
+      "rooms": 94,
+      "bareRooms": 8,
+      "features": {
+        "liminal-architecture": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 1781,
+        "bare": 101,
+        "supportedMetres": 2239.3058524150915,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 6,
+        "equipped": 1781,
+        "bare": 101,
+        "supportedMetres": 2239.3058524150915,
+        "missingMetres": 4.301656773872708,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 0,
+        "floorContacts": 0
+      },
+      "triangles": 8427,
+      "batches": 9,
+      "baseboards": 466,
+      "finishProbes": 18,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-15",
+      "address": {
+        "x": -1,
+        "z": 1,
+        "story": 1
+      },
+      "spatial": true,
+      "walls": 100,
+      "rooms": 18,
+      "bareRooms": 0,
+      "features": {
+        "liminal-architecture": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 378,
+        "bare": 0,
+        "supportedMetres": 603.0294943509163,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 6,
+        "equipped": 378,
+        "bare": 0,
+        "supportedMetres": 603.0294943509163,
+        "missingMetres": 4.469943349342827,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 0,
+        "floorContacts": 0
+      },
+      "triangles": 3286,
+      "batches": 9,
+      "baseboards": 164,
+      "finishProbes": 20,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-16",
+      "address": {
+        "x": 0,
+        "z": 1,
+        "story": -2
+      },
+      "spatial": true,
+      "walls": 352,
+      "rooms": 125,
+      "bareRooms": 7,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2699,
+        "bare": 106,
+        "supportedMetres": 3061.1233264038688,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 14,
+        "equipped": 2693,
+        "bare": 102,
+        "supportedMetres": 3056.323326403871,
+        "missingMetres": 15.900000000000025,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 0,
+        "floorContacts": 0
+      },
+      "triangles": 13514,
+      "batches": 9,
+      "baseboards": 778,
+      "finishProbes": 20,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-17",
+      "address": {
+        "x": 1,
+        "z": 1,
+        "story": -1
+      },
+      "spatial": true,
+      "walls": 254,
+      "rooms": 101,
+      "bareRooms": 0,
+      "features": {
+        "liminal-architecture": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2355,
+        "bare": 0,
+        "supportedMetres": 2871.0203364660797,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 4,
+        "equipped": 2360,
+        "bare": 0,
+        "supportedMetres": 2871.0203364660806,
+        "missingMetres": 3.578303872514539,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 1,
+        "changed": 0,
+        "floorContacts": 0
+      },
+      "triangles": 9980,
+      "batches": 8,
+      "baseboards": 597,
+      "finishProbes": 21,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-18",
+      "address": {
+        "x": -1,
+        "z": -1,
+        "story": 0
+      },
+      "spatial": true,
+      "walls": 346,
+      "rooms": 120,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2993,
+        "bare": 0,
+        "supportedMetres": 3352.310992604785,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 20,
+        "equipped": 2981,
+        "bare": 0,
+        "supportedMetres": 3347.3547885054663,
+        "missingMetres": 11.55000000000001,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 1,
+        "floorContacts": 1
+      },
+      "triangles": 13738,
+      "batches": 9,
+      "baseboards": 844,
+      "finishProbes": 18,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-19",
+      "address": {
+        "x": 0,
+        "z": -1,
+        "story": 1
+      },
+      "spatial": true,
+      "walls": 238,
+      "rooms": 115,
+      "bareRooms": 0,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2487,
+        "bare": 0,
+        "supportedMetres": 3016.334122931135,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 0,
+        "equipped": 2491,
+        "bare": 0,
+        "supportedMetres": 3016.334122931135,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 1,
+        "floorContacts": 0
+      },
+      "triangles": 11524,
+      "batches": 9,
+      "baseboards": 697,
+      "finishProbes": 30,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-20",
+      "address": {
+        "x": 1,
+        "z": -1,
+        "story": -2
+      },
+      "spatial": true,
+      "walls": 108,
+      "rooms": 60,
+      "bareRooms": 0,
+      "features": {
+        "raised-zone": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 1245,
+        "bare": 0,
+        "supportedMetres": 1521.8566491710917,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 0,
+        "equipped": 1245,
+        "bare": 0,
+        "supportedMetres": 1521.8566491710917,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 0,
+        "floorContacts": 0
+      },
+      "triangles": 5280,
+      "batches": 9,
+      "baseboards": 324,
+      "finishProbes": 31,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-21",
+      "address": {
+        "x": -1,
+        "z": 0,
+        "story": -1
+      },
+      "spatial": true,
+      "walls": 339,
+      "rooms": 129,
+      "bareRooms": 7,
+      "features": {},
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2918,
+        "bare": 180,
+        "supportedMetres": 3262.2448930859086,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 0,
+        "equipped": 2918,
+        "bare": 187,
+        "supportedMetres": 3262.2448930859086,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 2,
+        "floorContacts": 2
+      },
+      "triangles": 14896,
+      "batches": 9,
+      "baseboards": 836,
+      "finishProbes": 27,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-22",
+      "address": {
+        "x": 0,
+        "z": 0,
+        "story": 0
+      },
+      "spatial": true,
+      "walls": 359,
+      "rooms": 122,
+      "bareRooms": 0,
+      "features": {
+        "liminal-architecture": 2
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2967,
+        "bare": 0,
+        "supportedMetres": 3212.3899823502097,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 47,
+        "equipped": 2967,
+        "bare": 0,
+        "supportedMetres": 3212.3899823502097,
+        "missingMetres": 25.856828430667555,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 0,
+        "floorContacts": 0
+      },
+      "triangles": 14179,
+      "batches": 9,
+      "baseboards": 884,
+      "finishProbes": 23,
+      "cleanupIdempotent": true
+    },
+    {
+      "seed": "WALL-FINISH-HOLDOUT-23",
+      "address": {
+        "x": 1,
+        "z": 0,
+        "story": 1
+      },
+      "spatial": true,
+      "walls": 408,
+      "rooms": 133,
+      "bareRooms": 8,
+      "features": {
+        "liminal-architecture": 3,
+        "liminal-pit": 1
+      },
+      "sourceFeaturesUnchanged": true,
+      "roomShapesUnchanged": true,
+      "lightingUnchanged": true,
+      "openingsUnchanged": true,
+      "coverage": {
+        "equipped": 2757,
+        "bare": 176,
+        "supportedMetres": 2927.418616814853,
+        "missingMetres": 0,
+        "floating": 0
+      },
+      "beforeCoverage": {
+        "errors": 43,
+        "equipped": 2751,
+        "bare": 176,
+        "supportedMetres": 2927.418616814853,
+        "missingMetres": 32.72601068948864,
+        "floating": 0
+      },
+      "wallCorrections": {
+        "removed": 0,
+        "changed": 0,
+        "floorContacts": 0
+      },
+      "triangles": 14090,
+      "batches": 9,
+      "baseboards": 812,
+      "finishProbes": 18,
+      "cleanupIdempotent": true
+    }
+  ],
+  "errors": [],
+  "limitation": "CPU geometry and plan audit. No screenshot seed was supplied; the image is represented by synthetic regression fixtures. No WebGL/GPU/FPS validation."
+}

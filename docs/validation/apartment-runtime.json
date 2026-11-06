@@ -1,0 +1,26 @@
+{
+  "sourceBytes": 349270200,
+  "beforeCompressedBytes": 93593337,
+  "afterCompressedBytes": 61909258,
+  "runtimeBytes": 93465432,
+  "beforeDecodeAndPrepareMs": [
+    6704.743245000001,
+    8252.761828,
+    3520.1172189999997
+  ],
+  "afterDecodeMs": [
+    674.6928659999976,
+    651.787941999999,
+    823.493104000001
+  ],
+  "runtimeRoundTripVerified": true,
+  "sceneAndMaterialsUnchanged": true,
+  "smallPropPreparation": {
+    "preparedMeshes": 24,
+    "savedVertices": 924777,
+    "preparationMs": 1962.1479740000004,
+    "maxWorldDeviationMetres": 0.0014,
+    "replacesExistingRuntimeWork": true
+  },
+  "scope": "Node CPU: gzip decode, document parse and typed geometry preparation; no network, WebGL or browser timing."
+}

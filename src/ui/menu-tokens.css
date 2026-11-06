@@ -1,0 +1,11 @@
+:root, :host, .experience-ui {
+  --game-bg: #0d1011;
+  --game-surface: #151a1a;
+  --game-hover: #ffffff09;
+  --game-text: #e7e9e2;
+  --game-muted: #a0a8a1;
+  --game-accent: #bac5aa;
+  --game-rule: #e7e9e214;
+  --game-font: 'Space Grotesk Variable', system-ui, sans-serif;
+  --game-ease: 150ms ease;
+}

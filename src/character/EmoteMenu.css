@@ -1,0 +1,87 @@
+.emote-overlay[hidden] { display: none; }
+.emote-overlay { --emote-accent: #ffdb85; position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; pointer-events: none; color: #f3f3ee; font: 400 1rem/1.35 Inter, system-ui, sans-serif; }
+.emote-overlay *, .emote-overlay *::before, .emote-overlay *::after { box-sizing: border-box; }
+.character-runtime .emote-overlay button { appearance: none; pointer-events: auto; color: inherit; background: none; border: 0; border-radius: 0; padding: 0; font: inherit; text-align: center; cursor: pointer; }
+.character-runtime .emote-overlay button:focus-visible { outline: 2px solid var(--emote-accent); outline-offset: 3px; }
+.character-runtime .emote-overlay button:disabled { pointer-events: none; }
+.emote-overlay svg { width: 20px; height: 20px; }
+.emote-overlay kbd { font: 500 .75rem/1.2 Inter, system-ui, sans-serif; color: #b9bcb5; }
+.emote-panel { position: relative; min-width: 0; min-height: 0; width: min(360px, calc(100vw - 24px)); }
+.emote-panel--wheel { aspect-ratio: 1; }
+.emote-wheel { position: relative; width: 100%; aspect-ratio: 1; }
+.emote-overlay .emote-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.emote-ring path { fill: rgb(17 20 21 / 90%); stroke: rgb(255 255 255 / 10%); stroke-width: 1; pointer-events: auto; cursor: pointer; }
+.emote-ring path.is-selected { fill: #f1f0e8; stroke: #f1f0e8; }
+.emote-ring path.is-unavailable { fill: rgb(17 20 21 / 80%); stroke: rgb(255 255 255 / 5%); cursor: default; }
+.emote-ring path.is-unavailable.is-selected { fill: #343731; stroke: #6e7165; }
+.character-runtime .emote-overlay .emote-slot { position: absolute; left: calc(50% + var(--slot-x)); top: calc(50% + var(--slot-y)); transform: translate(-50%, -50%); width: 76px; height: 78px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+.emote-slot img { display: block; height: 52px; width: 64px; object-fit: contain; filter: brightness(0) invert(1); pointer-events: none; }
+.emote-slot > span:last-child { font-size: .875rem; line-height: 1.15; font-weight: 500; }
+.emote-slot kbd { position: absolute; right: 5px; top: 4px; color: #9a9e96; }
+.character-runtime .emote-overlay .emote-slot.is-selected { color: #15191a; }
+.emote-slot.is-selected img { filter: brightness(0); }
+.emote-slot.is-selected kbd { color: #676c62; }
+.character-runtime .emote-overlay .emote-slot.is-unavailable { opacity: .38; color: #d1d3cb; cursor: default; }
+.emote-slot.is-unavailable.is-selected img { filter: brightness(0) invert(1); }
+.emote-empty { display: grid; place-items: center; height: 50px; width: 50px; font-size: 1.75rem; color: #82877f; }
+.emote-wheel-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 34.4444%; aspect-ratio: 1; background: rgb(17 20 21 / 90%); border: 1px solid rgb(255 255 255 / 15%); border-radius: 50%; pointer-events: auto; }
+.character-runtime .emote-overlay .emote-wheel-back, .character-runtime .emote-overlay .emote-wheel-all { position: absolute; left: 50%; transform: translate(-50%, -50%); display: grid; place-items: center; border-radius: 50%; }
+.character-runtime .emote-overlay .emote-wheel-back { top: 40%; width: 64.5%; height: 58%; color: #f3f3ee; }
+.character-runtime .emote-overlay .emote-wheel-all { top: 80%; width: 29%; aspect-ratio: 1; color: var(--emote-accent); }
+.emote-wheel-back svg { width: 52%; height: 52%; stroke-width: 1.6; }
+.emote-wheel-all svg { width: 62%; height: 62%; }
+.character-runtime .emote-overlay .emote-wheel-back:hover, .character-runtime .emote-overlay .emote-wheel-back.is-hovered, .character-runtime .emote-overlay .emote-wheel-all:hover, .character-runtime .emote-overlay .emote-wheel-all.is-hovered { background: #353931; color: var(--emote-accent); }
+.emote-caption { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 8px 0 0; padding: 10px 14px; width: max-content; max-width: calc(100vw - 24px); min-width: 200px; border-radius: 10px; background: rgb(17 20 21 / 88%); text-align: center; pointer-events: none; }
+.emote-caption strong { font-size: 1rem; font-weight: 500; }
+.emote-caption > span { color: #b9bcb5; font-size: .75rem; }
+.emote-caption > span.is-warning { color: #ffdb85; }
+.emote-cursor { position: fixed; left: -4px; top: -4px; width: 8px; height: 8px; background: var(--emote-accent); border: 1px solid #15191a; border-radius: 50%; pointer-events: none; display: none; }
+.has-game-pointer.has-active-pointer .emote-cursor { display: block; }
+.emote-panel--collection { width: min(420px, calc(100vw - 24px)); max-height: min(82vh, 640px); padding: 16px; display: flex; flex-direction: column; border: 1px solid rgb(255 255 255 / 17%); border-radius: 16px; background: rgb(17 20 21 / 95%); pointer-events: auto; }
+.emote-panel--pair { width: min(384px, calc(100vw - 24px)); max-height: 82vh; padding: 16px; overflow-y: auto; border: 1px solid #ffdb8540; border-radius: 16px; background: rgb(17 20 21 / 95%); pointer-events: auto; }
+.character-runtime .emote-overlay .emote-pair-link { position: absolute; width: 240px; height: 43px; left: 50%; top: -55px; transform: translateX(-50%); border: 1px solid #ffdb854a; border-radius: 10px; background: #111415ed; color: #ffdb85; font-size: 14px; }
+.emote-pair-link span { display: block; color: #b9bcb5; font-size: 11px; }
+.character-runtime .emote-overlay .emote-pair-link:hover, .character-runtime .emote-overlay .emote-pair-link.is-hovered { background: #353931; }
+.emote-pair-list { display: grid; gap: 7px; }
+.character-runtime .emote-overlay .emote-pair-list button { display: grid; grid-template-columns: 22px 1fr; gap: 3px 6px; text-align: left; padding: 13px 12px; border: 1px solid #ffffff1c; border-radius: 9px; }
+.emote-pair-list strong { font-size: 14px; font-weight: 500; }
+.emote-pair-list kbd { align-self: center; color: #ffdb85; }
+.emote-pair-list small { grid-column: 2; color: #a4ab99; font-size: 11px; }
+.emote-pair-list small:empty { display: none; }
+.character-runtime .emote-overlay .emote-pair-list button:hover:not(:disabled), .character-runtime .emote-overlay .emote-pair-list button.is-hovered { background: #353931; }
+.character-runtime .emote-overlay .emote-pair-list button:disabled { opacity: .45; }
+.emote-header { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+.emote-header h2 { flex: 1; margin: 0; font-size: 1rem; font-weight: 600; }
+.emote-posture { margin-left: 8px; color: #a4ab99; font-size: 11px; font-weight: 400; }
+.character-runtime .emote-overlay .emote-icon-button { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; color: #c4c8be; }
+.character-runtime .emote-overlay .emote-icon-button:hover, .character-runtime .emote-overlay .emote-icon-button.is-hovered { background: #353931; }
+.emote-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; overflow-y: auto; min-height: 0; scrollbar-width: thin; scrollbar-color: #666b5d transparent; }
+.emote-card { position: relative; min-width: 0; border: 1px solid rgb(255 255 255 / 8%); border-radius: 10px; }
+.character-runtime .emote-overlay .emote-card-select { width: 100%; height: 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 9px 4px 6px; border-radius: 9px; }
+.emote-card-select img { width: 58px; height: 52px; object-fit: contain; filter: brightness(0) invert(1); pointer-events: none; }
+.emote-card-select span { font-size: 12px; line-height: 1.25; }
+.character-runtime .emote-overlay .emote-card-select:disabled { color: #9ea397; cursor: default; pointer-events: auto; }
+.emote-card-select:disabled img { opacity: .35; }
+.character-runtime .emote-overlay .emote-card-select:hover, .character-runtime .emote-overlay .emote-card-select.is-hovered { background: #34372f; }
+.character-runtime .emote-overlay .emote-favorite { position: absolute; top: 2px; right: 0; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; color: #8b9183; }
+.emote-favorite svg { width: 16px; height: 16px; }
+.character-runtime .emote-overlay .emote-favorite[aria-pressed="true"] { color: var(--emote-accent); }
+.emote-favorite[aria-pressed="true"] svg { fill: currentColor; }
+.character-runtime .emote-overlay .emote-favorite:hover, .character-runtime .emote-overlay .emote-favorite.is-hovered { background: #4b4634; color: var(--emote-accent); }
+.emote-favorites { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgb(255 255 255 / 10%); }
+.emote-favorites-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.emote-favorites-heading strong { font-size: .875rem; font-weight: 500; }
+.emote-favorites-heading strong span { color: #92998b; font-size: .75rem; margin-left: 4px; }
+.character-runtime .emote-overlay .emote-favorites-heading button { color: var(--emote-accent); font-size: .875rem; }
+.emote-favorite-strip { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; margin-top: 7px; }
+.character-runtime .emote-overlay .emote-mini-slot { position: relative; min-width: 0; height: 40px; padding: 3px; border-radius: 7px; border: 1px solid rgb(255 255 255 / 10%); display: grid; place-items: center; }
+.emote-mini-slot img { width: 28px; height: 28px; object-fit: contain; filter: brightness(0) invert(1); pointer-events: none; }
+.emote-mini-slot kbd { position: absolute; top: 2px; left: 3px; font-size: 8px; }
+.emote-mini-slot .emote-empty { width: auto; height: auto; font-size: 20px; }
+.emote-collection-status { flex: 0 0 auto; min-height: 16px; margin: 8px 0 0; color: #a4ab99; font-size: 11px; text-align: center; }
+.emote-collection-status.is-warning { color: var(--emote-accent); }
+.character-runtime .emote-overlay .emote-mini-slot:hover, .character-runtime .emote-overlay .emote-mini-slot.is-hovered { background: #353931; }
+.is-replacing .emote-mini-slot { outline: 1px dashed var(--emote-accent); }
+.emote-footer { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgb(255 255 255 / 8%); color: #a4ab99; font-size: .75rem; }
+@media (max-width: 600px) { .emote-panel--wheel { width: min(320px, calc(100vw - 24px)); } .character-runtime .emote-overlay .emote-slot { width: 66px; height: 66px; } .emote-slot img { height: 42px; width: 52px; } .emote-panel--collection { padding: 12px; } }
+@media (max-height: 440px) { .emote-panel--wheel { width: min(280px, 75vh, calc(100vw - 24px)); } .character-runtime .emote-overlay .emote-slot { width: 62px; height: 60px; } .emote-slot img { height: 34px; width: 44px; } .emote-caption { margin-top: 3px; padding: 5px 10px; } }

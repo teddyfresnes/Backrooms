@@ -1,0 +1,307 @@
+{
+  "source": "https://dillonbecker.itch.io/sdap",
+  "author": "Dillon Becker",
+  "license": "CC BY 4.0",
+  "files": [
+    {
+      "file": "assets/audio/neighbors/alex/refusal-1.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Alex Brodie/refusal_1_alex.wav",
+      "sha256": "d1dbfda67e94fbad82c2cbb6c040cbc6e88f6ff95e4df409f52a975d1c80b551"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-2.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Alex Brodie/refusal_2_alex.wav",
+      "sha256": "65ae6d46fd09d7a3b23f0611d5869aca34625db69fe3d9acc22eb9e14cb7b732"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-3.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Alex Brodie/refusal_3_alex.wav",
+      "sha256": "43e9a0f715db2942e46d699d74f8cf46cf6a836fa16e64e165fdbce1ddc00b9a"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-4.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Alex Brodie/refusal_4_alex.wav",
+      "sha256": "64a2dc197f596f061a9db2eb18304af6c4ed8f16ecca644330257ce0d3fb6e57"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-5.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Alex Brodie/refusal_5_alex.wav",
+      "sha256": "27b2da08ca5e5c018dc97ecccd9f7cb17beef66dd4e79aa6968d275eea133925"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-6.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Alex Brodie/refusal_6_alex.wav",
+      "sha256": "1f2d98f4f41920deceb8e4b6c60ede5b57eb99bd04d547a06638ebfb0f1e1b8a"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-7.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Alex Brodie/refusal_7_alex.wav",
+      "sha256": "def780a1be9f382cc446ea69d9136c948e3945f4bbc138697d267dabcc603b07"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-8.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Alex Brodie/refusal_8_alex.wav",
+      "sha256": "6e3c2c776edc260c84c5ec2f7f633070f1150d010d2b36e58686d047a385d471"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-9.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Alex Brodie/refusal_9_alex.wav",
+      "sha256": "d7c42a036271bc0d27db457f91f9df74db6d687319fa12096fe4a1b633a3e972"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/refusal-10.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Alex Brodie/refusal_10_alex.wav",
+      "sha256": "3f64491fd78e46f5eab74f184879a0cc0325ff2fedc638711b58e215181a725b"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/miscellaneous-13.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Male/Alex Brodie/miscellaneous_13_alex.wav",
+      "sha256": "4db16247fc10de5241680024ac85c79e387397f7e2196f1e9736c6dd3441cb0c"
+    },
+    {
+      "file": "assets/audio/neighbors/alex/miscellaneous-15.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Male/Alex Brodie/miscellaneous_15_alex.wav",
+      "sha256": "586593ad5d1afb434adf95f2b86cd0b5de19703a87fa313eb50379d4832187c2"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-1.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Ian Lampert/refusal_1_ian.wav",
+      "sha256": "d8e5e3a5b17c0ba3059992e3cd16f27fc40a03899db642ddbf6dbddef2c56f0c"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-2.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Ian Lampert/refusal_2_ian.wav",
+      "sha256": "ba0576a46bdc2fd6a9857f5ea8d7955774b3781deb77f61d4d1ccac4a2274435"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-3.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Ian Lampert/refusal_3_ian.wav",
+      "sha256": "c72aaf2e472010b5147cf8d63de9f7f5ea26494fa9127b5363f3a9317c964fb6"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-4.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Ian Lampert/refusal_4_ian.wav",
+      "sha256": "b6201c1352de1454470e62c689743d2473fe30604e26a5aa79fd4656ae9485fe"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-5.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Ian Lampert/refusal_5_ian.wav",
+      "sha256": "a54be35a95a5e3ab15c574320252ae29f117b6843358ab8ae7bdd1b68202727a"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-6.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Ian Lampert/refusal_6_ian.wav",
+      "sha256": "5bab81769b7589bd6dbdd3de5ff79c95323310e9af01f1ebb46cb4c8ba82d7b2"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-7.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Ian Lampert/refusal_7_ian.wav",
+      "sha256": "7e5432febf64bccf5dcd5a8d44fc3a7d897e149e1eec89b4b2128d15088c4098"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-8.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Ian Lampert/refusal_8_ian.wav",
+      "sha256": "02469a9ea3dea288f2ece165e57ef9100c5e6baa452a213cc1cc601f9188cf26"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-9.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Ian Lampert/refusal_9_ian.wav",
+      "sha256": "ab23feef41f7d3ad3bebf572d152ca5b4cdf04d5374e4eeee9413fda92bd1757"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/refusal-10.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Ian Lampert/refusal_10_ian.wav",
+      "sha256": "a4cffb561e770c31eda96e117e37b836cf574e6d842f4365385192f1b93fbffe"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/miscellaneous-13.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Male/Ian Lampert/miscellaneous_13_ian.wav",
+      "sha256": "7f5ca66577003c8acc2950f1019cfa10918bb85cf65ecc0a3514445550b73b6e"
+    },
+    {
+      "file": "assets/audio/neighbors/ian/miscellaneous-15.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Male/Ian Lampert/miscellaneous_15_ian.wav",
+      "sha256": "9cf1c6b21c7adf4bc2efb18a211bf5b98aa24fcd9e40c8bae8a5a6e2d0fdb92b"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-1.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Sean Lenhart/refusal_1_sean.wav",
+      "sha256": "a5fcb82bd23269d1e02b62b15f7e1278bf08cca18ca60435846056970c9a1e1a"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-2.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Sean Lenhart/refusal_2_sean.wav",
+      "sha256": "3919537d19b479aad61662a397039c6d96abbd19048cd652eecf9e4058d8055b"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-3.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Sean Lenhart/refusal_3_sean.wav",
+      "sha256": "7a61d5b27f9ae824f63740c4dc62c5cd56629b1ba7280e1066d5a87116d6e72f"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-4.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Sean Lenhart/refusal_4_sean.wav",
+      "sha256": "29b17b78691f97c5cdd86588816612741b3811236fb813b49e3cf7b06b337d1f"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-5.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Sean Lenhart/refusal_5_sean.wav",
+      "sha256": "ac7868d2c9a17a722f6ffa4a754ac0ff3fdf1cb94f3328d9b7bde14e16508c8c"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-6.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Sean Lenhart/refusal_6_sean.wav",
+      "sha256": "40c9de857847512eff7d5039a2e648176d7ac4e63378a705b02090f3eb229b61"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-7.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Sean Lenhart/refusal_7_sean.wav",
+      "sha256": "c6357bb5ea86fca7e9786560725a0ec9f12bc9c21cff8c9d05f665cd7be417d4"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-8.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Sean Lenhart/refusal_8_sean.wav",
+      "sha256": "b195245213a52788240df66386563d9e3e7be42cb5128832870ab648fbad79e7"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-9.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Sean Lenhart/refusal_9_sean.wav",
+      "sha256": "9f2dba9c3d27d05fa2a6513e1d6f07a9c2545015947f35b8ce9c9563101bbd87"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/refusal-10.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Male/Sean Lenhart/refusal_10_sean.wav",
+      "sha256": "82120d58941b7101f3e14b8db74f5cd6ac4aec438923010130ddddc65afa8226"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/miscellaneous-13.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Male/Sean Lenhart/miscellaneous_13_sean.wav",
+      "sha256": "0755b2fdf79240613b44177136f498044840d8dd67d8d72bfd0262fcc8a03af7"
+    },
+    {
+      "file": "assets/audio/neighbors/sean/miscellaneous-15.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Male/Sean Lenhart/miscellaneous_15_sean.wav",
+      "sha256": "f748abfa54dd9d5d9848cf423af4418f06b9948ac9fa391d9458b9f02a3b9c68"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-1.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Karen Cenon/refusal_1_karen.wav",
+      "sha256": "793be5e8022aebcc4d3f92edf33259f493fc3464c5e9ea218081e83a6c3df580"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-2.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Karen Cenon/refusal_2_karen.wav",
+      "sha256": "ad796ce9607c6bee114f008eed94a78ca94a83d2ab079171fa0fda184f974646"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-3.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Karen Cenon/refusal_3_karen.wav",
+      "sha256": "96c11482694c28719ba06d9421c81eee3b12a87f22248b6917e8836c905003d3"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-4.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Karen Cenon/refusal_4_karen.wav",
+      "sha256": "69736b193b8de59a261758a82e3b1a626b48e00c85940e7c1a10194bf58aa8b6"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-5.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Karen Cenon/refusal_5_karen.wav",
+      "sha256": "fa5098db8ed93202e49e971c25f29fa5ddf368fd914e9e6ace0dcd53289e32da"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-6.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Karen Cenon/refusal_6_karen.wav",
+      "sha256": "90d92e8a28c63f3eb26c5c94150e873ccdd450b2ecddeae7fbdc0f3642f68656"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-7.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Karen Cenon/refusal_7_karen.wav",
+      "sha256": "92c29a2c21a711db43bb1bcb8f96daec206b14b5f0accce7371710f32a22cad7"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-8.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Karen Cenon/refusal_8_karen.wav",
+      "sha256": "b3770e74ac9945f73725889771139e1979173d40a906a7a0ef8d354ddc00610b"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-9.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Karen Cenon/refusal_9_karen.wav",
+      "sha256": "d0f1374246e68f65af232884650e7261fcf08cbf384eae98c6dcb88ce5c880dc"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/refusal-10.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Karen Cenon/refusal_10_karen.wav",
+      "sha256": "589b0fbee285dd6e6ea8b86d5823a245e2c95e925857bcbcd043bfae16d2bc1c"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/miscellaneous-13.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Female/Karen Cenon/miscellaneous_13_karen.wav",
+      "sha256": "2db439aa011c627a7e57e66a080e7acc48679d7d8102996329e7805fb0517f43"
+    },
+    {
+      "file": "assets/audio/neighbors/karen/miscellaneous-15.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Female/Karen Cenon/miscellaneous_15_karen.wav",
+      "sha256": "74e9fdb4125bedd8c1a88ef4ee42be49bbccb62a465b4516fb266aa64f6f1d51"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-1.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Meghan Christian/refusal_1_meghan.wav",
+      "sha256": "53900407f2e39c6dfbc660320c1e115bb930cfd173440c02ff7aaeef4935761e"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-2.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Meghan Christian/refusal_2_meghan.wav",
+      "sha256": "05b3f82090559b4d4294b1c520ed1b8abdeddd635da46ea65777a57e930b1187"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-3.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Meghan Christian/refusal_3_meghan.wav",
+      "sha256": "54c860cc0ed8792b51e8a4aaa6e1e5889af43769ddb656708dc8d497f9001cc1"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-4.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Meghan Christian/refusal_4_meghan.wav",
+      "sha256": "2cfb6970b23d0ea2e57be36ad4ab24bbb3a5ddb7945805f5dd04f6746106e473"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-5.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Meghan Christian/refusal_5_meghan.wav",
+      "sha256": "573dc5db36005bcc5396128f8eb8bb78a2a3e624ea2978cb32599ddded3348ad"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-6.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Meghan Christian/refusal_6_meghan.wav",
+      "sha256": "d9eee4ae6f0aa8eb9846116cc2dd982556c5f2a050462ab323a9a3d9e95b80f8"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-7.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Meghan Christian/refusal_7_meghan.wav",
+      "sha256": "ede303728453124f9240710135dcad13544ec1f1e74db1f178221129104531c6"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-8.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Meghan Christian/refusal_8_meghan.wav",
+      "sha256": "4b5ca486b97e935d2a4e9e5e629ae6c580f4c92562a5ebf537b4447f254a922e"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-9.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Meghan Christian/refusal_9_meghan.wav",
+      "sha256": "dadb1457f0f5053ae6b543236a90d37f968bb123e423ba978bb62652b005fd7c"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/refusal-10.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/5 - Refusal/Female/Meghan Christian/refusal_10_meghan.wav",
+      "sha256": "89bbf6b92c1524cb48d908f8405074a9a3b43b631c6f5dab56fc79a8333c9b8e"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/miscellaneous-13.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Female/Meghan Christian/miscellaneous_13_meghan.wav",
+      "sha256": "5052c562dcc78f0adf85987d9a4047132832f4eaffa34d7380be74cd2691730b"
+    },
+    {
+      "file": "assets/audio/neighbors/meghan/miscellaneous-15.ogg",
+      "source": "Super Dialogue Audio Pack v1/Step 2 - Audio Files/6 - Miscellaneous/Female/Meghan Christian/miscellaneous_15_meghan.wav",
+      "sha256": "4b52ddce087a5082832acc04e273e2a62d47c61be3e9f1268af35a0bd4e1eed3"
+    }
+  ]
+}

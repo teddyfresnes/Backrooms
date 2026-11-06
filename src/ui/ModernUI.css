@@ -1,0 +1,127 @@
+@import './menu-tokens.css';
+
+.pointer-capture {
+  position: absolute; top: 50%; left: 50%; z-index: 25; transform: translate(-50%, -50%);
+  display: grid; place-items: center; width: 44px; height: 44px; padding: 0;
+  border: 1px solid #e7e9e24d; border-radius: 50%; background: #0d1011b8;
+  color: #f4f4e9; cursor: pointer; pointer-events: auto;
+}
+.pointer-capture svg { width: 24px; height: 24px; }
+.pointer-capture:hover { background: #1c2222e6; border-color: #e7e9e299; }
+.pointer-capture[hidden], .experience-ui:not(.is-playing) .pointer-capture,
+.experience-ui.is-console-open .pointer-capture, .is-arrival-cinematic .pointer-capture { display: none; }
+
+/* The original home menu comes from styles.css. Dialogs retain their recent
+   presentation even while that home menu is the active page. */
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) {
+  --menu-accent: var(--game-accent); --menu-text: var(--game-text);
+  --menu-text-muted: var(--game-muted); --menu-muted: var(--game-muted);
+  --menu-surface: var(--game-surface); --menu-surface-soft: transparent;
+  --menu-surface-hover: var(--game-hover); --menu-border: var(--game-rule);
+  --menu-border-strong: #bac5aa55; font-family: var(--game-font);
+}
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .menu-overlay { background: #070b0de8; backdrop-filter: none; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .menu-panel, .experience-ui:where(:not(.is-main-menu[data-menu-page='home']))[data-menu-page='saves'] .menu-panel, .experience-ui:where(:not(.is-main-menu[data-menu-page='home']))[data-menu-page='wardrobe'] .menu-panel {
+  border: 0; border-radius: 0; background: var(--game-surface); box-shadow: none; backdrop-filter: none;
+}
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .menu-content { padding: clamp(22px, 4vw, 40px); }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .menu-panel::before, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .menu-panel::after { display: none; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .page-heading { border-bottom: 1px solid var(--game-rule); padding-bottom: 20px; margin-bottom: 24px; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .page-heading h2 { color: var(--game-text); font-size: clamp(23px, 3vw, 30px); font-weight: 450; letter-spacing: -.025em; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) button, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) select, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) input { font-family: var(--game-font); }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .menu-action, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .menu-action.primary, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .page-back, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .text-button, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .keyboard-presets button, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .secondary-button, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .save-load, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .save-delete, .experience-ui .confirmation-actions button {
+  border: 0; border-radius: 2px; background: transparent; color: var(--game-text); box-shadow: none;
+  font-size: 15px; font-weight: 400; letter-spacing: 0; text-transform: none;
+  transition: color var(--game-ease), background var(--game-ease);
+}
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .menu-action:hover:not(:disabled), .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .menu-action.primary:hover:not(:disabled), .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .page-back:hover, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .text-button:hover, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .keyboard-presets button:hover, .experience-ui .confirmation-actions button:hover { color: #fff; background: var(--game-hover); transform: none; box-shadow: none; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) button:focus-visible, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) input:focus-visible, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) select:focus-visible, .boot-error button:focus-visible { outline: 1px solid var(--game-accent); outline-offset: 4px; box-shadow: none; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) button:disabled { opacity: .34; cursor: not-allowed; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .menu-action.danger, .experience-ui .confirmation-actions button.danger { color: #d2aaa0; background: transparent; border: 0; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .menu-action.danger:hover:not(:disabled), .experience-ui .confirmation-actions button.danger:hover { color: #f1c8bc; background: #bb675509; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .settings-categories { border: 0; border-radius: 0; padding: 0 0 16px; gap: 16px; background: transparent; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) [data-settings-category] { padding: 8px 0; border: 0; border-radius: 0; color: var(--game-muted); text-transform: none; font-size: 14px; letter-spacing: 0; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) [data-settings-category].active { color: var(--game-text); background: transparent; box-shadow: inset 0 -1px var(--game-accent); }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .settings-card { border: 0; border-radius: 0; padding: 0; background: transparent; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .setting-row { padding: 16px 0; border-bottom: 1px solid var(--game-rule); }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .setting-row strong { color: var(--game-text); font-weight: 450; font-size: 14px; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .setting-row small, .object-controls-help { color: var(--game-muted); }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .setting-row select, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .binding-button, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .binding-key { border: 0; border-radius: 2px; background: #ffffff08; color: var(--game-text); font-size: 14px; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) input[type='range'] { accent-color: var(--game-accent); }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .keyboard-presets button.active { background: var(--game-hover); color: var(--game-accent); }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .save-card, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .save-entry { border: 0; border-radius: 0; background: transparent; box-shadow: none; border-bottom: 1px solid var(--game-rule); }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .save-entry:hover { background: var(--game-hover); }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .home-title h2 { font-size: clamp(28px, 4vw, 46px); font-weight: 400; color: var(--game-text); letter-spacing: -.035em; text-shadow: none; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .home-title p { font-size: 14px; color: var(--game-muted); letter-spacing: .03em; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .home-logo { width: 45px; height: 45px; filter: none; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])).is-paused[data-menu-page='home'] .menu-overlay { display: grid; place-items: center; padding: 24px; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])).is-paused[data-menu-page='home'] .menu-panel { width: min(400px, 100%); height: auto; max-height: calc(100dvh - 48px); overflow-y: auto; background: var(--game-surface); }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])).is-paused[data-menu-page='home'] .menu-content { padding: 30px; pointer-events: auto; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])).is-paused[data-menu-page='home'] .home-stage { width: 100%; height: auto; justify-content: flex-start; }
+.pause-heading { margin: 0 0 24px; }
+.pause-heading h2 { margin: 0; font-size: 26px; font-weight: 400; color: var(--game-text); letter-spacing: -.02em; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])).is-paused[data-menu-page='home'] .menu-actions { display: flex; flex-direction: column; gap: 2px; width: 100%; margin: 0; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])).is-paused[data-menu-page='home'] .continue-action.pause-only:not([hidden]) { display: contents; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])).is-paused[data-menu-page='home'] .menu-action { min-height: 44px; padding: 10px 0; font-size: 15px; text-align: left; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])).is-paused[data-menu-page='home'] .menu-action::before,
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])).is-paused[data-menu-page='home'] .menu-action::after { display: none; }
+.experience-ui .confirmation-layer {
+  --menu-accent: var(--game-accent); --menu-text: var(--game-text); --menu-text-muted: var(--game-muted);
+  background: #030403b8; backdrop-filter: none; color: var(--game-text); font-family: var(--game-font);
+}
+.experience-ui .confirmation-layer button:focus-visible { outline: 1px solid var(--game-accent); outline-offset: 4px; box-shadow: none; }
+.experience-ui .confirmation-card { width: min(360px, 100%); padding: 24px; border: 1px solid #d7cfb32b; border-radius: 4px; background: #111310; box-shadow: none; }
+.experience-ui .confirmation-card h2 { margin: 0; font-size: 22px; font-weight: 400; line-height: 1.3; letter-spacing: -.025em; }
+.experience-ui .confirmation-card p { margin: 10px 0 0; font-size: 13px; line-height: 1.5; color: var(--game-muted); }
+.experience-ui .confirmation-card p[hidden] { display: none; }
+.experience-ui .confirmation-actions { grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 24px; }
+.experience-ui .confirmation-actions button { min-height: 42px; padding: 10px 14px; border: 1px solid #e7e9e226; border-radius: 3px; font-size: 14px; text-align: center; }
+.experience-ui .confirmation-actions button.confirm-primary { border-color: #d8ceaa; background: #d8ceaa; color: #181b14; }
+.experience-ui .confirmation-actions button.confirm-primary:hover { border-color: #eee5c7; background: #eee5c7; color: #10120d; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .wardrobe-page-host { border: 0; border-radius: 0; background: var(--game-bg); }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) backrooms-wardrobe {
+  --bg: var(--game-bg); --surface: var(--game-surface); --surface-2: #1a2020; --surface-3: #202727;
+  --border: var(--game-rule); --border-strong: #bac5aa40; --text: var(--game-text);
+  --muted: var(--game-muted); --muted-2: #818981; --accent: var(--game-accent); --accent-soft: #bac5aa0a;
+}
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .developer-gate, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .developer-console-head, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .developer-export-box { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .developer-gate::before, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .developer-security-line, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .developer-lock-mark { display: none; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .developer-live-dot { box-shadow: none; background: var(--game-accent); }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .developer-gate h3 { font-size: 24px; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .developer-code-form input { border: 0; border-radius: 2px; background: var(--game-bg); color: var(--game-text); }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .developer-code-form button, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .developer-download-button, .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .developer-console-head button { border: 0; background: var(--game-hover); color: var(--game-text); font-size: 14px; }
+.loading-screen, .boot-error { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; padding: 24px; background: #000; color: #d4d4cf; font: 400 13px var(--game-font); }
+.loading-screen.boot-shell { background: #000; place-items: center; }
+.loading-screen.boot-shell::before, .loading-screen.boot-shell::after { display: none; }
+.loading-screen-content { width: min(288px, 80vw); text-align: left; }
+.loading-screen-heading { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+[data-loading-percent] { color: #eeeee7; font-variant-numeric: tabular-nums; }
+.loading-screen-track { height: 3px; overflow: hidden; background: #292929; }
+.loading-screen-track i { display: block; width: 0; height: 100%; background: #ded8b5; }
+.loading-screen-content .loading-screen-phase { min-height: 16px; margin: 9px 0 24px; font-size: 11px; color: #92928c; letter-spacing: 0; }
+.loading-maze { display: block; width: 180px; height: 94px; margin: auto; color: #51514d; }
+.loading-maze circle { filter: drop-shadow(0 0 2px #e2dbb2aa); }
+.boot-error { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; padding: 24px; background: var(--game-bg); color: var(--game-text); font: 400 15px var(--game-font); }
+.loading-screen-content { width: min(220px, 80vw); text-align: left; }
+.loading-screen-content p { margin: 0 0 18px; }
+.loading-screen-track { height: 1px; overflow: hidden; background: #e7e9e21a; }
+.loading-screen-track i { display: block; width: 35%; height: 100%; background: var(--game-accent); animation: loading-sweep 1.5s ease-in-out infinite alternate; }
+@keyframes loading-sweep { from { transform: translateX(-100%); } to { transform: translateX(385%); } }
+.boot-error { gap: 18px; justify-items: start; }
+.boot-error > strong { color: var(--game-text); font-size: 22px; font-weight: 400; letter-spacing: 0; }
+.boot-error > span { color: var(--game-muted); font-size: 14px; }
+.boot-error button { padding: 10px 0; border: 0; border-radius: 0; color: var(--game-text); background: transparent; font-size: 15px; }
+.new-game-film .new-game-film-wait { position: absolute; inset: 0; display: block; margin: 0; padding: 0; transform: none; width: auto; }
+.new-game-film-wait .loading-screen { position: absolute; z-index: 0; }
+.new-game-film .new-game-film-wait[hidden], .loading-screen[hidden], .pause-heading[hidden], .carry-hint[hidden] { display: none; }
+.interaction-prompt { padding: 8px 12px; border: 0; border-radius: 2px; background: #0d1011db; box-shadow: none; backdrop-filter: none; color: var(--game-text); font: 14px var(--game-font); text-transform: none; letter-spacing: 0; }
+.interaction-prompt kbd { padding: 4px 7px; margin-right: 8px; border: 1px solid #e7e9e233; border-radius: 2px; background: transparent; color: var(--game-text); box-shadow: none; }
+.carry-hint { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); padding: 9px 12px; color: var(--game-text); background: #0d1011d9; font-size: 12px; line-height: 1.7; white-space: pre-wrap; }
+.experience-ui:where(:not(.is-main-menu[data-menu-page='home'])):not(.is-playing) .carry-hint { display: none; }
+@media(max-width: 600px) {
+  .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .menu-panel, .experience-ui:where(:not(.is-main-menu[data-menu-page='home']))[data-menu-page='saves'] .menu-panel { width: 100%; max-height: 100dvh; }
+  .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) .settings-categories { gap: 12px; overflow-x: auto; flex-wrap: nowrap; }
+  .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])) [data-settings-category] { flex: 0 0 auto; }
+  .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])).is-paused[data-menu-page='home'] .menu-overlay { padding: 12px; }
+  .experience-ui:where(:not(.is-main-menu[data-menu-page='home'])).is-paused[data-menu-page='home'] .menu-panel { max-height: calc(100dvh - 24px); }
+}

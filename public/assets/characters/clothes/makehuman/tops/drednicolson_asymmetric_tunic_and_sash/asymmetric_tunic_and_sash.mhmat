@@ -1,0 +1,36 @@
+# Default Material for Asymmetric Tunic and Sash
+
+name asymmetric_tunic_and_sash01
+description Default Material for Asymmetric Tunic and Sash
+ambientColor 0.9 0.9 0.9
+diffuseColor  0.8 0.8 0.8
+specularColor  0.05 0.05 0.05
+shininess 0.4
+emissiveColor 0.0 0.0 0.0
+opacity 1.0
+translucency 0.0
+
+shadeless False
+wireframe False
+transparent False
+alphaToCoverage True
+backfaceCull False
+depthless False
+
+castShadows True
+
+receiveShadows True
+
+diffuseTexture Asymmetric_Tunic_and_Sash_diff.webp
+normalmapTexture Asymmetric_Tunic_and_Sash_nrml.webp
+specularTexture Asymmetric_Tunic_and_Sash_spec.webp
+normalmapIntensity 1.0
+
+shaderConfig diffuse True
+shaderConfig ambientOcclusion True
+shaderConfig normal True
+shaderConfig bump False
+shaderConfig displacement False
+shaderConfig vertexColors False
+shaderConfig spec True
+shaderConfig transparency False

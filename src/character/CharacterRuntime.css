@@ -1,0 +1,126 @@
+.character-runtime { position:fixed; inset:0; pointer-events:none; z-index:8; color:#edf2f6; }
+.character-runtime[hidden] { display:none; }
+
+.character-runtime { --injury-gray: 0; --injury-saturation: 1; --injury-vignette: 0; --injury-contrast: 1; --injury-brightness: 1; --death-veil: 0; position: fixed; inset: 0; background: transparent; color: #edf2f6; }
+
+
+.character-runtime__motion-fx {
+  --motion-blur: 0px;
+  --motion-opacity: 0;
+  position: fixed;
+  inset: -4px;
+  z-index: 1;
+  pointer-events: none;
+  opacity: var(--motion-opacity);
+  background: rgba(255,255,255,.002);
+  backdrop-filter: blur(var(--motion-blur));
+  -webkit-backdrop-filter: blur(var(--motion-blur));
+  mask-image: radial-gradient(circle at center, transparent 38%, rgba(0,0,0,.18) 64%, #000 100%);
+  -webkit-mask-image: radial-gradient(circle at center, transparent 38%, rgba(0,0,0,.18) 64%, #000 100%);
+  will-change: opacity, backdrop-filter;
+}
+
+
+.character-runtime__damage-fx {
+  --damage-opacity: 0;
+  --blood-scale: 1;
+  --hit-blood-opacity: 0;
+  --hit-blood-side: 0;
+  position: fixed;
+  inset: -2.5%;
+  z-index: 2;
+  pointer-events: none;
+  opacity: var(--damage-opacity);
+  transform: scale(var(--blood-scale));
+  /* Dark, dried edge smears instead of a full-screen bright-red arcade wash. */
+  background-image:
+    radial-gradient(ellipse at center, transparent 52%, rgba(56, 15, 12, .015) 70%, rgba(70, 18, 14, .20) 100%),
+    radial-gradient(ellipse at 2% 18%, rgba(88, 24, 19, .20) 0 1.1%, transparent 4.6%),
+    radial-gradient(ellipse at 98% 27%, rgba(78, 20, 16, .18) 0 1.25%, transparent 5.1%),
+    radial-gradient(ellipse at 8% 91%, rgba(92, 25, 18, .17) 0 1.2%, transparent 5.2%),
+    radial-gradient(ellipse at 94% 84%, rgba(74, 18, 15, .19) 0 1.35%, transparent 5.8%);
+  background-size: cover, cover, cover, cover, cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-blend-mode: normal, normal, normal, normal, normal;
+  box-shadow: inset 0 0 130px 34px rgba(62, 11, 9, calc(.07 + var(--injury-vignette) * .16));
+  filter: saturate(.52) brightness(.88) contrast(1.06);
+  mix-blend-mode: normal;
+  will-change: opacity, transform;
+}
+
+.character-runtime__damage-fx::before {
+  content: '';
+  position: absolute;
+  inset: -8%;
+  opacity: var(--hit-blood-opacity);
+  background-image: radial-gradient(ellipse at 3% 36%, #4b17122e, transparent 22%), radial-gradient(ellipse at 94% 62%, #5c1d1938, transparent 25%);
+  background-size: 118% 118%;
+  background-position: center;
+  background-repeat: no-repeat;
+  transform: translateX(calc(var(--hit-blood-side) * 5.5%)) rotate(calc(var(--hit-blood-side) * -2.5deg)) scale(1.04);
+  filter: saturate(.72) brightness(.72) contrast(1.18);
+  mix-blend-mode: normal;
+  will-change: opacity, transform;
+}
+
+
+.character-runtime__damage-fx::after {
+  content: '';
+  position: absolute;
+  inset: -1%;
+  opacity: var(--death-veil);
+  background:
+    radial-gradient(ellipse at 50% 47%, transparent 22%, rgba(7, 10, 12, .16) 47%, rgba(2, 4, 6, .82) 100%),
+    linear-gradient(rgba(19, 25, 29, .16), rgba(0, 0, 0, .20));
+  box-shadow: inset 0 0 210px 92px rgba(0, 0, 0, .86);
+  mix-blend-mode: multiply;
+  transition: opacity 80ms linear;
+}
+
+
+
+/* Production Backrooms interaction prompt, scoped to the gameplay character. */
+.character-runtime__get-up-prompt {
+  position: absolute;
+  z-index: 16;
+  bottom: 15%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 7px 11px;
+  border: 1px solid rgba(245, 240, 216, 0.27);
+  border-radius: 3px;
+  background: rgba(10, 11, 8, 0.8);
+  color: #f5f0d8;
+  font: 500 11px/1.4 'Space Grotesk Variable', system-ui, sans-serif;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 7px);
+  transition: opacity 140ms ease, transform 140ms ease;
+  backdrop-filter: blur(8px);
+}
+
+.character-runtime__get-up-prompt.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.character-runtime__get-up-prompt kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 2px 6px;
+  border: 1px solid rgba(245, 240, 216, 0.27);
+  border-radius: 3px;
+  background: rgba(245, 240, 216, 0.06);
+  color: #f5f0d8;
+  font: 500 11px/1 'JetBrains Mono Variable', monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .character-runtime__get-up-prompt { transition: none; }
+}

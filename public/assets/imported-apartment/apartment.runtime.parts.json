@@ -1,0 +1,32 @@
+{
+  "codecSha256": "a2149c79f068043f8dd89d14c1c1002f1f27e076a45b346bbe530d388ad3d6cb",
+  "version": 2,
+  "compression": "gzip",
+  "encoding": "apartment-binary-v1",
+  "bytes": 93465432,
+  "sourceSha256": "1b1864ff763676e6fa4bc0b66e0ae2d854a7bf9ef3e61990d2c9f6fce7067dda",
+  "runtimeSha256": "0ac2daf5805c913b3ab83fc338e1846d39d1f264c0e5fb0e2f998c879f86b2f6",
+  "compressedSha256": "36ed19616f79b1905f46118a1311d46f6f85a09864709ae6f41a328f0e8019aa",
+  "parts": [
+    {
+      "file": "apartment-runtime-000.bin",
+      "bytes": 16777216,
+      "sha256": "07555aaa621722d3cb6a4bc50a0c4482117f24806845fa8327515aad7eca5df5"
+    },
+    {
+      "file": "apartment-runtime-001.bin",
+      "bytes": 16777216,
+      "sha256": "49fe52db7857b31b06d1de5f7da9a3e89770691f88f06611fa1df9087b529858"
+    },
+    {
+      "file": "apartment-runtime-002.bin",
+      "bytes": 16777216,
+      "sha256": "83bdcaa7051b2ad66e4fabacf1e9a4e460666d674dc28cea0986c67381fe68f8"
+    },
+    {
+      "file": "apartment-runtime-003.bin",
+      "bytes": 11577610,
+      "sha256": "23a30e52da9cd4b5c0017d74ebc102f8b7d073725be128a1af80553054a399fb"
+    }
+  ]
+}
