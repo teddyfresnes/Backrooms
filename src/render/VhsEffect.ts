@@ -11,7 +11,9 @@ uniform vec2 vhsResolution;
 
 float vhsHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
-void mainUv(inout vec2 uv) {
+// The UV distortion lives here, not in a UV hook: postprocessing refuses an
+// effect that both transforms UVs and samples neighbours (convolution).
+vec2 vhsDistort(vec2 uv) {
   float i = vhsIntensity;
   float frame = floor(vhsTime * 24.0);
   // Fine per-line wobble, always a little present.
@@ -22,16 +24,18 @@ void mainUv(inout vec2 uv) {
   uv.x += torn * (vhsHash(vec2(frame, row)) - 0.5) * 0.12 * i;
   // A violent picture rolls vertically for a moment.
   uv.y += i * i * 0.035 * step(0.93, vhsHash(vec2(frame * 0.37, 2.0))) * sin(vhsTime * 31.0);
+  return clamp(uv, 0.0, 1.0);
 }
 
-void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+void mainImage(const in vec4 inputColor, const in vec2 baseUv, out vec4 outputColor) {
   float i = vhsIntensity;
   float frame = floor(vhsTime * 24.0);
+  vec2 uv = vhsDistort(baseUv);
   float shift = 0.0011 + 0.014 * i * i;
   vec3 color = vec3(
-    texture2D(inputBuffer, uv + vec2(shift, 0.0)).r,
-    inputColor.g,
-    texture2D(inputBuffer, uv - vec2(shift * 1.3, 0.0)).b
+    texture2D(inputBuffer, clamp(uv + vec2(shift, 0.0), 0.0, 1.0)).r,
+    texture2D(inputBuffer, uv).g,
+    texture2D(inputBuffer, clamp(uv - vec2(shift * 1.3, 0.0), 0.0, 1.0)).b
   );
   // Tape bleed: slightly washed, cold.
   float luma = dot(color, vec3(0.299, 0.587, 0.114));
