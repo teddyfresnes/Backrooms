@@ -810,7 +810,11 @@ export class RussianStairwellGame {
     this.savePreview = this.launch.kind === 'load' ? this.launch.save.previewImage : captureGameSavePreview(this.renderer.domElement);
     progress.complete('gpu');
     progress.start('audio');
-    await Promise.all([audioReady, voiceReady, neighborAudioReady]);
+    // Sound is optional for a playable scene: a failed clip must never discard
+    // the fully prepared level behind a "loading interrupted" screen.
+    await Promise.allSettled([audioReady, voiceReady, neighborAudioReady]).then(results => {
+      for (const result of results) if (result.status === 'rejected' && !this.disposed) console.warn('[audio] preparation incomplete', result.reason);
+    });
     progress.complete('audio');
     if (this.disposed) return;
     this.initialized = true;

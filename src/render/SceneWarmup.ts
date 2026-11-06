@@ -79,6 +79,43 @@ export async function waitForSceneGpu(
   } finally { gl.deleteSync(fence); }
 }
 
+type ProgramHandle = { getUniforms?(): unknown };
+type CompilingRenderer = Pick<THREE.WebGLRenderer, 'compileAsync'> & Partial<Pick<THREE.WebGLRenderer, 'compile' | 'properties' | 'extensions'>>;
+
+/** Without KHR_parallel_shader_compile (Firefox), compileAsync resolves at once
+ * and every program links synchronously inside the next render: one frozen
+ * task of tens of seconds. Link one material's programs per slice instead, so
+ * the loading view, timers and network keep running between slices. */
+export async function compileSceneProgressively(
+  renderer: CompilingRenderer, scene: THREE.Object3D, camera: THREE.Camera,
+  cancelled: () => boolean = () => false, onProgress?: (value: number) => void, pause: () => Promise<void> = yieldToBrowser,
+): Promise<void> {
+  const parallel = renderer.extensions?.get?.('KHR_parallel_shader_compile');
+  if (parallel || !renderer.compile || !renderer.properties) { await renderer.compileAsync(scene, camera); onProgress?.(1); return; }
+  const representatives = new Map<string, THREE.Object3D>();
+  scene.traverse(object => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.material || !(mesh.isMesh || (object as THREE.Points).isPoints || (object as THREE.Line).isLine || (object as THREE.Sprite).isSprite)) return;
+    const skinned = (mesh as THREE.SkinnedMesh).isSkinnedMesh, instanced = (mesh as THREE.InstancedMesh).isInstancedMesh;
+    for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      // Object traits change the program; the material alone does not.
+      const key = `${material.uuid}:${object.type}:${skinned ? 1 : 0}:${instanced ? 1 : 0}:${mesh.geometry?.morphAttributes?.position ? 1 : 0}:${mesh.geometry?.attributes.color ? 1 : 0}`;
+      if (!representatives.has(key)) representatives.set(key, object);
+    }
+  });
+  const objects = [...new Set(representatives.values())];
+  let sliceStart = performance.now();
+  for (let i = 0; i < objects.length; i++) {
+    if (cancelled()) return;
+    const materials = renderer.compile(objects[i]!, camera, scene as THREE.Scene);
+    // getUniforms() is Three's first use: it waits for this program's link now.
+    for (const material of materials) (renderer.properties.get(material) as { currentProgram?: ProgramHandle }).currentProgram?.getUniforms?.();
+    onProgress?.((i + 1) / objects.length);
+    if (performance.now() - sliceStart >= 12) { await pause(); sliceStart = performance.now(); }
+  }
+  onProgress?.(1);
+}
+
 export interface SceneWarmupOptions {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
@@ -223,7 +260,8 @@ export async function warmSceneForPlay(options: SceneWarmupOptions): Promise<voi
     options.onProgress?.(.55, 'Compilation des shaders');
     await yieldFrame();
     if (cancelled()) return;
-    await renderer.compileAsync(scene, camera);
+    await compileSceneProgressively(renderer, scene, camera, cancelled,
+      value => options.onProgress?.(.55 + value * .1, 'Compilation des shaders'), yieldFrame);
     timing('shaders');
     for (let frame = 0; frame < 2 && !cancelled(); frame++) {
       options.render(); options.onProgress?.(.65 + frame * .1, 'Préparation des premières images'); await yieldFrame();

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
-import { compactSceneDataMaps, restoreSceneDataMaps, waitForSceneGpu, warmSceneForPlay, uploadSceneGeometry } from './SceneWarmup';
+import { compileSceneProgressively, compactSceneDataMaps, restoreSceneDataMaps, waitForSceneGpu, warmSceneForPlay, uploadSceneGeometry } from './SceneWarmup';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const gpu = () => ({ SYNC_GPU_COMMANDS_COMPLETE: 1, TIMEOUT_EXPIRED: 2,
@@ -150,5 +150,31 @@ describe('preparation before gameplay', () => {
     expect(normal.image.width).toBe(1024); expect(compactSceneDataMaps(scene)).toBe(1024 ** 2 - 512 ** 2);
     scene.traverse(object => { if (object instanceof THREE.Mesh) object.geometry.dispose(); });
     for (const texture of [original, normal, roughness, colour]) texture.dispose(); material.dispose();
+  });
+  it('links one material at a time with yields when the browser cannot compile in parallel', async () => {
+    const scene = new THREE.Scene(), shared = new THREE.MeshStandardMaterial(), other = new THREE.MeshBasicMaterial();
+    const geometry = new THREE.BoxGeometry();
+    scene.add(new THREE.Mesh(geometry, shared), new THREE.Mesh(geometry, shared), new THREE.Mesh(geometry, other));
+    const linked: THREE.Material[] = [], programs = new Map<THREE.Material, { currentProgram: { getUniforms(): void } }>();
+    const renderer = {
+      extensions: { get: () => null }, compileAsync: vi.fn(async () => {}),
+      compile: vi.fn((object: THREE.Object3D, _camera: THREE.Camera, target: THREE.Object3D) => {
+        expect(target).toBe(scene);
+        const material = (object as THREE.Mesh).material as THREE.Material;
+        programs.set(material, { currentProgram: { getUniforms: () => { linked.push(material); } } });
+        return new Set([material]);
+      }),
+      properties: { get: (material: THREE.Material) => programs.get(material)! },
+    };
+    let now = 0; vi.spyOn(performance, 'now').mockImplementation(() => (now += 20));
+    const pause = vi.fn(async () => {}), progress: number[] = [];
+    await compileSceneProgressively(renderer as never, scene, new THREE.PerspectiveCamera(), () => false, value => progress.push(value), pause);
+    expect(renderer.compileAsync).not.toHaveBeenCalled();
+    expect(linked).toEqual([shared, other]);
+    expect(pause).toHaveBeenCalledTimes(2); expect(progress.at(-1)).toBe(1);
+    renderer.extensions.get = (() => ({})) as never;
+    await compileSceneProgressively(renderer as never, scene, new THREE.PerspectiveCamera());
+    expect(renderer.compileAsync).toHaveBeenCalledOnce();
+    geometry.dispose(); shared.dispose(); other.dispose();
   });
 });

@@ -22,8 +22,12 @@ export class NeighborVoice {
     const clips = [...new Set(voices)].flatMap(voice => NEIGHBOR_CUES.map(cue => neighborClipUrl(voice, cue)));
     await mapWithConcurrency(clips, 2, async url => {
       this.abort.signal.throwIfAborted();
-      const buffer = await loadAudioAsset(bus.context, url, this.abort.signal);
-      if (!this.disposed) this.buffers.set(url, buffer);
+      // One unavailable line leaves that neighbour silent; it never fails the level.
+      const buffer = await loadAudioAsset(bus.context, url, this.abort.signal).catch((error: unknown) => {
+        if (this.disposed) throw error;
+        console.warn('[audio] neighbour clip unavailable', url, error); return undefined;
+      });
+      if (buffer && !this.disposed) this.buffers.set(url, buffer);
     });
   }
   setVolume(volume: number): void { this.volume = volume; if (volume <= 0) this.stop(); }

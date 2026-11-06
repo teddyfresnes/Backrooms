@@ -96,12 +96,31 @@
 .loading-screen-content { width: min(288px, 80vw); text-align: left; }
 .loading-screen-heading { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
 [data-loading-percent] { color: #eeeee7; font-variant-numeric: tabular-nums; }
-.loading-screen-track { height: 3px; overflow: hidden; background: #292929; }
-.loading-screen-track i { display: block; width: 0; height: 100%; background: #ded8b5; transition: width .35s cubic-bezier(.2,.8,.2,1); }
-@media (prefers-reduced-motion: reduce) { .loading-screen-track i { transition: none; } }
+.loading-screen-track { position: relative; height: 3px; overflow: hidden; background: #292929; }
+.loading-screen-track i { position: absolute; inset: 0; background: #ded8b5; transform: scaleX(0); transform-origin: left; transition: transform .45s cubic-bezier(.2,.8,.2,1); }
+/* Independent of reported progress: the bar visibly lives during long steps. */
+.loading-screen-track b { position: absolute; inset: 0 auto 0 0; width: 34%; background: linear-gradient(90deg, #fff0, #fffbe388, #fff0); transform: translateX(-100%); animation: loading-sheen 1.7s cubic-bezier(.45,0,.25,1) infinite; }
 .loading-screen-content .loading-screen-phase { min-height: 16px; margin: 9px 0 24px; font-size: 11px; color: #92928c; letter-spacing: 0; }
-.loading-maze { display: block; width: 180px; height: 94px; margin: auto; color: #51514d; }
-.loading-maze circle { filter: drop-shadow(0 0 2px #e2dbb2aa); }
+.loading-maze { position: relative; width: 180px; height: 94px; margin: auto; color: #4d4d48; }
+.loading-maze svg { display: block; width: 100%; height: 100%; overflow: visible; animation: loading-hum 5.3s steps(1, end) infinite; }
+.loading-runner { position: absolute; left: -2.5px; top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: #f1ebc4; box-shadow: 0 0 6px 2px #e2dbb299, 0 0 18px 6px #e2dbb233; transform: translate(10.8px, 10.8px); animation: loading-run 26s linear -1s infinite; will-change: transform; }
+/* Negative delays start all dots at once; each trail dot lags 260 ms behind. */
+.loading-runner.is-trail { background: #e2dbb2; box-shadow: none; opacity: .32; scale: .8; animation-delay: -.74s; }
+.loading-runner.is-trail + .is-trail { opacity: .2; scale: .65; animation-delay: -.48s; }
+.loading-runner.is-trail + .is-trail + .is-trail { opacity: .1; scale: .5; animation-delay: -.22s; }
+/* Revealed by a CSS delay, so no timer outlives the view. */
+.loading-screen-hint { margin: 18px 0 0; font-size: 11px; color: #6f6f69; text-align: center; opacity: 0; animation: loading-fade .8s ease 14s forwards; }
+.loading-screen-hint[hidden] { display: none; }
+@keyframes loading-sheen { to { transform: translateX(300%); } }
+/* A tired fluorescent tube: mostly steady, two short dips per cycle. */
+@keyframes loading-hum { 0%, 100% { opacity: 1; } 61% { opacity: .55; } 62.5% { opacity: 1; } 64% { opacity: .7; } 65% { opacity: 1; } 88% { opacity: .82; } 89% { opacity: 1; } }
+@keyframes loading-fade { to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .loading-screen-track i { transition: none; }
+  .loading-screen-track b, .loading-runner.is-trail { display: none; }
+  .loading-maze svg, .loading-runner, .loading-screen-hint { animation: none; }
+  .loading-screen-hint { opacity: 1; }
+}
 .boot-error { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; padding: 24px; background: var(--game-bg); color: var(--game-text); font: 400 15px var(--game-font); }
 .boot-error { gap: 18px; justify-items: start; }
 .boot-error > strong { color: var(--game-text); font-size: 22px; font-weight: 400; letter-spacing: 0; }

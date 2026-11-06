@@ -148,8 +148,8 @@ describe('experience routing', () => {
     expect(main).toContain('autosaveOnReady');
     expect(main).toContain("startBackrooms({ kind: 'load', save }, true)");
     expect(backrooms).toContain('if (this.options.autoEnterOnReady) this.enter(true);');
-    expect(backrooms).toContain('await audioReady;');
-    expect(stairwell).toContain('await Promise.all([audioReady, voiceReady, neighborAudioReady]);');
+    expect(backrooms).toContain('await audioReady.catch(');
+    expect(stairwell).toContain('await Promise.allSettled([audioReady, voiceReady, neighborAudioReady])');
     expect(backrooms).toContain("this.saveNow('autosave')");
     expect(backrooms).toContain('nextStory !== this.activeStory');
     expect(backrooms).toContain('await this.worldStream.prepareSavedChunk(chunk)');

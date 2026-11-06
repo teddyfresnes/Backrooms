@@ -10,6 +10,23 @@ async function budget<T>(work:()=>Promise<T>):Promise<T> {
   else active++;
   try{return await work();}finally{const next=waiting.shift();if(next)next();else active--;}
 }
+/** The deadline covers only an unanswered request. A body still arriving while
+ * scene preparation keeps the main thread busy is progress, not a stall; a
+ * fixed whole-download timeout aborted healthy loads after a long freeze. */
+async function fetchAudioBytes(url:string):Promise<ArrayBuffer>{
+  let failure:unknown;
+  for(let attempt=0;attempt<2;attempt++){
+    const abort=new AbortController(),timer=setTimeout(()=>abort.abort(new DOMException('Audio request stalled','TimeoutError')),30000);
+    try{
+      const response=await fetch(url,{signal:abort.signal,...(attempt?{cache:'reload' as const}:{})});
+      clearTimeout(timer);
+      if(!response.ok)throw new Error(`Audio unavailable: ${url}`);
+      return await response.arrayBuffer();
+    }catch(error){failure=error;}
+    finally{clearTimeout(timer);}
+  }
+  throw failure;
+}
 export function loadAudioAsset(context:AudioContext,url:string,signal?:AbortSignal):Promise<AudioBuffer> {
   let cache=decoded.get(context);if(!cache){cache=new Map();decoded.set(context,cache);}
   const existing=cache.get(url);if(existing)return existing;
@@ -17,7 +34,7 @@ export function loadAudioAsset(context:AudioContext,url:string,signal?:AbortSign
     signal?.throwIfAborted();
     let bytes=encoded.get(url);
     if(!bytes){
-      bytes=fetch(url,{signal:AbortSignal.timeout(30000)}).then(response=>{if(!response.ok)throw new Error(`Audio unavailable: ${url}`);return response.arrayBuffer();});
+      bytes=fetchAudioBytes(url);
       encoded.set(url,bytes);void bytes.catch(()=>encoded.delete(url));
     }
     const data=await bytes;signal?.throwIfAborted();

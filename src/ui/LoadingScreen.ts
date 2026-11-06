@@ -29,42 +29,63 @@ export function loadingMaze(): { walls: string; route: string } {
   return { walls, route: `M${points.join('L')}` };
 }
 
-/** One measured, event-driven loading view for the launcher, saves and prologue. */
+const MAZE_SCALE = 1.2; // 150×78 viewBox units drawn in a 180×94 px box.
+
+/** The maze is deterministic: one CSS @keyframes rule per page drives every
+ * runner dot (CSS transform animations run on the compositor). */
+function installRunnerKeyframes(route: string): void {
+  if (typeof document === 'undefined' || document.getElementById('loading-runner-keyframes')) return;
+  const points = route.slice(1).split('L').map(point => point.split(',').map(Number) as [number, number]);
+  // Every step is one 12-unit cell edge, so evenly spaced keyframes are paced.
+  const frames = points.map(([x, y], index) =>
+    `${(index / (points.length - 1) * 100).toFixed(3)}%{transform:translate(${((x + 3) * MAZE_SCALE).toFixed(1)}px,${((y + 3) * MAZE_SCALE).toFixed(1)}px)}`).join('');
+  const style = document.createElement('style');
+  style.id = 'loading-runner-keyframes';
+  style.textContent = `@keyframes loading-run{${frames}}`;
+  document.head.append(style);
+}
+
+/** One measured, event-driven loading view for the launcher, saves and prologue.
+ * Every moving part animates transform/opacity only: the compositor keeps them
+ * moving while scene preparation occupies the main thread (SVG SMIL froze). */
 export class LoadingScreen {
   readonly element = document.createElement('div');
   private readonly track: HTMLElement;
   private readonly fill: HTMLElement;
   private readonly percent: HTMLElement;
   private readonly phase: HTMLElement;
+  private readonly hint: HTMLElement;
   private progress = 0;
   constructor(detail: string) {
     const maze = loadingMaze();
-    const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.element.className = 'loading-screen';
     this.element.innerHTML = `<div class="loading-screen-content">
       <div class="loading-screen-heading"><span>Chargement</span><span data-loading-percent>0 %</span></div>
-      <div class="loading-screen-track" role="progressbar" aria-label="Chargement" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+      <div class="loading-screen-track" role="progressbar" aria-label="Chargement" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i><b></b></div>
       <p class="loading-screen-phase" role="status" aria-live="polite"></p>
-      <svg class="loading-maze" viewBox="-3 -3 150 78" aria-hidden="true" focusable="false">
-        <path d="${maze.walls}" fill="none" stroke="currentColor" stroke-width=".65"/>
-        <circle r="1.9" fill="#e2dbb2" ${reduced ? 'cx="6" cy="6"' : ''}>
-          ${reduced ? '' : `<animateMotion dur="28s" repeatCount="indefinite" calcMode="paced" path="${maze.route}"/>`}
-        </circle>
-      </svg></div>`;
+      <div class="loading-maze" aria-hidden="true">
+        <svg viewBox="-3 -3 150 78" focusable="false"><path d="${maze.walls}" fill="none" stroke="currentColor" stroke-width=".65" stroke-linecap="square"/></svg>
+        <span class="loading-runner is-trail"></span><span class="loading-runner is-trail"></span><span class="loading-runner is-trail"></span>
+        <span class="loading-runner"></span>
+      </div>
+      <p class="loading-screen-hint">La première préparation peut prendre un moment sur ce navigateur.</p></div>`;
     this.track = this.element.querySelector('[role="progressbar"]')!;
     this.fill = this.track.querySelector('i')!;
     this.percent = this.element.querySelector('[data-loading-percent]')!;
     this.phase = this.element.querySelector('.loading-screen-phase')!;
+    this.hint = this.element.querySelector('.loading-screen-hint')!;
     this.setPhase(detail);
+    installRunnerKeyframes(maze.route);
   }
   setPhase(phase: string): void { if (this.phase.textContent !== phase) this.phase.textContent = phase; }
   setProgress(value: number, phase?: string): void {
     if (!Number.isFinite(value)) return;
     this.progress = Math.max(this.progress, Math.min(1, Math.max(0, value)));
     const percentage = Math.floor(this.progress * 100);
-    this.fill.style.width = `${this.progress * 100}%`;
+    this.fill.style.transform = `scaleX(${this.progress})`;
     this.track.setAttribute('aria-valuenow', String(percentage));
     this.percent.textContent = `${percentage} %`;
+    if (this.progress >= 1) this.hint.hidden = true;
     if (phase) this.setPhase(phase);
   }
 }

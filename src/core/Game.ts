@@ -17,7 +17,7 @@ import { MODERN_BACKROOMS_RIG } from '../render/FluorescentFixture';
 import { resolveLightingBrightness } from '../render/LightingBrightness';
 import { MaterialLibrary } from '../render/MaterialLibrary';
 import { PostFX } from '../render/PostFX';
-import { waitForSceneGpu } from '../render/SceneWarmup';
+import { compileSceneProgressively, waitForSceneGpu } from '../render/SceneWarmup';
 import { ExperienceUI } from '../ui/ExperienceUI';
 import type { ConsoleCompletion, ConsoleMode, ConsoleSubmitResult } from '../ui/ExperienceUI';
 import { loadGameSettings, type GameSettings } from '../ui/settings';
@@ -358,7 +358,7 @@ export class Game {
     await this.postFX.waitUntilReady();
     const characterWarmup = this.character?.renderWarmupRoots.map(root => ({ root, visible: root.visible })) ?? [];
     for (const { root } of characterWarmup) root.visible = true;
-    try { await this.renderer.compileAsync(this.scene, this.camera); }
+    try { await compileSceneProgressively(this.renderer, this.scene, this.camera, () => this.disposed); }
     finally { for (const { root, visible } of characterWarmup) root.visible = visible; }
     if (this.disposed) return;
     setVisualProgress(0.92, 'Préparation de l’affichage');
@@ -369,7 +369,7 @@ export class Game {
     await this.warmupPostFX();
     if (this.disposed) return;
     setVisualProgress(0.98, 'Préparation du son');
-    await audioReady;
+    await audioReady.catch(error => console.warn('[audio] preparation incomplete', error));
     if (this.disposed) return;
     setVisualProgress(1, 'Prêt');
     this.updateDebugState(true);

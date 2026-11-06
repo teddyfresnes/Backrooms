@@ -15,7 +15,8 @@ export class SampledDoorAudio {
   async prepare(bus:SpatialAudioBus):Promise<void>{
     this.bus=bus;
     await mapWithConcurrency(Object.entries(URLS) as [NeighborDoorSound,string][],2,async([kind,url])=>{
-      const buffer=await loadAudioAsset(bus.context,url,this.abort.signal);if(!this.disposed)this.buffers.set(kind,buffer);
+      const buffer=await loadAudioAsset(bus.context,url,this.abort.signal).catch((error:unknown)=>{if(this.disposed)throw error;console.warn('[audio] door sound unavailable',url,error);return undefined;});
+      if(buffer&&!this.disposed)this.buffers.set(kind,buffer);
     });
   }
   play(kind:NeighborDoorSound,position:Readonly<Vec3Data>,doorId:string):number{

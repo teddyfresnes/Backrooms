@@ -10,6 +10,12 @@ it('reports real completed work monotonically and reaches 100 only on readiness'
   expect(view.element.textContent).toContain('32 %');
   view.setProgress(1); expect(view.element.textContent).toContain('100 %');
   expect(view.element.querySelectorAll('canvas')).toHaveLength(0);
+  // Compositor-only motion: no SMIL, one shared CSS keyframe rule.
+  expect(view.element.querySelector('animateMotion')).toBeNull();
+  new LoadingScreen('Again');
+  expect(document.querySelectorAll('#loading-runner-keyframes')).toHaveLength(1);
+  expect(document.getElementById('loading-runner-keyframes')!.textContent).toMatch(/^@keyframes loading-run\{0\.000%\{transform:translate\(10\.8px,10\.8px\)\}/);
+  expect((view.element.querySelector('.loading-screen-hint') as HTMLElement).hidden).toBe(true);
 });
 it('walks a closed route through all 72 adjacent maze cells without crossing walls', () => {
   const maze=loadingMaze(), points=maze.route.slice(1).split('L').map(p=>p.split(',').map(Number));
