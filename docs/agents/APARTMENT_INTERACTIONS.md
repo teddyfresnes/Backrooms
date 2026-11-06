@@ -42,6 +42,8 @@ courrier et progression restent dans leurs modules précédents.
 | `ContactDeposits` | Trajectoires courtes et dépôts sur les vrais points/normales du décor |
 | `ApartmentFixtures` | Robinet, bassin, flottabilité, pales et lampe indépendante |
 | `ClosetHide` | Deux portes physiques du meuble près du lit, caméra intérieure et sortie |
+| `DoorHide` | Même mécanique derrière une porte à un battant : salle de bain et placard d’entrée (à gauche du frigo) |
+| `HideSpots` | Façade unique des trois cachettes (surface de `ClosetHide`) pour le jeu et la rencontre |
 | `ApartmentInteractionState` | Données optionnelles et validation des anciennes/nouvelles sauvegardes |
 
 Tous les objets mobiles ont des corps au montage, initialement endormis.

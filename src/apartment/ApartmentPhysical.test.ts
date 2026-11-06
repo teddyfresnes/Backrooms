@@ -62,17 +62,10 @@ it('creates every real book body before the first grab, rests without jitter, an
   step(physics, objects, 180, true);
   expect(upper.parts[0]!.getWorldPosition(new THREE.Vector3()).y).toBeLessThan(topBefore - .025);
 });
-it('keeps the radio independently physical and movable without leaving a fixed ghost collider', async () => {
-  const { environment, physics, camera, objects } = await apartmentFixture();
-  const radio = environment.pickables.find(item => item.appliance === 'radio')!;
-  expect(radio).toBeDefined(); const before = radio.bounds.getCenter(new THREE.Vector3());
-  camera.position.set(before.x, before.y, before.z + 1); camera.lookAt(before);
-  expect(objects.interact()).toBe(true); camera.position.y += .18; camera.position.z += .35; step(physics, objects, 35, true); camera.position.x -= .65; step(physics, objects, 120, true);
-  const now = new THREE.Box3().setFromObject(radio.parts[0]!, true).getCenter(new THREE.Vector3());
-  expect(now.distanceTo(before)).toBeGreaterThan(.35);
-  const ray = physics.world.castRay(new RAPIER.Ray({ x: before.x, y: before.y, z: before.z + .4 }, { x: 0, y: 0, z: -1 }), .42, true,
-    undefined, undefined, undefined, undefined, physics.isEnvironmentCollider);
-  expect(ray === null).toBe(true);
+it('keeps the radio a fixed appliance: never pickable, one static body', async () => {
+  const { environment } = await apartmentFixture();
+  expect(environment.pickables.find(item => item.appliance === 'radio')).toBeUndefined();
+  expect(environment.furnitureColliders.filter(c => c.id === 'imported-radio-fixed')).toHaveLength(1);
 });
 async function bottleFixture(wall = false, restoredBroken = false) {
   const physics = await PhysicsWorld.create(createStairwellPlan()); cleanup.push(() => physics.dispose());

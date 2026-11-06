@@ -46,6 +46,11 @@ const lerpAngle = (from: number, to: number, amount: number): number => {
   return from + delta * amount;
 };
 const crossed = (time: number, delta: number, mark: number): boolean => time >= mark && time - delta < mark;
+/** Seconds after the roar before the view snaps to the stairs. */
+const SPOTTED_STAIR_TURN_DELAY = 0.2;
+/** A point a couple of treads down the flight leaving the apartment landing. */
+const STAIR_LOOK_TARGET = { x: 1.05, z: -0.9 } as const;
+const STAIR_LOOK_DROP = 0.75;
 
 export interface BacteriaEncounterHost {
   readonly scene: THREE.Scene;
@@ -702,12 +707,15 @@ export class BacteriaEncounter {
   private updateSpotted(dt: number): void {
     const host = this.host;
     const t = this.phaseTime;
-    // You glance back: it has already turned.
-    this.actor.getHeadPosition(this.target);
+    // You glance back: it has already turned. Once it roars, the head whips
+    // round to the flight down, so control returns already facing the run.
+    const toStairs = t >= S.roar + SPOTTED_STAIR_TURN_DELAY;
+    if (toStairs) this.target.set(STAIR_LOOK_TARGET.x, this.eye.y - STAIR_LOOK_DROP, STAIR_LOOK_TARGET.z);
+    else this.actor.getHeadPosition(this.target);
     this.lookMatrix.lookAt(this.eye, this.target, UP);
     this.lookQuaternion.setFromRotationMatrix(this.lookMatrix);
     const current = host.player.getLookQuaternion();
-    this.nextLook.set(current.x, current.y, current.z, current.w).slerp(this.lookQuaternion, 1 - Math.exp(-dt * 9));
+    this.nextLook.set(current.x, current.y, current.z, current.w).slerp(this.lookQuaternion, 1 - Math.exp(-dt * (toStairs ? 15 : 9)));
     host.player.setLookQuaternion(this.nextLook);
     if (crossed(t, dt, S.dropTelevision)) this.dropTelevision();
     if (crossed(t, dt, S.whip)) {

@@ -70,6 +70,18 @@ Si l'aperçu est indisponible, le signaler et continuer sans tentatives répét�
 | Rendu, streaming, lumière, props, physique ou cycle de vie | `docs/agents/RUNTIME_RENDERING.md` |
 | Choisir les tests et le niveau de validation | `docs/agents/VERIFICATION.md` |
 | Ajouter une feature architecturale | `docs/ADDING_FEATURES.md`, puis `docs/agents/WORLD_GENERATION.md` |
+| Appartement : objets, appareils, cachettes | `docs/agents/APARTMENT_INTERACTIONS.md` |
+| Cage d’escalier, arrivée, voisins | `docs/agents/STAIRWELL_FLOW.md` |
+| PC et bureau | `docs/agents/COMPUTER_USE.md` |
+
+## Dépôt léger
+
+`main` est l’unique branche et porte toutes les dernières modifications ;
+l’historique lourd (≈ 1,6 Go) est archivé hors de GitHub. Rester sous ~256 Mo :
+ne versionner ni export source ni dossier de travail (`polyhaven/`, `temp/`,
+`dist/`). Seul le pack runtime de l’appartement est suivi ; l’export source
+(ignoré) ne sert qu’à le régénérer (`npm run assets:apartment`). Contrôler
+`git count-objects -vH` avant d’ajouter un asset de plus de 5 Mo.
 
 ## Contrats à ne pas casser
 
@@ -85,6 +97,18 @@ Si l'aperçu est indisponible, le signaler et continuer sans tentatives répét�
   les références croisées quand un nouveau champ contient des IDs.
 - Tout objet GPU, écouteur, worker ou collider créé doit avoir un chemin de
   nettoyage dans `dispose()` ou au démontage du chunk.
+
+## Nettoyage avant livraison
+
+- Mettre les essais dans un répertoire temporaire ou ignoré par Git. En fin de
+  tâche, retirer les fichiers d’essai, logs, captures, builds et archives
+  intermédiaires créés pour la tâche qui ne servent plus.
+- Travailler sur `main` quand la tâche le permet. Créer une branche ou un
+  worktree temporaire seulement si nécessaire, puis le fusionner dans `main` et
+  le supprimer. Demander l’accord avant de supprimer une branche distante.
+- Relire `git status --short` et le diff avant de livrer. Préserver les
+  fichiers et modifications préexistants, les commits non intégrés et les
+  livrables demandés. Signaler ce qui doit rester pour reprendre le travail.
 
 ## Entretien documentaire léger
 

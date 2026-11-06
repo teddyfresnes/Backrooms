@@ -63,9 +63,12 @@ Après la coupure, `LongCorridor` (couloir Level 0 avec néons à niveau par lam
 sans lumière Three.js) remplace la cage. À 20 m, `CorridorStory` déclenche la
 réaction ; la vague part toujours de la lampe 0, à la porte de l'appartement.
 `BacteriaEncounter` enchaîne ensuite : révélation lointaine (de dos, tête puis
-corps qui se retournent), charge accélérée, siège de la porte, placard. TV allumée :
-le monstre la porte et se calme, sortie discrète en maintenant la touche de sprint
-(`SNEAK_HOLD_SECONDS`), puis fuite dans la cage restaurée (`restoreStairwell`)
+corps qui se retournent), charge accélérée, siège de la porte, cachette (armoire,
+placard d'entrée ou salle de bain : `HIDE_SPOTS`, le monstre renifle devant celle
+utilisée). TV allumée : le monstre la porte et se calme (sa voix seule ; le cri ne
+joue qu'en poursuite), sortie discrète en maintenant la touche de sprint
+(`SNEAK_HOLD_SECONDS`) : le maintien pilote l'animation, le relâcher fait jaillir
+le joueur et le monstre charge. Puis fuite dans la cage restaurée (`restoreStairwell`)
 jusqu'à la porte du hall, ouverte sur `BackroomsCorridor`, qui mène au Level 0.
 TV éteinte : le placard est arraché. Les timings sont couverts par
 `BacteriaLayout.test.ts` et la machine à états par `BacteriaEncounter.test.ts`.

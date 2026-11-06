@@ -30,6 +30,10 @@ const objectNames = (root: SerializedObject): string[] => [
   ...(root.children ?? []).flatMap(objectNames),
 ];
 
+// The 90 MB source export is archived outside Git; only the runtime pack ships.
+// @ts-expect-error Node builtins are test-only.
+const sourceExportPresent = (await import('node:fs')).existsSync(new URL('../../public/assets/imported-apartment/apartment-000.bin', import.meta.url));
+
 describe('imported apartment integration', () => {
   it('closes the hollow entrance leaf with a flush rear face', () => {
     const geometry = new THREE.BufferGeometry();
@@ -143,7 +147,7 @@ describe('imported apartment integration', () => {
     expect(material.polygonOffset).toBe(true);
   });
 
-  it('preserves the attributed apartment hierarchy inside the current packed editor export', async () => {
+  it.skipIf(!sourceExportPresent)('preserves the attributed apartment hierarchy inside the current packed editor export', async () => {
     const { readFile } = await loadNodeFs();
     const base = new URL('../../public/assets/imported-apartment/', import.meta.url);
     const manifest = JSON.parse(await readFile(new URL('apartment.parts.json', base), 'utf8')) as { parts: { file: string }[] };

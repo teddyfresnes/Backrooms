@@ -192,6 +192,10 @@ describe('BacteriaEncounter', () => {
     expect(world.player.isInputEnabled).toBe(false);
     const glance = world.until(() => world.player.isInputEnabled, 3);
     expect(glance).toBeGreaterThan(SPOTTED_TIMELINE.release - 0.1);
+    // Control returns facing the flight down, not the creature.
+    const view = new THREE.Vector3(0, 0, -1).applyQuaternion(world.player.getLookQuaternion() as THREE.Quaternion).setY(0).normalize();
+    const stairs = new THREE.Vector3(1.05 - world.player.position.x, 0, -0.9 - world.player.position.z).normalize();
+    expect(view.dot(stairs)).toBeGreaterThan(0.95);
     expect(world.state.motion).toBe('run');
     world.step(DT);
     expect(scream()).toBe('setScreamActive:true');
