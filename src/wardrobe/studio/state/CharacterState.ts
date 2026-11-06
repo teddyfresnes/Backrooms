@@ -19,7 +19,7 @@ import {
 } from '../core/humanMeasurements'
 import type { CharacterConfig, ClothingSlot, MorphSection } from '../core/types'
 import { makeDefaultCharacter } from './defaults'
-import { resolveCharacterVoice, type CharacterVoiceId } from '../../../audio/VoiceCatalog'
+import { characterVoiceSex, defaultCharacterVoice, effectiveCharacterVoice, resolveCharacterVoice, type CharacterVoiceId } from '../../../audio/VoiceCatalog'
 
 const AUTOSAVE_KEY = 'character-studio/current/v4'
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
@@ -119,7 +119,8 @@ function normalizeConfig(saved: CharacterConfig): CharacterConfig {
     ...defaults,
     ...saved,
     baseAssetId: 'makehuman-hm08',
-    voiceId: resolveCharacterVoice(saved.voiceId, saved.body?.gender),
+    voiceId: effectiveCharacterVoice(saved),
+    voiceChosen: !!saved.voiceChosen,
     body: safeBody(saved.body),
     face: safeSection('face', saved.face),
     appearance: {
@@ -168,7 +169,7 @@ export const useCharacterState = create<EditorState>((set, get) => ({
   cameraResetToken: 0,
   commitSnapshot: () => {},
   setName: (name) => set((state) => ({ config: updated({ ...state.config, name: name.slice(0, 32) }) })),
-  setVoice: (voiceId) => set(state => ({ config: updated({ ...state.config, voiceId: resolveCharacterVoice(voiceId) }) })),
+  setVoice: (voiceId) => set(state => ({ config: updated({ ...state.config, voiceId: resolveCharacterVoice(voiceId), voiceChosen: true }) })),
   // Identity-only updates deliberately preserve the existing body/face/object
   // references. Promoting a preset to Custom must not be mistaken for a body
   // morph, otherwise the rig is recalibrated while a new hair mesh is mounting.
@@ -207,6 +208,9 @@ export const useCharacterState = create<EditorState>((set, get) => ({
       config: updated({
         ...current,
         body,
+        // A voice of the other sex only survives a sex change if it was picked for it.
+        ...(current.voiceId && current.voiceChosen && characterVoiceSex(current.voiceId) === sex
+          ? {} : { voiceId: defaultCharacterVoice(gender), voiceChosen: false }),
         appearance: {
           ...current.appearance,
           beardId: sex === 'male' ? current.appearance.beardId : null,

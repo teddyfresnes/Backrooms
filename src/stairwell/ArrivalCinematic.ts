@@ -75,6 +75,7 @@ export class ArrivalCinematic {
       onKeypadPress?(position:THREE.Vector3):void; onStopKeypad?():void },
   ) {
     this.root.name = 'arrival-cinematic-actor';
+    this.fill.name = 'arrival-cinematic-fill';
     this.root.add(avatar); this.scene.add(this.root, this.fill);
     this.entrance = new EntranceDoorMotion(entranceDoor);
     this.code = retargetEntryMotion(motions.code, avatar);
@@ -340,6 +341,9 @@ export class ArrivalCinematic {
     this.callbacks.onDispose?.();
     this.avatar.traverse(object => { if ((object as THREE.SkinnedMesh).isSkinnedMesh) (object as THREE.SkinnedMesh).skeleton.dispose(); });
     this.privateMaterials.forEach(material => material.dispose());
-    this.root.removeFromParent(); this.fill.removeFromParent();
+    // The fill stays parented at zero: removing a PointLight changes Three's
+    // light-count shader defines and recompiles every visible material (a 1–2 s
+    // hitch on ANGLE/Windows) right when the player takes control.
+    this.root.removeFromParent(); this.fill.intensity = 0;
   }
 }

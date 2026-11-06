@@ -70,6 +70,9 @@ it('blocks movement keys, gives skip a short safe POV transition, and disposes w
   expect(s.callbacks.onComplete).toHaveBeenCalledOnce(); expect(camera.position.distanceTo(s.pov.position)).toBeLessThan(1e-8);
   cinematic.dispose(); expect(document.querySelector('.arrival-cinematic')).toBeNull();
   expect(s.scene.getObjectByName('entrance-code-keypad')).toBeUndefined();
+  // Same light count before and after: no shader recompilation when control returns.
+  const fill = s.scene.getObjectByName('arrival-cinematic-fill') as THREE.PointLight | undefined;
+  expect(fill?.isPointLight).toBe(true); expect(fill!.intensity).toBe(0);
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'w' })); expect(key).toHaveBeenCalledOnce(); window.removeEventListener('keydown', key);
 });
 

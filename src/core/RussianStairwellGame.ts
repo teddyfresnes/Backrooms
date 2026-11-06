@@ -68,7 +68,7 @@ import { KeypadAudio } from '../audio/KeypadAudio';
 import { setDoorAudioListener } from '../audio/SpatialDoorAudio';
 import type { DoorOpenMode } from '../world/types';
 import { useCharacterState } from '../wardrobe/studio/state/CharacterState';
-import { resolveCharacterVoice } from '../audio/VoiceCatalog';
+import { effectiveCharacterVoice } from '../audio/VoiceCatalog';
 import { StairwellEnvironment } from '../stairwell/StairwellEnvironment';
 import { StairwellMaterials } from '../stairwell/StairwellMaterials';
 import { BacteriaActor } from '../monster/BacteriaActor';
@@ -469,7 +469,7 @@ export class RussianStairwellGame {
     );
     if (!environment.entranceMailbox) throw new Error('Les boîtes aux lettres du hall sont indisponibles.');
     const config = useCharacterState.getState().config;
-    const voice = resolveCharacterVoice(config.voiceId, config.body.gender);
+    const voice = effectiveCharacterVoice(config);
     const voiceReady = siteAudio.prepareVoice(voice).catch(() => undefined);
     
     this.sprintHint=new SprintHint(this.root);

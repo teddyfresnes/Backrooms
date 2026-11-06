@@ -1,5 +1,5 @@
 import { describe,it,expect } from 'vitest';
-import { CHARACTER_VOICES, characterVoiceUrl, randomConfirmationUrl, resolveCharacterVoice } from './VoiceCatalog';
+import { CHARACTER_VOICES, characterVoiceUrl, effectiveCharacterVoice, randomConfirmationUrl, resolveCharacterVoice } from './VoiceCatalog';
 
 describe('user-provided cinematic and dialogue recordings',()=>{
   it('ships all five voices and the complete music as verified local Opus files',async()=>{
@@ -41,4 +41,14 @@ it('restores voice IDs from the original wardrobe and ships their confirmation p
     expect(existsSync(`public${randomConfirmationUrl(voice.id, () => 0)}`)).toBe(true);
     expect(existsSync(`public${randomConfirmationUrl(voice.id, () => 0.999)}`)).toBe(true);
   }
+});
+
+it('gives a male body a male voice unless another voice was explicitly picked', () => {
+  // MPFB: gender 1 = male, -1 = female.
+  expect(resolveCharacterVoice(undefined, 1)).toBe('alex');
+  expect(resolveCharacterVoice(undefined, -1)).toBe('karen');
+  // Older saves persisted the inverted default as if it had been chosen.
+  expect(effectiveCharacterVoice({ voiceId: 'karen', body: { gender: 1 } })).toBe('alex');
+  expect(effectiveCharacterVoice({ voiceId: 'meghan', voiceChosen: true, body: { gender: 1 } })).toBe('meghan');
+  expect(effectiveCharacterVoice({ voiceId: 'ian', voiceChosen: true, body: { gender: 1 } })).toBe('ian');
 });

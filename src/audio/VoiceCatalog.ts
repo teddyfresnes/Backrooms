@@ -9,8 +9,21 @@ export const CHARACTER_VOICES = [
 export type CharacterVoiceId = typeof CHARACTER_VOICES[number]['id'];
 export type CharacterVoiceCue = 'hmm' | 'gasp';
 
+/** MPFB gender macro: >= 0 is male (1), < 0 is female (-1). */
+export const defaultCharacterVoice = (gender = -1): CharacterVoiceId => gender >= 0 ? 'alex' : 'karen';
+
+export const characterVoiceSex = (voice: CharacterVoiceId): 'male' | 'female' =>
+  CHARACTER_VOICES.find(entry => entry.id === voice)!.sex;
+
 export function resolveCharacterVoice(value: unknown, gender = -1): CharacterVoiceId {
-  return CHARACTER_VOICES.find(voice => voice.id === value || voice.assetId === value)?.id ?? (gender > 0 ? 'karen' : 'alex');
+  return CHARACTER_VOICES.find(voice => voice.id === value || voice.assetId === value)?.id ?? defaultCharacterVoice(gender);
+}
+
+/** The voice actually heard in game. Older saves stored the (then inverted)
+ * default as if picked: only an explicit choice may differ from the body. */
+export function effectiveCharacterVoice(config: { voiceId?: unknown; voiceChosen?: boolean; body?: { gender?: number } }): CharacterVoiceId {
+  const gender = config.body?.gender ?? -1;
+  return config.voiceChosen ? resolveCharacterVoice(config.voiceId, gender) : defaultCharacterVoice(gender);
 }
 
 export const characterVoiceUrl = (voice: CharacterVoiceId, cue: CharacterVoiceCue): string =>

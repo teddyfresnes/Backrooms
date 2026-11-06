@@ -97,16 +97,12 @@
 .loading-screen-heading { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
 [data-loading-percent] { color: #eeeee7; font-variant-numeric: tabular-nums; }
 .loading-screen-track { height: 3px; overflow: hidden; background: #292929; }
-.loading-screen-track i { display: block; width: 0; height: 100%; background: #ded8b5; }
+.loading-screen-track i { display: block; width: 0; height: 100%; background: #ded8b5; transition: width .35s cubic-bezier(.2,.8,.2,1); }
+@media (prefers-reduced-motion: reduce) { .loading-screen-track i { transition: none; } }
 .loading-screen-content .loading-screen-phase { min-height: 16px; margin: 9px 0 24px; font-size: 11px; color: #92928c; letter-spacing: 0; }
 .loading-maze { display: block; width: 180px; height: 94px; margin: auto; color: #51514d; }
 .loading-maze circle { filter: drop-shadow(0 0 2px #e2dbb2aa); }
 .boot-error { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; padding: 24px; background: var(--game-bg); color: var(--game-text); font: 400 15px var(--game-font); }
-.loading-screen-content { width: min(220px, 80vw); text-align: left; }
-.loading-screen-content p { margin: 0 0 18px; }
-.loading-screen-track { height: 1px; overflow: hidden; background: #e7e9e21a; }
-.loading-screen-track i { display: block; width: 35%; height: 100%; background: var(--game-accent); animation: loading-sweep 1.5s ease-in-out infinite alternate; }
-@keyframes loading-sweep { from { transform: translateX(-100%); } to { transform: translateX(385%); } }
 .boot-error { gap: 18px; justify-items: start; }
 .boot-error > strong { color: var(--game-text); font-size: 22px; font-weight: 400; letter-spacing: 0; }
 .boot-error > span { color: var(--game-muted); font-size: 14px; }

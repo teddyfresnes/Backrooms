@@ -91,6 +91,8 @@ export interface CharacterConfig {
   name: string
   baseAssetId: string
   voiceId?: import('../../../audio/VoiceCatalog').CharacterVoiceId
+  /** True only after the player picked a voice; otherwise it follows the body sex. */
+  voiceChosen?: boolean
   body: Record<string, number>
   face: Record<string, number>
   appearance: AppearanceConfig

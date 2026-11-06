@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { siteAudio } from '../../../audio/SiteAudio'
-import { CHARACTER_VOICES, randomConfirmationUrl, resolveCharacterVoice } from '../../../audio/VoiceCatalog'
+import { CHARACTER_VOICES, effectiveCharacterVoice, randomConfirmationUrl } from '../../../audio/VoiceCatalog'
 import { useCharacterState } from '../state/CharacterState'
 
 export function VoicePicker() {
-  const selected = useCharacterState(s => resolveCharacterVoice(s.config.voiceId, s.config.body.gender))
+  const selected = useCharacterState(s => effectiveCharacterVoice(s.config))
   const setVoice = useCharacterState(s => s.setVoice)
   const confirmation = useRef<HTMLAudioElement | null>(null)
   useEffect(() => () => {
