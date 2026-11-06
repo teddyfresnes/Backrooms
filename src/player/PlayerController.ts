@@ -218,6 +218,12 @@ export class PlayerController {
     this.resetFallbackPoint();
     this.pointerElement.style.cursor = this.originalCursor;
     this.callbacks.onPointerCaptureChange?.(false);
+    // The browser does not always drop the lock on a focus loss (alt-tab,
+    // another screen): release it, so the view never follows a mouse that is
+    // busy elsewhere until the player clicks back in.
+    if (this.pointerDocument.pointerLockElement === this.pointerElement) {
+      try { this.pointerDocument.exitPointerLock?.(); } catch { /* optional */ }
+    }
   }
   private readonly onPointerUnlock = (): void => {
     if (this.playingRequested && this.focusLost()) { this.releaseCaptureKeepPlaying(); return; }
@@ -293,7 +299,8 @@ export class PlayerController {
   get isLocked(): boolean { return this.controls.isLocked || this.fallbackPlaying; }
   get isPointerCaptured(): boolean {
     return this.playingRequested && this.controls.isLocked
-      && this.pointerDocument.pointerLockElement === this.pointerElement && !this.pointerDocument.hidden;
+      && this.pointerDocument.pointerLockElement === this.pointerElement && !this.pointerDocument.hidden
+      && (typeof this.pointerDocument.hasFocus !== 'function' || this.pointerDocument.hasFocus());
   }
   private readonly onPointerVisibility = (): void => { if (this.pointerDocument.hidden) this.onWindowBlur(); };
   get isTraversing(): boolean { return this.traversal !== undefined; }

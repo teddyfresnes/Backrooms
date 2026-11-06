@@ -156,7 +156,10 @@ export class ApartmentDevices {
     indicator.name = 'apartment-radio-powered-dial'; indicator.position.set(positions.radio.x, positions.radio.y + .015, radioBounds.max.z + .003);
     if (apartment.radio) {
       this.radioLocalCenter.copy(positions.radio); apartment.radio.worldToLocal(this.radioLocalCenter);
-      apartment.radio.attach(indicator); apartment.radio.attach(this.radioLight);
+      apartment.radio.attach(indicator);
+      // Not under the radio: the interior model is hidden from the landing, and a
+      // hidden light changes Three's light count, recompiling every lit shader.
+      this.radioLight.position.applyMatrix4(apartment.group.matrixWorld.clone().invert()); apartment.group.add(this.radioLight);
     }
     this.gasControls = gasControlBounds(apartment.stove).map(box => box.expandByScalar(.008));
     if (apartment.stove) this.targets.set('gas', apartment.stove);

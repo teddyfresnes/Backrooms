@@ -41,6 +41,9 @@ void mainImage(const in vec4 inputColor, const in vec2 baseUv, out vec4 outputCo
     texture2D(inputBuffer, uv).g,
     texture2D(inputBuffer, clamp(uv - vec2(shift * 1.3, 0.0), 0.0, 1.0)).b
   );
+  // The buffer is linear: damage it in display space, or grain and snow crush
+  // the shadows (a few thousandths in linear is most of a dark pixel).
+  color = pow(max(color, 0.0), vec3(1.0 / 2.2));
   // Tape bleed: washed and cold, only when disturbed.
   float luma = dot(color, vec3(0.299, 0.587, 0.114));
   color = mix(color, vec3(luma) * vec3(0.94, 1.0, 1.04), 0.4 * i2);
@@ -48,14 +51,14 @@ void mainImage(const in vec4 inputColor, const in vec2 baseUv, out vec4 outputCo
   color *= 1.0 - 0.22 * i2 * mod(floor(gl_FragCoord.y), 2.0);
   // Grain keeps the colour; grey snow only when disturbed.
   float grain = vhsHash(gl_FragCoord.xy + frame * 17.0) - 0.5;
-  color *= 1.0 + grain * 0.05;
+  color *= 1.0 + grain * 0.04;
   color += grain * 0.32 * i2;
   // A bright tracking line crawling up, and black dropouts, when it is bad.
   float crawl = fract(vhsTime * 0.11);
   color += smoothstep(0.012, 0.0, abs(uv.y - crawl)) * 0.4 * smoothstep(0.3, 0.6, i);
   float dropout = step(0.997 - 0.02 * i, vhsHash(vec2(floor(uv.y * 120.0), frame)));
   color = mix(color, vec3(0.0), dropout * smoothstep(0.3, 0.6, i));
-  outputColor = vec4(max(color, 0.0), inputColor.a);
+  outputColor = vec4(pow(max(color, 0.0), vec3(2.2)), inputColor.a);
 }
 `;
 

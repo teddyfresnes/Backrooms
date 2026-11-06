@@ -354,6 +354,26 @@ describe('embedded mouse controls', () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it('drops a lock the browser kept after a focus loss and ignores mouse motion meanwhile', () => {
+    const { controller, element, pointerDocument } = createController(new FakePhysics({ x: 0, y: .865, z: 0 }));
+    controller.lock();
+    const exitPointerLock = vi.fn();
+    Object.assign(pointerDocument, { exitPointerLock, hasFocus: () => true });
+    Object.defineProperty(pointerDocument, 'pointerLockElement', { configurable: true, value: element });
+    controller.controls.isLocked = true; controller.controls.dispatchEvent({ type: 'lock' });
+    mouse(pointerDocument, element, 'mousemove', 10, 10, { movementX: 1 });
+    const before = controller.getContinuousAimYawRadians();
+    // Another screen has focus but the lock is still reported as held.
+    Object.assign(pointerDocument, { hasFocus: () => false });
+    mouse(pointerDocument, element, 'mousemove', 30, 10, { movementX: 40 });
+    expect(controller.getContinuousAimYawRadians()).toBe(before);
+    Object.defineProperty(pointerDocument, 'hidden', { configurable: true, value: true });
+    pointerDocument.dispatchEvent(new Event('visibilitychange'));
+    expect(exitPointerLock).toHaveBeenCalled();
+    expect(controller.isLocked).toBe(true);
+    controller.dispose();
+  });
+
   it('removes the recapture request after the browser captures the mouse', () => {
     vi.useFakeTimers();
     const { controller, callbacks } = createController(new FakePhysics({ x: 0, y: .865, z: 0 }));

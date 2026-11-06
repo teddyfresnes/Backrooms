@@ -68,3 +68,11 @@ it('targets all four original physical gas knobs without adding a mesh, and reje
   camera.position.copy(center).add(new THREE.Vector3(0,1,0));camera.lookAt(center);expect(devices.interact()).toBe(false);
   camera.position.set(center.x,9.7,1.1);camera.lookAt(controls[0]!.getCenter(new THREE.Vector3()));expect(devices.interact()).toBe(false);
 });
+it('keeps every apartment light visible when the interior model is culled from the landing', async () => {
+  const { environment } = await fixture();
+  const count = () => { let lights = 0; environment.group.traverseVisible(object => { if ((object as THREE.Light).isLight) lights += 1; }); return lights; };
+  const before = count();
+  // A light that disappears with the model changes Three's light count and recompiles every lit shader.
+  (environment as unknown as { model: THREE.Object3D }).model.visible = false;
+  expect(count()).toBe(before);
+});

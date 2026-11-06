@@ -50,6 +50,10 @@ bloom historiques ; le composer est reconstruit lors de la bascule.
 quatre plafonniers et trois appliques possèdent sept sources fixes sans ombres
 locales. Leur position et leur contribution ne dépendent jamais de la caméra ;
 le nombre de lumières du shader reste constant pendant les déplacements.
+Une lumière s'éteint par son intensité, jamais par `visible` ni sous un parent
+masqué (le modèle intérieur de l'appartement est culé depuis le palier) : tout
+changement du nombre de lumières visibles recompile chaque shader éclairé en
+plein jeu. `FrameHitchMonitor` journalise le paramètre de clé qui a changé.
 Le profil moderne a des sources plus concentrées ; le classique reste plus
 chaud et plus large. Les deux shadow maps extérieures sont calculées une fois,
 puis invalidées uniquement lors d'une réactivation des ombres. En qualité

@@ -219,8 +219,8 @@ export class BacteriaEncounter {
     const facing = THREE.MathUtils.clamp((this.gazeView.dot(toward.normalize()) - 0.82) / 0.16, 0, 1);
     // Looked at, even from afar, it still corrupts the picture a little.
     const gaze = facing * (0.35 + 0.4 * THREE.MathUtils.clamp(1 - distance / 120, 0, 1));
-    const hidden = this.hidden ? 0.15 : 0;
-    return THREE.MathUtils.clamp(near * near * 0.75 + gaze * 0.5 + hidden + this.shakeLevel * 0.12, 0, 0.85);
+    const hidden = this.hidden ? 0.1 : 0;
+    return THREE.MathUtils.clamp(near * near * 0.52 + gaze * 0.34 + hidden + this.shakeLevel * 0.08, 0, 0.6);
   }
 
   /** Quest line for the objective tracker (null = let the story decide). */

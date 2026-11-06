@@ -42,7 +42,7 @@ import { resolveLightingBrightness } from '../render/LightingBrightness';
 import { FrameHitchMonitor } from '../render/FrameHitchMonitor';
 
 /** Always-on camcorder layer (0..1). */
-const PASSIVE_VHS = .1;
+const PASSIVE_VHS = .06;
 import { compactSceneDataMaps, restoreSceneDataMaps, warmSceneForPlay, waitForSceneGpu } from '../render/SceneWarmup';
 import { HallExitInteraction } from '../stairwell/HallExitInteraction';
 import { HallArrivalStory, MAIL_STAIR_GATE, MAIL_SECOND_FLIGHT_GATE, MAIL_SAFE_LANDING } from '../stairwell/HallArrivalStory';
