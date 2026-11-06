@@ -62,6 +62,10 @@ pas continuellement la scène. La cage utilise FXAA, sans passes auxiliaires ni
 textures de recherche SMAA. Le pipeline Backrooms attend explicitement les tables
 SMAA avant son warmup.
 
+La cage ajoute une passe `VhsEffect` séparée (elle échantillonne ses voisins) :
+niveau permanent faible, accentué par `BacteriaEncounter.cameraDisturbance`
+(proximité, regard, mise à mort). Aucun flash teinté : il rosissait la créature.
+
 `SceneWarmup` envoie toutes les textures à la carte graphique, prépare les limites
 et textures d'os des trois vues du personnage. Il monte aussi les buffers hors
 champ : des proxies partagent les buffers exacts avec une plage de dessin nulle,

@@ -97,9 +97,10 @@
   position: absolute;
   inset: 0;
   opacity: 0;
+  /* A tape dropout, not a red wash (hard-light tinted the creature pink). */
   background:
-    radial-gradient(ellipse at center, rgba(255, 255, 255, 0.0) 18%, rgba(160, 0, 0, 0.55) 62%, rgba(25, 0, 0, 0.95) 100%);
-  mix-blend-mode: hard-light;
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.55) 0 2px, rgba(0, 0, 0, 0) 2px 5px),
+    radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0.92) 100%);
 }
 
 .story-death {

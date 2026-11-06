@@ -78,9 +78,10 @@ export class ApartmentDeviceAudio {
     const now=this.bus.context.currentTime,gap=now-this.lastBallast;this.lastBallast=now;
     const thin=gap<.09?.45:1,variant=(index*2654435761>>>0)/4294967296;
     const range={refDistance:2.2,maxDistance:240,rolloff:.42};
-    this.burst(position,.028+variant*.02,.11*thin,2100+variant*1500,'bandpass',range);
-    this.burst(position,.11,.07*thin,320+variant*140,'lowpass',range);
-    this.tone(position,118+variant*6,96,.32+variant*.2,.016*thin,range);
+    // Louder than before: the strikes are the soundtrack of the wave.
+    this.burst(position,.028+variant*.02,.28*thin,2100+variant*1500,'bandpass',range);
+    this.burst(position,.13,.19*thin,320+variant*140,'lowpass',range);
+    this.tone(position,118+variant*6,96,.42+variant*.2,.04*thin,range);
   }
   ceramic(position: Vec3Data): void { this.burst(position,.4,.16,900,'lowpass'); this.tone(position,420,140,.12,.018); }
   constructor(private readonly bus: SpatialAudioBus, private readonly positions: DeviceAudioPositions,

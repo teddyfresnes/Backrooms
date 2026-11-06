@@ -7,6 +7,11 @@ vi.mock('postprocessing', async () => {
   const three = await import('three');
   class Effect extends three.EventDispatcher {
     blendMode = { opacity: { value: 0 } };
+    uniforms: Map<string, { value: unknown }>;
+    constructor(...args: unknown[]) {
+      super();
+      this.uniforms = (args[2] as { uniforms?: Map<string, { value: unknown }> } | undefined)?.uniforms ?? new Map();
+    }
   }
   class SMAA extends Effect {
     weightsMaterial = { searchTexture: null as unknown, areaTexture: null as unknown };
@@ -17,7 +22,7 @@ vi.mock('postprocessing', async () => {
     dispose = vi.fn(); setSize = vi.fn(); addPass = vi.fn(); render = vi.fn();
     constructor() { state.composers.push(this); }
   }
-  return { BlendFunction: { SCREEN: 0, MULTIPLY: 1, SOFT_LIGHT: 2 }, ToneMappingMode: { AGX: 0 },
+  return { BlendFunction: { SCREEN: 0, MULTIPLY: 1, SOFT_LIGHT: 2 }, ToneMappingMode: { AGX: 0 }, Effect, EffectAttribute: { CONVOLUTION: 2 },
     EffectComposer: Composer, SMAAEffect: SMAA, FXAAEffect: FXAA, BloomEffect: Effect, BrightnessContrastEffect: Effect,
     EffectPass: Effect, HueSaturationEffect: Effect, NoiseEffect: Effect, NormalPass: Effect, RenderPass: Effect,
     SSAOEffect: Effect, ToneMappingEffect: Effect, VignetteEffect: Effect };
@@ -53,5 +58,14 @@ describe('post-processing readiness', () => {
     const other = create(), cancelled = other.waitUntilReady(), before = state.composers.length;
     other.dispose(); await cancelled;
     expect(state.composers).toHaveLength(before); expect(vi.getTimerCount()).toBe(0);
+  });
+  it('adds the camcorder pass on request and keeps its level across pipeline rebuilds', () => {
+    const fx = new PostFX({ extensions: { has: () => true } } as unknown as THREE.WebGLRenderer,
+      new THREE.Scene(), new THREE.PerspectiveCamera(), 'modern', { bloom: false, antialias: 'fxaa', vhs: true });
+    fx.setVhs(0.6); fx.setPerformanceMode(true);
+    const vhs = (fx as unknown as { vhs: { intensity: number } }).vhs;
+    expect(vhs.intensity).toBeCloseTo(0.6);
+    fx.setVhs(7); expect(vhs.intensity).toBe(1);
+    fx.dispose();
   });
 });

@@ -429,6 +429,7 @@ export class BacteriaActor {
   private range(min: number, max: number): number { return min + (max - min) * this.random(); }
 
   setVisible(visible: boolean): void { this.root.visible = visible; }
+  get isVisible(): boolean { return this.root.visible; }
 
   /** 0 = its usual near-black hide, 1 = blown out by a strobe (the jumpscare). */
   setExposure(level: number): void {

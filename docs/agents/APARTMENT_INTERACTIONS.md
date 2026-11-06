@@ -18,6 +18,13 @@ partagés avec `WorldView`. Sol et Rapier suivent le support réel sous le seuil
 les retours commencent à l'extérieur du cadre importé, sans couvrir verrou et
 interrupteur. Les luminaires sont instanciés, leur champ analytique persiste
 indépendamment de la caméra.
+Au-delà des 168 m jouables, une enfilade non éclairée de 420 m (matériaux basiques,
+brouillard 150–560 m) prolonge le couloir derrière la créature ; un collider
+invisible ferme le fond. Ses tubes s'allument en cascade après le dernier tube
+jouable. Chaque tube qui s'allume joue le ballast et un clac enregistré ; un
+bourdonnement fluorescent suit le nombre de tubes allumés. Pendant la révélation
+le joueur garde toute sa vitesse (arrêt à 14 m de la créature) ; repéré sur le
+palier, seule la vue est tournée vers l'escalier pendant 0,4 s.
 Leurs colliders sont préparés désactivés ; la transition active les mêmes corps
 et retire les anciens chunks dans une mutation groupée. Météo et audio restent
 indépendants de la panne.

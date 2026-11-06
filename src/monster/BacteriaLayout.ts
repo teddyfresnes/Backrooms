@@ -300,8 +300,9 @@ export const distance = (a: Readonly<Vec3Data>, b: Readonly<Vec3Data>): number =
  * peak around 6.5 s). Times are seconds after the reveal troffer strikes.
  */
 export const REVEAL_TIMELINE = {
-  /** Slow push in from the player's field of view to a long-lens close-up. */
-  zoomDuration: 4.4,
+  /** Push in from the player's field of view to a long-lens close-up, quick
+   * once the far tubes light it. */
+  zoomDuration: 1.6,
   /** Feeding stops dead: it has heard something. */
   freeze: 3.6,
   /** The head starts to come round, alone, much too far. */

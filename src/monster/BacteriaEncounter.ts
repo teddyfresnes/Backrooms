@@ -36,9 +36,8 @@ type DeathCause = 'caught' | 'closet' | 'silence' | 'noise' | 'stairs';
 type Checkpoint = 'corridor' | 'closet';
 
 const EYE_HEIGHT = 0.73;
-/** Dazed steps during the reveal: slowed, and never more than a few metres closer. */
-const REVEAL_WALK_SCALE = 0.42;
-const REVEAL_FORWARD_LIMIT = 2.5;
+/** The player may keep running at it during the reveal, but never closer than this. */
+const REVEAL_CLOSEST = 14;
 const UP = new THREE.Vector3(0, 1, 0);
 const smooth = (value: number): number => { const t = THREE.MathUtils.clamp(value, 0, 1); return t * t * (3 - 2 * t); };
 const lerpAngle = (from: number, to: number, amount: number): number => {
@@ -46,8 +45,8 @@ const lerpAngle = (from: number, to: number, amount: number): number => {
   return from + delta * amount;
 };
 const crossed = (time: number, delta: number, mark: number): boolean => time >= mark && time - delta < mark;
-/** Seconds after the roar before the view snaps to the stairs. */
-const SPOTTED_STAIR_TURN_DELAY = 0.2;
+/** The view is swung to the stairs, then handed back this early. */
+const SPOTTED_LOOK_RELEASE = 0.4;
 /** A point a couple of treads down the flight leaving the apartment landing. */
 const STAIR_LOOK_TARGET = { x: 1.05, z: -0.9 } as const;
 const STAIR_LOOK_DROP = 0.75;
@@ -130,7 +129,6 @@ export class BacteriaEncounter {
   private readonly creatureLight = new THREE.PointLight(0xfff0c2, 0, 7.5, 1.7);
   private revealTime: number | null = null;
   private revealFov = 11.5;
-  private revealStartX = 0;
   private chargeTime = 0;
   private distanceAlong = 0;
   private readonly monsterPosition = new THREE.Vector3();
@@ -144,6 +142,8 @@ export class BacteriaEncounter {
   private readonly face = new THREE.Vector3();
   private readonly target = new THREE.Vector3();
   private readonly scratch = new THREE.Vector3();
+  private readonly gazeToward = new THREE.Vector3();
+  private readonly gazeView = new THREE.Vector3();
   private readonly lookMatrix = new THREE.Matrix4();
   private readonly lookQuaternion = new THREE.Quaternion();
   private readonly nextLook = new THREE.Quaternion();
@@ -204,6 +204,25 @@ export class BacteriaEncounter {
 
   get isHidden(): boolean { return this.hidden; }
 
+  /** How badly the "camera" degrades, 0..1: rises as the creature gets close
+   * or fills the view, and peaks during the kill. Drives the VHS layer. */
+  get cameraDisturbance(): number {
+    if (this.phase === 'jumpscare') return Math.min(1, 0.74 + this.hitKick * 0.18 + Math.abs(Math.sin(this.phaseTime * 19)) * 0.08);
+    if (this.phase === 'dormant' || this.phase === 'dead' || this.phase === 'over' || this.phase === 'aftermath') return 0;
+    if ((this.actor as { isVisible?: boolean }).isVisible === false) return 0;
+    if (this.phase === 'reveal' && this.revealTime === null) return 0;
+    const camera = this.host.renderCamera;
+    const toward = this.gazeToward.copy(this.monsterPosition).addScaledVector(UP, 1.2).sub(camera.position);
+    const distance = toward.length();
+    const near = THREE.MathUtils.clamp(1 - distance / 16, 0, 1);
+    camera.getWorldDirection(this.gazeView);
+    const facing = THREE.MathUtils.clamp((this.gazeView.dot(toward.normalize()) - 0.82) / 0.16, 0, 1);
+    // Looked at, even from afar, it still corrupts the picture a little.
+    const gaze = facing * (0.35 + 0.4 * THREE.MathUtils.clamp(1 - distance / 120, 0, 1));
+    const hidden = this.hidden ? 0.15 : 0;
+    return THREE.MathUtils.clamp(near * near * 0.75 + gaze * 0.5 + hidden + this.shakeLevel * 0.12, 0, 0.85);
+  }
+
   /** Quest line for the objective tracker (null = let the story decide). */
   get questText(): { text: string; tone: 'calm' | 'urgent' | 'hidden' } | null {
     const inside = this.playerInside();
@@ -235,19 +254,16 @@ export class BacteriaEncounter {
 
   get locksInput(): boolean {
     return this.phase === 'jumpscare' || this.phase === 'dead' || this.phase === 'escaped'
-      || this.hidden || (this.phase === 'spotted' && this.phaseTime < S.release);
+      || this.hidden;
   }
 
   /**
-   * The reveal plays passively: the player keeps walking, legs heavy, while
-   * the long lens frames the creature. Steps toward it are slowed and capped
-   * so the chase keeps its margin; backing away stays free.
+   * The reveal frames the creature on a long lens while the player keeps full
+   * control, running at it included; only the last metres are refused.
    */
   constrainMovement(position: THREE.Vector3, movement: THREE.Vector3): void {
     if (this.phase !== 'reveal') return;
-    movement.x *= REVEAL_WALK_SCALE;
-    movement.z *= REVEAL_WALK_SCALE;
-    const limit = this.revealStartX + REVEAL_FORWARD_LIMIT;
+    const limit = this.monsterPosition.x - REVEAL_CLOSEST;
     if (movement.x > 0 && position.x + movement.x > limit) movement.x = Math.max(0, limit - position.x);
   }
 
@@ -346,7 +362,6 @@ export class BacteriaEncounter {
     this.checkpoint = 'corridor';
     host.player.prepareScriptedStanding();
     host.player.setLookLocked(true);
-    this.revealStartX = host.player.position.x;
     host.onReveal();
     host.hud.hideHint();
     this.fov = host.baseFieldOfView();
@@ -720,10 +735,10 @@ export class BacteriaEncounter {
   private startSpotted(): void {
     const host = this.host;
     this.setPhase('spotted');
-    host.player.prepareScriptedStanding();
-    host.player.setInputEnabled(false);
+    // Only the view is taken, briefly, and swung to the flight down; the legs
+    // stay the player's so the run starts at once.
     host.player.setLookLocked(true);
-    host.hud.hideHint();
+    host.hud.showHint(host.sprintKeyLabel(), 'COURS ! Descends !', 4, true);
     host.openEscape();
     this.distanceAlong = 0;
   }
@@ -733,14 +748,14 @@ export class BacteriaEncounter {
     const t = this.phaseTime;
     // You glance back: it has already turned. Once it roars, the head whips
     // round to the flight down, so control returns already facing the run.
-    const toStairs = t >= S.roar + SPOTTED_STAIR_TURN_DELAY;
-    if (toStairs) this.target.set(STAIR_LOOK_TARGET.x, this.eye.y - STAIR_LOOK_DROP, STAIR_LOOK_TARGET.z);
-    else this.actor.getHeadPosition(this.target);
-    this.lookMatrix.lookAt(this.eye, this.target, UP);
-    this.lookQuaternion.setFromRotationMatrix(this.lookMatrix);
-    const current = host.player.getLookQuaternion();
-    this.nextLook.set(current.x, current.y, current.z, current.w).slerp(this.lookQuaternion, 1 - Math.exp(-dt * (toStairs ? 15 : 9)));
-    host.player.setLookQuaternion(this.nextLook);
+    if (t < SPOTTED_LOOK_RELEASE) {
+      this.target.set(STAIR_LOOK_TARGET.x, this.eye.y - STAIR_LOOK_DROP, STAIR_LOOK_TARGET.z);
+      this.lookMatrix.lookAt(this.eye, this.target, UP);
+      this.lookQuaternion.setFromRotationMatrix(this.lookMatrix);
+      const current = host.player.getLookQuaternion();
+      this.nextLook.set(current.x, current.y, current.z, current.w).slerp(this.lookQuaternion, 1 - Math.exp(-dt * 16));
+      host.player.setLookQuaternion(this.nextLook);
+    } else if (crossed(t, dt, SPOTTED_LOOK_RELEASE)) host.player.setLookLocked(false);
     if (crossed(t, dt, S.dropTelevision)) this.dropTelevision();
     if (crossed(t, dt, S.whip)) {
       this.targetYaw = this.yawToward(this.feet);
@@ -763,8 +778,6 @@ export class BacteriaEncounter {
       this.targetYaw = null;
       this.actor.setMotion('run');
       host.player.setLookLocked(false);
-      host.player.setInputEnabled(true);
-      host.hud.showHint(host.sprintKeyLabel(), 'COURS ! Descends !', 4, true);
     }
   }
 
@@ -887,8 +900,10 @@ export class BacteriaEncounter {
     });
     // A strobing key light and a blown-out hide: the face must read, for a split second.
     const strobe = Math.abs(Math.sin(t * 26));
-    this.creatureLight.intensity = 5.5 + strobe * 5 + this.hitKick * 4;
-    this.actor.setExposure(0.35 + strobe * 0.65);
+    // Kept below the level that washed the hide out to a pale pink; the
+    // violence is carried by the VHS layer instead.
+    this.creatureLight.intensity = 2.2 + strobe * 1.6 + this.hitKick * 1.2;
+    this.actor.setExposure(0.45 + strobe * 0.2);
     this.shakeLevel = Math.max(this.shakeLevel, 0.9);
     if (t >= KILL_CUT) {
       // Hard cut to black on the last crack, no fade.

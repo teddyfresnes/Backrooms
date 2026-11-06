@@ -7,7 +7,7 @@ import { SprintHint } from '../ui/SprintHint';
 import { Flashlight } from '../apartment/Flashlight';
 import { LongCorridor } from '../apartment/LongCorridor';
 import { CorridorReaction } from '../apartment/CorridorReaction';
-import { BACTERIA_REVEAL_LAMP, CorridorStory, CORRIDOR_SPACING } from '../story/CorridorProgress';
+import { BACTERIA_REVEAL_LAMP, CorridorStory, CORRIDOR_LAMPS, CORRIDOR_LENGTH, CORRIDOR_SPACING } from '../story/CorridorProgress';
 import { CharacterRuntime } from '../character/CharacterRuntime';
 import { viewmodelCommand, VIEWMODEL_COMPLETION } from '../character/ViewmodelCommand';
 import * as THREE from 'three';
@@ -40,6 +40,9 @@ import {
 import { PostFX } from '../render/PostFX';
 import { resolveLightingBrightness } from '../render/LightingBrightness';
 import { FrameHitchMonitor } from '../render/FrameHitchMonitor';
+
+/** Always-on camcorder layer (0..1). */
+const PASSIVE_VHS = .1;
 import { compactSceneDataMaps, restoreSceneDataMaps, warmSceneForPlay, waitForSceneGpu } from '../render/SceneWarmup';
 import { HallExitInteraction } from '../stairwell/HallExitInteraction';
 import { HallArrivalStory, MAIL_STAIR_GATE, MAIL_SECOND_FLIGHT_GATE, MAIL_SAFE_LANDING } from '../stairwell/HallArrivalStory';
@@ -559,6 +562,8 @@ export class RussianStairwellGame {
     if(this.disposed){this.corridorMaterials.dispose();return;}
     this.corridor=new LongCorridor(apartment.corridorDoorway,apartment.corridorFloorY,this.corridorMaterials.materials,physics);
     this.scene.add(this.corridor.group);
+    // The far tubes racing away behind the creature: faint, thinned clacks.
+    this.corridor.onLampStrike=(index)=>{if(index>=CORRIDOR_LAMPS)this.audio.tubeStrike?.(CORRIDOR_LENGTH+(index-CORRIDOR_LAMPS)*4-(this.player?.position.distanceTo(this.corridor!.threshold)??0),index);};
     await this.corridor.prepare();
     if(this.disposed)return;
     this.player.setMovementConstraint((position,movement)=>this.constrainExit(position,movement));
@@ -774,7 +779,7 @@ export class RussianStairwellGame {
       this.scene,
       this.camera,
       this.settings.lighting,
-      { bloom: false, antialias: 'fxaa' },
+      { bloom: false, antialias: 'fxaa', vhs: true },
     );
     this.applyRenderFeatures(0);
     this.resize();
@@ -1000,7 +1005,7 @@ export class RussianStairwellGame {
     this.environment.showPostOutage();this.environment.hideExterior();this.neighbors?.suspend();
     this.apartment.group.traverse(o=>{if(/(?:west|east|north)-neighbor-door-/.test(o.name))o.visible=false;});
     // Far enough that the long-lens reveal at ~94 m is never veiled.
-    this.scene.fog=new THREE.Fog(0x080b09,130,340);this.scene.background=new THREE.Color(0x080b09);this.camera.far=360;this.playerCamera.far=360;
+    this.scene.fog=new THREE.Fog(0x080b09,150,560);this.scene.background=new THREE.Color(0x080b09);this.camera.far=600;this.playerCamera.far=600;
     this.camera.updateProjectionMatrix();this.playerCamera.updateProjectionMatrix();this.applyApartmentPower();
     this.lastLampCount=this.corridorStory.litCount;this.corridor.setLights(this.lastLampCount,resolveLightingBrightness(this.settings.brightness).relativeGain,this.corridorStory.firstLamp,false);
     if(this.initialized)this.saveNow('autosave');
@@ -1417,11 +1422,15 @@ export class RussianStairwellGame {
     }
     this.corridor?.setLights(this.corridorBlackout===0?0:this.corridorStory.litCount,resolveLightingBrightness(this.settings.brightness).relativeGain,this.corridorStory.firstLamp);
     if(active&&this.corridorMounted)this.corridor?.update(delta);
+    this.audio.setCorridorHum?.(this.corridorMounted&&this.corridorBlackout!==0?Math.min(1,this.corridorStory.litCount/10):0);
     if(this.corridorStory.litCount!==this.lastLampCount){
       if (this.corridorStory.litCount > this.lastLampCount && this.corridorMounted && this.corridor) {
         // Each troffer strikes where it hangs; the far ones stay faintly audible.
         const position=new THREE.Vector3();
-        for(let index=this.lastLampCount;index<this.corridorStory.litCount;index++)this.deviceAudio?.corridorBallast(this.corridor.lampPosition(index,position),index);
+        for(let index=this.lastLampCount;index<this.corridorStory.litCount;index++){
+          this.deviceAudio?.corridorBallast(this.corridor.lampPosition(index,position),index);
+          this.audio.tubeStrike?.(position.distanceTo(this.player?.position ?? position),index);
+        }
       }
       this.lastLampCount=this.corridorStory.litCount;
       if(this.corridorStory.finished)this.saveNow('autosave');
@@ -1560,6 +1569,8 @@ export class RussianStairwellGame {
     }
     this.renderer.info.reset();
     this.renderRequested = false;
+    // A faint camcorder grain all the time, worse near or facing the creature.
+    this.postFX?.setVhs(PASSIVE_VHS + (this.encounter?.cameraDisturbance ?? 0));
     this.postFX?.render(delta);
     this.hitches?.check(frameStart, this.player.position);
   };

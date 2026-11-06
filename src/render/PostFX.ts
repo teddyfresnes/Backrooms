@@ -18,10 +18,13 @@ import {
   VignetteEffect,
 } from 'postprocessing';
 import type { LightingMode } from './LightingMode';
+import { VhsEffect } from './VhsEffect';
 
 export interface PostFXOptions {
   readonly bloom?: boolean;
   readonly antialias?: 'smaa' | 'fxaa';
+  /** Camcorder layer after grading, driven by setVhs(). */
+  readonly vhs?: boolean;
 }
 
 export class PostFX {
@@ -29,6 +32,8 @@ export class PostFX {
   private vignette?: VignetteEffect;
   private noise?: NoiseEffect;
   private grading?: HueSaturationEffect;
+  private vhs?: VhsEffect;
+  private vhsLevel = 0;
   private width = 1;
   private height = 1;
   private performanceMode = false;
@@ -154,6 +159,7 @@ export class PostFX {
       effects.push(toneMapping, grading, contrast, vignette);
       if (!coarsePointer && !this.performanceMode && !this.antialiasUnavailable) effects.push(this.antialiasEffect());
       composer.addPass(new EffectPass(this.camera, ...effects));
+      this.addVhsPass(composer);
       return composer;
     }
 
@@ -186,7 +192,22 @@ export class PostFX {
     effects.push(toneMapping, this.grading, contrast, this.noise, this.vignette);
     if (!coarsePointer && !this.performanceMode && !this.antialiasUnavailable) effects.push(this.antialiasEffect());
     composer.addPass(new EffectPass(this.camera, ...effects));
+    this.addVhsPass(composer);
     return composer;
+  }
+
+  private addVhsPass(composer: EffectComposer): void {
+    this.vhs = undefined;
+    if (!this.options.vhs) return;
+    this.vhs = new VhsEffect();
+    this.vhs.intensity = this.vhsLevel;
+    composer.addPass(new EffectPass(this.camera, this.vhs));
+  }
+
+  /** Camcorder damage 0 (clean) .. 1 (violent); kept across pipeline rebuilds. */
+  setVhs(level: number): void {
+    this.vhsLevel = THREE.MathUtils.clamp(Number.isFinite(level) ? level : 0, 0, 1);
+    if (this.vhs) this.vhs.intensity = this.vhsLevel;
   }
 
   setDarkness(value: number): void {
@@ -205,6 +226,7 @@ export class PostFX {
   }
 
   render(delta: number): void {
+    this.vhs?.advance(delta);
     this.composer.render(delta);
   }
 

@@ -36,7 +36,7 @@ it('warms the launcher effects at low resolution and presents only the final fra
   let width = 800, height = 600;
   const sizes: number[][] = [];
   const renderer = { setPixelRatio: vi.fn(), setSize: vi.fn((w, h) => { width = w; height = h; }), getContext: () => ({}) };
-  const postFX = { setSize: vi.fn(), render: vi.fn(() => sizes.push([width, height])) };
+  const postFX = { setSize: vi.fn(), setVhs: vi.fn(), render: vi.fn(() => sizes.push([width, height])) };
   const resize = vi.fn(() => { renderer.setSize(800, 600); postFX.setSize(800, 600); });
   Object.assign(game, { renderer, postFX, resize, disposed: false });
   await game.warmupPostFX();
@@ -80,7 +80,7 @@ function fixture() {
     environment:{update(){},dispose(){}},door:{update(){},dispose(){}},
     character:{setActive:(active:boolean)=>player.setInputEnabled(active),setArrivalPresentation(){},getEquipmentHandPosition:()=>false,dispose(){},
       update:(dt:number)=>{player.fixedUpdate(dt);player.renderUpdate(dt,1);game.camera.copy(game.playerCamera);}},
-    postFX:{render:vi.fn(),setPerformanceMode(){},setSize(){},dispose(){}}});
+    postFX:{render:vi.fn(),setPerformanceMode(){},setSize(){},setVhs(){},dispose(){}}});
   game.ui.setReady();
   const step=()=>game.frame(game.previousTime+1000/60);
   const key=(type:string)=>window.dispatchEvent(new KeyboardEvent(type,{key:'i',code:'KeyI',bubbles:true}));

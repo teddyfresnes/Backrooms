@@ -176,7 +176,7 @@ describe('experience routing', () => {
 
     expect(backrooms).toContain('BACKROOMS_ATMOSPHERE as ATMOSPHERE');
     expect(stairwell).toContain('new PostFX(');
-    expect(stairwell).toContain("{ bloom: false, antialias: 'fxaa' }");
+    expect(stairwell).toContain("{ bloom: false, antialias: 'fxaa', vhs: true }");
     expect(stairwell).toContain('this.postFX?.setLightingMode(settings.lighting)');
     expect(stairwell).toContain('this.postFX?.render(delta)');
     expect(stairwell).toContain('this.postFX?.dispose()');

@@ -5,7 +5,7 @@ import { createWallGeometry, createFloorGeometry, createCeilingGeometry } from '
 import { createFluorescentPanelGeometry } from '../render/FluorescentFixture';
 import { applyMatteSurface } from '../render/MatteSurface';
 import type { StaticCollider } from '../world/types';
-import { CORRIDOR_LENGTH, CORRIDOR_LAMPS, corridorLampDistance } from '../story/CorridorProgress';
+import { CORRIDOR_LENGTH, CORRIDOR_LAMPS, CORRIDOR_SPACING, corridorLampDistance } from '../story/CorridorProgress';
 
 /** A real Level 0 hallway: narrow, low drop ceiling, recessed troffers. */
 export const CORRIDOR_WIDTH = 3.05;
@@ -14,6 +14,10 @@ export const CORRIDOR_HEIGHT = 2.74;
 /** Straight hallway: no side openings. */
 export const CORRIDOR_ALCOVES: readonly { readonly at: number; readonly side: -1 | 1 }[] = [];
 const ALCOVE_WIDTH = 1.3, ALCOVE_DEPTH = 2.6, ALCOVE_HEIGHT = 2.18;
+/** The fogged continuation behind the creature, and its tubes racing away. */
+const VISTA_LENGTH = 420;
+const VISTA_LAMPS = Math.floor(VISTA_LENGTH / CORRIDOR_SPACING) - 1;
+const VISTA_STEP = .045;
 /** Peak additive halo around a fully lit troffer. */
 const HALO_STRENGTH = .34;
 /** Soft rectangular glare (rounded falloff, brightest just off the panel edge), no canvas needed. */
@@ -46,6 +50,8 @@ export class LongCorridor {
   readonly group=new THREE.Group();
   readonly colliders:StaticCollider[]=[];
   readonly threshold:THREE.Vector3;
+  /** A tube strikes (index ≥ CORRIDOR_LAMPS: far vista tubes). Sound hook. */
+  onLampStrike?:(index:number,level:number)=>void;
   private readonly ownedMaterials:THREE.Material[]=[];
   private readonly geometries=new Set<THREE.BufferGeometry>();
   private readonly levels=new Array<number>(CORRIDOR_LAMPS).fill(0);
@@ -55,6 +61,13 @@ export class LongCorridor {
   private readonly panels:THREE.InstancedMesh;
   private readonly halos:THREE.InstancedMesh;
   private readonly ownedTextures:THREE.Texture[]=[];
+  private readonly vista=new THREE.Group();
+  private readonly vistaMaterials:{material:THREE.MeshBasicMaterial;base:THREE.Color}[]=[];
+  private vistaPanels?:THREE.InstancedMesh;
+  private vistaHalos?:THREE.InstancedMesh;
+  /** Seconds since the last playable tube lit (-1 = dark), and far tubes on. */
+  private vistaTime=-1;
+  private vistaLit=0;
   private readonly panelColor=new THREE.Color();
   private readonly panelMatrix=new THREE.Matrix4();
   private seed=0x7a11c0;
@@ -77,6 +90,7 @@ export class LongCorridor {
     const wall=this.litMaterial(materials.wall,'wall'),floor=this.litMaterial(materials.floor,'floor'),ceiling=this.litMaterial(materials.ceiling,'ceiling'),baseboard=this.litMaterial(materials.baseboard,'trim');
     const mesh=(name:string,g:THREE.BufferGeometry,m:THREE.Material)=>{this.geometries.add(g);const o=new THREE.Mesh(g,m);o.name=name;this.group.add(o);return o;};
     const collider=(id:string,c:THREE.Vector3,size:THREE.Vector3,kind:StaticCollider['kind'])=>{const center=c.applyMatrix4(this.group.matrixWorld),q=this.group.quaternion;this.colliders.push({id,center:{x:center.x,y:center.y,z:center.z},halfExtents:{x:size.x/2,y:size.y/2,z:size.z/2},rotation:{x:q.x,y:q.y,z:q.z,w:q.w},kind});};
+    const panelGeoForVista=createFluorescentPanelGeometry();this.geometries.add(panelGeoForVista);
     const W=CORRIDOR_WIDTH,L=CORRIDOR_LENGTH,H=CORRIDOR_HEIGHT,bounds={minX:entry,maxX:L,minZ:-W/2,maxZ:W/2};
     const floorRects=[bounds,{minX:frame.min.x-.09,maxX:entry,minZ:openingMin,maxZ:openingMax}];
     const ceilingRects=[bounds];
@@ -120,9 +134,11 @@ export class LongCorridor {
     wallBox('corridor-entry-return-left',entry+.1,(-W/2+openingMin)/2,openingMin+W/2,'z',0,H);
     wallBox('corridor-entry-return-right',entry+.1,(W/2+openingMax)/2,W/2-openingMax,'z',0,H);
     wallBox('corridor-entry-lintel',entry+.1,(openingMin+openingMax)/2,openingMax-openingMin,'z',openingTop,H-openingTop);
-    wallBox('corridor-end',L+.1,0,W+.4,'z',0,H,.2,this.litMaterial(materials.wall,'end'));
+    // No dead end: past the playable 168 m the hallway runs on into the haze
+    // behind the creature. Only an invisible barrier stops the player.
+    collider('corridor-end',new THREE.Vector3(L+.1,H/2,0),new THREE.Vector3(.2,H,W+.4),'wall');
     // Exactly the generated levels' fixture: a flush luminous panel, no housing.
-    const panelGeo=createFluorescentPanelGeometry();this.geometries.add(panelGeo);
+    const panelGeo=panelGeoForVista;
     const diffuser=materials.fixtureGlow.clone();this.ownedMaterials.push(diffuser);
     this.panels=new THREE.InstancedMesh(panelGeo,diffuser,CORRIDOR_LAMPS);this.panels.name='instanced-luminous-ceiling-tiles';this.panels.renderOrder=12;
     const m=new THREE.Matrix4();for(let i=0;i<CORRIDOR_LAMPS;i++){
@@ -151,7 +167,44 @@ export class LongCorridor {
     this.halos=new THREE.InstancedMesh(haloGeo,halo,CORRIDOR_LAMPS);this.halos.name='corridor-troffer-halos';this.halos.renderOrder=13;
     for(let i=0;i<CORRIDOR_LAMPS;i++){this.halos.setMatrixAt(i,m.makeTranslation(corridorLampDistance(i),CORRIDOR_HEIGHT-.006,0));this.halos.setColorAt(i,this.panelColor.setScalar(0));}
     this.halos.frustumCulled=false;this.group.add(this.halos);
+    this.buildVista(materials,W,L,H,panelGeo);
     this.group.updateMatrixWorld(true);
+  }
+  /** Unlit, fogged continuation: cheap programs, no analytic field, no colliders. */
+  private buildVista(materials:MaterialSet,W:number,L:number,H:number,panelGeo:THREE.BufferGeometry):void{
+    const vista=this.vista;vista.name='corridor-vista';this.group.add(vista);
+    const basic=(source:THREE.MeshStandardMaterial)=>{
+      const material=new THREE.MeshBasicMaterial({name:`${source.name}-vista`,map:source.map,color:source.color.clone()});
+      this.ownedMaterials.push(material);this.vistaMaterials.push({material,base:source.color.clone()});return material;
+    };
+    const far={minX:L,maxX:L+VISTA_LENGTH,minZ:-W/2,maxZ:W/2};
+    const add=(name:string,geometry:THREE.BufferGeometry,material:THREE.Material)=>{this.geometries.add(geometry);const o=new THREE.Mesh(geometry,material);o.name=name;o.frustumCulled=false;vista.add(o);};
+    add('corridor-vista-floor',createFloorGeometry([far]),basic(materials.floor));
+    add('corridor-vista-ceiling',createCeilingGeometry(far,H),basic(materials.ceiling));
+    const wall=basic(materials.wall);
+    for(const side of [-1,1] as const)add(`corridor-vista-wall-${side}`,createWallGeometry({id:`corridor-vista-wall-${side}`,x:L+VISTA_LENGTH/2,z:side*(W/2+.1),
+      length:VISTA_LENGTH,orientation:'x',bottom:0,height:H,thickness:.2,tint:1,collision:false,kind:'wallpaper'}),wall);
+    const glow=(this.panels.material as THREE.Material);
+    this.vistaPanels=new THREE.InstancedMesh(panelGeo,glow,VISTA_LAMPS);this.vistaPanels.name='corridor-vista-panels';this.vistaPanels.renderOrder=12;
+    this.vistaHalos=new THREE.InstancedMesh(this.halos.geometry,this.halos.material,VISTA_LAMPS);this.vistaHalos.name='corridor-vista-halos';this.vistaHalos.renderOrder=13;
+    const m=new THREE.Matrix4();
+    for(let i=0;i<VISTA_LAMPS;i++){
+      const x=L+2+i*CORRIDOR_SPACING;
+      this.vistaPanels.setMatrixAt(i,m.makeTranslation(x,H-.003,0));this.vistaPanels.setColorAt(i,this.panelColor.setScalar(0));
+      this.vistaHalos.setMatrixAt(i,m.makeTranslation(x,H-.006,0));this.vistaHalos.setColorAt(i,this.panelColor.setScalar(0));
+    }
+    for(const mesh of [this.vistaPanels,this.vistaHalos]){mesh.frustumCulled=false;vista.add(mesh);}
+    this.applyVista(0);
+  }
+  /** `lit` far tubes on; the far surfaces take a dim reflected level. */
+  private applyVista(lit:number):void{
+    const reflected=lit>0?.5:.035;
+    for(const {material,base} of this.vistaMaterials)material.color.copy(base).multiplyScalar(reflected*this.uniforms.gain.value);
+    for(let i=0;i<VISTA_LAMPS;i++){
+      const on=i<lit?1:0;
+      this.vistaPanels!.setColorAt(i,this.panelColor.setScalar(on));this.vistaHalos!.setColorAt(i,this.panelColor.setScalar(on*HALO_STRENGTH));
+    }
+    for(const mesh of [this.vistaPanels!,this.vistaHalos!])if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
   }
   private litMaterial(source:THREE.MeshStandardMaterial,surface:'wall'|'floor'|'ceiling'|'trim'|'end'):THREE.MeshStandardMaterial {
     const material=source.clone(),u=this.uniforms;
@@ -235,7 +288,7 @@ export class LongCorridor {
       const on=i>=start&&i<count?1:0;
       if(on===this.targets[i])continue;
       this.targets[i]=on;
-      if(on&&this.mounted&&animate){this.strike[i]=BAD_TUBES.has(i)?.75:.32;}
+      if(on&&this.mounted&&animate){this.strike[i]=BAD_TUBES.has(i)?.75:.32;this.onLampStrike?.(i,1);}
       else{this.strike[i]=0;this.levels[i]=on;}
       this.dirty=true;
     }
@@ -254,6 +307,13 @@ export class LongCorridor {
         level=this.noise()<.012?.08+this.noise()*.3:THREE.MathUtils.lerp(level,target*.9,1-Math.exp(-dt*24));
       }else level=target;
       if(Math.abs(level-this.levels[i]!)>1e-4){this.levels[i]=level;this.dirty=true;}
+    }
+    // Once the last playable tube holds, the far ones strike in a fast cascade.
+    if(this.levels[CORRIDOR_LAMPS-1]!>.5)this.vistaTime=this.vistaTime<0?0:this.vistaTime+dt;else this.vistaTime=-1;
+    const vistaLit=this.vistaTime<0?0:Math.min(VISTA_LAMPS,Math.floor(this.vistaTime/VISTA_STEP)+1);
+    if(vistaLit!==this.vistaLit){
+      if(vistaLit>this.vistaLit&&this.vistaLit<VISTA_LAMPS)this.onLampStrike?.(CORRIDOR_LAMPS+this.vistaLit,1);
+      this.vistaLit=vistaLit;this.applyVista(vistaLit);
     }
     if(!this.dirty)return;this.dirty=false;
     // An unlit panel is hidden: the dead fixture beneath shows. A lit one

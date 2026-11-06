@@ -121,6 +121,9 @@ export class AudioSystem {
   private humGain?: GainNode;
   private ventGain?: GainNode;
   private rainGain?: GainNode;
+  /** Fluorescent hum of the post-outage corridor (interior ambience only). */
+  private corridorHumGain?: GainNode;
+  private lastTubeStrike = -1;
   private lowpass?: BiquadFilterNode;
   private readonly footsteps: Partial<Record<AudioSurface, readonly AudioBuffer[]>> = {};
   private readonly sprintBuffers: Partial<Record<AudioSurface, AudioBuffer>> = {};
@@ -187,6 +190,9 @@ export class AudioSystem {
       this.humGain.connect(this.lowpass);
       this.ventGain.connect(this.lowpass);
     } else {
+      this.corridorHumGain = context.createGain();
+      this.corridorHumGain.gain.value = 0;
+      this.corridorHumGain.connect(this.master);
       this.rainGain = context.createGain();
       this.rainGain.gain.value = 0.018 * this.interiorMix;
       this.rainGain.connect(this.master);
@@ -217,6 +223,7 @@ export class AudioSystem {
         this.loadBuffer('/assets/audio/interactions/blinds-close.mp3'),
         this.loadBuffer('/assets/audio/interactions/light-switch-on.mp3'),
         this.loadBuffer('/assets/audio/interactions/light-switch-off.mp3'),
+        this.loadBuffer('/assets/audio/fluorescent-hum-cc0.mp3'),
       ]);
     // Install the ambience as soon as it is decoded. In particular, apartment
     // rain must not wait for every footstep and impact asset to finish loading.
@@ -241,7 +248,11 @@ export class AudioSystem {
         blindsClose,
         lightSwitchOn,
         lightSwitchOff,
+        corridorHum,
       ] = ambienceBuffers;
+      if (corridorHum && this.corridorHumGain) {
+        this.loopSources.push(createLoopSource(context, corridorHum, this.corridorHumGain, 2.3));
+      }
       if (rain && this.rainGain) {
         this.loopSources.push(createLoopSource(context, rain, this.rainGain, 1.9));
       }
@@ -546,6 +557,25 @@ export class AudioSystem {
     const buffer = enabled ? this.lightSwitchOn : this.lightSwitchOff;
     if (!buffer) return;
     this.playRecordedClip(buffer, { offset: 0, duration: buffer.duration }, 0.54, 1, 10500);
+  }
+
+  /** A troffer striking: the recorded relay clack pitched down into a ballast
+   * thunk, quieter and duller with distance. Bursts closer than 70 ms thin out. */
+  tubeStrike(distance: number, variant = 0): void {
+    if (!this.context || !this.lightSwitchOn) return;
+    const now = this.context.currentTime, crowded = now - this.lastTubeStrike < 0.07;
+    if (crowded && distance > 30) return;
+    this.lastTubeStrike = now;
+    const near = 1 / (1 + Math.max(0, distance) * 0.06), wobble = ((variant * 2654435761) >>> 0) / 4294967296;
+    const buffer = this.lightSwitchOn, clip = { offset: 0, duration: buffer.duration };
+    this.playRecordedClip(buffer, clip, (crowded ? 0.35 : 0.8) * near, 0.52 + wobble * 0.12, lerpValue(9000, 1600, 1 - near), 0, 5);
+    this.playRecordedClip(buffer, clip, 0.45 * near, 0.31 + wobble * 0.05, lerpValue(2400, 700, 1 - near), 0.045, 8);
+  }
+
+  /** Steady corridor hum, 0 (dark) .. 1 (the whole hall lit). */
+  setCorridorHum(level: number): void {
+    if (!this.context || !this.corridorHumGain) return;
+    this.corridorHumGain.gain.setTargetAtTime(Math.min(1, Math.max(0, level)) * 0.2, this.context.currentTime, 0.25);
   }
 
   /** One blow of a mauling: a body slam and a crack of bone, pitched per hit. */

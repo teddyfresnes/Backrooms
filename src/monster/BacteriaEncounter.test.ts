@@ -144,9 +144,13 @@ function playToHiding(world: ReturnType<typeof setup>): void {
   // Passive: the player keeps walking while the lens frames the creature.
   expect(world.player.isInputEnabled).toBe(true);
   expect(world.player.lookLocked).toBe(true);
+  // Full speed toward it is allowed; only the last metres are refused.
   const step = new THREE.Vector3(10, 0, 0);
   world.encounter.constrainMovement(world.player.position, step);
-  expect(step.x).toBeLessThan(3);
+  expect(step.x).toBe(10);
+  const lunge = new THREE.Vector3(500, 0, 0);
+  world.encounter.constrainMovement(world.player.position, lunge);
+  expect(lunge.x).toBeLessThan(500); expect(lunge.x).toBeGreaterThan(0);
   world.setLampLit(true);
   world.step(REVEAL_TIMELINE.freeze);
   // Back turned while it feeds.
@@ -190,9 +194,12 @@ describe('BacteriaEncounter', () => {
     expect(world.quest()).toMatch(/sans courir/);
     // Tiptoe to the landing.
     world.until(() => world.events.includes('open-escape'), 4, () => { world.player.position.x = Math.min(threshold.x + 0.5, world.player.position.x + DT * 1.4); world.player.position.z = THREE.MathUtils.lerp(world.player.position.z, threshold.z, 0.05); });
-    expect(world.player.isInputEnabled).toBe(false);
-    const glance = world.until(() => world.player.isInputEnabled, 3);
-    expect(glance).toBeGreaterThan(SPOTTED_TIMELINE.release - 0.1);
+    // Spotted: the legs stay free, only the view is swung to the flight down.
+    expect(world.player.isInputEnabled).toBe(true);
+    expect(world.player.lookLocked).toBe(true);
+    const glance = world.until(() => !world.player.lookLocked, 1);
+    expect(glance).toBeLessThan(0.6);
+    world.until(() => world.state.motion === 'run', SPOTTED_TIMELINE.release + 0.2);
     // Control returns facing the flight down, not the creature.
     const view = new THREE.Vector3(0, 0, -1).applyQuaternion(world.player.getLookQuaternion() as THREE.Quaternion).setY(0).normalize();
     const stairs = new THREE.Vector3(1.05 - world.player.position.x, 0, -0.9 - world.player.position.z).normalize();
