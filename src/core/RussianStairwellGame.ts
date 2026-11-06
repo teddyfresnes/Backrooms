@@ -39,6 +39,7 @@ import {
 } from '../render/BackroomsAtmosphere';
 import { PostFX } from '../render/PostFX';
 import { resolveLightingBrightness } from '../render/LightingBrightness';
+import { FrameHitchMonitor } from '../render/FrameHitchMonitor';
 import { compactSceneDataMaps, restoreSceneDataMaps, warmSceneForPlay, waitForSceneGpu } from '../render/SceneWarmup';
 import { HallExitInteraction } from '../stairwell/HallExitInteraction';
 import { HallArrivalStory, MAIL_STAIR_GATE, MAIL_SECOND_FLIGHT_GATE, MAIL_SAFE_LANDING } from '../stairwell/HallArrivalStory';
@@ -205,6 +206,7 @@ export class RussianStairwellGame {
   private readonly storyHud: StoryHud;
   private questHold = 0;
   private readonly loadingAbort = new AbortController();
+  private hitches?: FrameHitchMonitor;
   private postFX?: PostFX;
   private pixelRatio: number;
   private accumulator = 0;
@@ -771,6 +773,14 @@ export class RussianStairwellGame {
     await this.postFX.waitUntilReady();
     if (this.disposed) return;
     this.renderer.setPixelRatio(1); this.renderer.setSize(320, 180, false); this.postFX.setSize(320, 180);
+    {
+      // Every visible light is unrolled into every lit shader (even at zero
+      // intensity): on ANGLE/D3D this count drives the per-program link time.
+      const lights: Record<string, number> = {};
+      this.scene.traverseVisible(object => { const light = object as THREE.Light; if (light.isLight) {
+        const key = light.type + ((light as THREE.PointLight).castShadow ? '+shadow' : ''); lights[key] = (lights[key] ?? 0) + 1; } });
+      for (const [type, count] of Object.entries(lights)) progress.recordOperation(`lights.${type}(count)`, count);
+    }
     await warmSceneForPlay({
       renderer: this.renderer, scene: this.scene, camera: this.camera,
       roots: [
@@ -819,6 +829,7 @@ export class RussianStairwellGame {
     progress.complete('audio');
     if (this.disposed) return;
     this.initialized = true;
+    this.hitches = new FrameHitchMonitor(this.renderer, this.scene);
     this.syncSaveHistory();
     this.ui.setSessionStarted(true);
     this.previousTime = performance.now();
@@ -1345,6 +1356,7 @@ export class RussianStairwellGame {
 
   private readonly frame = (now: number): void => {
     if (this.disposed || this.transitionSuspended || !this.player || !this.environment || !this.door) return;
+    const frameStart = performance.now();
     const measuredDelta = Math.max(0, (now - this.previousTime) / 1000);
     const delta = Math.min(0.05, measuredDelta);
     this.previousTime = now;
@@ -1539,6 +1551,7 @@ export class RussianStairwellGame {
     this.renderer.info.reset();
     this.renderRequested = false;
     this.postFX?.render(delta);
+    this.hitches?.check(frameStart, this.player.position);
   };
 
   private updateEncounterHud(delta: number): void {

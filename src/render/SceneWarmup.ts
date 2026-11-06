@@ -130,16 +130,27 @@ export async function compileSceneProgressively(
       }
     });
     const objects = [...new Set(representatives.values())];
+    // Pass 1 submits every compile/link without querying it. Firefox runs WebGL
+    // in a separate GPU process: these are queued commands, so its compiler
+    // works through them while this thread stays free. Querying each program
+    // right after submitting it (the previous approach) serialized every link.
+    const submitted = new Set<THREE.Material>();
     let sliceStart = performance.now();
     for (let i = 0; i < objects.length; i++) {
       if (cancelled()) return;
       bind();
-      try {
-        const materials = renderer.compile(objects[i]!, camera, scene as THREE.Scene);
-        // getUniforms() is Three's first use: it waits for this program's link now.
-        for (const material of materials) (renderer.properties.get(material) as { currentProgram?: ProgramHandle }).currentProgram?.getUniforms?.();
-      } finally { unbind(); }
-      onProgress?.((i + 1) / objects.length);
+      try { for (const material of renderer.compile(objects[i]!, camera, scene as THREE.Scene)) submitted.add(material); }
+      finally { unbind(); }
+      onProgress?.((i + 1) / objects.length * .2);
+      if (performance.now() - sliceStart >= 12) { await pause(); sliceStart = performance.now(); }
+    }
+    // Pass 2: getUniforms() is Three's first use and waits for that one link.
+    const programs = [...new Set([...submitted].map(material =>
+      (renderer.properties!.get(material) as { currentProgram?: ProgramHandle }).currentProgram).filter(Boolean))] as ProgramHandle[];
+    for (let i = 0; i < programs.length; i++) {
+      if (cancelled()) return;
+      programs[i]!.getUniforms?.();
+      onProgress?.(.2 + (i + 1) / programs.length * .8);
       if (performance.now() - sliceStart >= 12) { await pause(); sliceStart = performance.now(); }
     }
     onProgress?.(1);

@@ -151,7 +151,7 @@ describe('preparation before gameplay', () => {
     scene.traverse(object => { if (object instanceof THREE.Mesh) object.geometry.dispose(); });
     for (const texture of [original, normal, roughness, colour]) texture.dispose(); material.dispose();
   });
-  it('links one material at a time with yields when the browser cannot compile in parallel', async () => {
+  it('submits every program before waiting for any link, with yields, when the browser cannot compile in parallel', async () => {
     const scene = new THREE.Scene(), shared = new THREE.MeshStandardMaterial(), other = new THREE.MeshBasicMaterial();
     const geometry = new THREE.BoxGeometry();
     scene.add(new THREE.Mesh(geometry, shared), new THREE.Mesh(geometry, shared), new THREE.Mesh(geometry, other));
@@ -165,6 +165,7 @@ describe('preparation before gameplay', () => {
         // Same program variant as the composer's off-screen scene pass.
         expect(renderer.bound).toBeInstanceOf(THREE.WebGLRenderTarget);
         const material = (object as THREE.Mesh).material as THREE.Material;
+        expect(linked).toHaveLength(0); // no link is awaited between submissions
         programs.set(material, { currentProgram: { getUniforms: () => { linked.push(material); } } });
         return new Set([material]);
       }),
@@ -176,7 +177,7 @@ describe('preparation before gameplay', () => {
     expect(renderer.bound).toBeNull();
     expect(renderer.compileAsync).not.toHaveBeenCalled();
     expect(linked).toEqual([shared, other]);
-    expect(pause).toHaveBeenCalledTimes(2); expect(progress.at(-1)).toBe(1);
+    expect(pause).toHaveBeenCalledTimes(4); expect(progress.at(-1)).toBe(1);
     renderer.extensions.has = (() => true) as never;
     await compileSceneProgressively(renderer as never, scene, new THREE.PerspectiveCamera());
     expect(renderer.compileAsync).toHaveBeenCalledOnce();
