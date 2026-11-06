@@ -71,7 +71,9 @@ lots d'au plus huit textures ou 4 ms, avec une tâche navigateur entre les lots,
 sans attendre une image par texture. Sans `KHR_parallel_shader_compile`
 (Firefox), `compileAsync` rend la main tout de suite et chaque programme se lie
 au premier rendu, en un seul gel : `compileSceneProgressively` lie un matériau
-à la fois (`getUniforms()`) avec une tâche navigateur toutes les ~12 ms. Seuls les personnages sont dessinés hors
+à la fois (`getUniforms()`) avec une tâche navigateur toutes les ~12 ms, en
+liant une cible hors écran : la clé de programme dépend de la cible (espace de
+sortie) et la scène passe par le composer, sinon tout est recompilé au rendu. Seuls les personnages sont dessinés hors
 champ ; l'architecture conserve son culling normal. Visibilité et culling sont
 restaurés avant présentation. La cage prépare aussi huit vues à 320×180 (paliers
 et intérieur), en restaurant caméra et visibilité même en cas d'échec ; les

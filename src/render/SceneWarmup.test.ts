@@ -157,9 +157,13 @@ describe('preparation before gameplay', () => {
     scene.add(new THREE.Mesh(geometry, shared), new THREE.Mesh(geometry, shared), new THREE.Mesh(geometry, other));
     const linked: THREE.Material[] = [], programs = new Map<THREE.Material, { currentProgram: { getUniforms(): void } }>();
     const renderer = {
-      extensions: { get: () => null }, compileAsync: vi.fn(async () => {}),
+      extensions: { has: () => false }, compileAsync: vi.fn(async () => {}),
+      bound: null as THREE.WebGLRenderTarget | null,
+      getRenderTarget() { return this.bound; }, setRenderTarget(target: THREE.WebGLRenderTarget | null) { this.bound = target; },
       compile: vi.fn((object: THREE.Object3D, _camera: THREE.Camera, target: THREE.Object3D) => {
         expect(target).toBe(scene);
+        // Same program variant as the composer's off-screen scene pass.
+        expect(renderer.bound).toBeInstanceOf(THREE.WebGLRenderTarget);
         const material = (object as THREE.Mesh).material as THREE.Material;
         programs.set(material, { currentProgram: { getUniforms: () => { linked.push(material); } } });
         return new Set([material]);
@@ -168,11 +172,12 @@ describe('preparation before gameplay', () => {
     };
     let now = 0; vi.spyOn(performance, 'now').mockImplementation(() => (now += 20));
     const pause = vi.fn(async () => {}), progress: number[] = [];
-    await compileSceneProgressively(renderer as never, scene, new THREE.PerspectiveCamera(), () => false, value => progress.push(value), pause);
+    await compileSceneProgressively(renderer as never, scene, new THREE.PerspectiveCamera(), { onProgress: value => progress.push(value), pause });
+    expect(renderer.bound).toBeNull();
     expect(renderer.compileAsync).not.toHaveBeenCalled();
     expect(linked).toEqual([shared, other]);
     expect(pause).toHaveBeenCalledTimes(2); expect(progress.at(-1)).toBe(1);
-    renderer.extensions.get = (() => ({})) as never;
+    renderer.extensions.has = (() => true) as never;
     await compileSceneProgressively(renderer as never, scene, new THREE.PerspectiveCamera());
     expect(renderer.compileAsync).toHaveBeenCalledOnce();
     geometry.dispose(); shared.dispose(); other.dispose();

@@ -69,6 +69,11 @@ sont relus déverrouillés. Ne jamais sauvegarder la
 position brute d’une chute : chaque runtime écrit le dernier ancrage sûr transmis
 par `PlayerController`.
 
+`@dimforge/rapier3d` reste exclu de `optimizeDeps` : pré-empaqueté, Vite en
+servait deux copies de `rapier_wasm3d_bg.js` (deux tas JS) et tout rappel
+wasm→JS (requête à callback, erreur Rust) échouait en « wasm is undefined ».
+Ne jamais lever d'exception dans un callback de requête Rapier.
+
 `PhysicsWorld` possède un personnage cinématique Rapier et des lots de colliders
 indexés par clé de chunk. Les mutations groupées passent par
 `batchChunkChanges()` pour limiter les synchronisations. Leur `world.step()` de

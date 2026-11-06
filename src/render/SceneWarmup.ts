@@ -80,40 +80,73 @@ export async function waitForSceneGpu(
 }
 
 type ProgramHandle = { getUniforms?(): unknown };
-type CompilingRenderer = Pick<THREE.WebGLRenderer, 'compileAsync'> & Partial<Pick<THREE.WebGLRenderer, 'compile' | 'properties' | 'extensions'>>;
+type CompilingRenderer = Pick<THREE.WebGLRenderer, 'compileAsync'> & Partial<Pick<THREE.WebGLRenderer,
+  'compile' | 'properties' | 'extensions' | 'getRenderTarget' | 'setRenderTarget' | 'info'>>;
+
+/** A real task (not scheduler.yield, whose continuations outrank timers and
+ * paint): the loading view, timers and network run between compile slices. */
+const browserTask = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
+
+export interface ProgressiveCompileOptions {
+  cancelled?(): boolean;
+  onProgress?(value: number): void;
+  pause?(): Promise<void>;
+  /** The scene is drawn into an off-screen target (PostFX composer). Three's
+   * program key depends on the bound target (output colour space): compiling
+   * against the canvas built a variant the first real frame threw away and
+   * compiled again, doubling a load already dominated by shader links. */
+  offscreen?: boolean;
+  onProgramCount?(count: number): void;
+}
 
 /** Without KHR_parallel_shader_compile (Firefox), compileAsync resolves at once
  * and every program links synchronously inside the next render: one frozen
- * task of tens of seconds. Link one material's programs per slice instead, so
- * the loading view, timers and network keep running between slices. */
+ * task of tens of seconds. Link one material's programs per slice instead. */
 export async function compileSceneProgressively(
-  renderer: CompilingRenderer, scene: THREE.Object3D, camera: THREE.Camera,
-  cancelled: () => boolean = () => false, onProgress?: (value: number) => void, pause: () => Promise<void> = yieldToBrowser,
+  renderer: CompilingRenderer, scene: THREE.Object3D, camera: THREE.Camera, options: ProgressiveCompileOptions = {},
 ): Promise<void> {
-  const parallel = renderer.extensions?.get?.('KHR_parallel_shader_compile');
-  if (parallel || !renderer.compile || !renderer.properties) { await renderer.compileAsync(scene, camera); onProgress?.(1); return; }
-  const representatives = new Map<string, THREE.Object3D>();
-  scene.traverse(object => {
-    const mesh = object as THREE.Mesh;
-    if (!mesh.material || !(mesh.isMesh || (object as THREE.Points).isPoints || (object as THREE.Line).isLine || (object as THREE.Sprite).isSprite)) return;
-    const skinned = (mesh as THREE.SkinnedMesh).isSkinnedMesh, instanced = (mesh as THREE.InstancedMesh).isInstancedMesh;
-    for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
-      // Object traits change the program; the material alone does not.
-      const key = `${material.uuid}:${object.type}:${skinned ? 1 : 0}:${instanced ? 1 : 0}:${mesh.geometry?.morphAttributes?.position ? 1 : 0}:${mesh.geometry?.attributes.color ? 1 : 0}`;
-      if (!representatives.has(key)) representatives.set(key, object);
+  const { cancelled = () => false, onProgress, pause = browserTask, offscreen = true } = options;
+  const canBind = offscreen && renderer.getRenderTarget && renderer.setRenderTarget;
+  const target = canBind ? new THREE.WebGLRenderTarget(1, 1) : undefined, previous = canBind ? renderer.getRenderTarget!() : null;
+  const bind = () => { if (target) renderer.setRenderTarget!(target); };
+  const unbind = () => { if (target) renderer.setRenderTarget!(previous); };
+  const before = renderer.info?.programs?.length ?? 0;
+  try {
+    // has() checks silently; get() logs "extension not supported" on Firefox.
+    const parallel = renderer.extensions?.has?.('KHR_parallel_shader_compile');
+    if (parallel || !renderer.compile || !renderer.properties) {
+      bind(); const ready = renderer.compileAsync(scene, camera); unbind();
+      await ready; onProgress?.(1); return;
     }
-  });
-  const objects = [...new Set(representatives.values())];
-  let sliceStart = performance.now();
-  for (let i = 0; i < objects.length; i++) {
-    if (cancelled()) return;
-    const materials = renderer.compile(objects[i]!, camera, scene as THREE.Scene);
-    // getUniforms() is Three's first use: it waits for this program's link now.
-    for (const material of materials) (renderer.properties.get(material) as { currentProgram?: ProgramHandle }).currentProgram?.getUniforms?.();
-    onProgress?.((i + 1) / objects.length);
-    if (performance.now() - sliceStart >= 12) { await pause(); sliceStart = performance.now(); }
+    const representatives = new Map<string, THREE.Object3D>();
+    scene.traverse(object => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.material || !(mesh.isMesh || (object as THREE.Points).isPoints || (object as THREE.Line).isLine || (object as THREE.Sprite).isSprite)) return;
+      const skinned = (mesh as THREE.SkinnedMesh).isSkinnedMesh, instanced = (mesh as THREE.InstancedMesh).isInstancedMesh;
+      for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        // Object traits change the program; the material alone does not.
+        const key = `${material.uuid}:${object.type}:${skinned ? 1 : 0}:${instanced ? 1 : 0}:${mesh.geometry?.morphAttributes?.position ? 1 : 0}:${mesh.geometry?.attributes.color ? 1 : 0}`;
+        if (!representatives.has(key)) representatives.set(key, object);
+      }
+    });
+    const objects = [...new Set(representatives.values())];
+    let sliceStart = performance.now();
+    for (let i = 0; i < objects.length; i++) {
+      if (cancelled()) return;
+      bind();
+      try {
+        const materials = renderer.compile(objects[i]!, camera, scene as THREE.Scene);
+        // getUniforms() is Three's first use: it waits for this program's link now.
+        for (const material of materials) (renderer.properties.get(material) as { currentProgram?: ProgramHandle }).currentProgram?.getUniforms?.();
+      } finally { unbind(); }
+      onProgress?.((i + 1) / objects.length);
+      if (performance.now() - sliceStart >= 12) { await pause(); sliceStart = performance.now(); }
+    }
+    onProgress?.(1);
+  } finally {
+    target?.dispose();
+    options.onProgramCount?.((renderer.info?.programs?.length ?? 0) - before);
   }
-  onProgress?.(1);
 }
 
 export interface SceneWarmupOptions {
@@ -260,8 +293,10 @@ export async function warmSceneForPlay(options: SceneWarmupOptions): Promise<voi
     options.onProgress?.(.55, 'Compilation des shaders');
     await yieldFrame();
     if (cancelled()) return;
-    await compileSceneProgressively(renderer, scene, camera, cancelled,
-      value => options.onProgress?.(.55 + value * .1, 'Compilation des shaders'), yieldFrame);
+    await compileSceneProgressively(renderer, scene, camera, { cancelled,
+      onProgress: value => options.onProgress?.(.55 + value * .1, 'Compilation des shaders'),
+      ...(options.yieldFrame ? { pause: options.yieldFrame } : {}),
+      onProgramCount: count => options.onTiming?.('programsCompiled(count)', count) });
     timing('shaders');
     for (let frame = 0; frame < 2 && !cancelled(); frame++) {
       options.render(); options.onProgress?.(.65 + frame * .1, 'Préparation des premières images'); await yieldFrame();

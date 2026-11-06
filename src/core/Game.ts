@@ -358,7 +358,7 @@ export class Game {
     await this.postFX.waitUntilReady();
     const characterWarmup = this.character?.renderWarmupRoots.map(root => ({ root, visible: root.visible })) ?? [];
     for (const { root } of characterWarmup) root.visible = true;
-    try { await compileSceneProgressively(this.renderer, this.scene, this.camera, () => this.disposed); }
+    try { await compileSceneProgressively(this.renderer, this.scene, this.camera, { cancelled: () => this.disposed }); }
     finally { for (const { root, visible } of characterWarmup) root.visible = visible; }
     if (this.disposed) return;
     setVisualProgress(0.92, 'Préparation de l’affichage');
@@ -1009,7 +1009,9 @@ export class Game {
 
   private readSystemDiagnostics(): SystemDiagnostics {
     const gl = this.renderer.getContext();
-    const extension = gl.getExtension('WEBGL_debug_renderer_info') as {
+    // Firefox deprecated WEBGL_debug_renderer_info and already unmasks RENDERER.
+    const firefox = /firefox/i.test(navigator.userAgent);
+    const extension = firefox ? null : gl.getExtension('WEBGL_debug_renderer_info') as {
       UNMASKED_RENDERER_WEBGL: number;
       UNMASKED_VENDOR_WEBGL: number;
     } | null;
@@ -1020,8 +1022,8 @@ export class Game {
       language: navigator.language,
       cpuThreads: navigator.hardwareConcurrency || null,
       deviceMemoryGb: deviceNavigator.deviceMemory ?? null,
-      gpu: extension ? String(gl.getParameter(extension.UNMASKED_RENDERER_WEBGL)) : 'unavailable',
-      gpuVendor: extension ? String(gl.getParameter(extension.UNMASKED_VENDOR_WEBGL)) : 'unavailable',
+      gpu: String(gl.getParameter(extension ? extension.UNMASKED_RENDERER_WEBGL : gl.RENDERER)),
+      gpuVendor: String(gl.getParameter(extension ? extension.UNMASKED_VENDOR_WEBGL : gl.VENDOR)),
       webgl: gl.getParameter(gl.VERSION) as string,
       maxTextureSize: this.renderer.capabilities.maxTextureSize,
     };

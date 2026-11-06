@@ -11,11 +11,15 @@ const ENTRY_ASSETS = [
   '/assets/stairwell-window/window.glb',
 ] as const;
 
+/** Warms the HTTP cache with low-priority fetches. `<link rel="preload">` did
+ * the same but Firefox warned for every file not consumed within seconds,
+ * which is by design here: they are used only after the photographs. */
 export function preloadEntryAssets(): () => void {
-  const links = ENTRY_ASSETS.map(href => {
-    const link = document.createElement('link');
-    link.rel = 'preload'; link.as = 'fetch'; link.fetchPriority = 'low'; link.crossOrigin = 'anonymous'; link.href = href;
-    document.head.append(link); return link;
-  });
-  return () => links.forEach(link => link.remove());
+  const abort = new AbortController();
+  for (const href of ENTRY_ASSETS) {
+    void fetch(href, { signal: abort.signal, priority: 'low' } as RequestInit)
+      .then(response => response.ok ? response.blob() : undefined)
+      .catch(() => undefined);
+  }
+  return () => abort.abort();
 }

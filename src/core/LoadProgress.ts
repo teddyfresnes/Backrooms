@@ -29,6 +29,7 @@ export class LoadProgress {
   private readonly stalls: Array<{ atS: number; ms: number; phase: string }> = [];
   private heartbeat?: ReturnType<typeof setTimeout>;
   private lastBeat = performance.now();
+  private beatPhase = 'Préparation';
   constructor(private readonly log: boolean = typeof window !== 'undefined' && !(import.meta as { vitest?: unknown }).vitest) {
     if (this.log) this.beat();
   }
@@ -38,10 +39,12 @@ export class LoadProgress {
   private beat = (): void => {
     const now = performance.now(), gap = now - this.lastBeat - 250;
     if (gap >= 400) {
-      this.stalls.push({ atS: Math.round((this.lastBeat - this.started) / 100) / 10, ms: Math.round(gap), phase: this.phase });
-      console.info(`${clock()} [loading] main thread frozen ${(gap / 1000).toFixed(1)} s during "${this.phase}" (t+${this.seconds(this.lastBeat)})`);
+      // The phase that was running when the thread stopped, not the one after.
+      const phase = this.beatPhase === this.phase ? this.phase : `${this.beatPhase} → ${this.phase}`;
+      this.stalls.push({ atS: Math.round((this.lastBeat - this.started) / 100) / 10, ms: Math.round(gap), phase });
+      console.info(`${clock()} [loading] main thread frozen ${(gap / 1000).toFixed(1)} s during "${phase}" (t+${this.seconds(this.lastBeat)})`);
     }
-    this.lastBeat = now;
+    this.lastBeat = now; this.beatPhase = this.phase;
     if (now - this.started < 600000) this.heartbeat = setTimeout(this.beat, 250);
   };
   dispose(): void { clearTimeout(this.heartbeat); this.heartbeat = undefined; }
@@ -97,7 +100,7 @@ export class LoadProgress {
       const ms = (value: number) => Math.round(value);
       console.info(`${clock()} [loading] ready in ${this.seconds()} — frozen ${(this.stalls.reduce((sum, stall) => sum + stall.ms, 0) / 1000).toFixed(1)} s in total`);
       console.table(Object.fromEntries(Object.entries(this.timings).map(([phase, value]) => [phase, { ms: ms(value!) }])));
-      console.table(Object.fromEntries(Object.entries(this.operationsMs).sort((a, b) => b[1] - a[1]).map(([name, value]) => [name, { ms: ms(value) }])));
+      console.table(Object.fromEntries(Object.entries(this.operationsMs).sort((a, b) => b[1] - a[1]).map(([name, value]) => [name, { value: ms(value) }])));
       if (this.stalls.length) console.table(this.stalls);
       // One line to copy back for profiling.
       console.info(`${clock()} [loading] report JSON`, JSON.stringify({ ...report, resources: report.resources.filter(entry => entry.durationMs > 200) }));

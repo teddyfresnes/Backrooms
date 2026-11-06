@@ -801,6 +801,7 @@ export class RussianStairwellGame {
       onTiming: (phase, ms) => progress.recordOperation(`gpu.${phase}`, ms),
     });
     if (this.disposed) return;
+    progress.recordOperation('gpu.programsTotal(count)', this.renderer.info.programs?.length ?? 0);
     this.resize();
     progress.report('gpu', .96, 'Préparation de la résolution de jeu');
     this.postFX.render(0);

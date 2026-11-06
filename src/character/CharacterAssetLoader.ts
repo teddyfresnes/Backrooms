@@ -46,7 +46,20 @@ export class CharacterAssetLoader {
   private readonly fbx = new FBXLoader();
 
   async loadAsync(url: string): Promise<THREE.Group> {
-    if (url === '/assets/character/character.fbx') return this.fbx.loadAsync(url);
+    if (url === '/assets/character/character.fbx') {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Personnage indisponible : ${url}`);
+      const bytes = await response.arrayBuffer();
+      // The authored mesh has a few 5+ influence vertices; Three keeps the four
+      // strongest (the intended runtime result) and warned on every load.
+      const warn = console.warn;
+      console.warn = (...args: unknown[]) => {
+        if (typeof args[0] === 'string' && args[0].includes('more than 4 skinning weights')) return;
+        warn(...args);
+      };
+      try { return this.fbx.parse(bytes, url.slice(0, url.lastIndexOf('/') + 1)); }
+      finally { console.warn = warn; }
+    }
     const asset = (await motionAssets())[url];
     if (!asset?.hierarchy || !asset.clips) throw new Error(`Animation indisponible : ${url}`);
     const object = buildHierarchy(asset.hierarchy) as THREE.Group;
