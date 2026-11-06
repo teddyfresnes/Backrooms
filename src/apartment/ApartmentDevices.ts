@@ -223,7 +223,7 @@ export class ApartmentDevices {
       const before = state.tvOn; this.quest.setTelevision(!state.tvOn);
       if (this.quest.devices.tvOn !== before) this.audio.televisionSwitch(this.quest.devices.tvOn);
     }
-    if (device === 'radio') { if (state.outageTriggered) this.audio.radioStatic(); else this.quest.setRadio(!state.radioOn); }
+    if (device === 'radio') { this.audio.buttonClick(!state.radioOn); if (state.outageTriggered) this.audio.radioStatic(); else this.quest.setRadio(!state.radioOn); }
     if (device === 'gas') this.quest.setGas(!state.gasOn);
     // In particular, TV-off must pause Pressure in this input event.
     this.audio.sync(this.quest.devices, true); this.update(0, true, false); return true;

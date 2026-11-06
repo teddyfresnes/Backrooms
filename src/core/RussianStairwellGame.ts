@@ -197,6 +197,8 @@ export class RussianStairwellGame {
   /** Seconds before the corridor troffers die once the door gave way (-1 = lit). */
   private corridorBlackout = -1;
   private sprintHeld = false;
+  /** Interact (E) physically held, read by the silent exit from a hiding place. */
+  private interactHeld = false;
   private gunfire?: NeighborGunfire;
   /** Shot by a neighbour: scripted fall, death card, then back on the landing. */
   private shotDeath?: { time: number; from: THREE.Vector3; quaternion: THREE.Quaternion; floor: number; direction: THREE.Vector3; respawn: THREE.Vector3 };
@@ -540,7 +542,7 @@ export class RussianStairwellGame {
         this.player?.setInputEnabled(resume);
         this.character?.setActive(resume);
       });
-    this.deviceAudio = new ApartmentDeviceAudio(bus, { ...apartmentDevicePositions(apartment), panel: { x: -2.45, y: apartment.floorY + 1.9, z: -2.2 } }, () => this.quest.setRadioTrack(this.quest.devices.radioTrack + 1));
+    this.deviceAudio = new ApartmentDeviceAudio(bus, { ...apartmentDevicePositions(apartment), panel: { x: -2.45, y: apartment.floorY + 1.9, z: -2.2 } }, () => this.quest.setRadioTrack(this.quest.devices.radioTrack + 1), on => this.audio.lightSwitch(on));
     this.devices = new ApartmentDevices(apartment, physics, this.camera, this.ui, this.quest, this.deviceAudio);
     await this.devices.prepare();
     if(this.disposed)return;
@@ -622,6 +624,7 @@ export class RussianStairwellGame {
       },
       playing: () => !this.disposed && !this.transitionSuspended && !!this.player?.isLocked && !this.ui.isConsoleOpen && !document.hidden,
       bindings: () => this.settings.controls,
+      sound: kind => this.audio.door(kind),
     };
     const insideFloor = apartment.floorY + .031;
     const doorHide = (spot: 'closet' | 'bathroom', label: string, door: { pivot: THREE.Object3D; openAngle: number }, inside: [number, number], outside: [number, number]) =>
@@ -716,7 +719,7 @@ export class RussianStairwellGame {
         hideSpot: {
           canHide: () => !!this.closet && this.closet.isTargeted,
           current: () => this.closet?.currentId ?? 'wardrobe',
-          hide: spot => { if (!this.closet) return; this.closet.exitLocked = true; if (!this.closet.isActive) this.closet.enterNow(spot); },
+          hide: spot => { if (!this.closet) return; if (!this.closet.isActive) this.closet.enterNow(spot); this.closet.exitLocked = true; },
           release: () => this.closet?.requestExit(),
           forceOut: () => this.closet?.forceFinish(),
           holdExit: progress => this.closet?.holdExit(progress),
@@ -729,6 +732,12 @@ export class RussianStairwellGame {
         baseFieldOfView: () => this.settings.fieldOfView,
         sprintKeyLabel: () => formatKeyLabel(this.settings.controls.sprint),
         isSprintHeld: () => this.sprintHeld,
+        interactKeyLabel: () => formatKeyLabel(this.settings.controls.interact),
+        isInteractHeld: () => this.interactHeld,
+        turnTelevisionOn: () => {
+          const before = this.quest.devices.tvOn; this.quest.setTelevision(true);
+          if (!before && this.quest.devices.tvOn) this.deviceAudio?.televisionSwitch(true);
+        },
         setAvatarHidden: (hidden) => this.character?.setArrivalPresentation(hidden),
         canStartReveal: () => this.corridorMounted && this.inventory.hasLamp && !this.character?.isBusy
           && this.corridorStory.canStartBacteria(this.player!.position, this.corridor!.threshold),
@@ -1351,8 +1360,9 @@ export class RussianStairwellGame {
   /** Physical state of the sprint key, read by scripted holds even while movement is locked. */
   private readonly onSprintKey = (event: KeyboardEvent): void => {
     if (matchesControlAction(event, this.settings.controls, 'sprint')) this.sprintHeld = event.type === 'keydown';
+    if (matchesControlAction(event, this.settings.controls, 'interact')) this.interactHeld = event.type === 'keydown';
   };
-  private readonly onSprintBlur = (): void => { this.sprintHeld = false; };
+  private readonly onSprintBlur = (): void => { this.sprintHeld = false; this.interactHeld = false; };
 
   private readonly frame = (now: number): void => {
     if (this.disposed || this.transitionSuspended || !this.player || !this.environment || !this.door) return;

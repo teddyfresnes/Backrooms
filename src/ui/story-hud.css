@@ -111,8 +111,9 @@
   background: #000;
   color: #c9332a;
   text-align: center;
-  animation: story-death-in 900ms ease-out;
 }
+/* Hard cut to black on the last blow; only the words come up afterwards. */
+.story-death > * { animation: story-death-in 1100ms ease-out 420ms both; }
 
 .story-death[hidden] { display: none; }
 .story-death h2 { margin: 0; font: 600 clamp(2rem, 6vw, 4.4rem)/1 'Space Grotesk Variable', system-ui, sans-serif; letter-spacing: -0.02em; }
@@ -124,7 +125,7 @@
 @keyframes story-quest-in { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
 @keyframes story-hint-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 @keyframes story-urgent { 50% { opacity: 0.55; } }
-@keyframes story-death-in { from { opacity: 0; } 12% { opacity: 1; } }
+@keyframes story-death-in { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
 
 @media (prefers-reduced-motion: reduce) {
   .story-quest.is-new,

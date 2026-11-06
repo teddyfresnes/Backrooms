@@ -37,7 +37,13 @@ export class HideSpots {
   /** Saved as `closetDoor`: the wardrobe leaves (the other doors always close). */
   get doorProgress(): number { return this.places.wardrobe.doorProgress; }
   get exitLocked(): boolean { return this.active?.[1].exitLocked ?? false; }
-  set exitLocked(value: boolean) { for (const [, place] of this.entries) place.exitLocked = value; }
+  /** Locks only the place in use: a lock left on the others kept E from ever
+   * letting the player out of them later (bathroom, entry closet). */
+  set exitLocked(value: boolean) {
+    const active = this.active;
+    if (active) active[1].exitLocked = value;
+    else for (const [, place] of this.entries) place.exitLocked = value;
+  }
 
   interact(): boolean {
     const active = this.active;

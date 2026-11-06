@@ -604,8 +604,6 @@ export class ExperienceUI {
     document.addEventListener('keydown', this.onMenuKeyDown);
     window.addEventListener('keydown', this.onGameplayPauseKey, true);
     window.addEventListener('keyup', this.onPauseKeyUp, true);
-    window.addEventListener('blur', this.onGameplayBlur);
-    document.addEventListener('visibilitychange', this.onGameplayVisibility);
     document.addEventListener('fullscreenchange', this.onFullscreenChange);
     this.syncMenuContext();
     this.showSettingsCategory(this.activeSettingsCategory);
@@ -1130,8 +1128,8 @@ export class ExperienceUI {
     if (!this.readyState || !this.enteredOnce || this.isMainMenuOpen || this.isPaused) return;
     if (this.actions.pause) this.actions.pause(); else this.setLocked(false);
   }
-  private readonly onGameplayBlur = (): void => { this.pauseGameplay(); };
-  private readonly onGameplayVisibility = (): void => { if (document.hidden) this.pauseGameplay(); };
+  // Leaving the window or tab never opens the pause menu: PlayerController
+  // keeps play running and shows the recapture prompt; only Escape/P pause.
   private readonly onPauseKeyUp = (event:KeyboardEvent):void => {
     if(event.code==='Escape'||event.code==='KeyP')this.pauseKeyBlockedUntil=0;
   };
@@ -1406,8 +1404,6 @@ export class ExperienceUI {
     document.removeEventListener('keydown', this.onMenuKeyDown);
     window.removeEventListener('keydown', this.onGameplayPauseKey, true);
     window.removeEventListener('keyup', this.onPauseKeyUp, true);
-    window.removeEventListener('blur', this.onGameplayBlur);
-    document.removeEventListener('visibilitychange', this.onGameplayVisibility);
     document.removeEventListener('fullscreenchange', this.onFullscreenChange);
     if (this.chatFadeTimer !== undefined) window.clearTimeout(this.chatFadeTimer);
     if (this.saveStatusTimer !== undefined) window.clearTimeout(this.saveStatusTimer);

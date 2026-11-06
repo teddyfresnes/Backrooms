@@ -51,6 +51,11 @@ const SPOTTED_STAIR_TURN_DELAY = 0.2;
 /** A point a couple of treads down the flight leaving the apartment landing. */
 const STAIR_LOOK_TARGET = { x: 1.05, z: -0.9 } as const;
 const STAIR_LOOK_DROP = 0.75;
+/** The kill: the face hits the lens, the player is thrown down, then mauled. */
+const KILL_IMPACT = 0.24;
+const KILL_STRIKES = [KILL_IMPACT, 0.58, 0.84, 1.04, 1.22, 1.38, 1.52] as const;
+const KILL_CUT = 1.72;
+const ROLL_AXIS = new THREE.Vector3(0, 0, 1);
 
 export interface BacteriaEncounterHost {
   readonly scene: THREE.Scene;
@@ -83,6 +88,12 @@ export interface BacteriaEncounterHost {
   setPrompt(label: string | null): void;
   baseFieldOfView(): number;
   sprintKeyLabel(): string;
+  /** Label of the interact key (E): the silent exit from a hiding place is held on it. */
+  interactKeyLabel?(): string;
+  /** Whether interact is physically held right now (works while input is locked). */
+  isInteractHeld?(): boolean;
+  /** The set switches itself on: the lure no longer depends on the player's noise. */
+  turnTelevisionOn?(): void;
   /** Whether the sprint key is physically held right now (works while input is locked). */
   isSprintHeld(): boolean;
   /** Hides/shows the player's own avatar (inside the closet). */
@@ -149,6 +160,10 @@ export class BacteriaEncounter {
   private closetTarget = 0;
   private closetSpeed = 6;
   private shakeLevel = 0;
+  /** Decaying jolt of the last blow (camera roll and FOV punch). */
+  private hitKick = 0;
+  private hitSign = 1;
+  private readonly rollQuaternion = new THREE.Quaternion();
   private searchStage = 0;
   private searchTimer = 0;
   private entryAlong = 0;
@@ -208,7 +223,7 @@ export class BacteriaEncounter {
         return { text: 'Ne bouge plus. Pas un bruit…', tone: 'hidden' };
       case 'carry':
         return this.calm >= 1
-          ? { text: `Sortir du placard sans bruit — maintenir ${this.host.sprintKeyLabel()}`, tone: 'hidden' }
+          ? { text: `Sortir sans bruit — maintenir ${this.exitKeyLabel()}`, tone: 'hidden' }
           : { text: 'Attends qu’il se calme…', tone: 'hidden' };
       case 'sneak': return { text: 'Sors de l’appartement… sans courir.', tone: 'hidden' };
       case 'spotted':
@@ -295,12 +310,16 @@ export class BacteriaEncounter {
       camera.updateProjectionMatrix();
     }
     if (this.phase === 'jumpscare') {
+      const t = this.phaseTime, knock = this.knock(t);
       camera.position.copy(this.viewer());
+      // Thrown down: the view drops to the floor, the face looming above it.
+      camera.position.y -= knock * (this.hidden ? 0.45 : 1.08);
       this.actor.getFacePosition(this.target);
       this.lookMatrix.lookAt(camera.position, this.target, UP);
       camera.quaternion.setFromRotationMatrix(this.lookMatrix);
-      const t = this.phaseTime;
-      camera.fov = base + 22 * Math.exp(-t * 5) + 4;
+      camera.quaternion.multiply(this.rollQuaternion.setFromAxisAngle(ROLL_AXIS, this.hitSign * (knock * 0.95 + this.hitKick * 0.32)));
+      camera.fov = base + 26 * Math.exp(-t * 6) + 4 + this.hitKick * 14;
+      camera.near = 0.02;
       camera.updateProjectionMatrix();
     }
     if (this.phase === 'escaped') {
@@ -542,8 +561,10 @@ export class BacteriaEncounter {
     this.sound.setDuck(1 - lean * 0.75);
     if (this.searchTimer > 0.9) this.actor.setMotion('crouch');
     if (this.searchTimer < 3.9) return;
+    // The set clicks on by itself behind it: the lure no longer asks the player
+    // to have left a sound running in the flat.
+    if (!this.host.isTelevisionOn()) this.host.turnTelevisionOn?.();
     if (!this.host.isTelevisionOn() || !this.host.television) {
-      // Nothing else in the flat makes a sound. Only your breathing.
       this.sound.setDuck(1);
       this.ripCloset('silence');
       return;
@@ -594,10 +615,10 @@ export class BacteriaEncounter {
     this.sound.setVoiceCalm(this.calm);
     if (!this.hidden) return;
     if (before < 1 && this.calm >= 1) {
-      this.host.hud.showHint(this.host.sprintKeyLabel(), 'Maintenir pour sortir sans bruit', 600);
+      this.host.hud.showHint(this.exitKeyLabel(), 'Maintenir pour sortir sans bruit', 600);
     }
-    if (this.calm < 1) { this.holdWasDown = this.host.isSprintHeld(); return; }
-    const down = this.host.isSprintHeld();
+    if (this.calm < 1) { this.holdWasDown = this.exitHeld(); return; }
+    const down = this.exitHeld();
     if (down && !this.holdWasDown && this.hold === 0) this.hold = 1e-4;
     if (down && this.hold > 0) {
       this.hold = Math.min(1, this.hold + dt / SNEAK_HOLD_SECONDS);
@@ -612,6 +633,9 @@ export class BacteriaEncounter {
     }
     this.holdWasDown = down;
   }
+
+  private exitKeyLabel(): string { return this.host.interactKeyLabel?.() ?? this.host.sprintKeyLabel(); }
+  private exitHeld(): boolean { return this.host.isInteractHeld ? this.host.isInteractHeld() : this.host.isSprintHeld(); }
 
   private leaveClosetSilently(): void {
     const host = this.host;
@@ -810,50 +834,70 @@ export class BacteriaEncounter {
     this.actor.setLookTarget(this.eye);
     this.sound.jumpscare();
     host.audio.impact('door-burst');
-    host.hud.pulseFlash(1);
+    host.hud.pulseFlash(0.6);
     this.shakeLevel = 1.25;
+    this.hitKick = 0; this.hitSign = this.noise() < 0.5 ? 1 : -1;
     this.placeLunge(0);
   }
 
-  /** Puts the face right in front of the viewer, closing in over time. */
+  /** 0 → 1 as the blow throws the player to the floor. */
+  private knock(t: number): number { return smooth((t - KILL_IMPACT) / 0.2); }
+
+  /** Puts the face right in front of the viewer: it lunges into the lens, then
+   * follows the player down and thrashes over them. */
   private placeLunge(t: number): void {
     const eye = this.cameraRight.copy(this.viewer());
     const toward = this.heading.copy(this.monsterPosition).sub(eye).setY(0);
     if (this.hidden) this.host.renderCamera.getWorldDirection(toward).setY(0);
     if (toward.lengthSq() < 1e-4) this.host.player.getViewDirection(toward).setY(0);
     toward.normalize();
+    const knock = this.knock(t);
     // The hunched skull hangs well ahead of the root: place the face itself,
-    // lunging from arm's length to a hand's breadth from the lens.
-    const distance = THREE.MathUtils.lerp(1.15, 0.52, smooth(t / 0.32));
-    this.monsterYaw = Math.atan2(-toward.x, -toward.z);
+    // from arm's length to almost touching the lens at the impact.
+    const lunge = THREE.MathUtils.lerp(1.15, 0.2, smooth(t / KILL_IMPACT));
+    const thrash = knock * (Math.sin(t * 31) * 0.07 + Math.sin(t * 17.3) * 0.05);
+    const distance = THREE.MathUtils.lerp(lunge, 0.42, knock) + thrash;
+    const drop = knock * (this.hidden ? 0.3 : 0.78);
+    this.monsterYaw = Math.atan2(-toward.x, -toward.z) + knock * Math.sin(t * 23) * 0.16;
     if (t === 0) this.monsterPosition.copy(eye).addScaledVector(toward, distance + 0.35).setY(eye.y - 1.95);
     for (let pass = 0; pass < 2; pass += 1) {
       this.actor.setPlacement(this.monsterPosition, this.monsterYaw);
       const face = this.actor.getFacePosition(this.face).sub(eye);
       const along = face.x * toward.x + face.z * toward.z;
       this.monsterPosition.addScaledVector(toward, distance - along);
-      this.monsterPosition.y -= face.y + 0.06;
+      this.monsterPosition.y -= face.y + 0.06 + drop;
     }
     this.actor.setPlacement(this.monsterPosition, this.monsterYaw);
-    // Key light between the lens and the face, or it is a black blob.
-    this.creatureLight.position.copy(eye).addScaledVector(toward, distance * 0.45).addScaledVector(UP, .35);
   }
 
   private updateJumpscare(dt: number): void {
     const t = this.phaseTime;
     this.placeLunge(t);
+    this.hitKick = Math.max(0, this.hitKick - dt * 5.5);
+    // Each blow: a body slam with a crack of bone, a red burst and a jolt.
+    KILL_STRIKES.forEach((mark, index) => {
+      if (!crossed(t, dt, mark)) return;
+      const first = index === 0;
+      this.host.audio.strike(first ? 1.25 : 0.8 + (index % 3) * 0.12, index);
+      this.host.hud.pulseFlash(first ? 1 : 0.75);
+      this.hitKick = first ? 1.4 : 1;
+      this.hitSign = first ? 1 : -this.hitSign;
+      this.shakeLevel = first ? 2 : 1.45;
+      this.actor.snapHead();
+    });
     // A strobing key light and a blown-out hide: the face must read, for a split second.
     const strobe = Math.abs(Math.sin(t * 26));
-    this.creatureLight.intensity = 5.5 + strobe * 5;
+    this.creatureLight.intensity = 5.5 + strobe * 5 + this.hitKick * 4;
     this.actor.setExposure(0.35 + strobe * 0.65);
-    if (crossed(t, dt, 0.16)) this.host.hud.pulseFlash(0.85);
-    if (crossed(t, dt, 0.42)) this.host.hud.pulseFlash(0.9);
     this.shakeLevel = Math.max(this.shakeLevel, 0.9);
-    if (t >= 1.35) {
+    if (t >= KILL_CUT) {
+      // Hard cut to black on the last crack, no fade.
+      this.host.audio.strike(1.3, KILL_STRIKES.length);
       this.setPhase('dead');
       this.sound.stopAll(0);
       this.actor.setVisible(false);
       this.creatureLight.intensity = 0;
+      this.hitKick = 0;
       const detail: Record<DeathCause, string> = {
         caught: 'Retour à l’entrée du couloir…',
         closet: 'Il t’a vu y entrer.',

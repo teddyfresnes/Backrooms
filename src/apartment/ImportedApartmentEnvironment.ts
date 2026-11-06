@@ -824,6 +824,10 @@ export class ImportedApartmentEnvironment {
       (box) => new THREE.Vector3(box.min.x, box.min.y, box.getCenter(new THREE.Vector3()).z),
       0,
       Math.PI * 0.5,
+      // The leaf's frosted pane is exported outside bathroom_door, under
+      // TRANSPARENCY_NEEDED/use_MainPart: hinge it with the leaf or it stays
+      // floating in the frame as a square once the door opens.
+      [requireObject(this.model, 'polySurface45')],
     );
 
     this.shellColliderMeshes = [];
@@ -1274,9 +1278,11 @@ export class ImportedApartmentEnvironment {
     getHingeWorld: (closedAuthorBox: THREE.Box3) => THREE.Vector3,
     closedAngle: number,
     openAngle: number,
+    attached: readonly THREE.Object3D[] = [],
   ): DoorRuntime {
     this.group.updateMatrixWorld(true);
     leaf.updateWorldMatrix(true, true);
+    const attachedWorld = attached.map(part => { part.updateWorldMatrix(true, false); return part.matrixWorld.clone(); });
     const authoredWorld = leaf.matrixWorld.clone();
     const authoredBox = new THREE.Box3().setFromObject(leaf);
     const hingeWorld = getHingeWorld(authoredBox);
@@ -1292,6 +1298,10 @@ export class ImportedApartmentEnvironment {
 
     const local = pivot.matrixWorld.clone().invert().multiply(authoredWorld);
     local.decompose(leaf.position, leaf.quaternion, leaf.scale);
+    attached.forEach((part, index) => {
+      part.parent?.remove(part); pivot.add(part);
+      pivot.matrixWorld.clone().invert().multiply(attachedWorld[index]!).decompose(part.position, part.quaternion, part.scale);
+    });
     pivot.rotation.y = closedAngle;
     pivot.updateMatrixWorld(true);
     leaf.updateWorldMatrix(true, true);

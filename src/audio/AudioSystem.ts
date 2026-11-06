@@ -548,6 +548,16 @@ export class AudioSystem {
     this.playRecordedClip(buffer, { offset: 0, duration: buffer.duration }, 0.54, 1, 10500);
   }
 
+  /** One blow of a mauling: a body slam and a crack of bone, pitched per hit. */
+  strike(intensity = 1, variant = 0): void {
+    const rate = [0.8, 0.93, 0.72, 1.0, 0.86][variant % 5]!;
+    if (this.bodyFall) {
+      const onset = this.transientOffset(this.bodyFall);
+      this.playRecordedClip(this.bodyFall, { offset: onset, duration: this.bodyFall.duration - onset }, 1.05 * intensity, rate * 0.92, 6600, 0, 6.5);
+    }
+    if (this.boneCrack) this.playRecordedClip(this.boneCrack, { offset: 0, duration: this.boneCrack.duration }, 0.9 * intensity, rate * 1.06, 9400, 0.025);
+  }
+
   /** Shared context and master bus for scripted sound layers (null before start). */
   getOutput(): { readonly context: AudioContext; readonly destination: AudioNode } | null {
     return this.context && this.master ? { context: this.context, destination: this.master } : null;

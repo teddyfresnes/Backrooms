@@ -32,7 +32,7 @@ export class ClosetHide {
   private disposed=false;
   constructor(private readonly apartment:ImportedApartmentEnvironment,private readonly physics:PhysicsWorld,
     private readonly camera:THREE.PerspectiveCamera,private readonly ui:{setInteraction(label:string|null):void},private readonly host:{
-      position():THREE.Vector3;pose(position:THREE.Vector3,confined:boolean):void;presentation(active:boolean):void;active(active:boolean):void;playing():boolean;bindings():ControlBindings;
+      position():THREE.Vector3;pose(position:THREE.Vector3,confined:boolean):void;presentation(active:boolean):void;active(active:boolean):void;playing():boolean;bindings():ControlBindings;sound?(kind:'open'|'close'):void;
     },doorProgress=0){
     this.progress=THREE.MathUtils.clamp(doorProgress,0,1);
     const hinges=[new THREE.Vector3(-8.2146,8.7716,-5.3383),new THREE.Vector3(-7.6437,8.7716,-5.3334)];
@@ -71,10 +71,14 @@ export class ClosetHide {
   interact():boolean {
     if(this.isActive){if(this.exitLocked)return true;this.exitRequested=true;if(this.phase==='hidden')this.change('opening-exit');return true;}
     if(!this.targetedOverride&&!this.targeted())return false;
-    this.saved.copy(this.camera);this.exit.copy(this.host.position());this.from.copy(this.exit);this.exitRequested=false;this.yaw=0;this.pitch=0;
+    this.exitLocked=false;    this.saved.copy(this.camera);this.exit.copy(this.host.position());this.from.copy(this.exit);this.exitRequested=false;this.yaw=0;this.pitch=0;
     this.host.active(true);this.host.presentation(true);this.change('opening');this.ui.setInteraction(null);return true;
   }
-  private change(phase:Phase):void{this.phase=phase;this.phaseTime=0;}
+  private change(phase:Phase):void{
+    const previous=this.phase;this.phase=phase;this.phaseTime=0;
+    if(phase==='opening'||phase==='opening-exit'||(phase==='held-exit'&&previous!=='held-exit'))this.host.sound?.('open');
+    else if(phase==='hiding'||phase==='closing')this.host.sound?.('close');
+  }
   private syncDoors():void {
     for(const leaf of this.leaves){leaf.pivot.rotation.y=leaf.sign*this.progress*1.62;leaf.pivot.updateMatrixWorld(true);this.physics.setKinematicChunkTransform(leaf.key,leaf.pivot.position,leaf.pivot.quaternion);}
   }

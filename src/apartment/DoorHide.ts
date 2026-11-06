@@ -10,6 +10,8 @@ export interface DoorHideHost {
   active(active: boolean): void;
   playing(): boolean;
   bindings(): ControlBindings;
+  /** Recorded leaf sounds: the hinge as it opens, the latch as it shuts. */
+  sound?(kind: 'open' | 'close'): void;
 }
 
 export interface DoorHideLayout {
@@ -107,6 +109,8 @@ export class DoorHide {
       this.exitRequested = true; if (this.phase === 'hidden') this.change('opening-exit'); return true;
     }
     if (!this.targetedOverride && !this.targeted()) return false;
+    // A fresh, player-initiated hide is never locked by an earlier scene.
+    this.exitLocked = false;
     this.saved.copy(this.camera); this.from.copy(this.host.position()); this.exitRequested = false; this.yaw = 0; this.pitch = 0;
     this.host.active(true); this.host.presentation(true); this.change('opening'); this.ui.setInteraction(null);
     return true;
@@ -165,7 +169,12 @@ export class DoorHide {
     return !!hit && hit.distanceTo(this.camera.position) < 1.85;
   }
 
-  private change(phase: Phase): void { this.phase = phase; this.phaseTime = 0; }
+  private change(phase: Phase): void {
+    const previous = this.phase;
+    this.phase = phase; this.phaseTime = 0;
+    if (phase === 'opening' || phase === 'opening-exit' || (phase === 'held-exit' && previous !== 'held-exit')) this.host.sound?.('open');
+    else if (phase === 'hiding' || phase === 'closing') this.host.sound?.('close');
+  }
 
   private syncDoor(): void {
     const pivot = this.layout.pivot;

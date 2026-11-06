@@ -329,7 +329,33 @@ describe('embedded mouse controls', () => {
     controller.dispose();
   });
 
+  it('keeps playing without mouse look when the window loses focus, and pauses only on Escape-like capture loss', () => {
+    vi.useFakeTimers();
+    try {
+      const { controller, callbacks, pointerDocument } = createController(new FakePhysics({ x: 0, y: .865, z: 0 }));
+      controller.lock();
+      controller.controls.isLocked = true; controller.controls.dispatchEvent({ type: 'lock' });
+      // Another application took focus: the browser drops capture.
+      Object.assign(pointerDocument, { hasFocus: () => false });
+      controller.controls.isLocked = false; controller.controls.dispatchEvent({ type: 'unlock' });
+      vi.advanceTimersByTime(500);
+      expect(callbacks.onLockChange).toHaveBeenLastCalledWith(true);
+      expect(callbacks.onPointerCaptureChange).toHaveBeenLastCalledWith(false);
+      expect(controller.isLocked).toBe(true); expect(controller.isPointerCaptured).toBe(false);
+      // Back in the window, recaptured, then Escape releases capture: pause.
+      Object.assign(pointerDocument, { hasFocus: () => true });
+      controller.controls.isLocked = true; controller.controls.dispatchEvent({ type: 'lock' });
+      vi.advanceTimersByTime(1000);
+      controller.controls.isLocked = false; controller.controls.dispatchEvent({ type: 'unlock' });
+      expect(callbacks.onLockChange).toHaveBeenLastCalledWith(true);
+      vi.advanceTimersByTime(200);
+      expect(callbacks.onLockChange).toHaveBeenLastCalledWith(false);
+      controller.dispose();
+    } finally { vi.useRealTimers(); }
+  });
+
   it('removes the recapture request after the browser captures the mouse', () => {
+    vi.useFakeTimers();
     const { controller, callbacks } = createController(new FakePhysics({ x: 0, y: .865, z: 0 }));
     controller.controls.isLocked = false;
     controller.lock();
@@ -340,6 +366,7 @@ describe('embedded mouse controls', () => {
     expect(callbacks.onLockChange).toHaveBeenLastCalledWith(true);
     controller.controls.isLocked = false;
     controller.controls.dispatchEvent({ type: 'unlock' });
+    vi.advanceTimersByTime(200); vi.useRealTimers();
     expect(callbacks.onLockChange).toHaveBeenLastCalledWith(false);
     expect(callbacks.onPointerCaptureChange).toHaveBeenLastCalledWith(false);
     controller.unlock();

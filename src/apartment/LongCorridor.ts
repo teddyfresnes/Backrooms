@@ -14,6 +14,23 @@ export const CORRIDOR_HEIGHT = 2.74;
 /** Straight hallway: no side openings. */
 export const CORRIDOR_ALCOVES: readonly { readonly at: number; readonly side: -1 | 1 }[] = [];
 const ALCOVE_WIDTH = 1.3, ALCOVE_DEPTH = 2.6, ALCOVE_HEIGHT = 2.18;
+/** Peak additive halo around a fully lit troffer. */
+const HALO_STRENGTH = .34;
+/** Soft rectangular glare (rounded falloff, brightest just off the panel edge), no canvas needed. */
+function createHaloTexture(size=64):THREE.DataTexture{
+  const data=new Uint8Array(size*size*4);
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    const u=Math.abs((x+.5)/size*2-1),v=Math.abs((y+.5)/size*2-1);
+    // Distance outside the panel's footprint (≈55 % x 40 % of the halo).
+    const dx=Math.max(0,u-.55)/.45,dy=Math.max(0,v-.4)/.6,d=Math.min(1,Math.hypot(dx,dy));
+    const inside=u<.55&&v<.4?.55:1;
+    const a=Math.round(255*Math.pow(1-d,2.2)*inside),i=(y*size+x)*4;
+    data[i]=data[i+1]=data[i+2]=255;data[i+3]=a;
+  }
+  const texture=new THREE.DataTexture(data,size,size,THREE.RGBAFormat);
+  texture.name='corridor-troffer-halo';texture.magFilter=THREE.LinearFilter;texture.minFilter=THREE.LinearFilter;texture.needsUpdate=true;
+  return texture;
+}
 /** Every tube holds steady once lit, like the generated levels. */
 const BAD_TUBES = new Set<number>();
 
@@ -36,6 +53,8 @@ export class LongCorridor {
   private readonly strike=new Array<number>(CORRIDOR_LAMPS).fill(0);
   private readonly uniforms={levels:{value:this.levels},origin:{value:new THREE.Vector3()},axis:{value:new THREE.Vector3()},gain:{value:1},floorY:{value:0}};
   private readonly panels:THREE.InstancedMesh;
+  private readonly halos:THREE.InstancedMesh;
+  private readonly ownedTextures:THREE.Texture[]=[];
   private readonly panelColor=new THREE.Color();
   private readonly panelMatrix=new THREE.Matrix4();
   private seed=0x7a11c0;
@@ -119,8 +138,19 @@ export class LongCorridor {
       for(let i=0;i<CORRIDOR_LAMPS;i++)mesh.setMatrixAt(i,m.makeScale(scale,1,scale).setPosition(corridorLampDistance(i),y,0));
       mesh.frustumCulled=false;mesh.instanceMatrix.needsUpdate=true;this.group.add(mesh);
     };
-    housing('corridor-fixture-frames',0x8e8b82,1.07,CORRIDOR_HEIGHT-.0012);
+    // No oversized grey frame: around a lit panel it read as a dirty outline.
     housing('corridor-fixture-diffusers',0xd9d6ca,1,CORRIDOR_HEIGHT-.0022);
+    // Without bloom in this pipeline the panels looked flat. An additive halo
+    // on the tiles around each tube carries the glare; its instance colour
+    // follows the lamp level, so a dead or stuttering tube loses it too.
+    const haloGeo=new THREE.PlaneGeometry(4.1,2.9).rotateX(Math.PI*.5);this.geometries.add(haloGeo);
+    const haloMap=createHaloTexture();
+    const halo=new THREE.MeshBasicMaterial({name:'corridor-troffer-halo',map:haloMap,color:0xfff1c8,transparent:true,blending:THREE.AdditiveBlending,
+      depthWrite:false,toneMapped:false,fog:false,side:THREE.DoubleSide});
+    this.ownedMaterials.push(halo);this.ownedTextures.push(haloMap);
+    this.halos=new THREE.InstancedMesh(haloGeo,halo,CORRIDOR_LAMPS);this.halos.name='corridor-troffer-halos';this.halos.renderOrder=13;
+    for(let i=0;i<CORRIDOR_LAMPS;i++){this.halos.setMatrixAt(i,m.makeTranslation(corridorLampDistance(i),CORRIDOR_HEIGHT-.006,0));this.halos.setColorAt(i,this.panelColor.setScalar(0));}
+    this.halos.frustumCulled=false;this.group.add(this.halos);
     this.group.updateMatrixWorld(true);
   }
   private litMaterial(source:THREE.MeshStandardMaterial,surface:'wall'|'floor'|'ceiling'|'trim'|'end'):THREE.MeshStandardMaterial {
@@ -232,10 +262,12 @@ export class LongCorridor {
       const level=this.levels[i]!;
       this.panels.setMatrixAt(i,level>.03?this.panelMatrix.makeTranslation(corridorLampDistance(i),CORRIDOR_HEIGHT-.003,0):this.panelMatrix.makeScale(0,0,0));
       this.panels.setColorAt(i,this.panelColor.setScalar(Math.min(1,level)));
+      this.halos.setColorAt(i,this.panelColor.setScalar(Math.min(1,level)*HALO_STRENGTH));
     }
     this.panels.instanceMatrix.needsUpdate=true;
     if(this.panels.instanceColor)this.panels.instanceColor.needsUpdate=true;
+    if(this.halos.instanceColor)this.halos.instanceColor.needsUpdate=true;
   }
   private noise():number{this.seed=(this.seed*1664525+1013904223)>>>0;return this.seed/4294967296;}
-  dispose():void{if(this.prepared)this.physics.removeChunk('post-outage-corridor');this.group.removeFromParent();for(const g of this.geometries)g.dispose();for(const m of this.ownedMaterials)m.dispose();}
+  dispose():void{if(this.prepared)this.physics.removeChunk('post-outage-corridor');this.group.removeFromParent();for(const g of this.geometries)g.dispose();for(const m of this.ownedMaterials)m.dispose();for(const t of this.ownedTextures)t.dispose();}
 }

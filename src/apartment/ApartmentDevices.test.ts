@@ -18,7 +18,7 @@ async function fixture() {
   const environment = new (ImportedApartmentEnvironment as unknown as { new(model: THREE.Object3D): ImportedApartmentEnvironment })(await loadApartmentModel());
   const physics = await PhysicsWorld.create(createStairwellPlan()); cleanup.push(() => physics.dispose()); cleanup.push(() => environment.dispose());
   physics.addTrimeshChunk('apartment', environment.shellColliderMeshes); physics.addChunk('furniture', environment.furnitureColliders, { x: 0, y: 0, z: 0 });
-  const camera = new THREE.PerspectiveCamera(), quest = new ApartmentQuest(), sound = { sync: vi.fn(), unlock: vi.fn(), radioStatic: vi.fn(), moveRadio: vi.fn(), televisionSwitch: vi.fn() };
+  const camera = new THREE.PerspectiveCamera(), quest = new ApartmentQuest(), sound = { sync: vi.fn(), unlock: vi.fn(), radioStatic: vi.fn(), moveRadio: vi.fn(), televisionSwitch: vi.fn(), buttonClick: vi.fn() };
   const devices = new ApartmentDevices(environment, physics, camera, { setInteraction() {} }, quest, sound as unknown as ApartmentDeviceAudio);
   cleanup.push(() => devices.dispose()); return { environment, quest, devices, sound, camera };
 }

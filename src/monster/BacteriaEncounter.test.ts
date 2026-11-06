@@ -45,7 +45,7 @@ function fakeAudio() {
   return { audio: audio as unknown as BacteriaAudio, calls };
 }
 
-function setup(options: { tvOn?: boolean } = {}) {
+function setup(options: { tvOn?: boolean; selfSwitchingTv?: boolean } = {}) {
   const scene = new THREE.Scene();
   const position = new THREE.Vector3(threshold.x + 20, threshold.y + PLAYER_CENTER_HEIGHT, threshold.z);
   const look = new THREE.Quaternion();
@@ -82,7 +82,7 @@ function setup(options: { tvOn?: boolean } = {}) {
       release: () => { wardrobe.inside = false; wardrobe.exits += 1; player.setInputEnabled(true); },
       forceOut: () => { wardrobe.inside = false; },
     },
-    audio: { impact: (kind: string) => events.push(`impact:${kind}`), door: () => undefined } as never,
+    audio: { impact: (kind: string) => events.push(`impact:${kind}`), door: () => undefined, strike: () => events.push('strike') } as never,
     hud: {
       hideHint: () => { hint.text = null; }, showHint: (_key: string, text: string) => { hint.text = text; },
       pulseFlash: () => undefined, showDeath: (visible: boolean, detail?: string) => { if (visible) events.push(`death:${detail}`); },
@@ -98,6 +98,7 @@ function setup(options: { tvOn?: boolean } = {}) {
     canStartReveal: () => revealReady,
     isRevealLampLit: () => lampLit,
     isTelevisionOn: () => tv,
+    ...(options.selfSwitchingTv ? { turnTelevisionOn: () => { tv = true; events.push('tv-on'); } } : {}),
     onReveal: () => events.push('reveal'),
     onBreach: () => events.push('breach'),
     restoreStairwell: () => events.push('stairwell'),
@@ -223,6 +224,15 @@ describe('BacteriaEncounter', () => {
     expect(world.events).toContain('retry:corridor');
     expect(world.encounter.isHidden).toBe(false);
     expect(world.door.breached).toBe(false);
+  });
+
+  it('switches the set on by itself rather than killing a player who left the flat silent', () => {
+    const world = setup({ tvOn: false, selfSwitchingTv: true });
+    playToHiding(world);
+    world.until(() => world.events.includes('tv-on'), 30);
+    world.step(3);
+    expect(world.events.some(event => event.startsWith('death'))).toBe(false);
+    expect(world.events).toContain('stairwell');
   });
 
   it('hears a hold released too early, and restarts in the closet with the set in its arms', () => {

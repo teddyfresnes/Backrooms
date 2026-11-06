@@ -200,7 +200,41 @@ export class PlayerController {
     this.callbacks.onLockChange(true);
     this.callbacks.onPointerCaptureChange?.(true);
   };
+  /** Leaving the window (another application, hidden tab) is not a pause:
+   * play continues without mouse look and the recapture affordance shows. */
+  private focusLostAt = -Infinity;
+  private unlockDecision?: ReturnType<typeof setTimeout>;
+  private readonly focusLost = (): boolean => this.pointerDocument.hidden
+    || (typeof this.pointerDocument.hasFocus === 'function' && !this.pointerDocument.hasFocus())
+    || performance.now() - this.focusLostAt < 600;
+  private readonly onWindowBlur = (): void => {
+    this.focusLostAt = performance.now();
+    this.releaseCaptureKeepPlaying();
+  };
+  private releaseCaptureKeepPlaying(): void {
+    if (!this.playingRequested) return;
+    clearTimeout(this.unlockDecision); this.unlockDecision = undefined;
+    this.fallbackPlaying = true;
+    this.resetFallbackPoint();
+    this.pointerElement.style.cursor = this.originalCursor;
+    this.callbacks.onPointerCaptureChange?.(false);
+  }
   private readonly onPointerUnlock = (): void => {
+    if (this.playingRequested && this.focusLost()) { this.releaseCaptureKeepPlaying(); return; }
+    // Firefox may release capture before it reports the window blur. Escape
+    // (consumed by the browser) pauses; a focus loss shortly after does not.
+    if (this.playingRequested) {
+      clearTimeout(this.unlockDecision);
+      this.unlockDecision = setTimeout(() => {
+        this.unlockDecision = undefined;
+        if (!this.playingRequested || this.controls.isLocked) return;
+        if (this.focusLost()) this.releaseCaptureKeepPlaying(); else this.pauseAfterCaptureLoss();
+      }, 160);
+      return;
+    }
+    this.pauseAfterCaptureLoss();
+  };
+  private pauseAfterCaptureLoss(): void {
     // Browsers may consume Escape before dispatching a key event. Capture loss
     // itself must pause, rather than silently enabling uncaptured mouse look.
     const wasPlaying = this.playingRequested;
@@ -210,7 +244,7 @@ export class PlayerController {
     this.pointerElement.style.cursor = this.originalCursor;
     this.callbacks.onPointerCaptureChange?.(false);
     if (wasPlaying) this.callbacks.onLockChange(false);
-  };
+  }
   private readonly onCanvasMouseDown = (event: MouseEvent): void => {
     if (!this.isLocked || event.target !== this.pointerElement || this.controls.isLocked) return;
     this.pointerElement.focus({ preventScroll: true });
@@ -252,7 +286,7 @@ export class PlayerController {
     this.pointerDocument.addEventListener('mousedown', this.onCanvasMouseDown);
     this.pointerElement.addEventListener('mouseleave', this.resetFallbackPoint);
     this.pointerDocument.addEventListener('keydown', this.onFallbackKey);
-    this.pointerDocument.defaultView?.addEventListener('blur', this.onFallbackPause);
+    this.pointerDocument.defaultView?.addEventListener('blur', this.onWindowBlur);
     this.pointerDocument.addEventListener('visibilitychange', this.onPointerVisibility);
   }
 
@@ -261,7 +295,7 @@ export class PlayerController {
     return this.playingRequested && this.controls.isLocked
       && this.pointerDocument.pointerLockElement === this.pointerElement && !this.pointerDocument.hidden;
   }
-  private readonly onPointerVisibility = (): void => { if (this.pointerDocument.hidden) this.onFallbackPause(); };
+  private readonly onPointerVisibility = (): void => { if (this.pointerDocument.hidden) this.onWindowBlur(); };
   get isTraversing(): boolean { return this.traversal !== undefined; }
   get isNoclipEnabled(): boolean { return this.noclipEnabled; }
   get isIncapacitated(): boolean { return this.incapacitated; }
@@ -294,7 +328,7 @@ export class PlayerController {
   }
 
   unlock(): void {
-    this.playingRequested = false;
+    this.playingRequested = false; clearTimeout(this.unlockDecision); this.unlockDecision = undefined;
     const playing = this.isLocked;
     this.fallbackPlaying = false;
     this.resetFallbackPoint();
@@ -2045,7 +2079,8 @@ export class PlayerController {
     this.pointerElement.style.cursor = this.originalCursor;
     this.pointerElement.tabIndex = this.originalTabIndex;
     this.pointerDocument.removeEventListener('keydown', this.onFallbackKey);
-    this.pointerDocument.defaultView?.removeEventListener('blur', this.onFallbackPause);
+    this.pointerDocument.defaultView?.removeEventListener('blur', this.onWindowBlur);
+    clearTimeout(this.unlockDecision);
     this.pointerDocument.removeEventListener('visibilitychange', this.onPointerVisibility);
     this.controls.removeEventListener('lock', this.onPointerLock);
     this.controls.removeEventListener('unlock', this.onPointerUnlock);

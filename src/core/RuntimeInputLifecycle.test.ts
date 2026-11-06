@@ -88,7 +88,7 @@ function fixture() {
   const capture=()=>{Object.defineProperty(document,'pointerLockElement',{configurable:true,writable:true,value:canvas});document.dispatchEvent(new Event('pointerlockchange'));};
   return {app,game,player,canvas,request,listener,step,key,aim,capture};
 }
-it('pauses on blur and capture loss, freezes uncaptured look, and resumes configured controls across repeated games',()=>{
+it('keeps playing on blur with a recapture prompt, pauses on Escape, freezes uncaptured look, and resumes configured controls across repeated games',()=>{
   for(let run=0;run<3;run++){
     const {app,game,player,canvas,request,listener,step,key,aim,capture}=fixture();
     game.enterAfterIntro();
@@ -98,7 +98,14 @@ it('pauses on blur and capture loss, freezes uncaptured look, and resumes config
     const rotation=player.getLookQuaternion().clone();aim();expect(player.getLookQuaternion().angleTo(rotation)).toBe(0);
     capture();aim();step();expect(player.getLookQuaternion().angleTo(rotation)).toBeGreaterThan(.03);
     expect(game.postFX.render).toHaveBeenCalledTimes(46);
-    window.dispatchEvent(new Event('blur'));expect(game.ui.isPaused).toBe(true);
+    // Switching to another application is not a pause: play goes on and the
+    // recapture affordance shows until the next click on the game.
+    window.dispatchEvent(new Event('blur'));expect(game.ui.isPaused).toBe(false);
+    expect(app.querySelector<HTMLButtonElement>('[data-ui="capture-pointer"]')!.hidden).toBe(false);
+    const away=player.position.clone();key('keydown');for(let i=0;i<20;i++)step();key('keyup');
+    expect(player.position.distanceTo(away)).toBeGreaterThan(.1);
+    window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',bubbles:true,cancelable:true}));
+    expect(game.ui.isPaused).toBe(true);
     const paused=player.position.clone();key('keydown');for(let i=0;i<8;i++)step();key('keyup');
     expect(player.position.distanceTo(paused)).toBe(0);expect(game.ui.isPaused).toBe(true);
     // The actual resume button forwards its click; a synthetic click may enter
@@ -107,10 +114,8 @@ it('pauses on blur and capture loss, freezes uncaptured look, and resumes config
     expect(resume.disabled).toBe(false);resume.click();expect(game.ui.isPaused).toBe(false);
     expect(request).not.toHaveBeenCalled();
     key('keydown');for(let i=0;i<30;i++)step();key('keyup');expect(player.position.distanceTo(paused)).toBeGreaterThan(.2);
-    const controls=(player as unknown as {controls:THREE.EventDispatcher&{isLocked:boolean}}).controls;
-    controls.isLocked=false;controls.dispatchEvent({type:'unlock'} as never);
-    expect(game.ui.isPaused).toBe(true);expect(app.querySelector<HTMLButtonElement>('[data-ui="capture-pointer"]')!.hidden).toBe(true);
-    game.suspendForTransition();
+    // As in the router: the replaced game is suspended, then torn down.
+    game.suspendForTransition();game.dispose();
   }
 });
 it('restores a saved view and movement, and ignores audio APIs that expose no spatial setters',()=>{

@@ -43,7 +43,7 @@ courrier et progression restent dans leurs modules précédents.
 | `ApartmentFixtures` | Robinet, bassin, flottabilité, pales et lampe indépendante |
 | `ClosetHide` | Deux portes physiques du meuble près du lit, caméra intérieure et sortie |
 | `DoorHide` | Même mécanique derrière une porte à un battant : salle de bain et placard d’entrée (à gauche du frigo) |
-| `HideSpots` | Façade unique des trois cachettes (surface de `ClosetHide`) pour le jeu et la rencontre |
+| `HideSpots` | Façade unique des trois cachettes (surface de `ClosetHide`) pour le jeu et la rencontre ; `exitLocked` ne verrouille que la cachette occupée |
 | `ApartmentInteractionState` | Données optionnelles et validation des anciennes/nouvelles sauvegardes |
 
 Tous les objets mobiles ont des corps au montage, initialement endormis.
@@ -93,6 +93,15 @@ du personnage. Pause et onglet masqué suspendent tous les ticks.
 Les pales sont `Bone003_03` du ventilateur à la racine, pas l’extracteur de cuisine.
 La cage reste fixe. La lampe utilise son ampoule et son interrupteur propres,
 avec un état indépendant et une extinction imposée pendant la panne.
+
+Pendant la chasse, la sortie silencieuse se maintient sur interagir (E), pas sur
+sprint ; relâcher trop tôt fait jaillir le joueur. Si la TV est éteinte, elle
+s'allume seule derrière la créature (`turnTelevisionOn`) au lieu d'une mort
+« silence ». Entrer dans une cachette réinitialise son verrou : un verrou laissé
+sur une autre cachette empêchait E d'en sortir. Les cachettes jouent les vrais
+sons de porte (ouverture, fermeture) ; TV et radio ajoutent le clic enregistré.
+Le panneau dépoli de la porte de salle de bain (`polySurface45`, exporté hors de
+`bathroom_door`) est rattaché au même pivot que le vantail.
 
 Le meuble près du lit a une coque `Closet` et deux feuilles **sœurs** `LeftDoor`
 et `RightDoor`. Il diffère de `closet_door`, qui est une porte de pièce statique.

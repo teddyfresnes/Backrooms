@@ -84,7 +84,9 @@ export class ApartmentDeviceAudio {
   }
   ceramic(position: Vec3Data): void { this.burst(position,.4,.16,900,'lowpass'); this.tone(position,420,140,.12,.018); }
   constructor(private readonly bus: SpatialAudioBus, private readonly positions: DeviceAudioPositions,
-    private readonly nextRadioTrack: () => void) {
+    private readonly nextRadioTrack: () => void,
+    /** Recorded switch click (the light-switch take), layered under synthesized device sounds. */
+    private readonly recordedClick?: (on: boolean) => void) {
     const stream = (): Stream => {
       const element = new Audio(); element.preload = 'none'; element.crossOrigin = 'anonymous';
       return { element, pending: false, blocked: false, wanted: false };
@@ -165,10 +167,13 @@ export class ApartmentDeviceAudio {
     this.burst(panel, .32, .7, 180, 'lowpass', range);
     this.hum(this.positions.pc, 100, .5, .05);
   }
+  /** A plain device button (radio): the recorded click only. */
+  buttonClick(on: boolean): void { if (!this.disposed) this.recordedClick?.(on); }
   private lastTelevisionSwitch = -1;
   /** A CRT power button: relay click, degauss thump and (on) a brief static wash; (off) the picture collapsing. */
   televisionSwitch(on: boolean): void {
     if (this.disposed) return;
+    this.recordedClick?.(on);
     const now = this.bus.context.currentTime, rapid = now - this.lastTelevisionSwitch < .18;
     this.lastTelevisionSwitch = now;
     const tv = this.positions.tv, range = { refDistance: 1.1, maxDistance: 16, rolloff: 1.3 };
