@@ -1052,7 +1052,18 @@ export class BacteriaEncounter {
     const insideSplit = this.playerInside() !== monsterInside;
     const floors = Math.min(1, Math.abs(this.monsterPosition.y - this.feet.y) / 6);
     const occlusion = (insideSplit && this.host.door.isSecured() ? .62 : 0) + (this.hidden ? .18 : 0) + floors * 0.3;
+    this.sound.setScreamActive(this.pursuing());
     this.sound.updateSpatial(distance, pan, occlusion);
+  }
+
+  /** Phases where it runs at the player: only then the scream loop plays. */
+  private pursuing(): boolean {
+    switch (this.phase) {
+      case 'chase': case 'bang': case 'escape': case 'jumpscare': return true;
+      case 'inside': return !this.hidden;
+      case 'spotted': return this.phaseTime >= S.roar;
+      default: return false;
+    }
   }
 
   private setPhase(phase: Phase): void {

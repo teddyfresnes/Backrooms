@@ -6,6 +6,7 @@ import type { ApartmentQuest } from '../story/ApartmentQuest';
 import type { ApartmentDeviceAudio, DeviceAudioPositions } from '../audio/ApartmentDeviceAudio';
 import { SeededRandom } from '../world/SeededRandom';
 import { geometryIslands } from './GeometryIslands';
+import { burnerTop, GasFlame, panBase } from './GasFlame';
 
 type Device = 'tv' | 'radio' | 'gas';
 const boundsOf = (object?: THREE.Object3D) => object ? new THREE.Box3().setFromObject(object, true) : new THREE.Box3();
@@ -101,7 +102,7 @@ export class ApartmentDevices {
   private readonly screenMaterial = new THREE.MeshBasicMaterial({ color: 0, map: this.picture.texture, toneMapped: false, fog: false });
   private readonly pcMaterial = new THREE.MeshBasicMaterial({ color: 0, toneMapped: false, fog: false });
   private readonly radioMaterial = new THREE.MeshBasicMaterial({ color: 0x222018, toneMapped: false });
-  private readonly flames = new THREE.Group();
+  private readonly flame: GasFlame;
   private readonly gasControls: THREE.Box3[];
   private readonly gasRay = new THREE.Ray();
   private readonly gasPoint = new THREE.Vector3();
@@ -160,12 +161,14 @@ export class ApartmentDevices {
     this.gasControls = gasControlBounds(apartment.stove).map(box => box.expandByScalar(.008));
     if (apartment.stove) this.targets.set('gas', apartment.stove);
     const pan = boundsOf(apartment.pan), center = pan.getCenter(new THREE.Vector3());
-    this.flames.position.set(center.x, pan.min.y - .012, center.z); this.add(this.flames);
-    const flameMaterial = new THREE.MeshBasicMaterial({ color: 0x638dff, transparent: true, opacity: .8, toneMapped: false }); this.materials.add(flameMaterial);
-    const cone = new THREE.ConeGeometry(.012, .046, 5); this.geometry.add(cone);
-    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2, flame = new THREE.Mesh(cone, flameMaterial); flame.position.set(Math.cos(a) * .105, 0, Math.sin(a) * .105); this.flames.add(flame); }
-    this.gasLight.position.copy(this.flames.position).add(new THREE.Vector3(0, .06, 0));
-    const meal = new THREE.Group(); meal.name = 'apartment-pan-food'; meal.position.set(center.x, pan.min.y + .071, center.z); this.add(meal);
+    const base = panBase(apartment.pan) ?? { center: center.clone().setY(pan.min.y), radius: .08, bottomY: pan.min.y };
+    const burner = burnerTop(apartment.stove, base);
+    const gap = THREE.MathUtils.clamp(burner === null ? .022 : base.bottomY - burner, .012, .045);
+    this.flame = new GasFlame(THREE.MathUtils.clamp(base.radius * .5, .03, .065), gap);
+    this.flame.group.position.set(base.center.x, base.bottomY - gap, base.center.z); this.add(this.flame.group);
+    this.geometry.add(this.flame.geometry); this.materials.add(this.flame.material);
+    this.gasLight.position.set(base.center.x, base.bottomY - gap * .5, base.center.z);
+    const meal = new THREE.Group(); meal.name = 'apartment-pan-food'; meal.position.set(base.center.x, pan.min.y + .071, base.center.z); this.add(meal);
     const food = new THREE.MeshStandardMaterial({ color: 0xc39248, roughness: .94 }); this.materials.add(food);
     const vegetables = new THREE.MeshStandardMaterial({ color: 0x617345, roughness: .92 }); this.materials.add(vegetables);
     const morsel = new THREE.BoxGeometry(.052, .017, .027); this.geometry.add(morsel);
@@ -240,8 +243,8 @@ export class ApartmentDevices {
     this.pcLight.color.setHex(state.outageTriggered?0x467dff:0xa5c8bf);
     this.radioMaterial.color.setHex(state.radioOn ? 0xe3a657 : 0x28231b);
     this.tvLight.intensity = state.tvOn ? 2.1 : 0; this.radioLight.intensity = state.radioOn ? .65 : 0; this.pcLight.intensity = state.outageTriggered ? .8 : state.pcUsed ? 1.35 : 0;
-    this.flames.visible = state.gasOn; this.gasLight.intensity = state.gasOn ? .8 : 0;
-    this.flames.scale.y = 1 + Math.sin(this.elapsed * 17) * .1;
+    this.flame.update(state.gasOn, this.elapsed, delta);
+    this.gasLight.intensity = .8 * this.flame.intensity * (.9 + .1 * Math.sin(this.elapsed * 21));
     this.audio.sync(state, active, delta);
     if (state.tvOn && active) this.picture.draw(this.elapsed, state.outageTriggered && this.audio.pressureBroadcastReady);
     if (!canInteract) { if (this.prompted) this.ui.setInteraction(null); this.prompted = false; return; }

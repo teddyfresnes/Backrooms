@@ -169,6 +169,9 @@ describe('BacteriaEncounter', () => {
     world.until(() => world.state.motion === 'carry', 20);
     expect(world.events).toContain('stairwell');
     expect(world.quest()).toMatch(/calme/);
+    const scream = () => world.calls.filter(call => call.startsWith('setScreamActive')).at(-1);
+    // Calm with the television: its voice only, no scream loop.
+    expect(scream()).toBe('setScreamActive:false');
     world.step(CALM_SECONDS);
     expect(world.quest()).toMatch(/maintenir Maj/);
     world.setSprint(true);
@@ -187,6 +190,8 @@ describe('BacteriaEncounter', () => {
     const glance = world.until(() => world.player.isInputEnabled, 3);
     expect(glance).toBeGreaterThan(SPOTTED_TIMELINE.release - 0.1);
     expect(world.state.motion).toBe('run');
+    world.step(DT);
+    expect(scream()).toBe('setScreamActive:true');
     // Sprint down every flight to the hall door.
     const path = new ChasePath(createEscapeWaypoints());
     let along = path.project({ x: threshold.x + 0.5, y: threshold.y, z: threshold.z });

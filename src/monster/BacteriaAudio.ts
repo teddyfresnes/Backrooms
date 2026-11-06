@@ -113,6 +113,14 @@ export class BacteriaAudio {
 
   get isScreaming(): boolean { return !!this.scream; }
 
+  /**
+   * Only a pursuing creature screams. Calm phases (sniffing, the television,
+   * sneaking out) keep its voice alone; the loop fades out and comes back,
+   * at its spatial level, the moment it runs at you again.
+   */
+  setScreamActive(active: boolean): void { this.screamActive = active; }
+  private screamActive = true;
+
   /** 0..1 attenuation of the scream (e.g. while it sniffs at the closet). */
   setDuck(value: number): void { this.duck = THREE.MathUtils.clamp(value, 0, 1); }
 
@@ -131,14 +139,14 @@ export class BacteriaAudio {
     const far = Math.pow(THREE.MathUtils.clamp(distance / 30, 0, 1), 0.8);
     const cutoff = THREE.MathUtils.lerp(15500, 850, Math.max(far, occluded * 0.82));
     const voiceActive = !!this.voice;
-    const calm = 1 - 0.7 * this.calm;
+    const calm = 1 - 0.45 * this.calm;
     for (const [voice, gain] of [
-      [this.scream, level * this.duck * (voiceActive ? 0.38 : 1)],
+      [this.scream, this.screamActive ? level * this.duck * (voiceActive ? 0.38 : 1) : 0.0001],
       [this.voice, Math.min(1.25, level * 1.25 + 0.12) * this.duck * calm],
     ] as const) {
       if (!voice) continue;
       if (voice === this.scream && now < this.roarUntil) continue;
-      voice.gain.gain.setTargetAtTime(gain, now, voice === this.voice ? 0.25 : 0.06);
+      voice.gain.gain.setTargetAtTime(gain, now, voice === this.voice ? 0.25 : this.screamActive ? 0.06 : 0.3);
       voice.filter.frequency.setTargetAtTime(voice === this.voice ? Math.min(cutoff, THREE.MathUtils.lerp(15500, 1400, this.calm)) : cutoff, now, 0.08);
       voice.panner.pan.setTargetAtTime(THREE.MathUtils.clamp(pan, -1, 1) * (1 - near * 0.35), now, 0.05);
     }
@@ -183,6 +191,7 @@ export class BacteriaAudio {
     this.duck = 1;
     this.calm = 0;
     this.roarUntil = 0;
+    this.screamActive = true;
   }
 
   private createVoice(id: BufferId, loop: boolean, offset: number): SpatialVoice | undefined {
