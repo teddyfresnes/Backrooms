@@ -681,6 +681,10 @@ export class ImportedApartmentEnvironment {
   get renderWarmupRoot(): THREE.Object3D { return this.model; }
   readonly entryDoor: DoorRuntime;
   readonly closetDoor: DoorRuntime;
+  /** Bathroom leaf hinged on its west jamb; positive angles swing it into the bathroom. */
+  readonly bathroomDoor: DoorRuntime;
+  /** The two hideable interior doors: physics key and closed-leaf world box (kinematic in game). */
+  readonly hideDoors: Readonly<Record<'closet' | 'bathroom', { readonly key: string; readonly box: THREE.Box3 }>>;
   readonly lightSwitch: THREE.Group;
   readonly doorLock: THREE.Group;
   readonly windowBlinds: readonly [ApartmentWindowBlindRuntime, ApartmentWindowBlindRuntime];
@@ -814,6 +818,13 @@ export class ImportedApartmentEnvironment {
       0,
       Math.PI * 0.56,
     );
+    this.bathroomDoor = this.makeDoorRuntime(
+      'imported-apartment-bathroom-door-pivot',
+      bathroomLeaf,
+      (box) => new THREE.Vector3(box.min.x, box.min.y, box.getCenter(new THREE.Vector3()).z),
+      0,
+      Math.PI * 0.5,
+    );
 
     this.shellColliderMeshes = [];
     for (const mesh of collectMeshes(this.model)) {
@@ -860,18 +871,16 @@ export class ImportedApartmentEnvironment {
       if (!box.isEmpty()) furniture.push(colliderFromBox('imported-radio-fixed', box));
     }
 
-    // Interior doors are intentionally non-interactive, but they must still
-    // block the player instead of being ghost geometry.
-    for (const [id, leaf] of [
-      ['imported-bathroom-door-static', bathroomLeaf],
-      ['imported-closet-door-static', closetLeaf],
-    ] as const) {
-      // setFromObject transforms a local AABB and made the thin bathroom leaf
-      // look almost 70 cm deep to Rapier. Vertex-precise bounds keep the player
-      // close to the visible panel without letting them pass through it.
-      const box = preciseBoxFromObject(leaf);
-      if (!box.isEmpty()) furniture.push(colliderFromBox(id, box));
-    }
+    // Interior doors must block the player instead of being ghost geometry.
+    // Both are hiding places (DoorHide): the game mounts them as kinematic
+    // leaves that swing with their pivots, so they are not static furniture.
+    // setFromObject transforms a local AABB and made the thin bathroom leaf
+    // look almost 70 cm deep to Rapier. Vertex-precise bounds keep the player
+    // close to the visible panel without letting them pass through it.
+    this.hideDoors = {
+      bathroom: { key: 'imported-bathroom-door-static', box: preciseBoxFromObject(bathroomLeaf) },
+      closet: { key: 'imported-closet-door-static', box: preciseBoxFromObject(closetLeaf) },
+    };
 
     this.furnitureColliders = furniture;
 

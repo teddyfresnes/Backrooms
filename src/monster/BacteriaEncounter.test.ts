@@ -12,8 +12,7 @@ import {
   PLAYER_CENTER_HEIGHT,
   REVEAL_TIMELINE,
   SNEAK_HOLD_SECONDS,
-  SPOTTED_TIMELINE,
-} from './BacteriaLayout';
+  SPOTTED_TIMELINE, HIDE_SPOTS, type HideSpotId } from './BacteriaLayout';
 
 const threshold = { x: -2.02, y: 8.67, z: -2.71 };
 const DT = 1 / 60;
@@ -65,7 +64,7 @@ function setup(options: { tvOn?: boolean } = {}) {
   const eyeCamera = new THREE.PerspectiveCamera();
   const door = { secured: false, breached: false, isSecured() { return this.secured; }, jolt: () => undefined, breach() { this.breached = true; this.secured = false; }, repair() { this.breached = false; } };
   // The bedroom wardrobe: aimed at when the player stands in front of it.
-  const wardrobe = { aimed: true, inside: false, exits: 0 };
+  const wardrobe = { aimed: true, inside: false, exits: 0, held: 0, bursts: 0, spot: 'wardrobe' as HideSpotId };
   scene.updateMatrixWorld(true);
   const events: string[] = [];
   let lampLit = false, revealReady = true, sprint = false, tv = options.tvOn ?? true;
@@ -76,7 +75,10 @@ function setup(options: { tvOn?: boolean } = {}) {
     door: door as never,
     hideSpot: {
       canHide: () => wardrobe.aimed && !wardrobe.inside,
+      current: () => wardrobe.spot,
       hide: () => { wardrobe.inside = true; },
+      holdExit: (progress: number) => { wardrobe.held = progress; },
+      burstOut: () => { wardrobe.inside = false; wardrobe.bursts += 1; player.setInputEnabled(true); },
       release: () => { wardrobe.inside = false; wardrobe.exits += 1; player.setInputEnabled(true); },
       forceOut: () => { wardrobe.inside = false; },
     },
@@ -177,6 +179,7 @@ describe('BacteriaEncounter', () => {
     world.setSprint(true);
     world.step(SNEAK_HOLD_SECONDS - 0.5);
     expect(world.encounter.isHidden).toBe(true);
+    expect(world.wardrobe.held).toBeGreaterThan(0.8);
     expect(world.hint.hold).toBeGreaterThan(0.7);
     world.step(0.6);
     expect(world.encounter.isHidden).toBe(false);
@@ -224,7 +227,12 @@ describe('BacteriaEncounter', () => {
     world.until(() => /maintenir/.test(world.quest() ?? ''), 40);
     world.setSprint(true);
     world.step(0.8);
+    // The leaf follows the hold.
+    expect(world.wardrobe.held).toBeGreaterThan(0.2);
+    expect(world.wardrobe.held).toBeLessThan(0.4);
     world.setSprint(false);
+    world.step(0.05);
+    expect(world.wardrobe.bursts).toBe(1);
     world.until(() => world.events.some(event => event.startsWith('death')), 3);
     expect(world.events).toContain('death:Il t’a entendu.');
     world.step(4);
@@ -294,5 +302,18 @@ describe('BacteriaEncounter', () => {
     world.player.position.set(0.1, 0.865, -5.9);
     world.step(1.2);
     expect(world.events).toContain('escaped');
+  });
+});
+
+describe('other hiding places', () => {
+  it('sniffs in front of the bathroom when the player hid there', () => {
+    const world = setup({ tvOn: true });
+    world.wardrobe.spot = 'bathroom';
+    playToHiding(world);
+    world.until(() => world.events.includes('breach'), 20);
+    const front = HIDE_SPOTS.bathroom.frontPosition;
+    world.until(() => world.state.motion === 'crouch', 20);
+    const at = world.actor.root.position;
+    expect(Math.hypot(at.x - front.x, at.z - front.z)).toBeLessThan(0.6);
   });
 });

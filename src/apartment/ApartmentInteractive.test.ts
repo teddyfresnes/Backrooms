@@ -77,5 +77,5 @@ it('opens both actual closet leaves, traverses the real clear gap, pauses, and a
   const steps=vi.spyOn(f.physics.world,'step');expect(closet.interact()).toBe(true);expect(active).toBe(true);
   for(let i=0;i<110;i++){closet.update(1/60,true);f.physics.stepDynamics(1/60);}expect(closet.debugState.phase).toBe('hidden');expect(f.camera.position.distanceTo(new THREE.Vector3(-7.9265,9.95,-5.65))).toBeLessThan(.001);
   const before=closet.debugState;closet.update(1,false);expect(closet.debugState).toEqual(before);const escape=new KeyboardEvent('keydown',{code:'Escape',cancelable:true});window.dispatchEvent(escape);expect(escape.defaultPrevented).toBe(false);
-  closet.interact();for(let i=0;i<100;i++){closet.update(1/60,true);f.physics.stepDynamics(1/60);}expect(closet.isActive).toBe(false);expect(active).toBe(false);expect(position.z).toBeGreaterThan(-5.1);expect(steps).toHaveBeenCalledTimes(210);expect(overlaps).toEqual([]);
+  closet.interact();for(let i=0;i<200;i++){closet.update(1/60,true);f.physics.stepDynamics(1/60);}expect(closet.isActive).toBe(false);expect(active).toBe(false);expect(position.z).toBeGreaterThan(-5.1);expect(steps).toHaveBeenCalledTimes(310);expect(overlaps).toEqual([]);
 });

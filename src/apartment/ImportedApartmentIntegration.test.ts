@@ -254,7 +254,7 @@ describe('imported apartment integration', () => {
     expect(environment).toContain("'chair'");
     expect(environment).toContain("'trashcan'");
     expect(environment).toContain("'can'");
-    expect(environment).toContain('const box = preciseBoxFromObject(leaf)');
+    expect(environment).toContain('box: preciseBoxFromObject(bathroomLeaf)'); expect(environment).toContain('box: preciseBoxFromObject(closetLeaf)');
   });
 
   it('replaces only the apartment window panes with clear glass', () => {

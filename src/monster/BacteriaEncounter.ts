@@ -14,7 +14,8 @@ import {
   ChasePath,
   CHASE_SPEEDS,
   CLOSET,
-  WARDROBE,
+  HIDE_SPOTS,
+  type HideSpotId,
   corridorChargeSpeed,
   createEntryWaypoints,
   createEscapeWaypoints,
@@ -30,7 +31,7 @@ import {
 
 type Phase =
   | 'dormant' | 'reveal' | 'chase' | 'bang' | 'inside' | 'search' | 'lure' | 'grab' | 'carry'
-  | 'sneak' | 'spotted' | 'escape' | 'escaped' | 'aftermath' | 'over' | 'jumpscare' | 'dead';
+  | 'sneak' | 'burst' | 'spotted' | 'escape' | 'escaped' | 'aftermath' | 'over' | 'jumpscare' | 'dead';
 type DeathCause = 'caught' | 'closet' | 'silence' | 'noise' | 'stairs';
 type Checkpoint = 'corridor' | 'closet';
 
@@ -57,8 +58,14 @@ export interface BacteriaEncounterHost {
   /** The bedroom wardrobe (ClosetHide): the hunt decides when the player may leave it. */
   readonly hideSpot: {
     canHide(): boolean;
-    /** Climb in now (also on a checkpoint restart). */
-    hide(): void;
+    /** The place in use (or the one just chosen). Defaults to the wardrobe. */
+    current?(): HideSpotId;
+    /** Climb in now (also on a checkpoint restart), into `spot` when given. */
+    hide(spot?: HideSpotId): void;
+    /** The careful exit follows the held key (0..1). */
+    holdExit?(progress: number): void;
+    /** Let go too early: out at once, noisily. */
+    burstOut?(): void;
     /** Climb out (the silent exit). */
     release(): void;
     /** Out at once, without animation (a restart elsewhere). */
@@ -95,8 +102,14 @@ export interface BacteriaEncounterHost {
 export class BacteriaEncounter {
   private phase: Phase = 'dormant';
   private phaseTime = 0;
-  private readonly entryPath: ChasePath;
-  private readonly lurePath = new ChasePath(createLureWaypoints());
+  private spot: HideSpotId = 'wardrobe';
+  private readonly entryPaths: Record<HideSpotId, ChasePath>;
+  private readonly lurePaths = Object.fromEntries((Object.keys(HIDE_SPOTS) as HideSpotId[])
+    .map(id => [id, new ChasePath(createLureWaypoints(id))])) as Record<HideSpotId, ChasePath>;
+  /** Door → front of the hiding place actually in use. */
+  private get entryPath(): ChasePath { return this.entryPaths[this.spot]; }
+  private get lurePath(): ChasePath { return this.lurePaths[this.spot]; }
+  private get hideLayout() { return HIDE_SPOTS[this.spot]; }
   private readonly escapePath = new ChasePath(createEscapeWaypoints());
   private readonly creatureLight = new THREE.PointLight(0xfff0c2, 0, 7.5, 1.7);
   private revealTime: number | null = null;
@@ -157,7 +170,8 @@ export class BacteriaEncounter {
     private readonly actor: BacteriaActor,
     private readonly sound: BacteriaAudio,
   ) {
-    this.entryPath = new ChasePath(createEntryWaypoints(host.threshold));
+    this.entryPaths = Object.fromEntries((Object.keys(HIDE_SPOTS) as HideSpotId[])
+      .map(id => [id, new ChasePath(createEntryWaypoints(host.threshold, id))])) as Record<HideSpotId, ChasePath>;
     this.creatureLight.name = 'bacteria-creature-light';
     actor.setVisible(false);
     host.scene.add(actor.root, this.creatureLight);
@@ -248,6 +262,7 @@ export class BacteriaEncounter {
       case 'grab': this.updateGrab(dt); break;
       case 'carry': this.updateCarry(dt); break;
       case 'sneak': this.updateSneak(dt); break;
+      case 'burst': this.updateBurst(dt); break;
       case 'spotted': this.updateSpotted(dt); break;
       case 'escape': this.updateEscape(dt); break;
       case 'escaped': this.updateEscaped(); break;
@@ -473,7 +488,7 @@ export class BacteriaEncounter {
     if (this.hidden) {
       // Saw you go in: straight for the closet, then tear it open.
       const arrived = this.walkEntry(dt, CHASE_SPEEDS.apartment);
-      this.actor.setLookTarget(this.target.set(WARDROBE.hideEye.x, WARDROBE.hideEye.y, WARDROBE.hideEye.z));
+      this.actor.setLookTarget(this.target.set(this.hideLayout.hideEye.x, this.hideLayout.hideEye.y, this.hideLayout.hideEye.z));
       if (arrived) this.ripCloset('closet');
       return;
     }
@@ -501,7 +516,7 @@ export class BacteriaEncounter {
   }
 
   private updateSearch(dt: number): void {
-    const closetEye = this.target.set(WARDROBE.hideEye.x, WARDROBE.hideEye.y, WARDROBE.hideEye.z);
+    const closetEye = this.target.set(this.hideLayout.hideEye.x, this.hideLayout.hideEye.y, this.hideLayout.hideEye.z);
     if (this.searchStage === 0) {
       // Rushes in, then slows to a broken, sniffing walk.
       const speed = this.entryAlong < 1.6 ? 3.2 : CHASE_SPEEDS.stalk;
@@ -513,8 +528,11 @@ export class BacteriaEncounter {
     this.searchTimer += dt;
     const lean = smooth((this.searchTimer - 0.9) / 1.2) * (1 - smooth((this.searchTimer - 3.6) / 0.5));
     // Faces the crack, not the middle of the leaf: it knows.
-    this.monsterYaw = lerpAngle(this.monsterYaw, Math.atan2(WARDROBE.hideEye.x - this.monsterPosition.x, WARDROBE.hideEye.z - this.monsterPosition.z), 1 - Math.exp(-dt * 5));
-    this.monsterPosition.set(WARDROBE.frontPosition.x + lean * 0.06, WARDROBE.frontPosition.y, WARDROBE.frontPosition.z - lean * 0.38);
+    this.monsterYaw = lerpAngle(this.monsterYaw, Math.atan2(this.hideLayout.hideEye.x - this.monsterPosition.x, this.hideLayout.hideEye.z - this.monsterPosition.z), 1 - Math.exp(-dt * 5));
+    // Leans its head toward the gap, whichever way the hiding place faces.
+    const front = this.hideLayout.frontPosition, eyeAt = this.hideLayout.hideEye;
+    const toward = Math.atan2(eyeAt.x - front.x, eyeAt.z - front.z);
+    this.monsterPosition.set(front.x + Math.sin(toward) * lean * 0.38, front.y, front.z + Math.cos(toward) * lean * 0.38);
     this.actor.setLookTarget(closetEye);
     this.sound.setDuck(1 - lean * 0.75);
     if (this.searchTimer > 0.9) this.actor.setMotion('crouch');
@@ -579,11 +597,13 @@ export class BacteriaEncounter {
     if (down && this.hold > 0) {
       this.hold = Math.min(1, this.hold + dt / SNEAK_HOLD_SECONDS);
       this.host.hud.setHold(this.hold);
+      // The hold IS the exit: the leaf eases open, then the long step out.
+      this.host.hideSpot.holdExit?.(this.hold);
       if (this.hold >= 1) this.leaveClosetSilently();
     } else if (!down && this.hold > 0) {
-      // Let go too early: the hinge shrieks.
+      // Let go too early: out in a rush, the hinge shrieks.
       this.host.hud.setHold(null);
-      this.makeNoise();
+      this.burstFromHiding();
     }
     this.holdWasDown = down;
   }
@@ -614,6 +634,39 @@ export class BacteriaEncounter {
     if (this.runningTime > 0.18 || near) { this.makeNoise(); return; }
     const p = host.player.position;
     if (p.x > host.threshold.x + 0.32 && Math.abs(p.z - host.threshold.z) < 1.6 && Math.abs(p.y - host.threshold.y - PLAYER_CENTER_HEIGHT) < 0.6) this.startSpotted();
+  }
+
+  /** The key was let go mid-exit: the player stumbles out and it charges. */
+  private burstFromHiding(): void {
+    const host = this.host;
+    this.hold = 0;
+    host.hud.setHold(null);
+    host.hud.hideHint();
+    host.audio.door('open');
+    host.audio.impact('door-bang', 0.35);
+    if (host.hideSpot.burstOut) host.hideSpot.burstOut(); else host.hideSpot.release();
+    this.hidden = false;
+    host.player.setLookLocked(false);
+    this.dropTelevision();
+    this.actor.snapHead();
+    this.actor.setMotion('idle');
+    this.actor.setLookTarget(this.eye);
+    this.targetYaw = null;
+    this.setPhase('burst');
+  }
+
+  private updateBurst(dt: number): void {
+    // A beat to whirl round at the noise, then straight across the flat.
+    if (this.phaseTime < 0.35) {
+      this.targetYaw = this.yawToward(this.feet); this.yawRate = 18;
+      return;
+    }
+    this.targetYaw = null;
+    this.actor.setMotion('run');
+    this.actor.setLookTarget(this.eye);
+    this.pursue(dt, CHASE_SPEEDS.apartment);
+    const reach = Math.hypot(this.feet.x - this.monsterPosition.x, this.feet.z - this.monsterPosition.z);
+    if (reach < CATCH_RADIUS + 0.4 || this.phaseTime > 2.2) this.startJumpscare('noise');
   }
 
   /** A creak or a footfall: the television drops, it turns, and it comes. */
@@ -838,8 +891,8 @@ export class BacteriaEncounter {
     const host = this.host;
     this.restoreWorld();
     this.hidden = true;
-    host.player.teleport(WARDROBE.exitPosition);
-    host.hideSpot.hide();
+    host.player.teleport(this.hideLayout.exitPosition);
+    host.hideSpot.hide(this.spot);
     this.monsterPosition.set(TELEVISION.standPosition.x, TELEVISION.standPosition.y, TELEVISION.standPosition.z);
     this.monsterYaw = this.yawToward(TELEVISION.center);
     this.targetYaw = this.monsterYaw;
@@ -980,6 +1033,12 @@ export class BacteriaEncounter {
     this.hidden = true;
     this.host.hud.hideHint();
     this.host.hideSpot.hide();
+    const spot = this.host.hideSpot.current?.() ?? 'wardrobe';
+    if (spot !== this.spot) {
+      // Already on its way in: carry on along the route to this place instead.
+      this.spot = spot;
+      if (this.phase === 'inside') this.entryAlong = this.entryPath.project(this.monsterPosition);
+    }
     this.prompt = null;
     this.host.setPrompt(null);
     return true;
@@ -1062,6 +1121,7 @@ export class BacteriaEncounter {
       case 'chase': case 'bang': case 'escape': case 'jumpscare': return true;
       case 'inside': return !this.hidden;
       case 'spotted': return this.phaseTime >= S.roar;
+      case 'burst': return this.phaseTime >= 0.35;
       default: return false;
     }
   }

@@ -7,7 +7,10 @@ const INSIDE=new THREE.Vector3(-7.9265,9.44,-5.65),EYE=new THREE.Vector3(-7.9265
 interface Leaf {object:THREE.Object3D;pivot:THREE.Group;parent:THREE.Object3D;matrix:THREE.Matrix4;auto:boolean;key:string;sign:number}
 /** Leaving is slow and careful: the door eases open, a long step out, then it is pushed shut. */
 const EXIT_OPEN_RATE=1.2,EXIT_STEP_SECONDS=1.25,EXIT_CLOSE_RATE=1.6;
-type Phase='idle'|'opening'|'aligning'|'entering'|'hiding'|'hidden'|'opening-exit'|'exiting'|'closing';
+type Phase='idle'|'opening'|'aligning'|'entering'|'hiding'|'hidden'|'opening-exit'|'exiting'|'closing'|'held-exit'|'burst';
+/** Hold-driven exit: the first 40 % eases the leaf open, the next 50 % is the step out. */
+export const HOLD_OPEN_SHARE=.4,HOLD_STEP_SHARE=.5;
+const clamp01=(v:number)=>Math.max(0,Math.min(1,v));
 /** Scripted motion through the actual hollow furniture; all leaves keep physical colliders. */
 export class ClosetHide {
   private readonly leaves:Leaf[]=[];
@@ -50,6 +53,14 @@ export class ClosetHide {
   /** Out at once, doors shut: a scripted scene restarts elsewhere. */
   forceFinish():void{if(!this.isActive)return;this.exitLocked=false;this.progress=0;this.syncDoors();this.host.pose(OUTSIDE,false);this.finish();}
   get doorProgress():number{return this.progress;}
+  /** Drives the careful exit from a held key (0..1): the animation IS the hold. */
+  holdExit(progress:number):void{
+    if(!['hidden','hiding','held-exit'].includes(this.phase))return;
+    if(this.phase!=='held-exit')this.change('held-exit');this.held=clamp01(progress);
+  }
+  /** Let go too early: the leaf is flung open and the player stumbles out. */
+  burstOut():void{if(!['hidden','hiding','held-exit','opening-exit','exiting'].includes(this.phase))return;this.exitLocked=false;this.change('burst');}
+  private held=0;
   private targeted():boolean {
     if(this.leaves.length!==2)return false;const position=this.host.position();if(position.z< -5.1||Math.abs(position.x-INSIDE.x)>.42)return false;
     this.camera.getWorldDirection(this.direction);this.ray.set(this.camera.position,this.direction);const hit=this.ray.intersectBox(this.target,new THREE.Vector3());return !!hit&&hit.distanceTo(this.camera.position)<1.85;
@@ -87,6 +98,11 @@ export class ClosetHide {
       case 'hidden':this.hiddenView();if(!this.exitLocked)this.ui.setInteraction(`${formatKeyLabel(this.host.bindings().interact)} · Sortir du placard`);break;
       case 'opening-exit':this.hiddenView();this.progress=Math.min(1,this.progress+dt*EXIT_OPEN_RATE);if(this.progress===1)this.change('exiting');break;
       case 'exiting':this.move(INSIDE,OUTSIDE,Math.min(1,this.phaseTime/EXIT_STEP_SECONDS));if(this.phaseTime>=EXIT_STEP_SECONDS){this.host.pose(OUTSIDE,false);this.change('closing');}break;
+      case 'held-exit':{const step=clamp01((this.held-HOLD_OPEN_SHARE)/HOLD_STEP_SHARE);this.progress=Math.max(this.progress,clamp01(this.held/HOLD_OPEN_SHARE));
+        if(step>0)this.move(INSIDE,OUTSIDE,step);else this.hiddenView();
+        if(this.held>=1){this.host.pose(OUTSIDE,false);this.change('closing');}break;}
+      case 'burst':{this.progress=Math.min(1,this.progress+dt*9);const t=clamp01((this.phaseTime-.08)/.32);if(t>0)this.move(INSIDE,OUTSIDE,t);else this.hiddenView();
+        if(this.phaseTime>=.4){this.host.pose(OUTSIDE,false);this.syncDoors();this.finish();return;}break;}
       case 'closing':this.progress=Math.max(0,this.progress-dt*EXIT_CLOSE_RATE);this.camera.fov=THREE.MathUtils.lerp(this.saved.fov,62,this.progress);this.camera.updateProjectionMatrix();if(this.progress===0)this.finish();break;
     }this.syncDoors();
   }

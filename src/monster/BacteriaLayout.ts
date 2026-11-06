@@ -81,6 +81,48 @@ export const WARDROBE = {
   exitPosition: { x: -7.93, y: APARTMENT_FLOOR_Y + 0.9, z: -4.85 } as Vec3Data,
 } as const;
 
+export type HideSpotId = 'wardrobe' | 'closet' | 'bathroom';
+
+export interface HideSpotLayout {
+  /** Where the creature stops to sniff, in front of the leaf. */
+  readonly frontPosition: Vec3Data;
+  /** The hidden player's head: what it sniffs at. */
+  readonly hideEye: Vec3Data;
+  /** Player capsule centre just outside, for checkpoint restarts. */
+  readonly exitPosition: Vec3Data;
+  /** Free floor points between the entry and the front (door → front). */
+  readonly approach: readonly Vec3Data[];
+  /** Free floor points from the front to the television stand. */
+  readonly toTelevision: readonly Vec3Data[];
+}
+
+const floor = (x: number, z: number): Vec3Data => ({ x, y: APARTMENT_FLOOR_Y, z });
+
+/** Every place the hunted player can hide, each with the creature's own route. */
+export const HIDE_SPOTS: Readonly<Record<HideSpotId, HideSpotLayout>> = {
+  wardrobe: {
+    ...WARDROBE,
+    approach: [floor(-3.4, -2.75), floor(-6.3, -3.3), floor(-7.6, -4.15)],
+    toTelevision: [floor(-7.6, -3.4), floor(-7.9, -2.2)],
+  },
+  /** The entry closet left of the fridge. */
+  closet: {
+    frontPosition: CLOSET.frontPosition,
+    hideEye: { x: -2.63, y: APARTMENT_FLOOR_Y + 1.31, z: -0.16 },
+    exitPosition: CLOSET.exitPosition,
+    approach: [],
+    toTelevision: [floor(-3.4, -2.75), floor(-6.3, -3.3), floor(-7.9, -2.2)],
+  },
+  /** Behind the bathroom door, away from its hinge. */
+  bathroom: {
+    frontPosition: floor(-4.05, -3.3),
+    hideEye: { x: -3.9, y: APARTMENT_FLOOR_Y + 1.31, z: -4.6 },
+    exitPosition: { x: -4.05, y: APARTMENT_FLOOR_Y + 0.9, z: -3.5 },
+    approach: [floor(-3.4, -2.9)],
+    toTelevision: [floor(-4.6, -3.1), floor(-6.3, -3.3), floor(-7.9, -2.2)],
+  },
+};
+
 /** The television on its sideboard, north-west corner of the main room. */
 export const TELEVISION = {
   /** Where the creature stands to take it, and later cradles it, back to the closet. */
@@ -102,24 +144,23 @@ export function createChaseWaypoints(threshold: Readonly<Vec3Data>): Vec3Data[] 
   ];
 }
 
-/** Door → entry → across the main room → in front of the bedroom wardrobe. */
-export function createEntryWaypoints(threshold: Readonly<Vec3Data>): ChaseWaypoint[] {
+/** Door → entry → across the main room → in front of the chosen hiding place. */
+export function createEntryWaypoints(threshold: Readonly<Vec3Data>, spot: HideSpotId = 'wardrobe'): ChaseWaypoint[] {
+  const layout = HIDE_SPOTS[spot];
   return [
     { ...createChaseWaypoints(threshold)[1]!, speed: 1 },
     point(threshold.x - 0.7, threshold.y, threshold.z, 1),
-    point(-3.4, threshold.y, -2.75, 1),
-    point(-6.3, threshold.y, -3.3, 1),
-    point(-7.6, threshold.y, -4.15, 1),
-    { ...WARDROBE.frontPosition, y: threshold.y, speed: 1 },
+    ...layout.approach.map(p => point(p.x, threshold.y, p.z, 1)),
+    { ...layout.frontPosition, y: threshold.y, speed: 1 },
   ];
 }
 
-/** In front of the wardrobe → back into the main room → the television. */
-export function createLureWaypoints(): ChaseWaypoint[] {
+/** In front of the hiding place → back into the main room → the television. */
+export function createLureWaypoints(spot: HideSpotId = 'wardrobe'): ChaseWaypoint[] {
+  const layout = HIDE_SPOTS[spot];
   return [
-    { ...WARDROBE.frontPosition, speed: 1 },
-    point(-7.6, APARTMENT_FLOOR_Y, -3.4, 1),
-    point(-7.9, APARTMENT_FLOOR_Y, -2.2, 1),
+    { ...layout.frontPosition, speed: 1 },
+    ...layout.toTelevision.map(p => point(p.x, p.y, p.z, 1)),
     { ...TELEVISION.standPosition, speed: 1 },
   ];
 }

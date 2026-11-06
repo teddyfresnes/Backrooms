@@ -59,6 +59,8 @@ import { ComputerChair } from '../apartment/ComputerChair';
 import { ComputerUseSequence } from '../apartment/ComputerUseSequence';
 import { ApartmentFixtures } from '../apartment/ApartmentFixtures';
 import { ClosetHide } from '../apartment/ClosetHide';
+import { DoorHide, type DoorHideHost } from '../apartment/DoorHide';
+import { HideSpots } from '../apartment/HideSpots';
 import { ApartmentObjectInteraction } from '../apartment/ApartmentObjectInteraction';
 import { ApartmentDevices, apartmentDevicePositions } from '../apartment/ApartmentDevices';
 import { ApartmentDeviceAudio } from '../audio/ApartmentDeviceAudio';
@@ -172,7 +174,7 @@ export class RussianStairwellGame {
   private lastLampCount=0;
   private readonly equipmentHand=new THREE.Vector3();
   private fixtures?: ApartmentFixtures;
-  private closet?: ClosetHide;
+  private closet?: HideSpots;
   private deviceAudio?: ApartmentDeviceAudio;
   private storyCaption?: NarrativeCaption;
   private sprintHint?:SprintHint;
@@ -607,7 +609,7 @@ export class RussianStairwellGame {
     await this.character.initialize();
     if (this.disposed) return;
     this.character.setActive(false);
-    this.closet = new ClosetHide(apartment, physics, this.camera, this.ui, {
+    const hideHost: DoorHideHost = {
       position: () => this.player!.position,
       pose: (position, confined) => this.player?.setScriptedPose(position, confined),
       presentation: active => this.character?.setExternalCameraPresentation(active),
@@ -618,7 +620,19 @@ export class RussianStairwellGame {
       },
       playing: () => !this.disposed && !this.transitionSuspended && !!this.player?.isLocked && !this.ui.isConsoleOpen && !document.hidden,
       bindings: () => this.settings.controls,
-    }, this.launch.kind === 'load' ? this.launch.save.payload.fixtures?.closetDoor : undefined);
+    };
+    const insideFloor = apartment.floorY + .031;
+    const doorHide = (spot: 'closet' | 'bathroom', label: string, door: { pivot: THREE.Object3D; openAngle: number }, inside: [number, number], outside: [number, number]) =>
+      new DoorHide({ key: apartment.hideDoors[spot].key, label, pivot: door.pivot, leafBox: apartment.hideDoors[spot].box, openAngle: door.openAngle,
+        inside: new THREE.Vector3(inside[0], insideFloor + .67, inside[1]),
+        outside: new THREE.Vector3(outside[0], insideFloor + .865, outside[1]),
+        eye: new THREE.Vector3(inside[0], apartment.floorY + 1.31, inside[1]) }, physics, this.camera, this.ui, hideHost);
+    this.closet = new HideSpots({
+      wardrobe: new ClosetHide(apartment, physics, this.camera, this.ui, hideHost,
+        this.launch.kind === 'load' ? this.launch.save.payload.fixtures?.closetDoor : undefined),
+      closet: doorHide('closet', 'Se cacher dans le placard', apartment.closetDoor, [-2.63, -.12], [-2.66, -1.42]),
+      bathroom: doorHide('bathroom', 'Se cacher dans la salle de bain', apartment.bathroomDoor, [-3.9, -4.6], [-4.05, -3.5]),
+    });
 
     if(!apartment.computerChair)throw Error('La chaise du PC est absente.');
     this.pcUse=new ComputerUseSequence(new ComputerChair(apartment.computerChair,apartment.group,physics),physics,this.camera,{
@@ -699,9 +713,12 @@ export class RussianStairwellGame {
         door: this.door,
         hideSpot: {
           canHide: () => !!this.closet && this.closet.isTargeted,
-          hide: () => { if (!this.closet) return; this.closet.exitLocked = true; if (!this.closet.isActive) this.closet.enterNow(); },
+          current: () => this.closet?.currentId ?? 'wardrobe',
+          hide: spot => { if (!this.closet) return; this.closet.exitLocked = true; if (!this.closet.isActive) this.closet.enterNow(spot); },
           release: () => this.closet?.requestExit(),
           forceOut: () => this.closet?.forceFinish(),
+          holdExit: progress => this.closet?.holdExit(progress),
+          burstOut: () => this.closet?.burstOut(),
         },
         television: apartment.television,
         audio: this.audio,

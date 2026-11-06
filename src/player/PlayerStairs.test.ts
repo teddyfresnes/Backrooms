@@ -40,10 +40,10 @@ it.each([false, true])('takes the real staircase with the full controller (sprin
 // Hugging the central railing while climbing or descending must not snag:
 // the rail barrier's sloped underside used to hang over the treads.
 it.each([
-  ['up the left flight', { x: -.36, y: .865, z: -2.1 }, Math.PI + .18, (z: number) => z > 2.05, () => midLandingY(0) + .865],
-  ['down the left flight', { x: -.36, y: midLandingY(0) + .865, z: 2.1 }, -.18, (z: number) => z < -2.05, () => .865],
-  ['up the right flight', { x: .36, y: midLandingY(0) + .865, z: 2.1 }, .18, (z: number) => z < -2.05, () => floorY(1) + .865],
-  ['down the right flight', { x: .36, y: floorY(1) + .865, z: -2.1 }, Math.PI - .18, (z: number) => z > 2.05, () => midLandingY(0) + .865],
+  ['up the left flight', { x: -.36, y: .865, z: -2.1 }, Math.PI + .18, (z: number) => z > 2.05, (): number => midLandingY(0) + .865],
+  ['down the left flight', { x: -.36, y: midLandingY(0) + .865, z: 2.1 }, -.18, (z: number) => z < -2.05, (): number => .865],
+  ['up the right flight', { x: .36, y: midLandingY(0) + .865, z: 2.1 }, .18, (z: number) => z < -2.05, (): number => floorY(1) + .865],
+  ['down the right flight', { x: .36, y: floorY(1) + .865, z: -2.1 }, Math.PI - .18, (z: number) => z > 2.05, (): number => midLandingY(0) + .865],
 ] as const)('keeps moving while pressed against the railing %s', async (_label, start, yaw, done, endY) => {
   const physics = await PhysicsWorld.create(createStairwellPlan()); cleanup.push(() => physics.dispose());
   const view = new EventTarget(), pointerDocument = Object.assign(new EventTarget(), { defaultView: view });
