@@ -26,6 +26,7 @@ export interface EnvironmentSphereHit {
 /** The host's real collision world, including chunks, doors and apartment meshes. */
 export class CharacterEnvironment {
   private readonly queryShape = new RAPIER.Cuboid(3, 3, 3);
+  private reportedQueryFailure = false;
   private readonly sphere = new RAPIER.Ball(.1);
   private readonly sweepVelocity = new THREE.Vector3();
   private readonly overlapOrigin = new THREE.Vector3();
@@ -101,14 +102,27 @@ export class CharacterEnvironment {
     return null;
   }
   nearbyBoxes(position: THREE.Vector3): StaticCollider[] {
-    const result: StaticCollider[] = [];
+    // A JS exception thrown inside a Rapier callback re-enters wasm-bindgen's
+    // error path, which under Vite has no wasm binding ("wasm is undefined") and
+    // then fails on every frame, freezing the player. Only collect inside the
+    // query; read shapes afterwards, outside the borrowed broad phase.
+    const found: RAPIER.Collider[] = [];
     this.physics.world.intersectionsWithShape(position, { x: 0, y: 0, z: 0, w: 1 }, this.queryShape, collider => {
-      const shape = collider.shape;
-      if (shape instanceof RAPIER.Cuboid) result.push({ id: `physics-${collider.handle}`,
-        center: { ...collider.translation() }, halfExtents: { ...shape.halfExtents },
-        rotation: { ...collider.rotation() }, kind: this.physics.getEnvironmentKind(collider) });
+      if (collider) found.push(collider);
       return true;
     }, undefined, undefined, undefined, undefined, this.physics.isEnvironmentCollider);
+    const result: StaticCollider[] = [];
+    for (const collider of found) {
+      try {
+        if (collider.shapeType() !== RAPIER.ShapeType.Cuboid) continue;
+        const shape = collider.shape as RAPIER.Cuboid;
+        result.push({ id: `physics-${collider.handle}`,
+          center: { ...collider.translation() }, halfExtents: { ...shape.halfExtents },
+          rotation: { ...collider.rotation() }, kind: this.physics.getEnvironmentKind(collider) });
+      } catch (error) {
+        if (!this.reportedQueryFailure) { this.reportedQueryFailure = true; console.warn('[physics] nearby collider skipped', error); }
+      }
+    }
     return result;
   }
 }

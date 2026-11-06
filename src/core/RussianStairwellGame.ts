@@ -302,7 +302,7 @@ export class RussianStairwellGame {
   }
 
   async initialize(onProgress: LoadProgressCallback = () => undefined): Promise<void> {
-    const progress = this.options.loadProgress ?? new LoadProgress();
+    const progress = this.options.loadProgress ?? new LoadProgress(false);
     progress.subscribe(onProgress);
     const preload = this.options.apartmentPreload ?? new ApartmentPreload(APARTMENT_MODEL_URL, event => {
       progress.apartment(event);
@@ -755,7 +755,7 @@ export class RussianStairwellGame {
 
     this.character.beginComputerPresentation();this.character.endComputerPresentation(false);
     this.syncCorridor();
-    this.reaction=new CorridorReaction(this.scene,this.corridorStory,this.character,this.player,this.camera,apartment.doorCenter,apartment.corridorFloorY);
+    this.reaction=new CorridorReaction(this.scene,this.corridorStory,this.character,this.player,this.camera,apartment.doorCenter,apartment.corridorFloorY,this.corridor?.group);
     progress.complete('character');
     progress.start('gpu');
     this.postFX = new PostFX(

@@ -24,6 +24,25 @@ export class LoadProgress {
   private phase = 'Préparation';
   private downloadBytes?: { received: number; total?: number };
   private listener: LoadProgressCallback = () => {};
+  private readonly stalls: Array<{ atS: number; ms: number; phase: string }> = [];
+  private heartbeat?: ReturnType<typeof setTimeout>;
+  private lastBeat = performance.now();
+  constructor(private readonly log: boolean = typeof window !== 'undefined' && !(import.meta as { vitest?: unknown }).vitest) {
+    if (this.log) this.beat();
+  }
+  private seconds(at = performance.now()): string { return `${((at - this.started) / 1000).toFixed(1)} s`; }
+  /** A 250 ms timer that fires late measures a frozen main thread and names
+   * the phase it froze in (Firefox has no long-task observer). */
+  private beat = (): void => {
+    const now = performance.now(), gap = now - this.lastBeat - 250;
+    if (gap >= 400) {
+      this.stalls.push({ atS: Math.round((this.lastBeat - this.started) / 100) / 10, ms: Math.round(gap), phase: this.phase });
+      console.info(`[loading] main thread frozen ${(gap / 1000).toFixed(1)} s during "${this.phase}" (t+${this.seconds(this.lastBeat)})`);
+    }
+    this.lastBeat = now;
+    if (now - this.started < 600000) this.heartbeat = setTimeout(this.beat, 250);
+  };
+  dispose(): void { clearTimeout(this.heartbeat); this.heartbeat = undefined; }
   apartment(event: ApartmentLoadEvent): void {
     if (event.progress === 0) this.start(event.phase);
     if (event.receivedBytes !== undefined) this.downloadBytes = { received: event.receivedBytes, total: event.totalBytes };
@@ -32,7 +51,10 @@ export class LoadProgress {
   }
   subscribe(listener: LoadProgressCallback): void { this.listener = listener; this.emit(); }
   start(task: EntryLoadTask): void {
-    if (!this.begins.has(task)) this.begins.set(task, performance.now());
+    if (!this.begins.has(task)) {
+      this.begins.set(task, performance.now());
+      if (this.log) console.info(`[loading] ▶ ${ENTRY_LOAD_TASKS[task].label} (t+${this.seconds()})`);
+    }
     this.phase = ENTRY_LOAD_TASKS[task].label; this.emit();
   }
   report(task: EntryLoadTask, value: number, phase?: string): void {
@@ -47,6 +69,7 @@ export class LoadProgress {
     const begin = this.begins.get(task);
     if (begin === undefined) return;
     this.timings[task] = (this.timings[task] ?? 0) + performance.now() - begin;
+    if (this.log) console.info(`[loading] ✓ ${ENTRY_LOAD_TASKS[task].label} in ${((performance.now() - begin) / 1000).toFixed(1)} s (t+${this.seconds()})`);
     this.begins.delete(task);
     const next = (['network','decode','materials','scene','physics','character','gpu','audio'] as EntryLoadTask[]).find(id => this.begins.has(id));
     this.phase = next ? ENTRY_LOAD_TASKS[next].label : 'Finalisation';
@@ -64,9 +87,18 @@ export class LoadProgress {
     this.phase = 'Prêt';
     this.complete('ready');
     const resources = performance.getEntriesByType('resource').filter(entry => entry.startTime >= this.started) as PerformanceResourceTiming[];
-    const report = { apartmentBytes: this.downloadBytes, totalMs: performance.now() - this.started, phasesMs: { ...this.timings }, operationsMs: { ...this.operationsMs },
+    this.dispose();
+    const report = { stalls: [...this.stalls], apartmentBytes: this.downloadBytes, totalMs: performance.now() - this.started, phasesMs: { ...this.timings }, operationsMs: { ...this.operationsMs },
       resources: resources.map(entry => ({ url: entry.name, durationMs: entry.duration, transferredBytes: entry.transferSize, decodedBytes: entry.decodedBodySize })) };
     Object.assign(window, { __BACKROOMS_LOAD__: report });
-    console.info('[loading]', report);
+    if (this.log) {
+      const ms = (value: number) => Math.round(value);
+      console.info(`[loading] ready in ${this.seconds()} — frozen ${(this.stalls.reduce((sum, stall) => sum + stall.ms, 0) / 1000).toFixed(1)} s in total`);
+      console.table(Object.fromEntries(Object.entries(this.timings).map(([phase, value]) => [phase, { ms: ms(value!) }])));
+      console.table(Object.fromEntries(Object.entries(this.operationsMs).sort((a, b) => b[1] - a[1]).map(([name, value]) => [name, { ms: ms(value) }])));
+      if (this.stalls.length) console.table(this.stalls);
+      // One line to copy back for profiling.
+      console.info('[loading] report JSON', JSON.stringify({ ...report, resources: report.resources.filter(entry => entry.durationMs > 200) }));
+    }
   }
 }

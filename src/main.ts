@@ -228,6 +228,7 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
     showBootError(error, () => void startStairwell(launch));
     console.error(error);
   } finally {
+    loadProgress.dispose();
     releasePreloads();
     if (preparingStairwell === id) preparingStairwell = undefined;
     if (activePreparationAbort === preparation) activePreparationAbort = undefined;

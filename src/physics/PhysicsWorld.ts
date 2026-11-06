@@ -45,9 +45,13 @@ export class PhysicsWorld {
   readonly world: RAPIER.World;
   private readonly environmentBodies = new Set<number>();
   private readonly environmentKinds = new Map<number, StaticCollider['kind']>();
+  // Runs inside Rapier queries: it must never throw back into wasm (see
+  // CharacterEnvironment.nearbyBoxes), so stale or missing colliders are rejected.
   isEnvironmentCollider = (collider: RAPIER.Collider): boolean => {
-    const body = collider.parent();
-    return !!body && this.environmentBodies.has(body.handle) && collider.isEnabled() && !collider.isSensor();
+    try {
+      const body = collider?.parent();
+      return !!body && this.environmentBodies.has(body.handle) && collider.isEnabled() && !collider.isSensor();
+    } catch { return false; }
   };
   isInteractionObstacle = (collider: RAPIER.Collider): boolean => this.isEnvironmentCollider(collider)
     || (!collider.isSensor() && ((collider.collisionGroups() >>> 16) & 0x4000) !== 0);
@@ -310,7 +314,10 @@ export class PhysicsWorld {
     if (!body) return false;
     for (let i = 0; i < body.numColliders(); i++) this.environmentKinds.delete(body.collider(i).handle);
     this.environmentBodies.delete(body.handle);
-    this.world.removeRigidBody(body);
+    // A failed removal must not abort the caller's teardown (menu return);
+    // World.free() reclaims the body with the rest of the world.
+    try { this.world.removeRigidBody(body); }
+    catch (error) { console.warn('[physics] chunk body left for world teardown', key, error); }
     if (this.environmentKinds.size === 0) this.emptyChunkIndexPending = true;
     this.chunkBodies.delete(key);
     this.chunkColliders.delete(key);
