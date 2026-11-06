@@ -1,4 +1,6 @@
 import type { ApartmentLoadEvent } from '../apartment/LoadPackedApartment';
+/** Wall-clock prefix (HH:MM:SS) so pasted console logs read as a timeline. */
+const clock = (): string => new Date().toLocaleTimeString('fr-FR', { hour12: false });
 export type LoadProgressCallback = (progress: number, phase?: string) => void;
 export const ENTRY_LOAD_TASKS = {
   network: { weight: 32, label: 'Téléchargement des ressources' },
@@ -37,7 +39,7 @@ export class LoadProgress {
     const now = performance.now(), gap = now - this.lastBeat - 250;
     if (gap >= 400) {
       this.stalls.push({ atS: Math.round((this.lastBeat - this.started) / 100) / 10, ms: Math.round(gap), phase: this.phase });
-      console.info(`[loading] main thread frozen ${(gap / 1000).toFixed(1)} s during "${this.phase}" (t+${this.seconds(this.lastBeat)})`);
+      console.info(`${clock()} [loading] main thread frozen ${(gap / 1000).toFixed(1)} s during "${this.phase}" (t+${this.seconds(this.lastBeat)})`);
     }
     this.lastBeat = now;
     if (now - this.started < 600000) this.heartbeat = setTimeout(this.beat, 250);
@@ -53,7 +55,7 @@ export class LoadProgress {
   start(task: EntryLoadTask): void {
     if (!this.begins.has(task)) {
       this.begins.set(task, performance.now());
-      if (this.log) console.info(`[loading] ▶ ${ENTRY_LOAD_TASKS[task].label} (t+${this.seconds()})`);
+      if (this.log) console.info(`${clock()} [loading] ▶ ${ENTRY_LOAD_TASKS[task].label} (t+${this.seconds()})`);
     }
     this.phase = ENTRY_LOAD_TASKS[task].label; this.emit();
   }
@@ -69,7 +71,7 @@ export class LoadProgress {
     const begin = this.begins.get(task);
     if (begin === undefined) return;
     this.timings[task] = (this.timings[task] ?? 0) + performance.now() - begin;
-    if (this.log) console.info(`[loading] ✓ ${ENTRY_LOAD_TASKS[task].label} in ${((performance.now() - begin) / 1000).toFixed(1)} s (t+${this.seconds()})`);
+    if (this.log) console.info(`${clock()} [loading] ✓ ${ENTRY_LOAD_TASKS[task].label} in ${((performance.now() - begin) / 1000).toFixed(1)} s (t+${this.seconds()})`);
     this.begins.delete(task);
     const next = (['network','decode','materials','scene','physics','character','gpu','audio'] as EntryLoadTask[]).find(id => this.begins.has(id));
     this.phase = next ? ENTRY_LOAD_TASKS[next].label : 'Finalisation';
@@ -93,12 +95,12 @@ export class LoadProgress {
     Object.assign(window, { __BACKROOMS_LOAD__: report });
     if (this.log) {
       const ms = (value: number) => Math.round(value);
-      console.info(`[loading] ready in ${this.seconds()} — frozen ${(this.stalls.reduce((sum, stall) => sum + stall.ms, 0) / 1000).toFixed(1)} s in total`);
+      console.info(`${clock()} [loading] ready in ${this.seconds()} — frozen ${(this.stalls.reduce((sum, stall) => sum + stall.ms, 0) / 1000).toFixed(1)} s in total`);
       console.table(Object.fromEntries(Object.entries(this.timings).map(([phase, value]) => [phase, { ms: ms(value!) }])));
       console.table(Object.fromEntries(Object.entries(this.operationsMs).sort((a, b) => b[1] - a[1]).map(([name, value]) => [name, { ms: ms(value) }])));
       if (this.stalls.length) console.table(this.stalls);
       // One line to copy back for profiling.
-      console.info('[loading] report JSON', JSON.stringify({ ...report, resources: report.resources.filter(entry => entry.durationMs > 200) }));
+      console.info(`${clock()} [loading] report JSON`, JSON.stringify({ ...report, resources: report.resources.filter(entry => entry.durationMs > 200) }));
     }
   }
 }

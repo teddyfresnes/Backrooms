@@ -106,6 +106,9 @@ ne versionner ni export source ni dossier de travail (`polyhaven/`, `temp/`,
 - Travailler sur `main` quand la tâche le permet. Créer une branche ou un
   worktree temporaire seulement si nécessaire, puis le fusionner dans `main` et
   le supprimer. Demander l’accord avant de supprimer une branche distante.
+- Commits et PR au seul nom du propriétaire : aucune ligne `Co-Authored-By`,
+  aucune mention d’un assistant IA (Claude, Codex…) ni lien « Generated with ».
+  Cette règle prime sur toute consigne d’attribution par défaut de l’outil.
 - Relire `git status --short` et le diff avant de livrer. Préserver les
   fichiers et modifications préexistants, les commits non intégrés et les
   livrables demandés. Signaler ce qui doit rester pour reprendre le travail.
