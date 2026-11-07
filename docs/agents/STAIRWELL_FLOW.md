@@ -60,7 +60,11 @@ Le rappel/recul utilise les datums et limites de `layout`, avec un appui sur le 
 réel de la première volée. Un réarmement spatial, distinct du cooldown et de
 `mailGaspPlayed`, évite les boucles à la frontière. Le gasp est consommé et
 sauvegardé dès le premier rappel dans cette zone ; la récupération n'en rejoue pas.
-L'enveloppe sort avant que `LetterReader` ouvre le texte. `arrivalState` et le flag
+L'enveloppe sort avant que `LetterReader` ouvre le texte (`MAILBOX_NOTE` : un mot
+de Chloé). `GiftParcel`, à côté du paillasson du dernier palier (collider
+`chloe-gift`, retiré avec la cage), doit être ouvert avant d'entrer : il donne
+`COMPASS_ID` (emplacement ordinaire, jamais déposé) et `GIFT_LETTER`. Le flag
+`giftOpened` est optionnel ; les anciennes sauvegardes déjà rentrées le valent. `arrivalState` et le flag
 sonore sont indépendants. Les anciens snapshots mail/home/done sans flag sont
 considérés comme déjà avertis ; les anciennes sauvegardes sans objectif le contournent.
 

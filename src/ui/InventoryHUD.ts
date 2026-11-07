@@ -19,6 +19,8 @@ export class InventoryHUD {
     for(const item of sources)this.sources.set(item.id,item.parts);
     this.icons.set(FLASHLIGHT_ID,inventoryObjectIcon([torch],true));this.last='';
   }
+  /** A quest item's icon from its own model (local frame, like the torch). */
+  setQuestIcon(id:string,model:THREE.Object3D):void{this.icons.set(id,inventoryObjectIcon([model],true));this.last='';}
   reveal():void{this.peek=1.7;this.accent=.3;}
   update(inventory:InventoryState,delta:number,visible:boolean,playing:boolean,_storeKey:string,_torchKey:string,reduced=false):void{
     this.element.hidden=!visible;if(playing){this.peek=Math.max(0,this.peek-delta);this.accent=Math.max(0,this.accent-delta);}

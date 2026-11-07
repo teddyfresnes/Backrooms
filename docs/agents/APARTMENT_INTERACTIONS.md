@@ -37,6 +37,13 @@ parlée et l'indication de course, respectant le remappage et Maj droite. Le tem
 sont des extensions optionnelles de l’historique v2. L’événement historique de
 panne reste l’autorité du PC et de la radio, même après le rallumage des lampes.
 
+Après la lampe, `FuseBox` (mur de l'entrée, sud de la porte) s'ouvre et se
+réarme en vain ; `CorridorStory.fuseTried/knockDone` (optionnels, déduits pour
+les anciennes sauvegardes) bloquent la sortie jusqu'à la remarque puis aux trois
+coups et au coup grave, joués seulement porte fermée. La boussole sélectionnée
+est tenue par `HeldItemPose` sur les deux rigs ; son aiguille s'affole selon
+`BacteriaEncounter.creatureProximity`.
+
 `RussianStairwellGame` possède les systèmes ci-dessous et les détruit avant
 `ImportedApartmentEnvironment` et `PhysicsWorld`. Les portes, voisins, judas,
 courrier et progression restent dans leurs modules précédents.

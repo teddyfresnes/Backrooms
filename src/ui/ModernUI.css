@@ -93,6 +93,9 @@
 .loading-screen, .boot-error { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; padding: 24px; background: #000; color: #d4d4cf; font: 400 13px var(--game-font); }
 .loading-screen.boot-shell { background: #000; place-items: center; }
 .loading-screen.boot-shell::before, .loading-screen.boot-shell::after { display: none; }
+.loading-screen.boot-shell.is-arriving .loading-screen-content { animation: boot-arrive 1.1s ease-out both; }
+@keyframes boot-arrive { from { opacity: 0; transform: translateY(6px); } 40% { opacity: 0; } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .loading-screen.boot-shell.is-arriving .loading-screen-content { animation-duration: .01s; } }
 .loading-screen-content { width: min(288px, 80vw); text-align: left; }
 .loading-screen-heading { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
 [data-loading-percent] { color: #eeeee7; font-variant-numeric: tabular-nums; }

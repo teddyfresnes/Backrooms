@@ -1,6 +1,9 @@
 export interface InventoryItem { id:string; label:string }
 export interface InventoryProgress {version:1;slots:(InventoryItem|null)[];selected:number;lampOn:boolean}
 export const FLASHLIGHT_ID='quest:flashlight';
+/** Chloé's compass: a quest item kept in an ordinary slot, never put down. */
+export const COMPASS_ID='quest:compass';
+export const isQuestItem=(id:string):boolean=>id===FLASHLIGHT_ID||id===COMPASS_ID;
 export const freshInventory=():InventoryProgress=>({version:1,slots:[null,null,null,null,null],selected:0,lampOn:false});
 export function sanitizeInventory(value:unknown):InventoryProgress|null {
   if(!value||typeof value!=='object'||Array.isArray(value))return null;const v=value as InventoryProgress;
@@ -16,11 +19,14 @@ export class InventoryState {
   constructor(saved?:InventoryProgress){this.state=saved?{...saved,slots:saved.slots.map(i=>i?{...i}:null)}:freshInventory();}
   get hasLamp():boolean{return this.state.slots[0]?.id===FLASHLIGHT_ID;}
   get equipped():InventoryItem|null{return this.state.slots[this.state.selected]??null;}
-  get storedIds():string[]{return this.state.slots.flatMap(i=>i&&i.id!==FLASHLIGHT_ID?[i.id]:[]);}
+  get storedIds():string[]{return this.state.slots.flatMap(i=>i&&!isQuestItem(i.id)?[i.id]:[]);}
+  get hasCompass():boolean{return this.state.slots.some(i=>i?.id===COMPASS_ID);}
+  /** Into the first free ordinary slot, selected so it is in hand at once. */
+  acquireCompass():boolean{if(this.hasCompass)return false;const slot=this.state.slots.findIndex((i,n)=>n>0&&!i);if(slot<0)return false;this.state.slots[slot]={id:COMPASS_ID,label:'Boussole de Chloé'};this.state.selected=slot;return true;}
   acquireLamp():boolean{if(this.hasLamp)return false;this.state.slots[0]={id:FLASHLIGHT_ID,label:'Lampe torche'};this.state.selected=0;return true;}
-  store(item:InventoryItem):boolean{if(this.state.slots.some(i=>i?.id===item.id)||item.id===FLASHLIGHT_ID)return false;const slot=this.state.slots.findIndex((i,n)=>n>0&&!i);if(slot<0)return false;this.state.slots[slot]={...item};this.state.selected=slot;return true;}
+  store(item:InventoryItem):boolean{if(this.state.slots.some(i=>i?.id===item.id)||isQuestItem(item.id))return false;const slot=this.state.slots.findIndex((i,n)=>n>0&&!i);if(slot<0)return false;this.state.slots[slot]={...item};this.state.selected=slot;return true;}
   select(delta:number):void {this.state.selected=(this.state.selected+Math.sign(delta)+5)%5;}
-  takeSelected():InventoryItem|null{if(this.state.selected===0)return null;const item=this.equipped;this.state.slots[this.state.selected]=null;return item;}
+  takeSelected():InventoryItem|null{if(this.state.selected===0||isQuestItem(this.equipped?.id??''))return null;const item=this.equipped;this.state.slots[this.state.selected]=null;return item;}
   toggleLamp():boolean{if(!this.hasLamp)return false;this.state.selected=0;this.state.lampOn=!this.state.lampOn;return true;}
   snapshot():InventoryProgress{return {...this.state,slots:this.state.slots.map(i=>i?{...i}:null)};}
 }

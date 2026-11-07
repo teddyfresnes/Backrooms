@@ -15,7 +15,8 @@ it('supports primary AZERTY/QWERTY and fixed physical alternatives with Num Lock
     for(const [code,printed,axis,value] of [['ArrowUp','ArrowUp','forward',1],['ArrowDown','ArrowDown','forward',-1],['ArrowLeft','ArrowLeft','right',-1],['ArrowRight','ArrowRight','right',1],['ShiftRight','Shift','sprint',true],['Digit0','à','crouch',true],['Numpad0','Insert','crouch',true],['Numpad0','0','crouch',true]] as const){
       expect(key(code,'keydown',printed).defaultPrevented).toBe(true);expect(input.axes[axis]).toBe(value);key(code,'keyup',printed);
     }
-    for(const code of ['Space','ControlLeft','ControlRight']){key(code);expect(input.consumeActionPress('jump')).toBe(true);expect(input.axes.crouch).toBe(false);key(code,'keyup');}
+    key('Space');expect(input.consumeActionPress('jump')).toBe(true);expect(input.axes.crouch).toBe(false);key('Space','keyup');
+    for(const code of ['ControlLeft','ControlRight']){key(code);expect(input.consumeActionPress('crouch')).toBe(true);expect(input.consumeActionPress('jump')).toBe(false);key(code,'keyup');}
     for(const printed of ['1','End']){key('Numpad1','keydown',printed);expect(input.consumeActionPress('interact')).toBe(true);key('Numpad1','keyup',printed);expect(input.consumeActionRelease('interact')).toBe(true);}
     key('KeyE','keydown','e');expect(input.consumeActionPress('interact')).toBe(true);key('KeyE','keyup','e');
   }
@@ -32,6 +33,6 @@ it('does not double-trigger repeats, leak input from fields/shadow DOM or retain
 it('keeps browser shortcuts available and releases the original physical letter when its printed key changes',()=>{
   const input=fixture();key('ControlLeft');const print=key('KeyP','keydown','p',window,{ctrlKey:true});expect(print.defaultPrevented).toBe(false);expect(input.axes.vertical).toBe(0);
   key('KeyZ','keydown','z');key('KeyZ','keyup','Z');expect(input.axes.forward).toBe(0);
-  const saved={...defaultControlBindings(),crouch:'ControlLeft',interact:'KeyU'};
-  expect(sanitizeControlBindings(saved)).toMatchObject({crouch:'Digit0',interact:'KeyU'});
+  const saved={...defaultControlBindings(),crouch:'Digit0',interact:'KeyU'};
+  expect(sanitizeControlBindings(saved)).toMatchObject({crouch:'ControlLeft',interact:'KeyU'});
 });

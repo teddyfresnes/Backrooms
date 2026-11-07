@@ -83,7 +83,7 @@ it('advances passive objects with one fixed driver while the computer is open', 
 
 it('hesitates only for a real exit attempt after the PC recovery, keeps an already-open leaf unchanged and permits initial entry',()=>{
   const probe=Object.create(RussianStairwellGame.prototype),say=vi.fn(),door={restoreState:vi.fn(),getState:()=>({progress:1,targetProgress:1})};
-  const inventory=new InventoryState();Object.assign(probe,{quest:{devices:{outageTriggered:false}},inventory,apartment:{doorCenter:new THREE.Vector3(-2,9.8,-2.7),floorY:8.67},exitReminderArmed:true,storyCaption:{say},door});
+  const inventory=new InventoryState();const corridorStory=new CorridorStory();Object.assign(probe,{quest:{devices:{outageTriggered:false}},inventory,corridorStory,apartment:{doorCenter:new THREE.Vector3(-2,9.8,-2.7),floorY:8.67},exitReminderArmed:true,storyCaption:{say},door});
   const p=new THREE.Vector3(-2.45,9.535,-2.7),m=new THREE.Vector3(.2,-.04,0);
   probe.constrainExit(p,m);expect(m.x).toBe(.2);expect(say).not.toHaveBeenCalled();
   probe.quest.devices.outageTriggered=true;probe.pcUse={isActive:true};probe.constrainExit(p,m);expect(m.x).toBe(.2);
@@ -91,6 +91,10 @@ it('hesitates only for a real exit attempt after the PC recovery, keeps an alrea
   for(let i=0;i<80;i++)probe.constrainExit(p,new THREE.Vector3(.2,0,0));expect(say).toHaveBeenCalledOnce();expect(door.restoreState).not.toHaveBeenCalled();expect(door.getState().progress).toBe(1);
   const entering=new THREE.Vector3(-.2,0,0);probe.constrainExit(p,entering);expect(entering.x).toBe(-.2);
   inventory.acquireLamp();const allowed=new THREE.Vector3(.2,0,0);probe.constrainExit(p,allowed);expect(allowed.x).toBe(.2);
+  // With the corridor story running, the lamp alone is not enough: the breakers and the knocks come first.
+  corridorStory.activate();probe.exitReminderArmed=true;const early=new THREE.Vector3(.2,0,0);probe.constrainExit(p,early);expect(early.x).toBeCloseTo(.07);
+  expect(say).toHaveBeenLastCalledWith(expect.stringContaining('tableau électrique'));
+  corridorStory.tryFuse();corridorStory.finishKnock();const free=new THREE.Vector3(.2,0,0);probe.constrainExit(p,free);expect(free.x).toBe(.2);
 });
 it('allows an older post-outage save outside the apartment to reopen the door and retrieve the lamp',()=>{
   const probe=Object.create(RussianStairwellGame.prototype);Object.assign(probe,{quest:{devices:{outageTriggered:true}},inventory:new InventoryState(),player:{position:new THREE.Vector3(-1,9.535,-2.7)},apartment:{doorCenter:new THREE.Vector3(-2,9.8,-2.7)},exitReminderArmed:true,storyCaption:{say:vi.fn()}});
@@ -100,6 +104,6 @@ it('mounts the replacement only once and preserves the outage history when resto
   const probe=Object.create(RussianStairwellGame.prototype),activate=vi.fn(),removeChunk=vi.fn(),setPower=vi.fn(),setOldPower=vi.fn();
   const scene=new THREE.Scene(),group=new THREE.Group(),neighbor=new THREE.Group();neighbor.name='east-neighbor-door-5-leaf';group.add(neighbor);
   Object.assign(probe,{quest:{devices:{outageTriggered:true,lightOn:true}},corridorStory:new CorridorStory(),corridor:{activate,setLights:vi.fn()},physics:{removeChunk,batchChunkChanges:(f:()=>void)=>f()},scene,environment:{group:new THREE.Group(),showPostOutage:vi.fn(),hideExterior:vi.fn(),setPowerAvailable:setOldPower},apartment:{group,setPowerAvailable:setPower,setInteriorLightsEnabled:vi.fn()},camera:new THREE.PerspectiveCamera(),playerCamera:new THREE.PerspectiveCamera(),settings:{brightness:1},root:document.createElement('div')});
-  probe.syncCorridor();probe.syncCorridor();expect(activate).toHaveBeenCalledOnce();expect(removeChunk.mock.calls.map(c=>c[0])).toEqual(['origin','stairwell-furniture']);expect(neighbor.visible).toBe(false);
+  probe.syncCorridor();probe.syncCorridor();expect(activate).toHaveBeenCalledOnce();expect(removeChunk.mock.calls.map(c=>c[0])).toEqual(['origin','stairwell-furniture','chloe-gift']);expect(neighbor.visible).toBe(false);
   probe.corridorStory.state.apartmentRelit=true;probe.applyApartmentPower();expect(setPower).toHaveBeenLastCalledWith(true);expect(setOldPower).toHaveBeenLastCalledWith(false);expect(probe.quest.devices.outageTriggered).toBe(true);
 });

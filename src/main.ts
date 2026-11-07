@@ -187,8 +187,11 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
       onRequestLoadGame: loadFromHistory,
       // Finish the current input/frame stack before disposing the stairwell
       // runtime that detected the E interaction.
+      // Out of a fall that ends on black: the loading screen fades in from it.
       onEnterBackrooms: () => queueMicrotask(() => void startBackrooms(
         { kind: 'new' },
+        true,
+        false,
         true,
       )),
     }, { deferEntry: !!intro, apartmentPreload: preload, loadProgress, skipArrival: () => !!intro?.wasSkipped });
@@ -239,6 +242,7 @@ async function startBackrooms(
   launch: { readonly kind: 'new' } | { readonly kind: 'load'; readonly save: BackroomsGameSave },
   autosaveOnReady = false,
   menuBackground = false,
+  fadeIn = false,
 ): Promise<void> {
   const id = ++transitionId;
   siteAudio.setMenuActive(false);
@@ -251,6 +255,7 @@ async function startBackrooms(
         ? 'Initialisation du menu'
         : 'Génération des Backrooms',
   );
+  if (fadeIn) boot.element.classList.add('is-arriving');
   let game: GameRuntime | null = null;
   try {
     // Paint the overlay before importing the runtime and generating its origin in the worker.

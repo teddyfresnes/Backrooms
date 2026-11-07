@@ -7,6 +7,7 @@ import type { Vec3Data } from '../world/types';
 import type { StoryHud } from '../ui/StoryHud';
 import type { BacteriaActor } from './BacteriaActor';
 import type { BacteriaAudio } from './BacteriaAudio';
+import { BackroomsBelow, BELOW_TOP_Y } from './BackroomsBelow';
 import {
   BACTERIA_SPAWN_DISTANCE,
   CALM_SECONDS,
@@ -57,14 +58,18 @@ const KILL_IMPACT = 0.24;
 const KILL_STRIKES = [KILL_IMPACT, 0.58, 0.84, 1.04, 1.22, 1.38, 1.52] as const;
 const KILL_CUT = 1.72;
 const ROLL_AXIS = new THREE.Vector3(0, 0, 1);
-/** Out in the dark street: the foot catches, the body hits the asphalt and
- * keeps going, through the ground, falling into the Backrooms. */
+/** Out in the dark street: the foot catches, the body hits the ground and
+ * keeps going, through it: a long fall in the black, turning over to see the
+ * yellow maze of the Backrooms far below, rushing up, then the cut. */
 const FALL_HIT = 0.4;
 const FALL_SINK = 0.5;
 const FALL_GRAVITY = 12;
-const FALL_TINT_START = 1.45;
-const FALL_CUT = 2.45;
-const FALL_END = 2.8;
+/** Looking back up at the hole, then turning over to face the drop. */
+const FALL_TURN_START = 1.25;
+const FALL_TURN_END = 2.25;
+/** Just under the wall tops: into a corridor, the light floods everything. */
+const FALL_CUT_DEPTH = 1.2;
+const FALL_FADE = 0.45;
 
 export interface BacteriaEncounterHost {
   readonly scene: THREE.Scene;
@@ -120,6 +125,8 @@ export interface BacteriaEncounterHost {
   openEscape(): void;
   /** Falling through the world: 0 (black void) .. 1 (the fluorescent yellow below). */
   setFallTint?(level: number): void;
+  /** Screen to black at the end of the fall (0..1), before the loading screen. */
+  setFade?(level: number): void;
   onRetry(checkpoint: Checkpoint): void;
   /** Through the hall door: hand over to the Backrooms. */
   onEscaped(): void;
@@ -195,6 +202,9 @@ export class BacteriaEncounter {
   private readonly fallForward = new THREE.Vector3();
   private readonly fallEuler = new THREE.Euler(0, 0, 0, 'YXZ');
   private fallYaw = 0;
+  /** Time into the fall when the camera reaches the maze (computed at the trip). */
+  private fallCut = 4;
+  private readonly below = new BackroomsBelow();
   private television?: {
     readonly object: THREE.Object3D; readonly parent: THREE.Object3D;
     readonly position: THREE.Vector3; readonly quaternion: THREE.Quaternion; readonly scale: THREE.Vector3;
@@ -211,8 +221,11 @@ export class BacteriaEncounter {
       .map(id => [id, new ChasePath(createEntryWaypoints(host.threshold, id))])) as Record<HideSpotId, ChasePath>;
     this.creatureLight.name = 'bacteria-creature-light';
     actor.setVisible(false);
-    host.scene.add(actor.root, this.creatureLight);
+    host.scene.add(actor.root, this.creatureLight, this.below.group);
   }
+
+  /** The maze under the street: compiled with the rest at load. */
+  get warmupRoots(): readonly THREE.Object3D[] { return [this.below.warmupRoot]; }
 
   /** True from the reveal until the outcome: no save, no portal, no other prompt. */
   get isActive(): boolean {
@@ -221,12 +234,20 @@ export class BacteriaEncounter {
 
   get isHidden(): boolean { return this.hidden; }
 
+  /** 0 (nowhere near) .. 1 (on top of the player): what drives Chloé's compass mad. */
+  get creatureProximity(): number {
+    if (this.phase === 'dormant' || this.phase === 'over' || this.phase === 'aftermath' || this.phase === 'dead' || !this.actor.root.visible) return 0;
+    const distance = this.monsterPosition.distanceTo(this.feet);
+    return 1 - THREE.MathUtils.smoothstep(distance, 3, 24);
+  }
+
   /** How badly the "camera" degrades, 0..1: rises as the creature gets close
    * or fills the view, and peaks during the kill. Drives the VHS layer. */
   get cameraDisturbance(): number {
     if (this.phase === 'escaped') {
       const t = this.phaseTime;
-      return t < FALL_SINK ? 0.3 + 0.45 * smooth(t / FALL_HIT) : Math.min(0.9, 0.72 + 0.18 * smooth((t - FALL_SINK) / 1.2));
+      // Heavy through the ground, then clearing so the maze below reads.
+      return t < FALL_SINK ? 0.3 + 0.45 * smooth(t / FALL_HIT) : THREE.MathUtils.lerp(0.78, 0.36, smooth((t - FALL_TURN_START) / 1.6));
     }
     if (this.phase === 'jumpscare') return Math.min(1, 0.74 + this.hitKick * 0.18 + Math.abs(Math.sin(this.phaseTime * 19)) * 0.08);
     if (this.phase === 'dormant' || this.phase === 'dead' || this.phase === 'over' || this.phase === 'aftermath') return 0;
@@ -363,15 +384,20 @@ export class BacteriaEncounter {
       const t = this.phaseTime;
       const trip = smooth(t / FALL_HIT);
       const sink = Math.max(0, t - FALL_SINK);
-      // Pitched at the asphalt, then through it, turning over to see the hole recede.
+      // Pitched at the ground, then through it: looking back up at the hole
+      // receding (and what stands over it), then turning over to face the drop.
       camera.position.copy(this.fallFrom).addScaledVector(this.fallForward, 0.95 * trip + 0.7 * smooth(sink / 0.7));
       camera.position.y = this.fallFrom.y - 1.2 * trip - 0.5 * FALL_GRAVITY * sink * sink;
-      const pitch = THREE.MathUtils.lerp(-0.12 - 0.95 * trip, 1.1, smooth(sink / 0.95));
-      this.fallEuler.set(pitch, this.fallYaw + this.hitSign * 0.3 * sink, this.hitSign * (0.45 * trip + 0.55 * sink), 'YXZ');
+      const lookingUp = THREE.MathUtils.lerp(-0.12 - 0.95 * trip, 1.1, smooth(sink / 0.95));
+      const pitch = THREE.MathUtils.lerp(lookingUp, -1.5, smooth((t - FALL_TURN_START) / (FALL_TURN_END - FALL_TURN_START)));
+      // A slow tumble around the view axis once facing down.
+      const roll = this.hitSign * (0.45 * trip + 0.3 * sink);
+      this.fallEuler.set(pitch, this.fallYaw + this.hitSign * 0.25 * sink, roll, 'YXZ');
       camera.quaternion.setFromEuler(this.fallEuler);
-      camera.fov = base + 8 * trip + 26 * smooth(sink / 1.6);
+      camera.fov = base + 8 * trip + 22 * smooth(sink / 1.6) + 10 * smooth((t - (this.fallCut - 1.2)) / 1.2);
       camera.near = 0.03;
       camera.updateProjectionMatrix();
+      this.below.update(t >= FALL_SINK, camera.position.y);
     }
     if (this.shakeLevel > 0) {
       // A long lens magnifies every tremor: keep the shake proportional to the view.
@@ -845,10 +871,15 @@ export class BacteriaEncounter {
     this.fallForward.normalize();
     this.fallYaw = Math.atan2(-this.fallForward.x, -this.fallForward.z);
     this.hitSign = this.noise() < 0.5 ? -1 : 1;
+    // The drift ahead is small: centre the open cell under where the body lands.
+    this.below.placeUnder(this.fallFrom.x + this.fallForward.x * 1.65, this.fallFrom.z + this.fallForward.z * 1.65);
+    const drop = this.fallFrom.y - 1.2 - (BELOW_TOP_Y - FALL_CUT_DEPTH);
+    this.fallCut = FALL_SINK + Math.sqrt(Math.max(1, drop) / (0.5 * FALL_GRAVITY));
   }
 
   /** The trip, the hit, then the noclip: down through the street while it
-   * looms over the hole, until the void turns fluorescent yellow. */
+   * looms over the hole, a long fall in the dark toward the yellow maze, and
+   * the cut as the body drops between its walls. */
   private updateEscaped(dt: number): void {
     const host = this.host;
     const t = this.phaseTime;
@@ -858,11 +889,12 @@ export class BacteriaEncounter {
       this.shakeLevel = 0.8;
     }
     if (crossed(t, dt, FALL_SINK)) {
-      // Under the ground now: the body left on the asphalt must not be seen from below.
+      // Under the ground now: the body left on the ground must not be seen from below.
       host.setAvatarHidden(true);
       if (this.actor.root.visible) this.sound.roar();
     }
     if (crossed(t, dt, 1.05)) this.sound.stopAll(1.4);
+    if (crossed(t, dt, FALL_TURN_END + 0.4)) this.actor.setVisible(false);
     if (this.actor.root.visible) {
       // It reaches the spot where you went down and stares into the dark after you.
       const flat = Math.hypot(this.feet.x - this.monsterPosition.x, this.feet.z - this.monsterPosition.z);
@@ -870,9 +902,15 @@ export class BacteriaEncounter {
       this.actor.setMotion(flat > 1.3 ? 'run' : 'idle');
       this.actor.setLookTarget(host.renderCamera.position);
     }
-    host.setFallTint?.(smooth((t - FALL_TINT_START) / (FALL_CUT - FALL_TINT_START)));
-    if (crossed(t, dt, FALL_CUT)) host.hud.pulseFlash(1);
-    if (t >= FALL_END) {
+    const sink = Math.max(0, t - FALL_SINK);
+    this.sound.setFallWind(t < this.fallCut ? smooth(sink / 1.4) * (0.55 + 0.45 * smooth((t - FALL_TURN_END) / (this.fallCut - FALL_TURN_END))) : 0);
+    // The air turns yellow only in the last instants, as the light below swallows the view.
+    host.setFallTint?.(smooth((t - (this.fallCut - 0.35)) / 0.35));
+    this.shakeLevel = Math.max(this.shakeLevel, 0.18 * smooth(sink / 2));
+    if (crossed(t, dt, this.fallCut)) { host.hud.pulseFlash(0.8); this.sound.stopFallWind(FALL_FADE); }
+    host.setFade?.(smooth((t - this.fallCut) / FALL_FADE));
+    if (t >= this.fallCut + FALL_FADE + 0.12) {
+      this.below.update(false, 0);
       this.restoreWorld();
       this.setPhase('over');
       host.onEscaped();
@@ -1268,5 +1306,6 @@ export class BacteriaEncounter {
     this.restoreTelevision();
     this.actor.dispose();
     this.creatureLight.removeFromParent();
+    this.below.dispose();
   }
 }

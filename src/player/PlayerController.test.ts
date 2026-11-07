@@ -501,6 +501,55 @@ describe('PlayerController locomotion', () => {
   });
 });
 
+describe('PlayerController running contact', () => {
+  /** Flat ground; an optional wall at z = wallZ stops all forward progress. */
+  class GroundPhysics extends FakePhysics {
+    wallZ = Number.NEGATIVE_INFINITY;
+    override move(delta: Vec3Data): CharacterMotionResult {
+      this.moveDeltas.push({ ...delta });
+      const z = Math.max(this.wallZ, this.position.z + delta.z);
+      const moved = new THREE.Vector3(delta.x, 0, z - this.position.z);
+      this.position.add(moved);
+      return { position: this.position, grounded: true, moved };
+    }
+  }
+  const run = (controller: PlayerController, ticks: number) => { for (let tick = 0; tick < ticks; tick += 1) controller.fixedUpdate(1 / 60); };
+
+  it('slides when crouch is pressed during a sprint', () => {
+    const physics = new GroundPhysics({ x: 0, y: 0.865, z: 0 });
+    const { controller } = createController(physics);
+    inputState.axes.forward = 1; inputState.axes.sprint = true; inputState.down.add('ShiftLeft');
+    run(controller, 60);
+    inputState.presses.add('ControlLeft');
+    run(controller, 1);
+    expect(controller.getDebugState().sliding).toBe(true);
+    controller.dispose();
+  });
+
+  it('stands against a wall instead of running in place, without restarting the sprint loop', () => {
+    const physics = new GroundPhysics({ x: 0, y: 0.865, z: 0 });
+    const states: string[] = [];
+    const { controller } = createController(physics);
+    (controller as unknown as { callbacks: { onMovementAudioState(state: string): void } }).callbacks.onMovementAudioState = state => states.push(state);
+    inputState.axes.forward = 1; inputState.axes.sprint = true; inputState.down.add('ShiftLeft');
+    run(controller, 50);
+    physics.wallZ = physics.position.z - 0.02;
+    states.length = 0;
+    run(controller, 120);
+    expect(controller.getMovementIntent().forward).toBe(0);
+    expect(controller.getInputIntent().forward).toBe(1);
+    expect(controller.getDebugState().horizontalSpeed).toBe(0);
+    expect(controller.getDebugState().sprinting).toBe(false);
+    const changes = states.filter((state, index) => index > 0 && state !== states[index - 1]).length;
+    expect(changes).toBeLessThanOrEqual(1);
+    expect(states.at(-1)).toBe('idle');
+    physics.wallZ = Number.NEGATIVE_INFINITY;
+    run(controller, 30);
+    expect(controller.getMovementIntent().forward).toBe(1);
+    controller.dispose();
+  });
+});
+
 describe('PlayerController look state', () => {
   it('round-trips the internal normalized look quaternion independently from camera roll', () => {
     const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });

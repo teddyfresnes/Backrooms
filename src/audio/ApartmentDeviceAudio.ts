@@ -56,6 +56,24 @@ export class ApartmentDeviceAudio {
   fixtureClick(position: Vec3Data): void {
     const now=this.bus.context.currentTime;if(now-this.lastFixtureClick<.08)return;this.lastFixtureClick=now;this.burst(position,.045,.022,1600,'lowpass');
   }
+  /** A modular breaker lever snapping up: a short plastic clack. */
+  breakerFlip(position: Vec3Data): void {
+    if (this.disposed) return;
+    this.burst(position, .05, .09, 3400, 'bandpass'); this.burst(position, .03, .05, 900, 'lowpass');
+  }
+  /** Every lever thrown back at once: a hard double clack and a dry electric snap. */
+  breakerTrip(position: Vec3Data): void {
+    if (this.disposed) return;
+    this.burst(position, .09, .22, 2600, 'bandpass'); this.burst(position, .16, .14, 5200, 'highpass');
+    this.tone(position, 180, 60, .12, .03);
+  }
+  /** The deep, wrong knock that follows: felt more than heard. */
+  deepKnock(position: Vec3Data): void {
+    if (this.disposed) return;
+    const range = { refDistance: 3, maxDistance: 40, rolloff: .6 };
+    this.burst(position, .7, .9, 160, 'lowpass', range);
+    this.tone(position, 58, 31, 1.3, .32, range); this.tone(position, 92, 44, .55, .12, range);
+  }
   chairMotion(position: Vec3Data): void {
     const now=this.bus.context.currentTime;if(now-this.lastChairMotion<.2)return;this.lastChairMotion=now;
     this.burst(position,.32,.045,650,'lowpass');

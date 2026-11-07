@@ -48,6 +48,7 @@ const NOCLIP_SPRINT_SPEED = 22;
 const MIN_LOOK_QUATERNION_LENGTH = 1e-8;
 const SLOW_INTERACTION_HOLD = 1;
 const EPSILON = 1e-6;
+const WALL_STALL_SECONDS = 0.12;
 // Three PointerLockControls 0.185.1 applies yaw at 0.002 rad per movementX pixel.
 // Keep a continuous copy so third-person aiming never depends on wrapped Euler/vector extraction.
 const POINTER_LOCK_RADIANS_PER_PIXEL = 0.002;
@@ -98,6 +99,11 @@ export class PlayerController {
   private sprintSuppressed = false;
   private movementSpeedScale = 1;
   private blockedMotionFraction = 0;
+  /** Seconds spent pushing into an obstacle without real progress (running into a wall). */
+  private wallStall = 0;
+  /** Debounced sprint-loop state: grounded/sprint flicker on steps or walls must not restart the loop. */
+  private movementAudioState: 'idle' | 'sprint' = 'idle';
+  private movementAudioPending = 0;
   private crouching = false;
   private crouchRequested = false;
   private targetStrafeLean = 0;
@@ -504,8 +510,16 @@ export class PlayerController {
   /** Read-only movement intent for animation selection; PlayerController remains the sole input owner. */
   getMovementIntent(): { forward: number; right: number; sprint: boolean; crouch: boolean } {
     const axes = this.input.axes;
+    // Pressed into a wall: the body stands against it instead of running in place.
+    if (this.isWallStalled) return { forward: 0, right: 0, sprint: false, crouch: axes.crouch };
     return { forward: axes.forward, right: axes.right, sprint: this.canSprint && axes.sprint && !this.sprintSuppressed, crouch: axes.crouch };
   }
+  /** Raw held direction, even against a wall (scripted gates react to the push itself). */
+  getInputIntent(): { forward: number; right: number } {
+    const axes = this.input.axes;
+    return { forward: axes.forward, right: axes.right };
+  }
+  private get isWallStalled(): boolean { return this.wallStall >= WALL_STALL_SECONDS; }
   /** Read-only control evidence used by the dev pit-stumble model. */
   getPitControlIntent(): { forward: number; right: number; jumpGraceSeconds: number } {
     const axes = this.input.axes;
@@ -778,7 +792,7 @@ export class PlayerController {
       x: this.position.x, y: this.position.y, z: this.position.z,
       position: { x: this.position.x, y: this.position.y, z: this.position.z },
       velocity: { x: this.velocity.x, y: verticalSpeed, z: this.velocity.z },
-      horizontalSpeed: Math.hypot(this.velocity.x, this.velocity.z),
+      horizontalSpeed: this.isWallStalled ? 0 : Math.hypot(this.velocity.x, this.velocity.z),
       verticalSpeed,
       horizontalAcceleration: this.horizontalAcceleration,
       grounded: this.grounded,
@@ -937,8 +951,25 @@ export class PlayerController {
 
   fixedUpdate(delta: number): void {
     this.updateMovement(delta);
-    this.callbacks.onMovementAudioState?.(this.gameplayInputEnabled && this.grounded && this.sprinting ? 'sprint' : 'idle');
+    this.updateMovementAudioState(delta);
     this.externalMotion.set(0, 0, 0);
+  }
+
+  /**
+   * The sprint loop follows a debounced state: a stride over a step riser or a
+   * shoulder against a wall flickers grounded/sprinting for a tick or two, and
+   * restarting the loop each time is heard as a stutter.
+   */
+  private updateMovementAudioState(delta: number): void {
+    const wanted: 'idle' | 'sprint' = this.gameplayInputEnabled && this.sprinting && !this.isWallStalled
+      && (this.grounded || this.airborneTime < 0.25) ? 'sprint' : 'idle';
+    if (!this.gameplayInputEnabled) { this.movementAudioPending = 0; this.movementAudioState = 'idle'; this.callbacks.onMovementAudioState?.('idle'); return; }
+    if (wanted === this.movementAudioState) this.movementAudioPending = 0;
+    else {
+      this.movementAudioPending += delta;
+      if (this.movementAudioPending >= (wanted === 'sprint' ? 0.06 : 0.2)) { this.movementAudioState = wanted; this.movementAudioPending = 0; }
+    }
+    this.callbacks.onMovementAudioState?.(this.movementAudioState);
   }
 
   private movementConstraint?: (position:THREE.Vector3, movement:THREE.Vector3)=>void;
@@ -1158,6 +1189,7 @@ export class PlayerController {
     const horizontalDistance = Math.hypot(result.moved.x, result.moved.z);
     this.blockedMotionFraction = 0;
     this.handleBlockedMotion(delta, intendedX, intendedZ, result.moved.x, result.moved.z);
+    this.updateWallStall(delta, intendedX, intendedZ, horizontalDistance);
     // Only a collision may trim the recorded additive step. A free strafe can
     // oppose one component of that step; it still has to be removed next tick,
     // otherwise that component accumulates and silently brakes the orbit.
@@ -1201,7 +1233,7 @@ export class PlayerController {
       this.anchorSafePosition(this.position);
     }
 
-    this.moving = horizontalDistance > 0.00015 && this.grounded;
+    this.moving = horizontalDistance > (this.isWallStalled ? 0.35 * delta : 0.00015) && this.grounded;
     this.sprinting = sprintRequested
       && axes.forward > 0
       && !this.crouching
@@ -1608,6 +1640,27 @@ export class PlayerController {
     const lateralSign = Math.sign(directionX * this.right.x + directionZ * this.right.z) || 1;
     this.collisionRoll += lateralSign * 0.011 * impact;
     if (this.slideTimer > 0) this.slideTimer = Math.min(this.slideTimer, 0.1);
+  }
+
+  /**
+   * Running straight into a wall: the KCC only grinds a few millimetres along
+   * it while the input keeps rebuilding speed, which read as running in place
+   * with a stuttering sprint loop. After a short stall the velocity follows
+   * what really moved, the gait stops and the intent reads as standing.
+   */
+  private updateWallStall(delta: number, intendedX: number, intendedZ: number, movedDistance: number): void {
+    const intended = Math.hypot(intendedX, intendedZ);
+    // Input held, almost nothing gained. Once stalled the velocity is tiny, so
+    // the small absolute floor keeps the stall latched until the body really moves.
+    const pushing = this.grounded && delta > 0
+      && (this.input.axes.forward !== 0 || this.input.axes.right !== 0)
+      && movedDistance < Math.max(0.25 * intended, 0.6 * delta);
+    this.wallStall = pushing ? this.wallStall + delta : 0;
+    if (!this.isWallStalled) return;
+    const scale = intended > EPSILON ? Math.min(1, movedDistance / intended) : 0;
+    this.velocity.x *= scale;
+    this.velocity.z *= scale;
+    this.sprintBurst = 0;
   }
 
   private updateAccelerationCameraTargets(delta: number): void {

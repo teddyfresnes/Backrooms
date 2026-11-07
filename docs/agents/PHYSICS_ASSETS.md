@@ -131,11 +131,14 @@ autres touches gardent leur `KeyboardEvent.code` physique. `ExperienceUI`
 garantit une touche unique par action, puis `Game` transmet la configuration à
 `PlayerController` et `InputManager`. Les variantes gauche/droite de Maj, Ctrl
 et Alt sont traitées comme une même touche pour les conflits et à l’exécution.
-`actionKeyCodes` ajoute les flèches, Ctrl/saut, 0 et Numpad0/accroupissement,
+`actionKeyCodes` ajoute les flèches, 0 et Numpad0/accroupissement (Ctrl gauche
+est la touche principale ; s'accroupir en sprint lance la glissade),
 Maj droite/course et Numpad1/interaction, y compris dans les gestes modaux et
 le relevé. Les codes physiques du pavé priment sur leur libellé Verr. Num.
-L’ancienne affectation Ctrl/accroupissement migre vers 0 ; les autres réglages
-restent conservés. Les entrées des champs et les raccourcis hors jeu n’alimentent
+Un accroupissement enregistré sur 0 (période Ctrl/saut) migre vers Ctrl ; les
+autres réglages restent conservés. Pousser contre un obstacle sans progresser
+(`wallStall`) aligne la vitesse sur le déplacement réel et annule l'intention
+animée ; la boucle de course suit un état anti-rebond (marches, murs). Les entrées des champs et les raccourcis hors jeu n’alimentent
 jamais les actions, et blur/onglet masqué vident les touches maintenues.
 
 ## Props et assets

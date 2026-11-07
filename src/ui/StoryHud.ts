@@ -16,6 +16,7 @@ export class StoryHud {
   private readonly hintText = document.createElement('span');
   private readonly holdBar = document.createElement('i');
   private readonly flash = document.createElement('div');
+  private readonly fade = document.createElement('div');
   private readonly death = document.createElement('section');
   private readonly deathDetail = document.createElement('p');
   private hintRemaining = 0;
@@ -36,13 +37,14 @@ export class StoryHud {
     this.holdBar.hidden = true;
     this.hint.append(this.hintKey, this.hintText, this.holdBar);
     this.flash.className = 'story-flash';
+    this.fade.className = 'story-fade';
     this.death.className = 'story-death';
     this.death.hidden = true;
     const title = document.createElement('h2');
     title.textContent = 'Il t’a eu.';
     this.deathDetail.textContent = 'Retour dans le hall…';
     this.death.append(title, this.deathDetail);
-    this.root.append(this.quest, this.hint, this.flash, this.death);
+    this.root.append(this.quest, this.hint, this.flash, this.fade, this.death);
     container.append(this.root);
   }
 
@@ -80,6 +82,9 @@ export class StoryHud {
 
   /** Red/white strobe of the jumpscare (0..1, decays by itself). */
   pulseFlash(level: number): void { this.flashLevel = Math.max(this.flashLevel, Math.min(1, level)); }
+
+  /** Plain black over everything (0..1), e.g. the end of the fall before loading. */
+  setFade(level: number): void { this.fade.style.opacity = Math.min(1, Math.max(0, level)).toFixed(3); }
 
   showDeath(visible: boolean, detail?: string): void {
     this.death.hidden = !visible;

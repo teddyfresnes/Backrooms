@@ -24,12 +24,17 @@ export interface CorridorProgress {
   reactionPosition?: Vec3Data; reactionYaw?: number;
   entryConsumed?: boolean; waveStart?: number;
   bacteriaSurvived?: boolean;
+  /** The breakers were thrown back on, in vain (after the lamp). */
+  fuseTried?: boolean;
+  /** The knocks at the door are over (or were skipped, the door being open). */
+  knockDone?: boolean;
 }
 export const freshCorridor = (): CorridorProgress => ({version:1,active:false,distance:0,triggered:false,elapsed:0,returned:false,apartmentRelit:false,entryConsumed:false});
 export function sanitizeCorridor(value: unknown): CorridorProgress | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const v=value as CorridorProgress;
   if(v.bacteriaSurvived!==undefined&&(typeof v.bacteriaSurvived!=='boolean'||(v.bacteriaSurvived&&!v.returned)))return null;
+  if(v.fuseTried!==undefined&&typeof v.fuseTried!=='boolean'||v.knockDone!==undefined&&(typeof v.knockDone!=='boolean'||(v.knockDone&&!v.fuseTried)))return null;
   if(v.entryConsumed!==undefined&&typeof v.entryConsumed!=='boolean'||v.waveStart!==undefined&&(!Number.isInteger(v.waveStart)||v.waveStart<0||v.waveStart>=CORRIDOR_LAMPS))return null;
   if(v.version!==1 || !['active','triggered','returned','apartmentRelit'].every(k=>typeof (v as unknown as Record<string,unknown>)[k]==='boolean')
     || !Number.isFinite(v.distance)||v.distance<0||v.distance>CORRIDOR_LENGTH+1
@@ -44,6 +49,15 @@ export class CorridorStory {
   readonly state: CorridorProgress;
   private previousPosition?:Vec3Data;
   constructor(saved?: CorridorProgress){this.state=saved?{...saved,entryConsumed:saved.entryConsumed??saved.distance>.7,...(saved.reactionPosition?{reactionPosition:{...saved.reactionPosition}}:{})}:freshCorridor();}
+  /** Saves from before the breaker scene, already out in the corridor: it happened. */
+  private get legacyPastFuse():boolean{return this.state.fuseTried===undefined&&(!!this.state.entryConsumed||this.state.triggered);}
+  get fuseDone():boolean{return this.state.fuseTried===true||this.legacyPastFuse;}
+  get knockDone():boolean{return this.state.knockDone===true||this.legacyPastFuse;}
+  /** First failed re-arm: returns true once. */
+  tryFuse():boolean{if(this.fuseDone)return false;this.state.fuseTried=true;return true;}
+  finishKnock():void{if(this.state.fuseTried)this.state.knockDone=true;}
+  /** Lamp taken but the breaker scene (and the knocks) not over: the door stays a hesitation. */
+  get beforeExploring():boolean{return this.state.active&&!this.state.triggered&&!(this.fuseDone&&this.knockDone);}
   activate(): boolean {if(this.state.active)return false;this.state.active=true;return true;}
   observe(position:Vec3Data,door:Vec3Data,hasLamp:boolean,yaw:number):boolean {
     const s=this.state;if(!s.active||!hasLamp)return false;
@@ -88,7 +102,10 @@ export class CorridorStory {
     if(!this.state.active)return null;
     if(!hasLamp)return 'Récupérer la lampe torche sur le bureau';
     if(this.state.bacteriaSurvived)return 'Descendre jusqu’à la porte du hall.';
-    if(!this.state.triggered)return 'Sortir de l’appartement et explorer le couloir';
+    if(!this.state.triggered){
+      if(!this.fuseDone)return 'Trouver le tableau électrique et réarmer les disjoncteurs.';
+      return this.knockDone?'Sortir chercher les voisins.':null;
+    }
     return this.finished?null:this.state.returned?'Observer les lumières au fond du couloir':'… D’où vient cette lumière ?';
   }
   snapshot():CorridorProgress{return {...this.state,...(this.state.reactionPosition?{reactionPosition:{...this.state.reactionPosition}}:{})};}

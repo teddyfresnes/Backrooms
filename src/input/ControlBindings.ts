@@ -20,7 +20,7 @@ const azertyBindings: ControlBindings = {
   right: 'KeyD',
   sprint: 'ShiftLeft',
   jump: 'Space',
-  crouch: 'Digit0',
+  crouch: 'ControlLeft',
   interact: 'KeyE',
 };
 
@@ -108,7 +108,7 @@ export const equivalentKeyCodes = (code: string): readonly string[] => {
 /** Fixed physical alternatives coexist with the configurable main bindings. */
 export const secondaryControlCodes: Readonly<Record<ControlAction, readonly string[]>> = {
   forward: ['ArrowUp'], backward: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
-  sprint: ['ShiftRight'], jump: ['ControlLeft', 'ControlRight'],
+  sprint: ['ShiftRight'], jump: [],
   crouch: ['Digit0', 'Numpad0'], interact: ['Numpad1'],
 };
 export const actionKeyCodes = (bindings: ControlBindings, action: ControlAction): readonly string[] => {
@@ -138,9 +138,10 @@ export const sanitizeControlBindings = (
   const candidate = typeof value === 'object' && value !== null
     ? { ...value as Partial<Record<ControlAction, unknown>> }
     : {};
-  // v46 and earlier used Ctrl for crouch. The newly requested Ctrl jump owns
-  // that physical key; migrate only this conflict, keeping other saved keys.
-  if (candidate.crouch === 'ControlLeft' || candidate.crouch === 'ControlRight') candidate.crouch = 'Digit0';
+  // Ctrl is the main crouch key again; 0 / Pavé 0 stay as fixed alternatives.
+  // Saves from the Ctrl-jump period stored crouch on 0, which would leave Ctrl
+  // inert: move it back, keeping every other saved key.
+  if (candidate.crouch === 'Digit0' || candidate.crouch === 'Numpad0') candidate.crouch = 'ControlLeft';
   const requested = controlActions.map((action) => candidate[action]);
   const valid = requested.every((code): code is string => (
     typeof code === 'string' && isBindableCode(code)

@@ -78,7 +78,7 @@ function fixture() {
   player.setControlBindings({...defaultControlBindings(),forward:'KeyI'});
   Object.assign(game,{initialized:true,player,physics,audio,
     environment:{update(){},dispose(){}},door:{update(){},dispose(){}},
-    character:{setActive:(active:boolean)=>player.setInputEnabled(active),setArrivalPresentation(){},getEquipmentHandPosition:()=>false,dispose(){},
+    character:{setActive:(active:boolean)=>player.setInputEnabled(active),setArrivalPresentation(){},getEquipmentHandPosition:()=>false,setHeldItem(){},getHeldItemFrame:()=>false,dispose(){},
       update:(dt:number)=>{player.fixedUpdate(dt);player.renderUpdate(dt,1);game.camera.copy(game.playerCamera);}},
     postFX:{render:vi.fn(),setPerformanceMode(){},setSize(){},setVhs(){},setLensRain(){},dispose(){}}});
   game.ui.setReady();

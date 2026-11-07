@@ -5,7 +5,7 @@ import { midLandingY, STAIRWELL_LEFT_FLIGHT, STAIRWELL_RIGHT_FLIGHT } from './la
 
 export const MAIL_REMINDER = 'Mon courrier… Je dois le récupérer avant de monter.';
 export const HOME_REMINDER = 'Il est temps de rentrer chez moi. Au dernier étage.';
-export const MAIL_REACTION = 'Merde… le rétroviseur. Il ne manquait plus que ça.';
+export const MAIL_REACTION = 'Un cadeau… de Chloé ? Devant ma porte.';
 export const MAIL_STAIR_GATE: StaticCollider = {
   id: 'arrival-mail-stairs-gate', kind: 'barrier',
   center: { x: 0, y: midLandingY(0) + 1, z: STAIRWELL_LEFT_FLIGHT.maxZ + .79 }, halfExtents: { x: 2, y: 1, z: .045 },

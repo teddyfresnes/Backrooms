@@ -409,7 +409,7 @@ export class ExperienceUI {
                     </div>
                     <p class="binding-help" data-ui="binding-help">Sélectionnez une commande, puis appuyez sur une touche.</p>
                     <div class="bindings-grid">${bindingRows}</div>
-                    <p class="object-controls-help">Alternatives permanentes : flèches pour se déplacer, Ctrl pour sauter, 0 ou Pavé 0 pour s’accroupir, Maj droite pour courir, Pavé 1 pour interagir (Verr. Num indifférent). Échap ou P : pause, y compris au PC. Les lettres ne commandent pas le jeu dans un champ de saisie.</p>
+                    <p class="object-controls-help">Alternatives permanentes : flèches pour se déplacer, 0 ou Pavé 0 pour s’accroupir (Ctrl par défaut ; en courant, s’accroupir fait glisser), Maj droite pour courir, Pavé 1 pour interagir (Verr. Num indifférent). Échap ou P : pause, y compris au PC. Les lettres ne commandent pas le jeu dans un champ de saisie.</p>
                     <p class="object-controls-help">Objets : interagir ou cliquer pour prendre, interagir pour poser, clic pour lancer. Molette : distance. Clic droit + souris : tourner. La souris oriente la vue uniquement après capture confirmée.</p>
                   </fieldset>
 

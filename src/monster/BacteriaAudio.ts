@@ -169,6 +169,48 @@ export class BacteriaAudio {
     if (this.scream) this.scream.source.playbackRate.setValueAtTime(0.86, now);
   }
 
+  private wind?: { source: AudioBufferSourceNode; filter: BiquadFilterNode; gain: GainNode };
+  /**
+   * Air rushing past during the fall (0 silent .. 1 full): filtered noise that
+   * opens up with the speed. Synthesised once, seeded by sample index.
+   */
+  setFallWind(level: number): void {
+    const output = this.output();
+    if (!output || this.disposed) return;
+    const { context } = output, now = context.currentTime, value = Math.min(1, Math.max(0, level));
+    if (!this.wind) {
+      if (value <= 0) return;
+      const length = Math.floor(context.sampleRate * 2), buffer = context.createBuffer(1, length, context.sampleRate), data = buffer.getChannelData(0);
+      let state = 0x9e3779b9, brown = 0;
+      for (let i = 0; i < length; i++) {
+        state ^= state << 13; state ^= state >>> 17; state ^= state << 5;
+        brown = brown * 0.985 + ((state >>> 0) / 4294967296 * 2 - 1) * 0.15;
+        data[i] = brown;
+      }
+      const source = context.createBufferSource(), filter = context.createBiquadFilter(), gain = context.createGain();
+      source.buffer = buffer; source.loop = true;
+      filter.type = 'bandpass'; filter.Q.value = 0.6; filter.frequency.value = 300;
+      gain.gain.value = 0.0001;
+      source.connect(filter).connect(gain).connect(output.destination);
+      source.start();
+      this.wind = { source, filter, gain };
+    }
+    this.wind.gain.gain.setTargetAtTime(0.0001 + value * 1.6, now, 0.12);
+    this.wind.filter.frequency.setTargetAtTime(260 + value * 1400, now, 0.2);
+  }
+  stopFallWind(fadeSeconds: number): void {
+    const wind = this.wind, output = this.output();
+    if (!wind || !output) return;
+    this.wind = undefined;
+    const now = output.context.currentTime;
+    try {
+      wind.gain.gain.cancelScheduledValues(now);
+      wind.gain.gain.setTargetAtTime(0.0001, now, Math.max(0.01, fadeSeconds / 3));
+      wind.source.stop(now + Math.max(0.03, fadeSeconds));
+    } catch { /* already stopped */ }
+    wind.source.addEventListener('ended', () => { wind.source.disconnect(); wind.filter.disconnect(); wind.gain.disconnect(); }, { once: true });
+  }
+
   /** Hard cut (death card) or fade (the creature walked away). */
   stopAll(fadeSeconds = 0): void {
     const output = this.output();
@@ -185,6 +227,8 @@ export class BacteriaAudio {
       }
     }
     try { this.tension?.stop(now + Math.max(0, fadeSeconds)); } catch { /* ended */ }
+    // A fade of the creature's voice leaves the fall wind alone; a hard cut does not.
+    if (fadeSeconds === 0) this.stopFallWind(0);
     this.scream = undefined;
     this.voice = undefined;
     this.tension = undefined;

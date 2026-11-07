@@ -54,8 +54,9 @@ describe('control bindings', () => {
   });
   it('keeps permanent alternatives and pause from being reassigned to a conflicting action',()=>{
     const original=defaultControlBindings();
-    for(const [action,code]of [['forward','ControlRight'],['jump','Numpad0'],['left','ArrowUp'],['interact','KeyP']] as const)
+    for(const [action,code]of [['forward','Digit0'],['jump','Numpad0'],['left','ArrowUp'],['interact','KeyP']] as const)
       expect(remapControlBinding(original,action,code).bindings).toEqual(original);
-    expect(remapControlBinding(original,'jump','ControlRight').bindings.jump).toBe('ControlRight');
+    expect(original.crouch).toBe('ControlLeft');
+    expect(remapControlBinding(original,'crouch','Digit0').bindings.crouch).toBe('Digit0');
   });
 });

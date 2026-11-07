@@ -127,6 +127,7 @@ import {
   updateFirstPersonBodyFollow,
 } from './FirstPersonLook';
 import './CharacterRuntime.css';
+import { HeldItemPose, type HeldItemBasis, type PalmFrame } from './HeldItemPose';
 
 const FIXED_DELTA = 1 / 60;
 const MAX_ACCUMULATOR = 0.12;
@@ -1176,6 +1177,52 @@ export class CharacterRuntime {
     this.viewMode=forceFirstPerson?'first-person':this.computerViewMode??this.viewMode;this.computerViewMode=undefined;
     this.playAnimation('idle',true,1,false,true);this.updateAvatarTransform(0,true);this.applyViewMode(true);this.presentCamera();
   }
+  /** The right hand holds a small item flat in its palm (presentation only). */
+  setHeldItem(holding: boolean): void { this.holdingItem = holding; }
+  /** Palm frame of the visible rig once the grip has settled, for placing the held item. */
+  getHeldItemFrame(output: PalmFrame): boolean {
+    if (this.isBusy || this.ragdoll) return false;
+    const firstPerson = this.viewMode === 'first-person' && !this.computerPose;
+    const pose = firstPerson ? this.firstPersonHeldPose : this.heldPose;
+    if (!pose.active) return false;
+    return pose.palmFrame(firstPerson ? this.firstPersonRightHandBone : this.rightHandBone, output);
+  }
+  private heldItemAllowed(): boolean {
+    return this.holdingItem && !this.isBusy && !this.ragdoll && !this.recovery && !this.activeEmote
+      && !this.pairCoordinator.session && this.combatPhase === 'none' && !this.combatAttack && !this.player?.isIncapacitated;
+  }
+  /** Third-person rig: in front of the chest, from the head and the real shoulders. */
+  private applyHeldItemPose(delta: number): void {
+    const weight = this.heldPose.advance(this.heldItemAllowed(), delta);
+    if (weight <= 0 || !this.headBone || !this.leftUpperArmBone || !this.rightUpperArmBone) return;
+    this.headBone.getWorldPosition(this.heldOrigin);
+    this.rightUpperArmBone.getWorldPosition(this.heldRight);
+    this.leftUpperArmBone.getWorldPosition(this.heldShoulder);
+    this.heldRight.sub(this.heldShoulder).setY(0);
+    if (this.heldRight.lengthSq() < 1e-6) return;
+    this.heldRight.normalize();
+    this.heldUp.set(0, 1, 0);
+    this.heldForward.crossVectors(this.heldUp, this.heldRight).normalize();
+    const basis: HeldItemBasis = { origin: this.heldOrigin, forward: this.heldForward, up: this.heldUp, right: this.heldRight,
+      reach: { forward: 0.3, right: 0.06, up: -0.4 } };
+    this.heldPose.apply([this.rightUpperArmBone, this.rightForearmBone, this.rightHandBone], basis);
+  }
+  /** First-person rig: low in the view, following the look with a limited pitch. */
+  private applyFirstPersonHeldItemPose(delta: number): void {
+    const weight = this.firstPersonHeldPose.advance(this.heldItemAllowed() && this.viewMode === 'first-person', delta);
+    if (weight <= 0) return;
+    this.firstPersonCamera.getWorldPosition(this.heldOrigin);
+    this.firstPersonCamera.getWorldDirection(this.heldForward);
+    const pitch = THREE.MathUtils.clamp(Math.asin(THREE.MathUtils.clamp(this.heldForward.y, -1, 1)), -0.85, 0.35);
+    const flat = Math.hypot(this.heldForward.x, this.heldForward.z);
+    if (flat < 1e-4) return;
+    this.heldForward.set(this.heldForward.x / flat * Math.cos(pitch), Math.sin(pitch), this.heldForward.z / flat * Math.cos(pitch));
+    this.heldRight.crossVectors(this.heldForward, new THREE.Vector3(0, 1, 0)).normalize();
+    this.heldUp.crossVectors(this.heldRight, this.heldForward).normalize();
+    const basis: HeldItemBasis = { origin: this.heldOrigin, forward: this.heldForward, up: this.heldUp, right: this.heldRight,
+      reach: { forward: 0.33, right: 0.09, up: -0.26 } };
+    this.firstPersonHeldPose.apply([this.firstPersonRightUpperArmBone, this.firstPersonRightForearmBone, this.firstPersonRightHandBone], basis);
+  }
   getEquipmentHandPosition(output:THREE.Vector3):boolean {
     const hand=this.viewMode==='first-person'&&!this.computerPose?this.firstPersonRightHandBone:this.rightHandBone;
     if(!hand||this.isBusy)return false;hand.getWorldPosition(output);return true;
@@ -1435,6 +1482,15 @@ export class CharacterRuntime {
   private readonly firstPersonClipUniforms: Array<{ clipY: { value: number }; combatIsolation: { value: number }; groundKick: { value: number } }> = [];
   private readonly firstPersonCombatPresentation = new FirstPersonCombatPose();
   private readonly firstPersonObstaclePose = new FirstPersonObstaclePose();
+  /** A small object read in the right palm (the compass), on both rigs. */
+  private readonly heldPose = new HeldItemPose();
+  private readonly firstPersonHeldPose = new HeldItemPose();
+  private holdingItem = false;
+  private readonly heldOrigin = new THREE.Vector3();
+  private readonly heldForward = new THREE.Vector3();
+  private readonly heldUp = new THREE.Vector3();
+  private readonly heldRight = new THREE.Vector3();
+  private readonly heldShoulder = new THREE.Vector3();
   private readonly firstPersonHipWorld = new THREE.Vector3();
   private readonly firstPersonHipTarget = new THREE.Vector3();
   private readonly firstPersonForward = new THREE.Vector3();
@@ -10647,6 +10703,7 @@ export class CharacterRuntime {
     this.applyFirstPersonArmTuning(rawDelta);
     this.applyFallMotion(rawDelta);
     this.applyHeadLook(rawDelta);
+    this.applyHeldItemPose(rawDelta);
     this.updatePitEdgeRisk(rawDelta);
     if (this.ragdoll) {
       // The ragdoll cloned the fully evaluated animation pose above. Render the
@@ -10664,6 +10721,7 @@ export class CharacterRuntime {
         new THREE.Vector3(Math.sin(this.bodyYaw), 0, Math.cos(this.bodyYaw))
           .multiplyScalar(-0.075 * this.firstPersonCombatPoseBlend));
       this.applyFirstPersonGuardPose(rawDelta);
+      this.applyFirstPersonHeldItemPose(rawDelta);
       this.applyFirstPersonArmCameraSafety(rawDelta);
       this.applyFirstPersonObstaclePose(rawDelta);
     }

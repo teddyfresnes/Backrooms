@@ -69,13 +69,16 @@ utilisée). TV allumée : le monstre la porte et se calme (sa voix seule ; le cr
 joue qu'en poursuite), sortie discrète en maintenant E (`SNEAK_HOLD_SECONDS`) :
 le maintien pilote l'animation, le relâcher fait jaillir le joueur et le monstre
 charge. Puis fuite dans la cage restaurée (`restoreStairwell`) et par la porte du
-hall : seul le vantail droit s'ouvre (`HALL_DOOR_COLLIDER_ID` se désactive, le
-vantail ouvert reçoit un collider ; le mouvement de la cinématique d'arrivée est
-réutilisé). `createEscapeRunColliders` monte une bande de rue invisible, couverte
-d'herbe (`EscapeStreet`, visible à la lampe, pas `outdoor-grass` synthétisés) ;
-`setExteriorDark` ne garde que la pluie et l'immeuble hôte. Dehors (`ESCAPE_RUN`),
-pluie sur l'objectif (`PostFX.setLensRain`), puis le joueur trébuche et traverse
-le sol (phase `escaped`, teinte jaune via `setFallTint`) avant le Level 0.
+hall : la porte entière disparaît (objet masqué, `HALL_DOOR_COLLIDER_ID` et
+`HALL_DOOR_LEFT_COLLIDER_ID` désactivés). `createEscapeRunColliders` monte une
+bande de rue invisible ; `EscapeStreet` dessine un bas-côté de 180 m (cartes
+couleur/rugosité/normales d'un même champ de hauteur) et des touffes instanciées
+au vent, au-delà du brouillard. `setExteriorDark` ne garde que la pluie et
+l'immeuble hôte. Dehors (`ESCAPE_RUN`), pluie sur l'objectif, puis le joueur
+trébuche et traverse le sol (phase `escaped`) : longue chute dans le noir vers
+`BackroomsBelow` (labyrinthe non éclairé, hors brouillard, centré sous la chute),
+vent de chute, teinte jaune dans les derniers instants, fondu au noir
+(`StoryHud.setFade`) puis écran de chargement en fondu (`is-arriving`).
 TV éteinte : le placard est arraché. Les timings sont couverts par
 `BacteriaLayout.test.ts` et la machine à états par `BacteriaEncounter.test.ts`.
 Aucune sauvegarde pendant la rencontre ; une mort avant la cachette ramène à

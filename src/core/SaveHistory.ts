@@ -49,6 +49,8 @@ export interface RussianStairwellSavePayload {
   readonly inventory?:InventoryProgress;
   readonly corridor?:CorridorProgress;
   readonly objective?:string|null;
+  /** Chloé's parcel on the landing was opened (the compass taken). */
+  readonly giftOpened?:boolean;
 }
 
 export interface BackroomsSavePayload {
@@ -268,7 +270,7 @@ const sanitizeDoorState = (value: unknown): GameSaveDoorState | null => {
 
 const sanitizeRussianPayload = (value: unknown): RussianStairwellSavePayload | null => {
   if (!isRecord(value)) return null;
-  const extras = ['mailGaspPlayed', 'neighbors', 'computer', 'objects', 'fixtures', 'pcUse', 'inventory', 'corridor', 'objective'];
+  const extras = ['mailGaspPlayed', 'neighbors', 'computer', 'objects', 'fixtures', 'pcUse', 'inventory', 'corridor', 'objective', 'giftOpened'];
   if (Object.keys(value).some(key => !['safePosition', 'quaternion', 'entranceDoor', 'apartmentLightOn', 'windowBlindsOpen', 'arrivalState', ...extras].includes(key))) return null;
   const core = Object.fromEntries(Object.entries(value).filter(([key]) => !extras.includes(key)));
   const hasStoryKeys = hasExactKeys(core,
@@ -301,6 +303,7 @@ const sanitizeRussianPayload = (value: unknown): RussianStairwellSavePayload | n
     || windowBlindsOpen.some((open) => typeof open !== 'boolean')
   ) return null;
   if (value.mailGaspPlayed !== undefined && typeof value.mailGaspPlayed !== 'boolean') return null;
+  if (value.giftOpened !== undefined && typeof value.giftOpened !== 'boolean') return null;
   let neighbors: HallNeighborProgress | undefined;
   if (value.neighbors !== undefined) {
     const n = value.neighbors;
@@ -344,6 +347,7 @@ const sanitizeRussianPayload = (value: unknown): RussianStairwellSavePayload | n
     ...(pcUse ? { pcUse } : {}),
     ...(inventory?{inventory}:{}),...(corridor?{corridor}:{}),
     ...(value.objective!==undefined?{objective:value.objective as string|null}:{}),
+    ...(typeof value.giftOpened==='boolean'?{giftOpened:value.giftOpened}:{}),
     windowBlindsOpen: Object.freeze([
       windowBlindsOpen[0] as boolean,
       windowBlindsOpen[1] as boolean,

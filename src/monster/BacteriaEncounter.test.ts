@@ -211,7 +211,7 @@ describe('BacteriaEncounter', () => {
     const path = new ChasePath(createEscapeWaypoints());
     let along = path.project({ x: threshold.x + 0.5, y: threshold.y, z: threshold.z });
     const feet = new THREE.Vector3();
-    world.step(14, () => {
+    world.step(18, () => {
       along = Math.min(path.length, along + 5.6 * DT);
       path.sample(along, feet);
       world.player.position.set(feet.x, feet.y + PLAYER_CENTER_HEIGHT, feet.z);
@@ -329,7 +329,10 @@ describe('BacteriaEncounter', () => {
     world.step(0.6);
     expect(world.encounter.locksInput).toBe(true);
     expect(world.events).not.toContain('escaped');
+    // Still falling toward the maze after three seconds.
     world.step(2.6);
+    expect(world.events).not.toContain('escaped');
+    world.step(2);
     expect(world.events).toContain('escaped');
   });
 });

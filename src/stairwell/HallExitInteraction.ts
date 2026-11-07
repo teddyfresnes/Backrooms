@@ -55,7 +55,8 @@ export class HallExitInteraction {
     playerPosition: Readonly<Vec3Data>,
     viewDirection: THREE.Vector3,
   ): boolean {
-    if (viewDirection.lengthSq() < 1e-5) return false;
+    // Gone for the escape: an invisible leaf is no portal (rays ignore visibility).
+    if (viewDirection.lengthSq() < 1e-5 || !this.door.visible) return false;
     this.door.updateWorldMatrix(true, true);
     this.raycaster.set(
       new THREE.Vector3(playerPosition.x, playerPosition.y + EYE_OFFSET, playerPosition.z),

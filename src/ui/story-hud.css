@@ -93,6 +93,14 @@
 .story-hint-hold[hidden] { display: none; }
 .story-hint.is-holding kbd { background: rgba(239, 224, 145, 0.18); }
 
+.story-fade {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: #000;
+  pointer-events: none;
+}
+
 .story-flash {
   position: absolute;
   inset: 0;

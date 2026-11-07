@@ -34,6 +34,18 @@ export class SampledDoorAudio {
     source.onended=()=>{if(this.sources.get(doorId)?.source===source)this.sources.delete(doorId);source.disconnect();chain.dispose();};
     source.start();return buffer.duration/rate;
   }
+  /** A scripted blow on a door: never throttled, with its own rate and level. */
+  playScripted(kind:NeighborDoorSound,position:Readonly<Vec3Data>,id:string,rate:number,level:number):void{
+    const bus=this.bus,buffer=this.buffers.get(kind);
+    if(!bus||!buffer||this.disposed||bus.context.state!=='running')return;
+    if(this.sources.has(id))this.release(id);
+    if(this.sources.size>=6)this.release(this.sources.keys().next().value!);
+    const chain=doorAudioChain(bus,position,level,false,{refDistance:2.5,maxDistance:30,rolloff:.8});
+    const source=bus.context.createBufferSource();source.buffer=buffer;source.playbackRate.value=rate;
+    source.connect(chain.input);this.sources.set(id,{source,chain,at:bus.context.currentTime});
+    source.onended=()=>{if(this.sources.get(id)?.source===source)this.sources.delete(id);source.disconnect();chain.dispose();};
+    source.start();
+  }
   private release(id:string):void{
     const active=this.sources.get(id);if(!active)return;this.sources.delete(id);active.source.onended=null;
     try{active.source.stop();}catch{}active.source.disconnect();active.chain.dispose();
