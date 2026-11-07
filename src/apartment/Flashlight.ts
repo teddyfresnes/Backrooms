@@ -29,14 +29,16 @@ export class Flashlight {
     const wall=this.physics.world.castRay(new RAPIER.Ray(camera.position,this.direction),hit.distance,true,undefined,undefined,undefined,undefined,this.physics.isEnvironmentCollider);
     return !wall||wall.timeOfImpact>=hit.distance-.035;
   }
-  update(camera:THREE.Camera,hand:THREE.Vector3|undefined,owned:boolean,equipped:boolean,on:boolean,delta:number,reduced:boolean):void {
+  /** `grip`, when the rig holds it, is the stable frame of the rubber grip (+Y toward the lens). */
+  update(camera:THREE.Camera,hand:THREE.Vector3|undefined,owned:boolean,equipped:boolean,on:boolean,delta:number,reduced:boolean,grip?:{position:THREE.Vector3;quaternion:THREE.Quaternion}):void {
     this.model.visible=!owned||equipped;this.light.intensity=owned&&equipped&&on?32:0;
     if(!owned){this.model.position.copy(this.deskPosition);return;}
     if(!equipped)return;
     const desired=new THREE.Quaternion();camera.getWorldDirection(this.direction);desired.setFromUnitVectors(new THREE.Vector3(0,1,0),this.direction);
-    if(!this.initialized||reduced){this.smoothed.copy(desired);this.initialized=true;}else this.smoothed.slerp(desired,1-Math.exp(-delta*19));
-    const grip=hand??new THREE.Vector3(.23,-.29,-.35).applyMatrix4(camera.matrixWorld);
-    this.model.quaternion.copy(this.smoothed);this.model.position.copy(grip).addScaledVector(new THREE.Vector3(0,1,0).applyQuaternion(this.smoothed),-.09);
+    if(grip){this.smoothed.copy(grip.quaternion);this.initialized=true;}
+    else if(!this.initialized||reduced){this.smoothed.copy(desired);this.initialized=true;}else this.smoothed.slerp(desired,1-Math.exp(-delta*19));
+    const at=grip?.position??hand??new THREE.Vector3(.23,-.29,-.35).applyMatrix4(camera.matrixWorld);
+    this.model.quaternion.copy(this.smoothed);this.model.position.copy(at).addScaledVector(new THREE.Vector3(0,1,0).applyQuaternion(this.smoothed),-.09);
     this.light.position.set(0,.277,0).applyQuaternion(this.smoothed).add(this.model.position);
     // Aim from the real lens toward the view ray, compensating the equipped
     // hand offset rather than sending a parallel beam past the crosshair.

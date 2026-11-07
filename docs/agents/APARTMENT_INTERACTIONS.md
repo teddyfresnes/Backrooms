@@ -44,8 +44,10 @@ Après la lampe, `FuseBox` (mur du fond du séjour, face à la porte à 8 m ; le
 joueur reste figé pendant le réarmement, `fuseHold`) s'ouvre et se
 réarme en vain ; `CorridorStory.fuseTried/knockDone` (optionnels, déduits pour
 les anciennes sauvegardes) bloquent la sortie jusqu'à la remarque puis aux trois
-coups et au coup grave, joués seulement porte fermée. La boussole sélectionnée
-est tenue par `HeldItemPose` sur les deux rigs ; son aiguille s'affole selon
+coups et au coup grave, joués seulement porte fermée. Boussole et lampe en main :
+`heldItemFrame` fixe d'abord l'objet (dans la vue en 1P, sans balancement de
+marche ; devant le torse en 3P), puis `HeldItemPose` amène la main droite par IK
+(paume sous la boussole, doigts refermés sur la lampe). L'aiguille s'affole selon
 `BacteriaEncounter.creatureProximity`.
 
 `RussianStairwellGame` possède les systèmes ci-dessous et les détruit avant

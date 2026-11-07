@@ -127,7 +127,7 @@ import {
   updateFirstPersonBodyFollow,
 } from './FirstPersonLook';
 import './CharacterRuntime.css';
-import { HeldItemPose, type HeldItemBasis, type PalmFrame } from './HeldItemPose';
+import { gripForItem, heldItemFrame, HeldItemPose, type HeldItemKind, type PalmFrame } from './HeldItemPose';
 
 const FIXED_DELTA = 1 / 60;
 const MAX_ACCUMULATOR = 0.12;
@@ -1177,24 +1177,30 @@ export class CharacterRuntime {
     this.viewMode=forceFirstPerson?'first-person':this.computerViewMode??this.viewMode;this.computerViewMode=undefined;
     this.playAnimation('idle',true,1,false,true);this.updateAvatarTransform(0,true);this.applyViewMode(true);this.presentCamera();
   }
-  /** The right hand holds a small item flat in its palm (presentation only). */
-  setHeldItem(holding: boolean): void { this.holdingItem = holding; }
-  /** Palm frame of the visible rig once the grip has settled, for placing the held item. */
+  /** The right hand holds a quest item (presentation only): the compass or the torch. */
+  setHeldItem(kind: HeldItemKind | null): void { this.heldKind = kind; }
+  /**
+   * The stable frame of the held item for the drawn view: fixed in the view in
+   * first person (no gait sway), in front of the chest in third person.
+   * The compass frame is its dial centre; the torch frame its rubber grip, +Y forward.
+   */
   getHeldItemFrame(output: PalmFrame): boolean {
-    if (this.isBusy || this.ragdoll) return false;
-    const firstPerson = this.viewMode === 'first-person' && !this.computerPose;
-    const pose = firstPerson ? this.firstPersonHeldPose : this.heldPose;
-    if (!pose.active) return false;
-    return pose.palmFrame(firstPerson ? this.firstPersonRightHandBone : this.rightHandBone, output);
+    if (!this.heldKind || !this.heldFrameValid || this.isBusy || this.ragdoll) return false;
+    output.position.copy(this.heldFrame.position); output.quaternion.copy(this.heldFrame.quaternion);
+    return true;
   }
   private heldItemAllowed(): boolean {
-    return this.holdingItem && !this.isBusy && !this.ragdoll && !this.recovery && !this.activeEmote
+    return !!this.heldKind && !this.isBusy && !this.ragdoll && !this.recovery && !this.activeEmote && !this.computerPose
       && !this.pairCoordinator.session && this.combatPhase === 'none' && !this.combatAttack && !this.player?.isIncapacitated;
   }
-  /** Third-person rig: in front of the chest, from the head and the real shoulders. */
+  private readonly heldGrip = { palm: new THREE.Vector3(), normal: new THREE.Vector3(), fingers: new THREE.Vector3(), pole: new THREE.Vector3(), curl: 0 };
+  private readonly heldView = new THREE.Matrix4();
+  private readonly heldAim = new THREE.Vector3();
+  /** Third-person rig: the item in front of the chest, aimed where the player looks. */
   private applyHeldItemPose(delta: number): void {
     const weight = this.heldPose.advance(this.heldItemAllowed(), delta);
-    if (weight <= 0 || !this.headBone || !this.leftUpperArmBone || !this.rightUpperArmBone) return;
+    if (this.viewMode !== 'first-person') this.heldFrameValid = false;
+    if (weight <= 0 || !this.heldKind || !this.headBone || !this.leftUpperArmBone || !this.rightUpperArmBone) return;
     this.headBone.getWorldPosition(this.heldOrigin);
     this.rightUpperArmBone.getWorldPosition(this.heldRight);
     this.leftUpperArmBone.getWorldPosition(this.heldShoulder);
@@ -1203,25 +1209,29 @@ export class CharacterRuntime {
     this.heldRight.normalize();
     this.heldUp.set(0, 1, 0);
     this.heldForward.crossVectors(this.heldUp, this.heldRight).normalize();
-    const basis: HeldItemBasis = { origin: this.heldOrigin, forward: this.heldForward, up: this.heldUp, right: this.heldRight,
-      reach: { forward: 0.32, right: 0.05, up: -0.27 } };
-    this.heldPose.apply([this.rightUpperArmBone, this.rightForearmBone, this.rightHandBone], basis);
+    this.heldView.makeBasis(this.heldRight, this.heldUp, this.heldShoulder.copy(this.heldForward).negate()).setPosition(this.heldOrigin);
+    this.firstPersonCamera.getWorldDirection(this.heldAim).multiplyScalar(12).add(this.firstPersonCamera.getWorldPosition(this.heldShoulder));
+    const frame = this.viewMode === 'first-person' ? this.heldScratch : this.heldFrame;
+    heldItemFrame(this.heldKind, this.heldView, this.heldAim, false, frame);
+    if (frame === this.heldFrame) this.heldFrameValid = true;
+    this.heldGrip.curl = gripForItem(this.heldKind, frame, this.heldRight, this.heldUp, this.heldGrip);
+    this.heldPose.apply([this.rightUpperArmBone, this.rightForearmBone, this.rightHandBone], this.heldGrip);
   }
-  /** First-person rig: low in the view, following the look with a limited pitch. */
+  /** First-person rig: the item fixed in the view, the hand brought to it. */
   private applyFirstPersonHeldItemPose(delta: number): void {
     const weight = this.firstPersonHeldPose.advance(this.heldItemAllowed() && this.viewMode === 'first-person', delta);
+    this.heldFrameValid = false;
+    if (!this.heldKind || this.viewMode !== 'first-person' || !this.heldItemAllowed()) return;
+    this.firstPersonCamera.updateMatrixWorld(true);
+    this.heldView.copy(this.firstPersonCamera.matrixWorld);
+    this.firstPersonCamera.getWorldDirection(this.heldAim).multiplyScalar(12).add(this.firstPersonCamera.getWorldPosition(this.heldOrigin));
+    heldItemFrame(this.heldKind, this.heldView, this.heldAim, true, this.heldFrame);
+    this.heldFrameValid = true;
     if (weight <= 0) return;
-    this.firstPersonCamera.getWorldPosition(this.heldOrigin);
-    this.firstPersonCamera.getWorldDirection(this.heldForward);
-    const pitch = THREE.MathUtils.clamp(Math.asin(THREE.MathUtils.clamp(this.heldForward.y, -1, 1)), -0.85, 0.35);
-    const flat = Math.hypot(this.heldForward.x, this.heldForward.z);
-    if (flat < 1e-4) return;
-    this.heldForward.set(this.heldForward.x / flat * Math.cos(pitch), Math.sin(pitch), this.heldForward.z / flat * Math.cos(pitch));
-    this.heldRight.crossVectors(this.heldForward, new THREE.Vector3(0, 1, 0)).normalize();
-    this.heldUp.crossVectors(this.heldRight, this.heldForward).normalize();
-    const basis: HeldItemBasis = { origin: this.heldOrigin, forward: this.heldForward, up: this.heldUp, right: this.heldRight,
-      reach: { forward: 0.36, right: 0.07, up: -0.16 } };
-    this.firstPersonHeldPose.apply([this.firstPersonRightUpperArmBone, this.firstPersonRightForearmBone, this.firstPersonRightHandBone], basis);
+    this.heldRight.setFromMatrixColumn(this.heldView, 0).normalize();
+    this.heldUp.setFromMatrixColumn(this.heldView, 1).normalize();
+    this.heldGrip.curl = gripForItem(this.heldKind, this.heldFrame, this.heldRight, this.heldUp, this.heldGrip);
+    this.firstPersonHeldPose.apply([this.firstPersonRightUpperArmBone, this.firstPersonRightForearmBone, this.firstPersonRightHandBone], this.heldGrip);
   }
   getEquipmentHandPosition(output:THREE.Vector3):boolean {
     const hand=this.viewMode==='first-person'&&!this.computerPose?this.firstPersonRightHandBone:this.rightHandBone;
@@ -1276,6 +1286,16 @@ export class CharacterRuntime {
   getWorldVelocity(target: THREE.Vector3): THREE.Vector3 {
     if (this.ragdoll) return this.ragdoll.getVelocity(target);
     return this.recovery ? target.set(0, 0, 0) : target.copy(this.player!.getDebugState().velocity);
+  }
+  /**
+   * Arriving face down after the fall into the Backrooms: a quiet, non-fatal
+   * ragdoll on the ground; the interact key gets up (the usual recovery).
+   * Returns false if the body could not go down yet (not ready, already down).
+   */
+  collapseOnArrival(): boolean {
+    if (!this.ready || this.ragdoll || this.recovery) return false;
+    this.startRagdoll({ fatal: false, quietStart: true, status: 'AU SOL · E POUR SE RELEVER' });
+    return !!this.ragdoll;
   }
   /** The game owns spawn/streaming; this actor uses the same rig and interactions. */
   setInteractionPartner(position: THREE.Vector3 | null, combat = false): void {
@@ -1485,7 +1505,10 @@ export class CharacterRuntime {
   /** A small object read in the right palm (the compass), on both rigs. */
   private readonly heldPose = new HeldItemPose();
   private readonly firstPersonHeldPose = new HeldItemPose();
-  private holdingItem = false;
+  private heldKind: HeldItemKind | null = null;
+  private readonly heldFrame: PalmFrame = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
+  private readonly heldScratch: PalmFrame = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
+  private heldFrameValid = false;
   private readonly heldOrigin = new THREE.Vector3();
   private readonly heldForward = new THREE.Vector3();
   private readonly heldUp = new THREE.Vector3();

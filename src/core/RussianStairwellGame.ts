@@ -1224,12 +1224,13 @@ export class RussianStairwellGame {
     const small=this.inventory.equipped;
     const showSmall=small&&!isQuestItem(small.id)&&!this.objects?.isHolding&&!this.pcUse?.isActive&&!this.closet?.isActive&&!this.peephole?.isActive&&!this.character?.isBusy;
     this.objects?.presentEquipped(showSmall?small.id:undefined,hand,this.camera.quaternion);
-    this.flashlight?.update(this.camera,hand,owned,!!equipped,this.inventory.state.lampOn,delta,!this.settings.cameraMotion);
-    // Chloé's compass, read flat in the right palm (both views).
-    const reading=small?.id===COMPASS_ID&&!this.objects?.isHolding&&!this.pcUse?.isActive&&!this.closet?.isActive&&!this.peephole?.isActive&&!this.character?.isBusy&&!this.encounter?.isHidden&&!this.shotDeath;
-    this.character?.setHeldItem(!!reading);
-    const palm=reading&&this.character?.getHeldItemFrame(this.palm)?this.palm:undefined;
-    this.compass?.update(this.camera,palm,!!reading&&(!!palm||!this.character),this.encounter?.creatureProximity??0,delta);
+    // Quest items have a stable frame (fixed in the view in first person); the right hand grips them.
+    const free=!this.objects?.isHolding&&!this.pcUse?.isActive&&!this.closet?.isActive&&!this.peephole?.isActive&&!this.character?.isBusy&&!this.encounter?.isHidden&&!this.shotDeath;
+    const reading=small?.id===COMPASS_ID&&free;
+    this.character?.setHeldItem(reading?'compass':equipped&&free?'torch':null);
+    const frame=(reading||equipped)&&this.character?.getHeldItemFrame(this.palm)?this.palm:undefined;
+    this.flashlight?.update(this.camera,hand,owned,!!equipped,this.inventory.state.lampOn,delta,!this.settings.cameraMotion,equipped&&!reading?frame:undefined);
+    this.compass?.update(this.camera,reading?frame:undefined,!!reading&&(!!frame||!this.character),this.encounter?.creatureProximity??0,delta);
   }
 
   private currentSurface(): AudioSurface {
@@ -1522,7 +1523,14 @@ export class RussianStairwellGame {
   /** Physical state of the sprint key, read by scripted holds even while movement is locked. */
   private readonly onSprintKey = (event: KeyboardEvent): void => {
     if (matchesControlAction(event, this.settings.controls, 'sprint')) this.sprintHeld = event.type === 'keydown';
-    if (matchesControlAction(event, this.settings.controls, 'interact')) this.interactHeld = event.type === 'keydown';
+    if (matchesControlAction(event, this.settings.controls, 'interact')) {
+      const pressed = event.type === 'keydown' && !event.repeat && !this.interactHeld;
+      this.interactHeld = event.type === 'keydown';
+      // Hidden during the hunt, the player's input is locked: the key itself
+      // still means "climb out" (fatal while the creature is in the flat).
+      if (pressed && this.closet?.isActive && this.encounter?.isHidden && this.closet.exitLocked
+        && this.player?.isLocked && !this.ui.isPaused && !this.ui.isConsoleOpen) this.encounter.requestHiddenExit();
+    }
   };
   private readonly onSprintBlur = (): void => { this.sprintHeld = false; this.interactHeld = false; };
 

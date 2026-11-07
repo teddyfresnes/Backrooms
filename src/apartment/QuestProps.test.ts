@@ -4,7 +4,10 @@ import { Compass, CompassNeedle } from './Compass';
 import { FuseBox, FUSE_BOX_MOUNT } from './FuseBox';
 import { GiftParcel } from '../stairwell/GiftParcel';
 import { EscapeStreet } from '../stairwell/EscapeStreet';
-import { HeldItemPose } from '../character/HeldItemPose';
+import { gripForItem, heldItemFrame, HeldItemPose } from '../character/HeldItemPose';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+// @ts-expect-error Node builtins are restricted to tests.
+import { readFileSync } from 'node:fs';
 import { BackroomsBelow, BELOW_TOP_Y } from '../monster/BackroomsBelow';
 
 const wrap = (angle: number) => Math.atan2(Math.sin(angle), Math.cos(angle));
@@ -32,29 +35,38 @@ it('points the red tip of the held compass toward world north whatever the case 
   expect(scene.children).toHaveLength(0);
 });
 
-it('lays the right palm up toward the eyes and frames the held item on it', () => {
-  // Shoulder → elbow → wrist along +X, fingers further along +X, thumb (index) toward -Z: palm down.
-  const upper = new THREE.Bone(), lower = new THREE.Bone(), hand = new THREE.Bone();
-  const middle = new THREE.Bone(), index = new THREE.Bone(), pinky = new THREE.Bone();
-  middle.name = 'RightHandMiddle1'; index.name = 'RightHandIndex1'; pinky.name = 'RightHandPinky1';
-  upper.position.set(0, 1.4, 0); lower.position.set(0.28, 0, 0); hand.position.set(0.25, 0, 0);
-  middle.position.set(0.09, 0, 0); index.position.set(0.085, 0, -0.025); pinky.position.set(0.075, 0, 0.03);
-  upper.add(lower); lower.add(hand); hand.add(middle, index, pinky);
-  const root = new THREE.Group(); root.add(upper); root.updateMatrixWorld(true);
+it.each(['compass', 'torch'] as const)('brings the real right hand to a %s fixed in the view', kind => {
+  const bytes = readFileSync('public/assets/character/character.fbx');
+  const root = new FBXLoader().parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
+  root.updateMatrixWorld(true);
+  const bone = (suffix: string) => { let found: THREE.Bone | undefined; root.traverse(o => { if (!found && (o as THREE.Bone).isBone && o.name.toLowerCase().replace(/[^a-z0-9]/g, '').endsWith(suffix)) found = o as THREE.Bone; }); return found!; };
+  const upper = bone('rightarm'), lower = bone('rightforearm'), hand = bone('righthand'), head = bone('head');
+  // The character faces +Z: an eye camera at the head looking the same way.
+  const eye = head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.08, 0.1));
+  const camera = new THREE.PerspectiveCamera(); camera.position.copy(eye); camera.lookAt(eye.clone().add(new THREE.Vector3(0, -0.15, 1))); camera.updateMatrixWorld(true);
+  const view = camera.matrixWorld.clone(), aim = eye.clone().add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(12));
+  const frame = heldItemFrame(kind, view, aim, true, { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() });
+  // In the lower right of the view, in front of the eye.
+  const local = frame.position.clone().applyMatrix4(view.clone().invert());
+  expect(local.z).toBeLessThan(-0.2); expect(local.x).toBeGreaterThan(0); expect(local.y).toBeLessThan(0);
+  const right = new THREE.Vector3().setFromMatrixColumn(view, 0), up = new THREE.Vector3().setFromMatrixColumn(view, 1);
+  const grip = { palm: new THREE.Vector3(), normal: new THREE.Vector3(), fingers: new THREE.Vector3(), pole: new THREE.Vector3(), curl: 0 };
+  grip.curl = gripForItem(kind, frame, right, up, grip);
   const pose = new HeldItemPose();
   for (let i = 0; i < 80; i++) pose.advance(true, 1 / 30);
-  const basis = { origin: new THREE.Vector3(0, 1.6, 0), forward: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, 1, 0), right: new THREE.Vector3(1, 0, 0), reach: { forward: 0.3, right: 0.06, up: -0.4 } };
-  pose.apply([upper, lower, hand], basis);
+  pose.apply([upper, lower, hand], grip);
   root.updateMatrixWorld(true);
-  const frame = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
-  expect(pose.palmFrame(hand, frame)).toBe(true);
-  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(frame.quaternion);
-  expect(up.y).toBeGreaterThan(0.7);
-  expect(up.z).toBeGreaterThan(0.4);
-  const wrist = hand.getWorldPosition(new THREE.Vector3());
-  expect(wrist.distanceTo(new THREE.Vector3(0.06, 1.2, -0.3))).toBeLessThan(0.08);
-  for (let i = 0; i < 80; i++) pose.advance(false, 1 / 30);
-  expect(pose.active).toBe(false);
+  const p = (b: THREE.Bone) => b.getWorldPosition(new THREE.Vector3());
+  const f = p(bone('righthandmiddle1')).sub(p(hand)).normalize(), t = p(bone('righthandindex1')).sub(p(bone('righthandpinky1')));
+  const normal = new THREE.Vector3().crossVectors(t, f).normalize();
+  expect(normal.dot(grip.normal)).toBeGreaterThan(0.9);
+  const palm = p(hand).lerp(p(bone('righthandmiddle1')), 0.62);
+  expect(palm.distanceTo(grip.palm)).toBeLessThan(0.05);
+  if (kind === 'torch') {
+    // Fingers closed: the middle fingertip has come round toward the palm side.
+    const tip = p(bone('righthandmiddle3')).sub(p(bone('righthandmiddle1')));
+    expect(tip.dot(grip.normal)).toBeGreaterThan(0.01);
+  }
 });
 
 it('re-arms every breaker one after another, then trips them all back once', () => {

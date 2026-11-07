@@ -269,6 +269,7 @@ async function startBackrooms(
       launch,
       autosaveOnReady,
       autoEnterOnReady: !menuBackground,
+      arrivedByFall: fadeIn,
       onRequestContinue: menuBackground
         ? () => queueMicrotask(() => continueFromMainMenu())
         : undefined,

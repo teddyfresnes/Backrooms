@@ -168,15 +168,16 @@ export function createLureWaypoints(spot: HideSpotId = 'wardrobe'): ChaseWaypoin
 /** Ground floor: the hall door gives onto the dark, rain-soaked street. */
 export const FACADE_OUTER_Z = STAIRWELL_BOUNDS.minZ - STAIRWELL_WALL_THICKNESS * 0.5;
 /**
- * The run out of the hall door: an invisible strip of street, walled on both
- * sides, long enough that the trip always happens before its end.
+ * The run out of the hall door: a wide stretch of verge whose invisible limits
+ * lie far beyond the point where the foot always catches, whichever way the
+ * player runs (straight on or along the facade).
  */
 export const ESCAPE_RUN = {
-  halfWidth: 14,
+  halfWidth: 40,
   floorY: 0,
-  /** Far end of the strip (the block across the street starts near -21.4). */
-  endZ: FACADE_OUTER_Z - 26,
-  /** Out in the dark this far, the foot catches. */
+  /** Far end of the strip, never reached before the trip. */
+  endZ: FACADE_OUTER_Z - 45,
+  /** Out in the dark this far from the doorway (any direction), the foot catches. */
   tripDistance: 14,
   /** ...or after this long outside, whatever the pace. */
   tripDelay: 4.6,
@@ -186,7 +187,7 @@ export const isOutsideHall = (position: Readonly<Vec3Data>): boolean =>
   position.y < 1.4 && position.z < FACADE_OUTER_Z - 0.25 && Math.abs(position.x) < ESCAPE_RUN.halfWidth + 0.5;
 /** Far enough out in the dark: the player trips and falls through the world. */
 export const isTripPosition = (position: Readonly<Vec3Data>): boolean =>
-  isOutsideHall(position) && position.z < FACADE_OUTER_Z - ESCAPE_RUN.tripDistance;
+  isOutsideHall(position) && Math.hypot(position.x, FACADE_OUTER_Z - position.z) > ESCAPE_RUN.tripDistance;
 
 /** In front of the apartment door, on the top landing. */
 export const DOOR_LANDING: Vec3Data = { x: APARTMENT_ENTRY_DOOR.centerX + 0.56, y: APARTMENT_FLOOR_Y, z: APARTMENT_ENTRY_DOOR.centerZ };

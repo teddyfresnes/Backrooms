@@ -14,6 +14,7 @@ import {
   DOOR_LANDING,
   isOutsideHall,
   isTripPosition,
+  ESCAPE_RUN,
   FACADE_OUTER_Z,
   REVEAL_TIMELINE as R,
   SPOTTED_TIMELINE,
@@ -102,6 +103,9 @@ describe('Bacteria escape down the stairwell', () => {
     expect(isTripPosition({ x: 0.1, y: 0.87, z: FACADE_OUTER_Z - 1 })).toBe(false);
     expect(isTripPosition({ x: 0.1, y: 0.87, z: FACADE_OUTER_Z - 7 })).toBe(false);
     expect(isTripPosition({ x: 0.1, y: 0.87, z: FACADE_OUTER_Z - 15 })).toBe(true);
+    // Running along the facade counts too, long before any invisible limit.
+    expect(isTripPosition({ x: -14.5, y: 0.87, z: FACADE_OUTER_Z - 1 })).toBe(true);
+    expect(ESCAPE_RUN.halfWidth).toBeGreaterThan(ESCAPE_RUN.tripDistance * 2);
     // Always downhill, until the curb of the hall door.
     for (let index = 1; index < path.points.length - 3; index += 1) expect(path.points[index]!.y).toBeLessThanOrEqual(path.points[index - 1]!.y + 1e-6);
   });

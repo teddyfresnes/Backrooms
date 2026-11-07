@@ -24,6 +24,7 @@ import {
   DOOR_BANG_SECONDS,
   ESCAPE_RUN,
   isOutsideHall,
+  FACADE_OUTER_Z,
   isTripPosition,
   PLAYER_CENTER_HEIGHT,
   REVEAL_TIMELINE as R,
@@ -859,6 +860,19 @@ export class BacteriaEncounter {
       this.playerRate = THREE.MathUtils.lerp(this.playerRate, rate, 1 - Math.exp(-dt * 6));
     }
     this.lastPlayerAlong = playerAlong;
+    // Out in the street both are off the route: straight at the player, same elastic.
+    const monsterOut = this.monsterPosition.z < FACADE_OUTER_Z - 0.4 && this.monsterPosition.y < 1;
+    if (monsterOut && isOutsideHall(host.player.position)) {
+      const flat = Math.hypot(this.feet.x - this.monsterPosition.x, this.feet.z - this.monsterPosition.z);
+      const moved = dt > 0 ? Math.hypot(this.feet.x - this.previousFeet.x, this.feet.z - this.previousFeet.z) / dt : 0;
+      this.playerRate = THREE.MathUtils.lerp(this.playerRate, Math.min(12, moved), 1 - Math.exp(-dt * 6));
+      this.stallTime = this.playerRate < ESCAPE_STALL_RATE ? this.stallTime + dt : Math.max(0, this.stallTime - dt * 1.5);
+      this.pursue(dt, this.followSpeed(flat));
+      this.distanceAlong = this.escapePath.project(this.monsterPosition);
+      this.actor.setLookTarget(this.eye);
+      this.checkCaught('stairs');
+      return;
+    }
     this.stallTime = this.playerRate < ESCAPE_STALL_RATE ? this.stallTime + dt : Math.max(0, this.stallTime - dt * 1.5);
     if (Math.abs(gap) < 1.6) {
       // On top of you: no more path, a lunge.
@@ -867,10 +881,7 @@ export class BacteriaEncounter {
     } else {
       // Always right behind, never quite on you: it closes fast from afar,
       // then hangs a few metres back at your pace. Stop, and it is on you.
-      const desired = this.stallTime > ESCAPE_STALL_SECONDS ? 0 : ESCAPE_FOLLOW_GAP;
-      const speed = gap >= desired
-        ? THREE.MathUtils.clamp(Math.max(0, this.playerRate) + (gap - desired) * 1.5, 3, 11)
-        : THREE.MathUtils.clamp(this.playerRate * 0.85, 0, 11);
+      const speed = this.followSpeed(gap);
       this.distanceAlong = THREE.MathUtils.clamp(this.distanceAlong + Math.sign(gap) * speed * dt, 0, this.escapePath.length);
       this.escapePath.sample(this.distanceAlong, this.monsterPosition);
       this.escapePath.heading(this.distanceAlong, this.heading);
@@ -879,6 +890,18 @@ export class BacteriaEncounter {
     }
     this.actor.setLookTarget(this.eye);
     this.checkCaught('stairs');
+  }
+
+  /**
+   * The elastic: far behind it runs much faster than any person, close it
+   * slows to just under the player's pace, a few metres back. Stopping for
+   * more than a second lets the gap close.
+   */
+  private followSpeed(gap: number): number {
+    const desired = this.stallTime > ESCAPE_STALL_SECONDS ? 0 : ESCAPE_FOLLOW_GAP;
+    return gap >= desired
+      ? THREE.MathUtils.clamp(Math.max(0, this.playerRate) + (gap - desired) * 1.5, 3, 11.5)
+      : THREE.MathUtils.clamp(this.playerRate * 0.85, 0, 11.5);
   }
 
   private startEscaped(): void {
