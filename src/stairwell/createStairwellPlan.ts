@@ -100,7 +100,7 @@ const flightRailing = (id: string, x: number, lowZ: number, highZ: number, lowY:
   };
 };
 
-/** The closed hall door, in the base stairwell chunk; disabled when it opens for the escape. */
+/** The closed right leaf of the hall door, in the base stairwell chunk; disabled when it opens for the escape. */
 export const HALL_DOOR_COLLIDER_ID = 'south-wall-door';
 
 /**
@@ -117,6 +117,14 @@ export const createEscapeRunColliders = (run: { halfWidth: number; floorY: numbe
     collider('escape-run-end', 0, run.floorY + height * 0.5, run.endZ - 0.1, run.halfWidth + 0.2, height * 0.5, 0.1, 'barrier'),
   ];
 };
+
+/** The swung-open leaf, from its rendered bounds: it stays as solid as it looks. */
+export const createOpenLeafCollider = (bounds: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } }): StaticCollider => collider(
+  'hall-door-open-leaf',
+  (bounds.min.x + bounds.max.x) * 0.5, (bounds.min.y + bounds.max.y) * 0.5, (bounds.min.z + bounds.max.z) * 0.5,
+  Math.max(0.03, (bounds.max.x - bounds.min.x) * 0.5), Math.max(0.05, (bounds.max.y - bounds.min.y) * 0.5), Math.max(0.03, (bounds.max.z - bounds.min.z) * 0.5),
+  'wall',
+);
 
 export const createStairwellColliders = (): StaticCollider[] => {
   const colliders: StaticCollider[] = [];
@@ -227,7 +235,9 @@ export const createStairwellColliders = (): StaticCollider[] => {
     collider('south-wall-west', (STAIRWELL_BOUNDS.minX - entranceHalf) * 0.5, STAIRWELL_ROOF_Y * 0.5, STAIRWELL_BOUNDS.minZ, (entranceHalf - STAIRWELL_BOUNDS.minX) * 0.5, STAIRWELL_ROOF_Y * 0.5, wallHalf, 'wall'),
     collider('south-wall-east', (STAIRWELL_BOUNDS.maxX + entranceHalf) * 0.5, STAIRWELL_ROOF_Y * 0.5, STAIRWELL_BOUNDS.minZ, (STAIRWELL_BOUNDS.maxX - entranceHalf) * 0.5, STAIRWELL_ROOF_Y * 0.5, wallHalf, 'wall'),
     collider('south-wall-header', 0, (STAIRWELL_ENTRANCE_HEIGHT + STAIRWELL_ROOF_Y) * 0.5, STAIRWELL_BOUNDS.minZ, entranceHalf, (STAIRWELL_ROOF_Y - STAIRWELL_ENTRANCE_HEIGHT) * 0.5, wallHalf, 'wall'),
-    collider(HALL_DOOR_COLLIDER_ID, 0, STAIRWELL_ENTRANCE_HEIGHT * 0.5, STAIRWELL_BOUNDS.minZ, entranceHalf, STAIRWELL_ENTRANCE_HEIGHT * 0.5, wallHalf, 'wall'),
+    // Only the right leaf (x > 0) swings open; the left one stays shut and solid.
+    collider('south-wall-door-left', -entranceHalf * 0.5, STAIRWELL_ENTRANCE_HEIGHT * 0.5, STAIRWELL_BOUNDS.minZ, entranceHalf * 0.5, STAIRWELL_ENTRANCE_HEIGHT * 0.5, wallHalf, 'wall'),
+    collider(HALL_DOOR_COLLIDER_ID, entranceHalf * 0.5, STAIRWELL_ENTRANCE_HEIGHT * 0.5, STAIRWELL_BOUNDS.minZ, entranceHalf * 0.5, STAIRWELL_ENTRANCE_HEIGHT * 0.5, wallHalf, 'wall'),
     collider('north-wall', 0, STAIRWELL_ROOF_Y * 0.5, STAIRWELL_BOUNDS.maxZ, width * 0.5, STAIRWELL_ROOF_Y * 0.5, wallHalf, 'wall'),
     collider('roof', 0, STAIRWELL_ROOF_Y + 0.12, 0, width * 0.5, 0.12, depth * 0.5, 'barrier'),
   );

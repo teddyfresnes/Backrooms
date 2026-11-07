@@ -96,11 +96,12 @@ describe('Bacteria escape down the stairwell', () => {
     expect(path.points[0]!.y).toBeGreaterThan(8);
     expect(end.y).toBeLessThan(0.5);
     // It follows the player out of the hall door, into the street.
-    expect(end.z).toBeLessThan(FACADE_OUTER_Z - 8);
+    expect(end.z).toBeLessThan(FACADE_OUTER_Z - 16);
     expect(isOutsideHall({ x: 0.1, y: 0.87, z: FACADE_OUTER_Z - 1 })).toBe(true);
     expect(isOutsideHall({ x: 0.1, y: 0.87, z: -3 })).toBe(false);
     expect(isTripPosition({ x: 0.1, y: 0.87, z: FACADE_OUTER_Z - 1 })).toBe(false);
-    expect(isTripPosition({ x: 0.1, y: 0.87, z: FACADE_OUTER_Z - 7 })).toBe(true);
+    expect(isTripPosition({ x: 0.1, y: 0.87, z: FACADE_OUTER_Z - 7 })).toBe(false);
+    expect(isTripPosition({ x: 0.1, y: 0.87, z: FACADE_OUTER_Z - 15 })).toBe(true);
     // Always downhill, until the curb of the hall door.
     for (let index = 1; index < path.points.length - 3; index += 1) expect(path.points[index]!.y).toBeLessThanOrEqual(path.points[index - 1]!.y + 1e-6);
   });

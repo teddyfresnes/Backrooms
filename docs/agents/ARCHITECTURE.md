@@ -69,10 +69,13 @@ utilisée). TV allumée : le monstre la porte et se calme (sa voix seule ; le cr
 joue qu'en poursuite), sortie discrète en maintenant E (`SNEAK_HOLD_SECONDS`) :
 le maintien pilote l'animation, le relâcher fait jaillir le joueur et le monstre
 charge. Puis fuite dans la cage restaurée (`restoreStairwell`) et par la porte du
-hall : son collider `HALL_DOOR_COLLIDER_ID` se désactive, `createEscapeRunColliders`
-monte une bande de rue invisible, `setExteriorDark` ne laisse que la pluie dans le
-noir. Dehors (`ESCAPE_RUN`), le joueur trébuche puis traverse le sol (phase
-`escaped`, teinte jaune via `setFallTint`) avant le passage au Level 0.
+hall : seul le vantail droit s'ouvre (`HALL_DOOR_COLLIDER_ID` se désactive, le
+vantail ouvert reçoit un collider ; le mouvement de la cinématique d'arrivée est
+réutilisé). `createEscapeRunColliders` monte une bande de rue invisible, couverte
+d'herbe (`EscapeStreet`, visible à la lampe, pas `outdoor-grass` synthétisés) ;
+`setExteriorDark` ne garde que la pluie et l'immeuble hôte. Dehors (`ESCAPE_RUN`),
+pluie sur l'objectif (`PostFX.setLensRain`), puis le joueur trébuche et traverse
+le sol (phase `escaped`, teinte jaune via `setFallTint`) avant le Level 0.
 TV éteinte : le placard est arraché. Les timings sont couverts par
 `BacteriaLayout.test.ts` et la machine à états par `BacteriaEncounter.test.ts`.
 Aucune sauvegarde pendant la rencontre ; une mort avant la cachette ramène à

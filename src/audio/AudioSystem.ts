@@ -1,3 +1,4 @@
+import { SeededRandom } from '../world/SeededRandom';
 import { loadAudioAsset } from './AudioAssetQueue';
 import type { RoomKind } from '../world/types';
 import { audioGainFromSetting } from './volume';
@@ -5,7 +6,7 @@ import type { SpatialAudioBus } from './SpatialDoorAudio';
 import { connectAudioOutput } from './output';
 import { CooperativeWork } from '../core/CooperativeWork';
 
-export type AudioSurface = 'backrooms-carpet' | 'apartment-wood' | 'stairwell-concrete';
+export type AudioSurface = 'backrooms-carpet' | 'apartment-wood' | 'stairwell-concrete' | 'outdoor-grass';
 export type LandingKind = 'light' | 'medium' | 'heavy' | 'traumatic';
 export type AudioAmbience = 'backrooms' | 'interior';
 export type DoorSound = 'open' | 'close' | 'blocked';
@@ -20,13 +21,13 @@ const footstepUrls = (name: string): readonly string[] => Array.from(
   (_, index) => `/assets/audio/footsteps/${name}-${index + 1}.mp3`,
 );
 
-const FOOTSTEP_URLS: Record<AudioSurface, readonly string[]> = {
+const FOOTSTEP_URLS: Partial<Record<AudioSurface, readonly string[]>> = {
   'backrooms-carpet': footstepUrls('backrooms-carpet'),
   'apartment-wood': footstepUrls('apartment-wood'),
   'stairwell-concrete': footstepUrls('stairwell-concrete'),
 };
 
-const SPRINT_URLS: Record<AudioSurface, string> = {
+const SPRINT_URLS: Partial<Record<AudioSurface, string>> = {
   'backrooms-carpet': '/assets/audio/footsteps/run-backrooms-carpet.mp3',
   'apartment-wood': '/assets/audio/footsteps/run-apartment-wood.mp3',
   'stairwell-concrete': '/assets/audio/footsteps/run-stairwell-concrete.mp3',
@@ -36,24 +37,28 @@ const SURFACE_GAIN: Record<AudioSurface, number> = {
   'backrooms-carpet': 0.96,
   'apartment-wood': 1,
   'stairwell-concrete': 0.98,
+  'outdoor-grass': 1.05,
 };
 
 const WALK_CUTOFF: Record<AudioSurface, number> = {
   'backrooms-carpet': 5400,
   'apartment-wood': 6800,
   'stairwell-concrete': 6400,
+  'outdoor-grass': 7200,
 };
 
 const WALK_RATE: Record<AudioSurface, number> = {
   'backrooms-carpet': 0.94,
   'apartment-wood': 0.93,
   'stairwell-concrete': 0.92,
+  'outdoor-grass': 1,
 };
 
 const SPRINT_LOOP_TRIM: Record<AudioSurface, { start: number; end: number }> = {
   'backrooms-carpet': { start: 0.015, end: 0.025 },
   'apartment-wood': { start: 0.025, end: 0.17 },
   'stairwell-concrete': { start: 0.055, end: 0.045 },
+  'outdoor-grass': { start: 0, end: 0 },
 };
 
 const STEP_RATE_VARIATION = [0.99, 1.015, 0.98, 1.008, 0.992, 1.02, 0.985, 1.005] as const;
@@ -61,6 +66,44 @@ const STEP_RATE_VARIATION = [0.99, 1.015, 0.98, 1.008, 0.992, 1.02, 0.985, 1.005
 // This non-linear order keeps neighbouring recordings apart without inventing
 // an artificial left/right stereo alternation.
 const STEP_ORDER = [0, 5, 2, 7, 3, 1, 6, 4] as const;
+
+/** Seeded noise (never Math.random): the same blades every session. */
+const grassNoise = (label: string) => {
+  const random = new SeededRandom('outdoor-grass-steps').fork(label);
+  return (): number => random.float(-1, 1);
+};
+
+/** One footfall in wet grass: a soft heel thump under a swish of blades. */
+const writeGrassStep = (data: Float32Array, rate: number, start: number, seed: string, strength = 1): void => {
+  const noise = grassNoise(seed);
+  const length = Math.floor(rate * 0.24);
+  let low = 0, band = 0, previous = 0;
+  for (let index = 0; index < length && start + index < data.length; index += 1) {
+    const t = index / rate;
+    const white = noise();
+    // Blades: high band noise, fast attack, a second brush as the foot rolls.
+    band = 0.55 * band + (white - previous); previous = white;
+    const swish = band * (Math.exp(-t * 26) * (1 - Math.exp(-t * 600)) + 0.45 * Math.exp(-Math.abs(t - 0.07) * 55));
+    // Heel: muffled low thump.
+    low += (white - low) * 0.035;
+    const thump = low * 5.5 * Math.exp(-t * 34) * (1 - Math.exp(-t * 900));
+    data[start + index]! += (swish * 0.32 + thump) * strength;
+  }
+};
+
+export const synthesizeGrassSteps = (context: BaseAudioContext): { steps: AudioBuffer[]; run: AudioBuffer } => {
+  const rate = context.sampleRate;
+  const steps = Array.from({ length: 6 }, (_, index) => {
+    const buffer = context.createBuffer(1, Math.floor(rate * 0.26), rate);
+    writeGrassStep(buffer.getChannelData(0), rate, 0, `step-${index}`, 0.9 + (index % 3) * 0.06);
+    return buffer;
+  });
+  // A sprint loop: four strides at ~2.9 steps/s, slightly uneven.
+  const offsets = [0, 0.335, 0.68, 1.02], duration = 1.37;
+  const run = context.createBuffer(1, Math.floor(rate * duration), rate);
+  offsets.forEach((offset, index) => writeGrassStep(run.getChannelData(0), rate, Math.floor(offset * rate), `run-${index}`, index % 2 ? 0.92 : 1));
+  return { steps, run };
+};
 
 export const landingKindForSpeed = (impactSpeed: number): LandingKind => {
   if (impactSpeed < 4.5) return 'light';
@@ -131,6 +174,7 @@ export class AudioSystem {
     'backrooms-carpet': 0,
     'apartment-wood': 3,
     'stairwell-concrete': 6,
+    'outdoor-grass': 2,
   };
   private readonly transientOffsets = new WeakMap<AudioBuffer, number>();
   private bodyFall?: AudioBuffer;
@@ -199,12 +243,12 @@ export class AudioSystem {
     }
 
     const commonPromise = Promise.all([
-      this.ambience === 'backrooms' ? this.loadBuffers(FOOTSTEP_URLS['backrooms-carpet']) : Promise.resolve([]),
-      this.loadBuffers(FOOTSTEP_URLS['apartment-wood']),
-      this.loadBuffers(FOOTSTEP_URLS['stairwell-concrete']),
-      this.ambience === 'backrooms' ? this.loadBuffer(SPRINT_URLS['backrooms-carpet']) : Promise.resolve(null),
-      this.loadBuffer(SPRINT_URLS['apartment-wood']),
-      this.loadBuffer(SPRINT_URLS['stairwell-concrete']),
+      this.ambience === 'backrooms' ? this.loadBuffers(FOOTSTEP_URLS['backrooms-carpet']!) : Promise.resolve([]),
+      this.loadBuffers(FOOTSTEP_URLS['apartment-wood']!),
+      this.loadBuffers(FOOTSTEP_URLS['stairwell-concrete']!),
+      this.ambience === 'backrooms' ? this.loadBuffer(SPRINT_URLS['backrooms-carpet']!) : Promise.resolve(null),
+      this.loadBuffer(SPRINT_URLS['apartment-wood']!),
+      this.loadBuffer(SPRINT_URLS['stairwell-concrete']!),
       this.loadBuffer('/assets/audio/impacts/body-fall-normalized.mp3'),
       this.loadBuffer('/assets/audio/impacts/bone-crack-normalized.mp3'),
     ]);
@@ -283,6 +327,12 @@ export class AudioSystem {
     if (sprintCarpet) this.sprintBuffers['backrooms-carpet'] = sprintCarpet;
     if (sprintWood) this.sprintBuffers['apartment-wood'] = sprintWood;
     if (sprintConcrete) this.sprintBuffers['stairwell-concrete'] = sprintConcrete;
+    if (this.ambience !== 'backrooms') {
+      // Wet grass has no recording: brushed, crushed blades synthesised once.
+      const grass = synthesizeGrassSteps(context);
+      this.footsteps['outdoor-grass'] = grass.steps;
+      this.sprintBuffers['outdoor-grass'] = grass.run;
+    }
     this.bodyFall = bodyFall ?? undefined;
     this.boneCrack = boneCrack ?? undefined;
     const work=new CooperativeWork();

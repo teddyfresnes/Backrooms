@@ -175,11 +175,11 @@ export const ESCAPE_RUN = {
   halfWidth: 3.2,
   floorY: 0,
   /** Far end of the strip (the block across the street starts near -21.4). */
-  endZ: FACADE_OUTER_Z - 14,
+  endZ: FACADE_OUTER_Z - 26,
   /** Out in the dark this far, the foot catches. */
-  tripDistance: 6,
+  tripDistance: 14,
   /** ...or after this long outside, whatever the pace. */
-  tripDelay: 2.2,
+  tripDelay: 4.6,
 } as const;
 /** Out of the hall door, in the street. */
 export const isOutsideHall = (position: Readonly<Vec3Data>): boolean =>
@@ -218,8 +218,9 @@ export function createEscapeWaypoints(): ChaseWaypoint[] {
   }
   points.push(
     point(-0.35, 0, -3.15, CHASE_SPEEDS.landing),
-    point(0.1, 0.02, STAIRWELL_BOUNDS.minZ + 0.75, CHASE_SPEEDS.landing),
-    point(0.1, ESCAPE_RUN.floorY, FACADE_OUTER_Z - 1.2, CHASE_SPEEDS.landing),
+    // Through the open right leaf of the hall door.
+    point(0.55, 0.02, STAIRWELL_BOUNDS.minZ + 0.75, CHASE_SPEEDS.landing),
+    point(0.55, ESCAPE_RUN.floorY, FACADE_OUTER_Z - 1.2, CHASE_SPEEDS.landing),
     // Out into the street, straight on into the dark.
     point(0, ESCAPE_RUN.floorY, ESCAPE_RUN.endZ + 1, CHASE_SPEEDS.landing),
   );

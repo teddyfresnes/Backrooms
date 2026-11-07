@@ -79,11 +79,14 @@ describe('escape through the hall door', () => {
     const colliders = createStairwellColliders();
     const door = colliders.find(collider => collider.id === HALL_DOOR_COLLIDER_ID)!;
     expect(door).toBeDefined();
-    expect(door.center.x).toBe(0);
+    // The right leaf only: the left one stays a wall.
+    expect(door.center.x).toBeGreaterThan(0);
+    expect(colliders.some(collider => collider.id === 'south-wall-door-left' && collider.center.x < 0)).toBe(true);
     expect(door.center.y - door.halfExtents.y).toBeLessThanOrEqual(0);
     // No other wall piece blocks the doorway once it is disabled.
+    const gapX = door.center.x;
     const blocking = colliders.filter(collider => collider.id.startsWith('south-wall') && collider.id !== HALL_DOOR_COLLIDER_ID
-      && Math.abs(collider.center.x) < collider.halfExtents.x && collider.center.y - collider.halfExtents.y < 2);
+      && Math.abs(collider.center.x - gapX) < collider.halfExtents.x && collider.center.y - collider.halfExtents.y < 2);
     expect(blocking).toEqual([]);
     const run = createEscapeRunColliders(ESCAPE_RUN);
     const ground = run.find(collider => collider.id === 'escape-run-ground')!;

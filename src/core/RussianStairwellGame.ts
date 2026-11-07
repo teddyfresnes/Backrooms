@@ -89,7 +89,8 @@ import { NeighborGunfire } from '../stairwell/NeighborGunfire';
 import { matchesControlAction } from '../input/ControlBindings';
 import type { StaticCollider } from '../world/types';
 import { StoryHud } from '../ui/StoryHud';
-import { createEscapeRunColliders, createStairwellPlan, HALL_DOOR_COLLIDER_ID } from '../stairwell/createStairwellPlan';
+import { createEscapeRunColliders, createOpenLeafCollider, createStairwellPlan, HALL_DOOR_COLLIDER_ID } from '../stairwell/createStairwellPlan';
+import { EscapeStreet } from '../stairwell/EscapeStreet';
 import { STAIRWELL_SPAWN, STAIRWELL_LEVEL_COUNT, floorY, midLandingY } from '../stairwell/layout';
 import { ExperienceUI } from '../ui/ExperienceUI';
 import type { ConsoleCompletion, ConsoleMode, ConsoleSubmitResult } from '../ui/ExperienceUI';
@@ -195,6 +196,12 @@ export class RussianStairwellGame {
   private escapeOpen = false;
   private fallTint = 0;
   private escapeDoor?: EntranceDoorMotion;
+  /** The leaf belongs to the arrival cinematic when it played: never disposed twice. */
+  private escapeDoorOwned = false;
+  private escapeStreet?: EscapeStreet;
+  private escapeOutside = 0;
+  private movementAudioState: 'idle' | 'sprint' = 'idle';
+  private movementSurface?: AudioSurface;
   private escapeDoorOpen = -1;
   private stairwellColliders: readonly StaticCollider[] = [];
   /** The cage is back behind the apartment door (after the hiding, or on a later load). */
@@ -368,6 +375,8 @@ export class RussianStairwellGame {
     environment.setBrightness(this.settings.brightness);
     apartment.setBrightness(this.settings.brightness);
     this.environment = environment;
+    this.escapeStreet = new EscapeStreet({ halfWidth: ESCAPE_RUN.halfWidth, floorY: ESCAPE_RUN.floorY, nearZ: FACADE_OUTER_Z, endZ: ESCAPE_RUN.endZ });
+    this.scene.add(this.escapeStreet.group);
     progress.start('physics');
     this.scene.add(environment.group, apartment.group);
     if (environment.furnitureColliders.length > 0) {
@@ -395,7 +404,7 @@ export class RussianStairwellGame {
       onLockChange: (locked) => this.onPlayerLockChange(locked),
       onPointerCaptureChange: captured => this.ui.setPointerCaptureRequired(!captured),
       onFootstep: (strength) => this.audio.footstep(this.currentSurface(), strength),
-      onMovementAudioState: (state) => this.audio.setMovementState(this.currentSurface(), state),
+      onMovementAudioState: (state) => { this.movementAudioState = state; this.movementSurface = this.currentSurface(); this.audio.setMovementState(this.movementSurface, state); },
       onInteract: mode => this.tryInteract(mode),
       onLand: (impactSpeed, impact) => {
         this.audio.land(this.currentSurface(), impactSpeed);
@@ -798,6 +807,7 @@ export class RussianStairwellGame {
         ...(this.arrivalCinematic?.warmupRoots ?? []),
         ...(bacteria?.warmupRoots ?? []),
         ...(this.gunfire?.warmupRoots ?? []),
+        ...(this.escapeStreet ? [this.escapeStreet.group] : []),
       ],
       staticRoots: [apartment.renderWarmupRoot],
       viewpoints: [
@@ -1029,12 +1039,16 @@ export class RussianStairwellGame {
         physics.setChunkColliderEnabled('origin',HALL_DOOR_COLLIDER_ID,false);
         if(!physics.hasChunk('escape-run'))physics.addChunk('escape-run',createEscapeRunColliders(ESCAPE_RUN),{x:0,y:0,z:0});
       });
-      environment.setExteriorDark(true);environment.setRainExclusion(null);environment.setEscapeGlow(null);
+      environment.setExteriorDark(true);environment.setRainExclusion(null);environment.setEscapeGlow(null);environment.setWeather(true);
+      this.escapeStreet?.setVisible(true);
       this.scene.background=new THREE.Color(0x000000);
-      this.scene.fog=new THREE.Fog(0x000000,2,18);
+      this.scene.fog=new THREE.Fog(0x000000,4,30);
     }
-    if(!this.escapeDoor&&environment.hallEntranceDoor&&!this.arrivalCinematic){
-      try{this.escapeDoor=new EntranceDoorMotion(environment.hallEntranceDoor);}catch(error){console.warn('Porte du hall immobile.',error);}
+    if(!this.escapeDoor&&environment.hallEntranceDoor){
+      // After the arrival the cinematic still holds the leaf's hinge: reuse it.
+      const shared=this.arrivalCinematic?.entranceMotion;
+      if(shared){this.escapeDoor=shared;this.escapeDoorOwned=false;}
+      else try{this.escapeDoor=new EntranceDoorMotion(environment.hallEntranceDoor);this.escapeDoorOwned=true;}catch(error){console.warn('Porte du hall immobile.',error);}
     }
     if(this.escapeDoorOpen<0)this.escapeDoorOpen=0;
   }
@@ -1044,14 +1058,21 @@ export class RussianStairwellGame {
       // The leaf swings open on its own, slowly at first.
       this.escapeDoorOpen=Math.min(1,this.escapeDoorOpen+delta*.7);
       const t=this.escapeDoorOpen;this.escapeDoor?.setOpen(t*t*(3-2*t));
+      if(this.escapeDoorOpen>=1&&this.escapeDoor&&this.physics){
+        // Wide open now: the leaf is as solid as it looks.
+        const bounds=new THREE.Box3();this.escapeDoor.pivot.updateWorldMatrix(true,true);bounds.setFromObject(this.escapeDoor.pivot);
+        if(!bounds.isEmpty()){this.physics.removeChunk('hall-door-open-leaf');this.physics.addChunk('hall-door-open-leaf',[createOpenLeafCollider(bounds)],{x:0,y:0,z:0});}
+      }
     }
     // Out in the street the dark closes in; the fall turns it fluorescent yellow.
     const fog=this.scene.fog;
     if(this.escapeOpen&&fog instanceof THREE.Fog&&this.player){
-      const outside=THREE.MathUtils.clamp((FACADE_OUTER_Z-this.player.position.z)/3,0,1);
+      const outside=THREE.MathUtils.clamp((FACADE_OUTER_Z-this.player.position.z)/2,0,1);
+      this.escapeOutside=outside;
       const tint=this.fallTint;
-      fog.near=THREE.MathUtils.lerp(THREE.MathUtils.lerp(2,.6,outside),.2,tint);
-      fog.far=THREE.MathUtils.lerp(THREE.MathUtils.lerp(18,10,outside),7,tint);
+      // Far enough to make out the building behind; ahead there is nothing to see.
+      fog.near=THREE.MathUtils.lerp(4,.2,tint);
+      fog.far=THREE.MathUtils.lerp(THREE.MathUtils.lerp(30,34,outside),7,tint);
     }
   }
   private setFallTint(level:number):void {
@@ -1106,6 +1127,7 @@ export class RussianStairwellGame {
       position.z >= APARTMENT_BOUNDS.minZ &&
       position.z <= APARTMENT_BOUNDS.maxZ
     ) return 'apartment-wood';
+    if (position && this.escapeOpen && position.z < FACADE_OUTER_Z - .1 && position.y < 1.4) return 'outdoor-grass';
     return 'stairwell-concrete';
   }
 
@@ -1119,7 +1141,9 @@ export class RussianStairwellGame {
 
   private interiorRainGain(surface: AudioSurface): number {
     // After the power cut the outside is gone: no rain at any window, no rain noise.
-    if (this.quest.devices.outageTriggered) { this.environment?.setWeather(false); return 0; }
+    if (this.quest.devices.outageTriggered && !this.escapeOpen) { this.environment?.setWeather(false); return 0; }
+    // Out in the street the downpour is all around.
+    if (this.escapeOpen && this.escapeOutside > 0) return THREE.MathUtils.lerp(.14, .42, this.escapeOutside) * (1 - this.fallTint);
     if (!this.apartment || !this.environment || !this.player) {
       return interiorRainGainForDistance(surface, Number.POSITIVE_INFINITY);
     }
@@ -1586,6 +1610,12 @@ export class RussianStairwellGame {
     this.renderRequested = false;
     // A faint camcorder grain all the time, worse near or facing the creature.
     this.postFX?.setVhs(PASSIVE_VHS + (this.encounter?.cameraDisturbance ?? 0));
+    this.postFX?.setLensRain(this.escapeOutside * (1 - this.fallTint));
+    // Sprinting across the threshold: the run loop changes from concrete to grass.
+    if (this.movementAudioState === 'sprint') {
+      const surface = this.currentSurface();
+      if (surface !== this.movementSurface) { this.movementSurface = surface; this.audio.setMovementState(surface, 'sprint'); }
+    }
     this.postFX?.render(delta);
     this.hitches?.check(frameStart, this.player.position);
   };
@@ -1755,7 +1785,7 @@ export class RussianStairwellGame {
     document.removeEventListener('mousemove', this.onObjectMouseMove, true);
     document.removeEventListener('mouseup', this.onObjectMouseUp, true);
     this.equipmentInput.dispose();this.inventoryHUD.dispose();this.flashlight?.dispose();this.corridor?.dispose();
-    this.gunfire?.dispose();this.escapeDoor?.dispose();this.reaction?.dispose();
+    this.gunfire?.dispose();if(this.escapeDoorOwned)this.escapeDoor?.dispose();this.escapeStreet?.dispose();this.reaction?.dispose();
     this.sprintHint?.dispose();this.corridorMaterials?.dispose();
     this.pcUse?.dispose();this.closet?.dispose(); this.fixtures?.dispose();
     this.objects?.dispose();

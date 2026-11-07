@@ -34,6 +34,7 @@ export class PostFX {
   private grading?: HueSaturationEffect;
   private vhs?: VhsEffect;
   private vhsLevel = 0;
+  private rainLevel = 0;
   private width = 1;
   private height = 1;
   private performanceMode = false;
@@ -201,6 +202,7 @@ export class PostFX {
     if (!this.options.vhs) return;
     this.vhs = new VhsEffect();
     this.vhs.intensity = this.vhsLevel;
+    this.vhs.rain = this.rainLevel;
     composer.addPass(new EffectPass(this.camera, this.vhs));
   }
 
@@ -208,6 +210,12 @@ export class PostFX {
   setVhs(level: number): void {
     this.vhsLevel = THREE.MathUtils.clamp(Number.isFinite(level) ? level : 0, 0, 1);
     if (this.vhs) this.vhs.intensity = this.vhsLevel;
+  }
+
+  /** Drops on the lens (VHS layer only), 0 .. 1; kept across rebuilds. */
+  setLensRain(level: number): void {
+    this.rainLevel = THREE.MathUtils.clamp(Number.isFinite(level) ? level : 0, 0, 1);
+    if (this.vhs) this.vhs.rain = this.rainLevel;
   }
 
   setDarkness(value: number): void {

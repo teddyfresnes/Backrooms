@@ -144,6 +144,7 @@ export interface StairwellLightingProfile {
   readonly wallDistance: number;
 }
 
+const ESCAPE_MOON = 0.4;
 export const STAIRWELL_LIGHTING_PROFILES: Record<LightingMode, StairwellLightingProfile> = {
   modern: {
     moonIntensity: 0.085,
@@ -1810,10 +1811,10 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
         light.color.setHex(color);
       }
     };
-    const outside = this.exteriorDark ? 0 : 1;
-    if (this.moonLight) apply([this.moonLight], profile.moonIntensity * outside, profile.moonColor);
+    // A dark street: a faint moon still outlines the building behind you.
+    if (this.moonLight) apply([this.moonLight], profile.moonIntensity * (this.exteriorDark ? ESCAPE_MOON : 1), profile.moonColor);
     if (this.streetLampLight) {
-      apply([this.streetLampLight], profile.streetLampIntensity * outside, profile.streetLampColor);
+      apply([this.streetLampLight], profile.streetLampIntensity * (this.exteriorDark ? 0 : 1), profile.streetLampColor);
     }
     this.localLighting.setProfile(profile);
     this.lightingMode = mode;
@@ -1823,8 +1824,9 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
   private readonly darkenedExterior: THREE.Object3D[] = [];
   private lightingMode?: LightingMode;
   /**
-   * The escape street: moon and street lamp go out (at zero, still counted by
-   * the shaders) so nothing but rain shows beyond the hall door.
+   * The escape street: the street lamp goes out and the moon nearly does (at
+   * zero, lights stay counted by the shaders); the street, the other blocks
+   * and the sky vanish. The host building, against the facade, stays.
    */
   setExteriorDark(dark: boolean): void {
     if (dark === this.exteriorDark) return;
@@ -1833,8 +1835,13 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     for (const object of this.darkenedExterior) object.visible = true;
     this.darkenedExterior.length = 0;
     if (dark) {
+      const bounds = new THREE.Box3(), facadeZ = STAIRWELL_BOUNDS.minZ - STAIRWELL_WALL_THICKNESS * 0.5;
+      this.group.updateMatrixWorld(true);
       for (const child of this.exterior.children) {
         if (!child.visible || child === this.rain || (this.hallEntranceDoor && (child === this.hallEntranceDoor || child.getObjectById(this.hallEntranceDoor.id)))) continue;
+        bounds.setFromObject(child);
+        // Pieces of the host building itself (wings, plinth, windows, entrance skin).
+        if (!bounds.isEmpty() && bounds.min.z > facadeZ - 0.6 && bounds.max.y > 1) continue;
         let hasLight = false;
         child.traverse(object => { hasLight ||= (object as THREE.Light).isLight === true; });
         if (hasLight) continue;
@@ -1844,7 +1851,7 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     }
     if (this.lightingMode) this.setLightingMode(this.lightingMode);
     else {
-      if (this.moonLight) this.moonLight.intensity = dark ? 0 : STAIRWELL_LIGHTING_PROFILES.modern.moonIntensity;
+      if (this.moonLight) this.moonLight.intensity = STAIRWELL_LIGHTING_PROFILES.modern.moonIntensity * (dark ? ESCAPE_MOON : 1);
       if (this.streetLampLight) this.streetLampLight.intensity = dark ? 0 : STAIRWELL_LIGHTING_PROFILES.modern.streetLampIntensity;
     }
   }

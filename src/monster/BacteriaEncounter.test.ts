@@ -325,7 +325,7 @@ describe('BacteriaEncounter', () => {
     world.step(1.2);
     expect(world.events).not.toContain('escaped');
     // Out in the dark: the trip, then the long fall before the hand-over.
-    world.player.position.set(0.1, 0.865, FACADE_OUTER_Z - 7);
+    world.player.position.set(0.1, 0.865, FACADE_OUTER_Z - 15);
     world.step(0.6);
     expect(world.encounter.locksInput).toBe(true);
     expect(world.events).not.toContain('escaped');

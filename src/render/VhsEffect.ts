@@ -8,8 +8,28 @@ const fragmentShader = /* glsl */ `
 uniform float vhsIntensity;
 uniform float vhsTime;
 uniform vec2 vhsResolution;
+uniform float vhsRain;
 
 float vhsHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+
+// Rain on the lens: one layer of cells, some holding a drop that beads,
+// swells and slides down before it clears. Returns the refraction offset.
+vec2 vhsDrops(vec2 uv, float scale, float speed, float seed, out float mask) {
+  vec2 p = uv * vec2(vhsResolution.x / vhsResolution.y, 1.0) * scale;
+  vec2 cell = floor(p);
+  vec2 f = fract(p) - 0.5;
+  float h = vhsHash(cell + seed);
+  float h2 = vhsHash(cell + seed + 7.31);
+  float life = fract(vhsTime * speed * (0.6 + 0.8 * h2) + h);
+  float present = step(0.52, vhsHash(cell + seed + 3.17));
+  vec2 center = (vec2(h, h2) - 0.5) * 0.5;
+  center.y -= life * life * 0.55;
+  float radius = 0.1 + 0.16 * h2;
+  vec2 d = f - center;
+  float dist = length(d * vec2(1.0, 0.8));
+  mask = smoothstep(radius, radius * 0.55, dist) * present * smoothstep(0.0, 0.08, life) * smoothstep(1.0, 0.75, life);
+  return d / radius * mask;
+}
 
 // The UV distortion lives here, not in a UV hook: postprocessing refuses an
 // effect that both transforms UVs and samples neighbours (convolution).
@@ -35,6 +55,14 @@ void mainImage(const in vec4 inputColor, const in vec2 baseUv, out vec4 outputCo
   float i2 = i * i;
   float frame = floor(vhsTime * 24.0);
   vec2 uv = vhsDistort(baseUv);
+  float drop = 0.0;
+  if (vhsRain > 0.001) {
+    float near, far;
+    vec2 bend = vhsDrops(baseUv, 7.0, 0.09, 0.0, near) + vhsDrops(baseUv, 13.0, 0.14, 19.7, far) * 0.7;
+    drop = max(near, far) * vhsRain;
+    // A drop is a little lens: it shows the scene flipped and pulled in.
+    uv = clamp(uv - bend * vhsRain * 0.028, 0.0, 1.0);
+  }
   float shift = 0.0006 + 0.014 * i2;
   vec3 color = vec3(
     texture2D(inputBuffer, clamp(uv + vec2(shift, 0.0), 0.0, 1.0)).r,
@@ -44,6 +72,8 @@ void mainImage(const in vec4 inputColor, const in vec2 baseUv, out vec4 outputCo
   // The buffer is linear: damage it in display space, or grain and snow crush
   // the shadows (a few thousandths in linear is most of a dark pixel).
   color = pow(max(color, 0.0), vec3(1.0 / 2.2));
+  // Wet glass: drops read slightly brighter at the core, dark at the rim.
+  color *= 1.0 + drop * 0.12 - drop * drop * 0.2;
   // Tape bleed: washed and cold, only when disturbed.
   float luma = dot(color, vec3(0.299, 0.587, 0.114));
   color = mix(color, vec3(luma) * vec3(0.94, 1.0, 1.04), 0.4 * i2);
@@ -70,12 +100,17 @@ export class VhsEffect extends Effect {
         ['vhsIntensity', new THREE.Uniform(0)],
         ['vhsTime', new THREE.Uniform(0)],
         ['vhsResolution', new THREE.Uniform(new THREE.Vector2(1, 1))],
+        ['vhsRain', new THREE.Uniform(0)],
       ]),
     });
   }
 
   set intensity(value: number) { this.uniforms.get('vhsIntensity')!.value = THREE.MathUtils.clamp(value, 0, 1); }
   get intensity(): number { return this.uniforms.get('vhsIntensity')!.value as number; }
+
+  /** Rain beading on the lens, 0 (dry) .. 1 (out in the downpour). */
+  set rain(value: number) { this.uniforms.get('vhsRain')!.value = THREE.MathUtils.clamp(value, 0, 1); }
+  get rain(): number { return this.uniforms.get('vhsRain')!.value as number; }
 
   advance(delta: number): void { this.uniforms.get('vhsTime')!.value = ((this.uniforms.get('vhsTime')!.value as number) + delta) % 1000; }
 
