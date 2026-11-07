@@ -165,27 +165,28 @@ export function createLureWaypoints(spot: HideSpotId = 'wardrobe'): ChaseWaypoin
   ];
 }
 
-/** Ground floor: the hall door gives onto a Level 0 hallway during the escape. */
+/** Ground floor: the hall door gives onto the dark, rain-soaked street. */
 export const FACADE_OUTER_Z = STAIRWELL_BOUNDS.minZ - STAIRWELL_WALL_THICKNESS * 0.5;
-export const BACKROOMS_CORRIDOR = {
-  /** Starts a hair outside the facade so no face is coplanar with the wall. */
-  nearZ: FACADE_OUTER_Z - 0.035,
-  // Ends short of the block across the street (front face z ≈ -21.4).
-  farZ: FACADE_OUTER_Z - 13.4,
-  halfWidth: STAIRWELL_ENTRANCE_WIDTH * 0.5 + 0.07,
-  // Raised over the entrance curb (0.16 m): reads as a threshold step.
-  floorY: 0.17,
-  height: STAIRWELL_ENTRANCE_HEIGHT + 0.06,
-  panelCount: 6,
+/**
+ * The run out of the hall door: an invisible strip of street, walled on both
+ * sides, long enough that the trip always happens before its end.
+ */
+export const ESCAPE_RUN = {
+  halfWidth: 3.2,
+  floorY: 0,
+  /** Far end of the strip (the block across the street starts near -21.4). */
+  endZ: FACADE_OUTER_Z - 14,
+  /** Out in the dark this far, the foot catches. */
+  tripDistance: 6,
+  /** ...or after this long outside, whatever the pace. */
+  tripDelay: 2.2,
 } as const;
-export const corridorPanelZ = (index: number): number => {
-  const span = BACKROOMS_CORRIDOR.nearZ - BACKROOMS_CORRIDOR.farZ;
-  // Index 0 is the farthest panel.
-  return BACKROOMS_CORRIDOR.farZ + span * ((index + 0.62) / BACKROOMS_CORRIDOR.panelCount);
-};
-/** Reaching the open hall door: the Backrooms take the player. */
-export const isEscapePosition = (position: Readonly<Vec3Data>): boolean =>
-  position.y < 1.4 && position.z < STAIRWELL_BOUNDS.minZ + 0.62 && Math.abs(position.x) < STAIRWELL_ENTRANCE_WIDTH * 0.5;
+/** Out of the hall door, in the street. */
+export const isOutsideHall = (position: Readonly<Vec3Data>): boolean =>
+  position.y < 1.4 && position.z < FACADE_OUTER_Z - 0.25 && Math.abs(position.x) < ESCAPE_RUN.halfWidth + 0.5;
+/** Far enough out in the dark: the player trips and falls through the world. */
+export const isTripPosition = (position: Readonly<Vec3Data>): boolean =>
+  isOutsideHall(position) && position.z < FACADE_OUTER_Z - ESCAPE_RUN.tripDistance;
 
 /** In front of the apartment door, on the top landing. */
 export const DOOR_LANDING: Vec3Data = { x: APARTMENT_ENTRY_DOOR.centerX + 0.56, y: APARTMENT_FLOOR_Y, z: APARTMENT_ENTRY_DOOR.centerZ };
@@ -218,7 +219,9 @@ export function createEscapeWaypoints(): ChaseWaypoint[] {
   points.push(
     point(-0.35, 0, -3.15, CHASE_SPEEDS.landing),
     point(0.1, 0.02, STAIRWELL_BOUNDS.minZ + 0.75, CHASE_SPEEDS.landing),
-    point(0.1, BACKROOMS_CORRIDOR.floorY, FACADE_OUTER_Z - 1.2, CHASE_SPEEDS.landing),
+    point(0.1, ESCAPE_RUN.floorY, FACADE_OUTER_Z - 1.2, CHASE_SPEEDS.landing),
+    // Out into the street, straight on into the dark.
+    point(0, ESCAPE_RUN.floorY, ESCAPE_RUN.endZ + 1, CHASE_SPEEDS.landing),
   );
   return points;
 }

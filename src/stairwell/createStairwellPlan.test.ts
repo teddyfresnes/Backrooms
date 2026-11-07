@@ -71,3 +71,24 @@ describe('Russian residential stairwell plan V23', () => {
     expect(STAIRWELL_SPAWN.z).toBeLessThan(-2.5);
   });
 });
+
+describe('escape through the hall door', () => {
+  it('closes the door gap with its own collider and lays an invisible street strip beyond it', async () => {
+    const { createEscapeRunColliders, createStairwellColliders, HALL_DOOR_COLLIDER_ID } = await import('./createStairwellPlan');
+    const { ESCAPE_RUN, FACADE_OUTER_Z } = await import('../monster/BacteriaLayout');
+    const colliders = createStairwellColliders();
+    const door = colliders.find(collider => collider.id === HALL_DOOR_COLLIDER_ID)!;
+    expect(door).toBeDefined();
+    expect(door.center.x).toBe(0);
+    expect(door.center.y - door.halfExtents.y).toBeLessThanOrEqual(0);
+    // No other wall piece blocks the doorway once it is disabled.
+    const blocking = colliders.filter(collider => collider.id.startsWith('south-wall') && collider.id !== HALL_DOOR_COLLIDER_ID
+      && Math.abs(collider.center.x) < collider.halfExtents.x && collider.center.y - collider.halfExtents.y < 2);
+    expect(blocking).toEqual([]);
+    const run = createEscapeRunColliders(ESCAPE_RUN);
+    const ground = run.find(collider => collider.id === 'escape-run-ground')!;
+    expect(ground.center.y + ground.halfExtents.y).toBeCloseTo(ESCAPE_RUN.floorY, 5);
+    expect(ground.center.z + ground.halfExtents.z).toBeGreaterThanOrEqual(FACADE_OUTER_Z);
+    expect(ground.center.z - ground.halfExtents.z).toBeLessThanOrEqual(FACADE_OUTER_Z - ESCAPE_RUN.tripDistance - 2);
+  });
+});

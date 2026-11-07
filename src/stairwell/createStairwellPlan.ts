@@ -4,6 +4,8 @@ import {
   floorY,
   midLandingY,
   STAIRWELL_BOUNDS,
+  STAIRWELL_ENTRANCE_HEIGHT,
+  STAIRWELL_ENTRANCE_WIDTH,
   STAIRWELL_FLIGHT_COUNT,
   STAIRWELL_FLOOR_HEIGHT,
   STAIRWELL_LEFT_FLIGHT,
@@ -98,6 +100,24 @@ const flightRailing = (id: string, x: number, lowZ: number, highZ: number, lowY:
   };
 };
 
+/** The closed hall door, in the base stairwell chunk; disabled when it opens for the escape. */
+export const HALL_DOOR_COLLIDER_ID = 'south-wall-door';
+
+/**
+ * Invisible strip of street in front of the hall door, mounted only for the
+ * escape: ground, both sides and the far end.
+ */
+export const createEscapeRunColliders = (run: { halfWidth: number; floorY: number; endZ: number }): StaticCollider[] => {
+  const nearZ = STAIRWELL_BOUNDS.minZ - STAIRWELL_WALL_THICKNESS * 0.5;
+  const length = nearZ - run.endZ, centerZ = (nearZ + run.endZ) * 0.5, height = 3;
+  return [
+    floorCollider('escape-run-ground', -run.halfWidth, run.halfWidth, run.endZ, nearZ + 0.02, run.floorY),
+    collider('escape-run-west', -run.halfWidth - 0.1, run.floorY + height * 0.5, centerZ, 0.1, height * 0.5, length * 0.5, 'barrier'),
+    collider('escape-run-east', run.halfWidth + 0.1, run.floorY + height * 0.5, centerZ, 0.1, height * 0.5, length * 0.5, 'barrier'),
+    collider('escape-run-end', 0, run.floorY + height * 0.5, run.endZ - 0.1, run.halfWidth + 0.2, height * 0.5, 0.1, 'barrier'),
+  ];
+};
+
 export const createStairwellColliders = (): StaticCollider[] => {
   const colliders: StaticCollider[] = [];
 
@@ -189,6 +209,7 @@ export const createStairwellColliders = (): StaticCollider[] => {
   const width = STAIRWELL_BOUNDS.maxX - STAIRWELL_BOUNDS.minX;
   const depth = STAIRWELL_BOUNDS.maxZ - STAIRWELL_BOUNDS.minZ;
   const wallHalf = STAIRWELL_WALL_THICKNESS * 0.5;
+  const entranceHalf = STAIRWELL_ENTRANCE_WIDTH * 0.5;
   const topFloorY = floorY(STAIRWELL_LEVEL_COUNT - 1);
   const westOpeningMinZ = APARTMENT_ENTRY_DOOR.centerZ - APARTMENT_ENTRY_DOOR.width * 0.5;
   const westOpeningMaxZ = APARTMENT_ENTRY_DOOR.centerZ + APARTMENT_ENTRY_DOOR.width * 0.5;
@@ -202,7 +223,11 @@ export const createStairwellColliders = (): StaticCollider[] => {
     collider('west-wall-top-north', STAIRWELL_BOUNDS.minX, topFloorY + STAIRWELL_FLOOR_HEIGHT * 0.5, westOpeningMaxZ + westNorthDepth * 0.5, wallHalf, STAIRWELL_FLOOR_HEIGHT * 0.5, westNorthDepth * 0.5, 'wall'),
     collider('west-wall-top-header', STAIRWELL_BOUNDS.minX, (westOpeningTopY + STAIRWELL_ROOF_Y) * 0.5, APARTMENT_ENTRY_DOOR.centerZ, wallHalf, (STAIRWELL_ROOF_Y - westOpeningTopY) * 0.5, APARTMENT_ENTRY_DOOR.width * 0.5, 'wall'),
     collider('east-wall', STAIRWELL_BOUNDS.maxX, STAIRWELL_ROOF_Y * 0.5, 0, wallHalf, STAIRWELL_ROOF_Y * 0.5, depth * 0.5, 'wall'),
-    collider('south-wall', 0, STAIRWELL_ROOF_Y * 0.5, STAIRWELL_BOUNDS.minZ, width * 0.5, STAIRWELL_ROOF_Y * 0.5, wallHalf, 'wall'),
+    // Split around the hall door: its own piece opens for the escape.
+    collider('south-wall-west', (STAIRWELL_BOUNDS.minX - entranceHalf) * 0.5, STAIRWELL_ROOF_Y * 0.5, STAIRWELL_BOUNDS.minZ, (entranceHalf - STAIRWELL_BOUNDS.minX) * 0.5, STAIRWELL_ROOF_Y * 0.5, wallHalf, 'wall'),
+    collider('south-wall-east', (STAIRWELL_BOUNDS.maxX + entranceHalf) * 0.5, STAIRWELL_ROOF_Y * 0.5, STAIRWELL_BOUNDS.minZ, (STAIRWELL_BOUNDS.maxX - entranceHalf) * 0.5, STAIRWELL_ROOF_Y * 0.5, wallHalf, 'wall'),
+    collider('south-wall-header', 0, (STAIRWELL_ENTRANCE_HEIGHT + STAIRWELL_ROOF_Y) * 0.5, STAIRWELL_BOUNDS.minZ, entranceHalf, (STAIRWELL_ROOF_Y - STAIRWELL_ENTRANCE_HEIGHT) * 0.5, wallHalf, 'wall'),
+    collider(HALL_DOOR_COLLIDER_ID, 0, STAIRWELL_ENTRANCE_HEIGHT * 0.5, STAIRWELL_BOUNDS.minZ, entranceHalf, STAIRWELL_ENTRANCE_HEIGHT * 0.5, wallHalf, 'wall'),
     collider('north-wall', 0, STAIRWELL_ROOF_Y * 0.5, STAIRWELL_BOUNDS.maxZ, width * 0.5, STAIRWELL_ROOF_Y * 0.5, wallHalf, 'wall'),
     collider('roof', 0, STAIRWELL_ROOF_Y + 0.12, 0, width * 0.5, 0.12, depth * 0.5, 'barrier'),
   );

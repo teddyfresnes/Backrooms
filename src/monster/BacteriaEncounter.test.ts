@@ -12,7 +12,7 @@ import {
   PLAYER_CENTER_HEIGHT,
   REVEAL_TIMELINE,
   SNEAK_HOLD_SECONDS,
-  SPOTTED_TIMELINE, HIDE_SPOTS, type HideSpotId } from './BacteriaLayout';
+  SPOTTED_TIMELINE, HIDE_SPOTS, FACADE_OUTER_Z, type HideSpotId } from './BacteriaLayout';
 
 const threshold = { x: -2.02, y: 8.67, z: -2.71 };
 const DT = 1 / 60;
@@ -314,14 +314,22 @@ describe('BacteriaEncounter', () => {
     expect(world.events.slice(before)).not.toContain('breach');
   });
 
-  it('resumes a survived save as a free walk to the hall door', () => {
+  it('resumes a survived save as a free walk out into the street, where the player trips and falls', () => {
     const world = setup();
     world.setRevealReady(false);
     world.encounter.resumeAftermath();
     expect(world.encounter.isActive).toBe(false);
     expect(world.events).toContain('open-escape');
-    world.player.position.set(0.1, 0.865, -5.9);
+    // Just outside the door: still walking.
+    world.player.position.set(0.1, 0.865, FACADE_OUTER_Z - 1);
     world.step(1.2);
+    expect(world.events).not.toContain('escaped');
+    // Out in the dark: the trip, then the long fall before the hand-over.
+    world.player.position.set(0.1, 0.865, FACADE_OUTER_Z - 7);
+    world.step(0.6);
+    expect(world.encounter.locksInput).toBe(true);
+    expect(world.events).not.toContain('escaped');
+    world.step(2.6);
     expect(world.events).toContain('escaped');
   });
 });

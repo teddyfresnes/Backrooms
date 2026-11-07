@@ -66,10 +66,13 @@ réaction ; la vague part toujours de la lampe 0, à la porte de l'appartement.
 corps qui se retournent), charge accélérée, siège de la porte, cachette (armoire,
 placard d'entrée ou salle de bain : `HIDE_SPOTS`, le monstre renifle devant celle
 utilisée). TV allumée : le monstre la porte et se calme (sa voix seule ; le cri ne
-joue qu'en poursuite), sortie discrète en maintenant la touche de sprint
-(`SNEAK_HOLD_SECONDS`) : le maintien pilote l'animation, le relâcher fait jaillir
-le joueur et le monstre charge. Puis fuite dans la cage restaurée (`restoreStairwell`)
-jusqu'à la porte du hall, ouverte sur `BackroomsCorridor`, qui mène au Level 0.
+joue qu'en poursuite), sortie discrète en maintenant E (`SNEAK_HOLD_SECONDS`) :
+le maintien pilote l'animation, le relâcher fait jaillir le joueur et le monstre
+charge. Puis fuite dans la cage restaurée (`restoreStairwell`) et par la porte du
+hall : son collider `HALL_DOOR_COLLIDER_ID` se désactive, `createEscapeRunColliders`
+monte une bande de rue invisible, `setExteriorDark` ne laisse que la pluie dans le
+noir. Dehors (`ESCAPE_RUN`), le joueur trébuche puis traverse le sol (phase
+`escaped`, teinte jaune via `setFallTint`) avant le passage au Level 0.
 TV éteinte : le placard est arraché. Les timings sont couverts par
 `BacteriaLayout.test.ts` et la machine à états par `BacteriaEncounter.test.ts`.
 Aucune sauvegarde pendant la rencontre ; une mort avant la cachette ramène à

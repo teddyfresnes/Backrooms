@@ -578,6 +578,13 @@ export class AudioSystem {
     this.corridorHumGain.gain.setTargetAtTime(Math.min(1, Math.max(0, level)) * 0.2, this.context.currentTime, 0.25);
   }
 
+  /** A run that ends face down: a heavy body fall, no bone. */
+  tumble(intensity = 1): void {
+    if (!this.bodyFall) return;
+    const onset = this.transientOffset(this.bodyFall);
+    this.playRecordedClip(this.bodyFall, { offset: onset, duration: this.bodyFall.duration - onset }, 1.2 * intensity, 0.78, 5200, 0, 6.5);
+  }
+
   /** One blow of a mauling: a body slam and a crack of bone, pitched per hit. */
   strike(intensity = 1, variant = 0): void {
     const rate = [0.8, 0.93, 0.72, 1.0, 0.86][variant % 5]!;

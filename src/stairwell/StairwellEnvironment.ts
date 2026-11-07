@@ -1810,11 +1810,43 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
         light.color.setHex(color);
       }
     };
-    if (this.moonLight) apply([this.moonLight], profile.moonIntensity, profile.moonColor);
+    const outside = this.exteriorDark ? 0 : 1;
+    if (this.moonLight) apply([this.moonLight], profile.moonIntensity * outside, profile.moonColor);
     if (this.streetLampLight) {
-      apply([this.streetLampLight], profile.streetLampIntensity, profile.streetLampColor);
+      apply([this.streetLampLight], profile.streetLampIntensity * outside, profile.streetLampColor);
     }
     this.localLighting.setProfile(profile);
+    this.lightingMode = mode;
+  }
+
+  private exteriorDark = false;
+  private readonly darkenedExterior: THREE.Object3D[] = [];
+  private lightingMode?: LightingMode;
+  /**
+   * The escape street: moon and street lamp go out (at zero, still counted by
+   * the shaders) so nothing but rain shows beyond the hall door.
+   */
+  setExteriorDark(dark: boolean): void {
+    if (dark === this.exteriorDark) return;
+    this.exteriorDark = dark;
+    // The street, the blocks and the sky vanish; only the rain remains.
+    for (const object of this.darkenedExterior) object.visible = true;
+    this.darkenedExterior.length = 0;
+    if (dark) {
+      for (const child of this.exterior.children) {
+        if (!child.visible || child === this.rain || (this.hallEntranceDoor && (child === this.hallEntranceDoor || child.getObjectById(this.hallEntranceDoor.id)))) continue;
+        let hasLight = false;
+        child.traverse(object => { hasLight ||= (object as THREE.Light).isLight === true; });
+        if (hasLight) continue;
+        child.visible = false;
+        this.darkenedExterior.push(child);
+      }
+    }
+    if (this.lightingMode) this.setLightingMode(this.lightingMode);
+    else {
+      if (this.moonLight) this.moonLight.intensity = dark ? 0 : STAIRWELL_LIGHTING_PROFILES.modern.moonIntensity;
+      if (this.streetLampLight) this.streetLampLight.intensity = dark ? 0 : STAIRWELL_LIGHTING_PROFILES.modern.streetLampIntensity;
+    }
   }
 
   setBrightness(value: number): void {

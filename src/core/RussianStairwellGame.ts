@@ -43,6 +43,9 @@ import { FrameHitchMonitor } from '../render/FrameHitchMonitor';
 
 /** Always-on camcorder layer (0..1). */
 const PASSIVE_VHS = .06;
+/** The noclip fall: the black street void, then the Backrooms' fluorescent yellow. */
+const FALL_BLACK = new THREE.Color(0x000000);
+const FALL_YELLOW = new THREE.Color(0xc8b35c);
 import { compactSceneDataMaps, restoreSceneDataMaps, warmSceneForPlay, waitForSceneGpu } from '../render/SceneWarmup';
 import { HallExitInteraction } from '../stairwell/HallExitInteraction';
 import { HallArrivalStory, MAIL_STAIR_GATE, MAIL_SECOND_FLIGHT_GATE, MAIL_SAFE_LANDING } from '../stairwell/HallArrivalStory';
@@ -80,14 +83,13 @@ import { StairwellMaterials } from '../stairwell/StairwellMaterials';
 import { BacteriaActor } from '../monster/BacteriaActor';
 import { BacteriaAudio } from '../monster/BacteriaAudio';
 import { BacteriaEncounter } from '../monster/BacteriaEncounter';
-import { BackroomsCorridor } from '../monster/BackroomsCorridor';
-import { FACADE_OUTER_Z } from '../monster/BacteriaLayout';
+import { ESCAPE_RUN, FACADE_OUTER_Z } from '../monster/BacteriaLayout';
 import { EntranceDoorMotion } from '../stairwell/EntranceDoorMotion';
 import { NeighborGunfire } from '../stairwell/NeighborGunfire';
 import { matchesControlAction } from '../input/ControlBindings';
 import type { StaticCollider } from '../world/types';
 import { StoryHud } from '../ui/StoryHud';
-import { createStairwellPlan } from '../stairwell/createStairwellPlan';
+import { createEscapeRunColliders, createStairwellPlan, HALL_DOOR_COLLIDER_ID } from '../stairwell/createStairwellPlan';
 import { STAIRWELL_SPAWN, STAIRWELL_LEVEL_COUNT, floorY, midLandingY } from '../stairwell/layout';
 import { ExperienceUI } from '../ui/ExperienceUI';
 import type { ConsoleCompletion, ConsoleMode, ConsoleSubmitResult } from '../ui/ExperienceUI';
@@ -189,8 +191,9 @@ export class RussianStairwellGame {
   private neighborCaption?: NarrativeCaption;
   private savePreview?: string;
   private encounter?: BacteriaEncounter;
-  /** Level 0 hallway behind the hall door: the way out at the end of the escape. */
-  private escapeCorridor?: BackroomsCorridor;
+  /** The hall door stands open on the dark street (escape run mounted). */
+  private escapeOpen = false;
+  private fallTint = 0;
   private escapeDoor?: EntranceDoorMotion;
   private escapeDoorOpen = -1;
   private stairwellColliders: readonly StaticCollider[] = [];
@@ -321,10 +324,6 @@ export class RussianStairwellGame {
     await this.audio.setSuspended(true);
     const bacteriaReady = BacteriaActor.load(this.loadingAbort.signal).catch(error => {
       if (!this.disposed) console.warn('Rencontre Bacteria indisponible.', error);
-      return null;
-    });
-    const escapeReady = BackroomsCorridor.load(this.renderer).catch(error => {
-      if (!this.disposed) console.warn('Couloir de fuite indisponible.', error);
       return null;
     });
     void this.bacteriaAudio.load();
@@ -702,15 +701,10 @@ export class RussianStairwellGame {
       this.lastSafePosition.copy(this.player.position);
     }
 
-    const [bacteria, escapeCorridor] = await Promise.all([bacteriaReady, escapeReady]);
+    const bacteria = await bacteriaReady;
     if (this.disposed) {
       bacteria?.dispose();
-      escapeCorridor?.dispose();
       return;
-    }
-    if (escapeCorridor) {
-      this.escapeCorridor = escapeCorridor;
-      this.scene.add(escapeCorridor.group);
     }
     this.stairwellRestored = !!this.corridorStory.state.bacteriaSurvived;
     if (bacteria) {
@@ -756,6 +750,7 @@ export class RussianStairwellGame {
         onBreach: () => { this.corridorBlackout = .85; },
         restoreStairwell: () => this.restoreStairwell(),
         openEscape: () => this.openEscape(),
+        setFallTint: (level) => this.setFallTint(level),
         onRetry: (checkpoint) => {
           if (checkpoint === 'corridor') {
             this.corridorBlackout = -1;
@@ -802,7 +797,6 @@ export class RussianStairwellGame {
         this.corridor.group,
         ...(this.arrivalCinematic?.warmupRoots ?? []),
         ...(bacteria?.warmupRoots ?? []),
-        ...(this.escapeCorridor ? [this.escapeCorridor.group] : []),
         ...(this.gunfire?.warmupRoots ?? []),
       ],
       staticRoots: [apartment.renderWarmupRoot],
@@ -1025,19 +1019,24 @@ export class RussianStairwellGame {
     this.apartment.group.traverse(o=>{if(/(?:west|east|north)-neighbor-door-/.test(o.name))o.visible=true;});
     this.scene.fog=new THREE.Fog(0x080a0c,10,44);this.scene.background=new THREE.Color(0x06080a);
   }
-  /** Hall door open on a lit Level 0 hallway, its light spilling into the dark hall. */
+  /** The hall door swings open on the street, gone black: only the rain is left out there. */
   private openEscape():void {
-    const environment=this.environment;
-    if(!environment)return;
-    if(this.escapeCorridor){
-      this.escapeCorridor.setVisible(true);this.escapeCorridor.setAll(true,true);
-      environment.setExteriorClearance(this.escapeCorridor.clearance);environment.setRainExclusion(this.escapeCorridor.clearance);
+    const environment=this.environment,physics=this.physics;
+    if(!environment||!physics)return;
+    if(!this.escapeOpen){
+      this.escapeOpen=true;
+      physics.batchChunkChanges(()=>{
+        physics.setChunkColliderEnabled('origin',HALL_DOOR_COLLIDER_ID,false);
+        if(!physics.hasChunk('escape-run'))physics.addChunk('escape-run',createEscapeRunColliders(ESCAPE_RUN),{x:0,y:0,z:0});
+      });
+      environment.setExteriorDark(true);environment.setRainExclusion(null);environment.setEscapeGlow(null);
+      this.scene.background=new THREE.Color(0x000000);
+      this.scene.fog=new THREE.Fog(0x000000,2,18);
     }
     if(!this.escapeDoor&&environment.hallEntranceDoor&&!this.arrivalCinematic){
       try{this.escapeDoor=new EntranceDoorMotion(environment.hallEntranceDoor);}catch(error){console.warn('Porte du hall immobile.',error);}
     }
     if(this.escapeDoorOpen<0)this.escapeDoorOpen=0;
-    environment.setEscapeGlow(1.6,{x:0,y:2.2,z:FACADE_OUTER_Z+.9});
   }
   private updateEscapeDoor(delta:number):void {
     if(this.escapeDoorOpen<0)return;
@@ -1046,7 +1045,23 @@ export class RussianStairwellGame {
       this.escapeDoorOpen=Math.min(1,this.escapeDoorOpen+delta*.7);
       const t=this.escapeDoorOpen;this.escapeDoor?.setOpen(t*t*(3-2*t));
     }
-    this.escapeCorridor?.update(delta,null);
+    // Out in the street the dark closes in; the fall turns it fluorescent yellow.
+    const fog=this.scene.fog;
+    if(this.escapeOpen&&fog instanceof THREE.Fog&&this.player){
+      const outside=THREE.MathUtils.clamp((FACADE_OUTER_Z-this.player.position.z)/3,0,1);
+      const tint=this.fallTint;
+      fog.near=THREE.MathUtils.lerp(THREE.MathUtils.lerp(2,.6,outside),.2,tint);
+      fog.far=THREE.MathUtils.lerp(THREE.MathUtils.lerp(18,10,outside),7,tint);
+    }
+  }
+  private setFallTint(level:number):void {
+    const tint=THREE.MathUtils.clamp(level,0,1);
+    if(tint===this.fallTint)return;
+    this.fallTint=tint;
+    const color=FALL_BLACK.clone().lerp(FALL_YELLOW,tint);
+    if(this.scene.fog)this.scene.fog.color.copy(color);
+    if(this.scene.background instanceof THREE.Color)this.scene.background.copy(color);
+    this.audio.setCorridorHum?.(tint);
   }
   private startShotDeath(direction:THREE.Vector3):void {
     if(this.shotDeath||!this.player)return;
@@ -1709,6 +1724,9 @@ export class RussianStairwellGame {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    // First: a teardown step that throws must never leave this loop rendering
+    // under the next runtime (two scenes per frame).
+    this.renderer.setAnimationLoop(null);
     this.loadingAbort.abort();
     this.options.apartmentPreload?.dispose();
     // Before the cinematic and environment: it restores their lights and door.
@@ -1737,7 +1755,7 @@ export class RussianStairwellGame {
     document.removeEventListener('mousemove', this.onObjectMouseMove, true);
     document.removeEventListener('mouseup', this.onObjectMouseUp, true);
     this.equipmentInput.dispose();this.inventoryHUD.dispose();this.flashlight?.dispose();this.corridor?.dispose();
-    this.gunfire?.dispose();this.escapeDoor?.dispose();if(this.escapeCorridor){this.escapeCorridor.dispose();this.environment?.setExteriorClearance(null);this.environment?.setRainExclusion(null);}this.reaction?.dispose();
+    this.gunfire?.dispose();this.escapeDoor?.dispose();this.reaction?.dispose();
     this.sprintHint?.dispose();this.corridorMaterials?.dispose();
     this.pcUse?.dispose();this.closet?.dispose(); this.fixtures?.dispose();
     this.objects?.dispose();

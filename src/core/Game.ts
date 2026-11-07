@@ -18,6 +18,7 @@ import { resolveLightingBrightness } from '../render/LightingBrightness';
 import { MaterialLibrary } from '../render/MaterialLibrary';
 import { PostFX } from '../render/PostFX';
 import { compileSceneProgressively, waitForSceneGpu } from '../render/SceneWarmup';
+import { FrameHitchMonitor } from '../render/FrameHitchMonitor';
 import { ExperienceUI } from '../ui/ExperienceUI';
 import type { ConsoleCompletion, ConsoleMode, ConsoleSubmitResult } from '../ui/ExperienceUI';
 import { loadGameSettings, type GameSettings } from '../ui/settings';
@@ -902,8 +903,25 @@ export class Game {
     );
   }
 
+  private hitches?: FrameHitchMonitor;
+  private readonly perf = { time: 0, frames: 0, worst: 0, calls: 0, triangles: 0 };
+  /** A slow stretch of play names its cost: frame times, draws and GPU resources. */
+  private recordPerf(delta: number): void {
+    const perf = this.perf, info = this.renderer.info;
+    perf.time += delta; perf.frames += 1; perf.worst = Math.max(perf.worst, delta);
+    perf.calls = Math.max(perf.calls, info.render.calls); perf.triangles = Math.max(perf.triangles, info.render.triangles);
+    if (perf.time < 5) return;
+    const average = perf.time / perf.frames * 1000;
+    if (average > 22) {
+      const clock = new Date().toLocaleTimeString('fr-FR', { hour12: false });
+      console.info(`${clock} [perf] ${Math.round(perf.frames / perf.time)} fps (avg ${average.toFixed(1)} ms, worst ${Math.round(perf.worst * 1000)} ms), up to ${perf.calls} draws / ${Math.round(perf.triangles / 1000)}k triangles, ${info.programs?.length ?? 0} programs, ${info.memory.geometries} geometries, ${info.memory.textures} textures, pixel ratio ${this.pixelRatio.toFixed(2)}`);
+    }
+    perf.time = 0; perf.frames = 0; perf.worst = 0; perf.calls = 0; perf.triangles = 0;
+  }
+
   private readonly frame = (now: number): void => {
     if (this.disposed || this.transitionSuspended || !this.player || !this.worldStream || !this.postFX) return;
+    const frameStart = performance.now();
     const measuredDelta = Math.max(0, (now - this.previousTime) / 1000);
     const rawDelta = Math.min(0.05, measuredDelta);
     this.previousTime = now;
@@ -971,6 +989,11 @@ export class Game {
     // quality step still fills fresh HDR targets with a single rendered frame.
     this.renderer.info.reset();
     this.postFX.render(rawDelta);
+    if (playing) {
+      this.hitches ??= new FrameHitchMonitor(this.renderer, this.scene);
+      this.hitches.check(frameStart, this.camera.position);
+      this.recordPerf(measuredDelta);
+    }
     this.frameCounter += 1;
     this.metricsTimer += rawDelta;
     if (this.metricsTimer >= 0.35) {

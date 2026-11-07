@@ -21,7 +21,9 @@ import {
   createEscapeWaypoints,
   createLureWaypoints,
   DOOR_BANG_SECONDS,
-  isEscapePosition,
+  ESCAPE_RUN,
+  isOutsideHall,
+  isTripPosition,
   PLAYER_CENTER_HEIGHT,
   REVEAL_TIMELINE as R,
   SNEAK_HOLD_SECONDS,
@@ -55,6 +57,14 @@ const KILL_IMPACT = 0.24;
 const KILL_STRIKES = [KILL_IMPACT, 0.58, 0.84, 1.04, 1.22, 1.38, 1.52] as const;
 const KILL_CUT = 1.72;
 const ROLL_AXIS = new THREE.Vector3(0, 0, 1);
+/** Out in the dark street: the foot catches, the body hits the asphalt and
+ * keeps going, through the ground, falling into the Backrooms. */
+const FALL_HIT = 0.4;
+const FALL_SINK = 0.5;
+const FALL_GRAVITY = 12;
+const FALL_TINT_START = 1.45;
+const FALL_CUT = 2.45;
+const FALL_END = 2.8;
 
 export interface BacteriaEncounterHost {
   readonly scene: THREE.Scene;
@@ -106,8 +116,10 @@ export interface BacteriaEncounterHost {
   onBreach(): void;
   /** Hidden for good, creature deep inside: the stairwell takes the corridor's place. */
   restoreStairwell(): void;
-  /** The ground-floor hall door swings open on a lit Level 0 hallway. */
+  /** The ground-floor hall door swings open on the dark, rainy street. */
   openEscape(): void;
+  /** Falling through the world: 0 (black void) .. 1 (the fluorescent yellow below). */
+  setFallTint?(level: number): void;
   onRetry(checkpoint: Checkpoint): void;
   /** Through the hall door: hand over to the Backrooms. */
   onEscaped(): void;
@@ -178,6 +190,11 @@ export class BacteriaEncounter {
   private hold = 0;
   private holdWasDown = false;
   private runningTime = 0;
+  private outsideTime = 0;
+  private readonly fallFrom = new THREE.Vector3();
+  private readonly fallForward = new THREE.Vector3();
+  private readonly fallEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+  private fallYaw = 0;
   private television?: {
     readonly object: THREE.Object3D; readonly parent: THREE.Object3D;
     readonly position: THREE.Vector3; readonly quaternion: THREE.Quaternion; readonly scale: THREE.Vector3;
@@ -207,6 +224,10 @@ export class BacteriaEncounter {
   /** How badly the "camera" degrades, 0..1: rises as the creature gets close
    * or fills the view, and peaks during the kill. Drives the VHS layer. */
   get cameraDisturbance(): number {
+    if (this.phase === 'escaped') {
+      const t = this.phaseTime;
+      return t < FALL_SINK ? 0.3 + 0.45 * smooth(t / FALL_HIT) : Math.min(0.9, 0.72 + 0.18 * smooth((t - FALL_SINK) / 1.2));
+    }
     if (this.phase === 'jumpscare') return Math.min(1, 0.74 + this.hitKick * 0.18 + Math.abs(Math.sin(this.phaseTime * 19)) * 0.08);
     if (this.phase === 'dormant' || this.phase === 'dead' || this.phase === 'over' || this.phase === 'aftermath') return 0;
     if ((this.actor as { isVisible?: boolean }).isVisible === false) return 0;
@@ -246,8 +267,8 @@ export class BacteriaEncounter {
           : { text: 'Attends qu’il se calme…', tone: 'hidden' };
       case 'sneak': return { text: 'Sors de l’appartement… sans courir.', tone: 'hidden' };
       case 'spotted':
-      case 'escape': return { text: 'Descends l’escalier ! La porte du hall !', tone: 'urgent' };
-      case 'aftermath': return { text: 'Descendre jusqu’à la porte du hall.', tone: 'calm' };
+      case 'escape': return { text: 'Descends l’escalier ! Sors dans la rue !', tone: 'urgent' };
+      case 'aftermath': return { text: 'Descendre et sortir dans la rue.', tone: 'calm' };
       default: return null;
     }
   }
@@ -284,7 +305,7 @@ export class BacteriaEncounter {
       return;
     }
     if (this.phase === 'aftermath') {
-      if (isEscapePosition(host.player.position)) this.startEscaped();
+      if (isTripPosition(host.player.position)) this.startEscaped();
       return;
     }
 
@@ -301,7 +322,7 @@ export class BacteriaEncounter {
       case 'burst': this.updateBurst(dt); break;
       case 'spotted': this.updateSpotted(dt); break;
       case 'escape': this.updateEscape(dt); break;
-      case 'escaped': this.updateEscaped(); break;
+      case 'escaped': this.updateEscaped(dt); break;
       case 'jumpscare': this.updateJumpscare(dt); break;
       case 'dead': this.updateDead(); break;
     }
@@ -339,10 +360,17 @@ export class BacteriaEncounter {
       camera.updateProjectionMatrix();
     }
     if (this.phase === 'escaped') {
-      // Carried forward through the door, into the yellow.
-      const push = smooth(this.phaseTime / 0.9);
-      camera.position.z -= push * 1.6;
-      camera.fov = base + push * 18;
+      const t = this.phaseTime;
+      const trip = smooth(t / FALL_HIT);
+      const sink = Math.max(0, t - FALL_SINK);
+      // Pitched at the asphalt, then through it, turning over to see the hole recede.
+      camera.position.copy(this.fallFrom).addScaledVector(this.fallForward, 0.95 * trip + 0.7 * smooth(sink / 0.7));
+      camera.position.y = this.fallFrom.y - 1.2 * trip - 0.5 * FALL_GRAVITY * sink * sink;
+      const pitch = THREE.MathUtils.lerp(-0.12 - 0.95 * trip, 1.1, smooth(sink / 0.95));
+      this.fallEuler.set(pitch, this.fallYaw + this.hitSign * 0.3 * sink, this.hitSign * (0.45 * trip + 0.55 * sink), 'YXZ');
+      camera.quaternion.setFromEuler(this.fallEuler);
+      camera.fov = base + 8 * trip + 26 * smooth(sink / 1.6);
+      camera.near = 0.03;
       camera.updateProjectionMatrix();
     }
     if (this.shakeLevel > 0) {
@@ -783,7 +811,8 @@ export class BacteriaEncounter {
 
   private updateEscape(dt: number): void {
     const host = this.host;
-    if (isEscapePosition(host.player.position)) { this.startEscaped(); return; }
+    this.outsideTime = isOutsideHall(host.player.position) ? this.outsideTime + dt : 0;
+    if (isTripPosition(host.player.position) || this.outsideTime > ESCAPE_RUN.tripDelay) { this.startEscaped(); return; }
     const playerAlong = this.escapePath.project(this.feet);
     const gap = playerAlong - this.distanceAlong;
     if (Math.abs(gap) < 1.6) {
@@ -805,19 +834,48 @@ export class BacteriaEncounter {
   private startEscaped(): void {
     const host = this.host;
     this.setPhase('escaped');
+    this.outsideTime = 0;
     host.player.setInputEnabled(false);
     host.player.setLookLocked(true);
     host.hud.hideHint();
-    host.hud.pulseFlash(0.35);
-    this.sound.stopAll(0.8);
+    const camera = host.renderCamera;
+    this.fallFrom.copy(camera.position);
+    camera.getWorldDirection(this.fallForward).setY(0);
+    if (this.fallForward.lengthSq() < 1e-6) this.fallForward.set(0, 0, -1);
+    this.fallForward.normalize();
+    this.fallYaw = Math.atan2(-this.fallForward.x, -this.fallForward.z);
+    this.hitSign = this.noise() < 0.5 ? -1 : 1;
   }
 
-  private updateEscaped(): void {
-    this.host.hud.pulseFlash(smooth(this.phaseTime / 0.9));
-    if (this.phaseTime >= 0.95) {
+  /** The trip, the hit, then the noclip: down through the street while it
+   * looms over the hole, until the void turns fluorescent yellow. */
+  private updateEscaped(dt: number): void {
+    const host = this.host;
+    const t = this.phaseTime;
+    if (crossed(t, dt, FALL_HIT)) {
+      host.audio.tumble?.(1);
+      host.hud.pulseFlash(0.3);
+      this.shakeLevel = 0.8;
+    }
+    if (crossed(t, dt, FALL_SINK)) {
+      // Under the ground now: the body left on the asphalt must not be seen from below.
+      host.setAvatarHidden(true);
+      if (this.actor.root.visible) this.sound.roar();
+    }
+    if (crossed(t, dt, 1.05)) this.sound.stopAll(1.4);
+    if (this.actor.root.visible) {
+      // It reaches the spot where you went down and stares into the dark after you.
+      const flat = Math.hypot(this.feet.x - this.monsterPosition.x, this.feet.z - this.monsterPosition.z);
+      if (flat > 1.3) this.pursue(dt, CHASE_SPEEDS.landing);
+      this.actor.setMotion(flat > 1.3 ? 'run' : 'idle');
+      this.actor.setLookTarget(host.renderCamera.position);
+    }
+    host.setFallTint?.(smooth((t - FALL_TINT_START) / (FALL_CUT - FALL_TINT_START)));
+    if (crossed(t, dt, FALL_CUT)) host.hud.pulseFlash(1);
+    if (t >= FALL_END) {
       this.restoreWorld();
       this.setPhase('over');
-      this.host.onEscaped();
+      host.onEscaped();
     }
   }
 
@@ -1186,6 +1244,7 @@ export class BacteriaEncounter {
   private pursuing(): boolean {
     switch (this.phase) {
       case 'chase': case 'bang': case 'escape': case 'jumpscare': return true;
+      case 'escaped': return this.phaseTime < FALL_SINK;
       case 'inside': return !this.hidden;
       case 'spotted': return this.phaseTime >= S.roar;
       case 'burst': return this.phaseTime >= 0.35;
