@@ -70,8 +70,9 @@ considérés comme déjà avertis ; les anciennes sauvegardes sans objectif le c
 
 `ApartmentQuest` et `QuestTracker` affichent un seul objectif global en haut à
 gauche, y compris au-dessus du bureau. Le parcours est courrier → entrée réelle →
-lumière → gaz → TV et radio → mail de la régie → première partie terminée de
-Démineur (victoire ou défaite). Le compte locataire reste une application libre.
+lumière → gaz → TV et radio → mails récents (le premier, URGENT, annonce une
+réparation à payer) → solde bancaire → première partie terminée de Démineur
+(victoire ou défaite). L'horloge du PC affiche 01 h et les minutes réelles. Le compte locataire reste une application libre.
 Les actions déjà effectuées sont monotones, distinctes de l'état courant des
 appareils. `SaveHistory.computer.apartment` conserve ces états, les pensées
 consommées, la bouteille cassée et la panne. Un ancien `stage: done` prouvait

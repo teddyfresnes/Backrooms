@@ -1,19 +1,26 @@
 import {expect,it}from 'vitest';
-import {InventoryState,sanitizeInventory,FLASHLIGHT_ID,COMPASS_ID}from './InventoryState';
-it('preserves the quest slot even when every small-object slot is full before or after the outage',()=>{
-  for(const first of [false,true]){const bag=new InventoryState();if(first)bag.acquireLamp();for(let i=0;i<4;i++)expect(bag.store({id:`prop:${i}`,label:'Disquette'})).toBe(true);
-    expect(bag.store({id:'prop:extra',label:'Verre'})).toBe(false);if(!first)expect(bag.acquireLamp()).toBe(true);expect(bag.acquireLamp()).toBe(false);expect(bag.state.slots.filter(Boolean)).toHaveLength(5);bag.state.selected=0;expect(bag.takeSelected()).toBeNull();expect(bag.hasLamp).toBe(true);}
+import {InventoryState,sanitizeInventory,FLASHLIGHT_ID,COMPASS_ID,INVENTORY_CAPACITY}from './InventoryState';
+it('grows in pickup order, keeps an empty hand at the end and never stores past capacity',()=>{
+  const bag=new InventoryState();expect(bag.cellCount).toBe(1);expect(bag.equipped).toBeNull();
+  expect(bag.acquireCompass()).toBe(true);expect(bag.state.items[0]!.id).toBe(COMPASS_ID);expect(bag.equipped?.id).toBe(COMPASS_ID);expect(bag.cellCount).toBe(2);
+  expect(bag.acquireLamp()).toBe(true);expect(bag.state.items[1]!.id).toBe(FLASHLIGHT_ID);expect(bag.equipped?.id).toBe(FLASHLIGHT_ID);
+  bag.select(1);expect(bag.equipped).toBeNull();bag.select(1);expect(bag.equipped?.id).toBe(COMPASS_ID);bag.select(-1);expect(bag.equipped).toBeNull();
+  for(let i=0;i<INVENTORY_CAPACITY;i++)bag.store({id:`prop:${i}`,label:'Disquette'});
+  expect(bag.state.items).toHaveLength(INVENTORY_CAPACITY);expect(bag.cellCount).toBe(INVENTORY_CAPACITY+1);
+  expect(bag.storedIds).toEqual(['prop:0','prop:1','prop:2']);
 });
-it('never duplicates identities when scrolling, equipping, stowing and restoring',()=>{
-  const bag=new InventoryState();const item={id:'prop:disk',label:'Disquette'};bag.store(item);expect(bag.store(item)).toBe(false);bag.acquireLamp();bag.toggleLamp();
-  for(let i=0;i<30;i++)bag.select(1);expect(bag.storedIds).toEqual([item.id]);expect(sanitizeInventory(bag.snapshot())).toEqual(bag.snapshot());
-  const restored=new InventoryState(bag.snapshot());restored.state.selected=1;expect(restored.takeSelected()).toEqual(item);expect(restored.storedIds).toHaveLength(0);expect(restored.state.lampOn).toBe(true);
-  expect(sanitizeInventory({...bag.snapshot(),slots:[{id:FLASHLIGHT_ID,label:'Lampe'},{id:FLASHLIGHT_ID,label:'Double'},null,null,null]})).toBeNull();
+it('never drops quest items, puts an ordinary item back in hand and round-trips',()=>{
+  const bag=new InventoryState();bag.acquireCompass();expect(bag.takeSelected()).toBeNull();expect(bag.store({id:COMPASS_ID,label:'x'})).toBe(false);
+  const disk={id:'prop:disk',label:'Disquette'};bag.store(disk);expect(bag.store(disk)).toBe(false);expect(bag.takeSelected()).toEqual(disk);
+  expect(bag.equipped).toBeNull();expect(bag.storedIds).toEqual([]);
+  bag.acquireLamp();bag.toggleLamp();expect(bag.state.lampOn).toBe(true);
+  expect(sanitizeInventory(bag.snapshot())).toEqual(bag.snapshot());expect(new InventoryState(bag.snapshot()).hasCompass).toBe(true);
+  expect(sanitizeInventory({...bag.snapshot(),items:[...bag.snapshot().items,{id:COMPASS_ID,label:'Double'}]})).toBeNull();
+  expect(sanitizeInventory({...bag.snapshot(),selected:9})).toBeNull();
 });
-it('keeps Chloé’s compass in an ordinary slot that can be selected but never stored or dropped',()=>{
-  const bag=new InventoryState();expect(bag.acquireCompass()).toBe(true);expect(bag.acquireCompass()).toBe(false);
-  expect(bag.hasCompass).toBe(true);expect(bag.equipped?.id).toBe(COMPASS_ID);expect(bag.state.selected).toBe(1);
-  expect(bag.takeSelected()).toBeNull();expect(bag.storedIds).toEqual([]);expect(bag.store({id:COMPASS_ID,label:'x'})).toBe(false);
-  expect(sanitizeInventory(bag.snapshot())).toEqual(bag.snapshot());
-  expect(new InventoryState(bag.snapshot()).hasCompass).toBe(true);
+it('migrates the five fixed slots of v1 saves, keeping the selection',()=>{
+  const legacy={version:1,slots:[{id:FLASHLIGHT_ID,label:'Lampe torche'},null,{id:'prop:book',label:'Livre'},null,null],selected:2,lampOn:true};
+  expect(sanitizeInventory(legacy)).toEqual({version:2,items:[{id:FLASHLIGHT_ID,label:'Lampe torche'},{id:'prop:book',label:'Livre'}],selected:1,lampOn:true});
+  expect(sanitizeInventory({...legacy,selected:1})!.selected).toBe(2);
+  expect(sanitizeInventory({...legacy,slots:[null,{id:FLASHLIGHT_ID,label:'x'},null,null,null]})).toBeNull();
 });

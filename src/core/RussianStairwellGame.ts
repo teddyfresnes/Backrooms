@@ -1,6 +1,6 @@
 import { InventoryState, FLASHLIGHT_ID, COMPASS_ID, isQuestItem } from '../apartment/InventoryState';
 import { Compass } from '../apartment/Compass';
-import { createCompassModel, disposeObjectTree } from '../apartment/CompassModel';
+import { compassIcon } from '../ui/InventoryIcons';
 import { FuseBox } from '../apartment/FuseBox';
 import { GiftParcel } from '../stairwell/GiftParcel';
 import type { PalmFrame } from '../character/HeldItemPose';
@@ -126,6 +126,8 @@ export interface RussianStairwellGameCallbacks {
 }
 
 const AUTOSAVE_INTERVAL_SECONDS = 30;
+/** Played seconds after the failed re-arm before the first knock (the remark first). */
+const KNOCK_START = 4.6;
 
 export class RussianStairwellGame {
   private readonly root = document.createElement('main');
@@ -190,6 +192,8 @@ export class RussianStairwellGame {
   private postFuse:{time:number;knock:boolean|null}|null=null;
   /** Extra camcorder disturbance after the deep knock, decaying. */
   private knockScare=0;
+  /** Seconds the player still stands at the panel after it tripped. */
+  private fuseHold=0;
   private corridor?:LongCorridor;
   private reaction?:CorridorReaction;
   private corridorMounted=false;
@@ -579,11 +583,7 @@ export class RussianStairwellGame {
     this.flashlight=new Flashlight(this.scene,physics,apartment.group.getObjectByName('Desk'));
     this.inventoryHUD.setObjectSources(apartment.pickables,this.flashlight.model);
     this.compass=new Compass(this.scene);
-    {
-      // Icon from a clean copy: without its crystal, the dial reads in the slot.
-      const icon=createCompassModel();icon.getObjectByName('compass-crystal')?.removeFromParent();icon.rotation.x=.55;icon.updateMatrixWorld(true);
-      this.inventoryHUD.setQuestIcon(COMPASS_ID,icon);disposeObjectTree(icon);
-    }
+    this.inventoryHUD.setQuestIcon(COMPASS_ID,compassIcon());
     this.setupGift();
     this.fuseBox=new FuseBox(apartment.floorY,{
       ui:this.ui,
@@ -594,7 +594,7 @@ export class RussianStairwellGame {
     this.scene.add(this.fuseBox.group);
     physics.addChunk('apartment-fuse-box',[this.fuseBox.collider],{x:0,y:0,z:0});
     // Saved between the failed re-arm and the end of the knocks: the knocks come again.
-    if(this.corridorStory.state.fuseTried&&!this.corridorStory.state.knockDone)this.postFuse={time:3.2,knock:null};
+    if(this.corridorStory.state.fuseTried&&!this.corridorStory.state.knockDone)this.postFuse={time:KNOCK_START-1,knock:null};
     this.corridorMaterials=await MaterialLibrary.load(this.renderer,undefined,'yellow');
     if(this.disposed){this.corridorMaterials.dispose();return;}
     this.corridor=new LongCorridor(apartment.corridorDoorway,apartment.corridorFloorY,this.corridorMaterials.materials,physics);
@@ -951,7 +951,11 @@ export class RussianStairwellGame {
   private tryInteract(mode: DoorOpenMode = 'fast'): void {
     if(this.pcUse?.isActive||this.corridorStory?.modal||this.shotDeath)return;
     if (!this.player || !this.door || this.character?.isBusy || (this.letterReader?.isOpen || this.computerDesktop?.isOpen) || this.mailRecoil > 0) return;
-    if (this.closet?.isActive) { this.closet.interact(); return; }
+    if (this.closet?.isActive) {
+      // During the hunt the encounter decides what climbing out means.
+      if (this.encounter?.isHidden && this.closet.exitLocked) { this.encounter.requestHiddenExit(); return; }
+      this.closet.interact(); return;
+    }
     this.camera.getWorldDirection(this.viewDirection);
     if (this.encounter?.isActive || this.encounter?.isHidden) {
       if (!this.player.isLocked || this.ui.isConsoleOpen) return;
@@ -1025,6 +1029,7 @@ export class RussianStairwellGame {
     this.letterReader?.open(()=>this.storyCaption?.say('Chloé… Une boussole.'),GIFT_LETTER);
   }
   private onFuseTripped():void {
+    this.fuseHold=1.1;
     if(this.corridorStory.tryFuse()){
       this.postFuse={time:0,knock:null};
       this.storyCaption?.say('Rien. Tout redescend dès que je réarme… Le problème ne vient pas de chez moi.');
@@ -1037,22 +1042,23 @@ export class RussianStairwellGame {
     if(!sequence||!this.apartment||!this.door)return;
     const before=sequence.time;sequence.time+=delta;
     const at=(mark:number)=>before<mark&&sequence.time>=mark;
-    if(sequence.knock===null&&sequence.time>=3.2){
+    // The remark is read in full before anything happens at the door.
+    if(sequence.knock===null&&sequence.time>=KNOCK_START){
       sequence.knock=this.door.isSecured()&&!this.door.isBroken;
       if(!sequence.knock){this.finishPostFuse('Il faut que je trouve un voisin. Eux ont peut-être encore du courant.');return;}
     }
     if(!sequence.knock)return;
     const door=this.apartment.doorCenter,position={x:door.x+.05,y:this.apartment.floorY+1.35,z:door.z};
-    [3.25,3.63,4.01].forEach((mark,index)=>{
+    [KNOCK_START+.05,KNOCK_START+.43,KNOCK_START+.81].forEach((mark,index)=>{
       if(!at(mark))return;
       this.doorAudio.playScripted('knock',position,`apartment-door-knock-${index}`,.94-index*.03,2.6);
       this.door?.jolt(.55);
     });
-    if(at(5.45)){
+    if(at(KNOCK_START+2.25)){
       this.doorAudio.playScripted('knock',position,'apartment-door-knock-deep',.4,3.4);
       this.deviceAudio?.deepKnock(position);this.door.jolt(1);this.knockScare=.55;
     }
-    if(sequence.time>=7.4)this.finishPostFuse('… Il y a quelqu’un ? Sûrement un voisin. Je devrais aller voir.');
+    if(sequence.time>=KNOCK_START+4.3)this.finishPostFuse('… Il y a quelqu’un ? Sûrement un voisin. Je devrais aller voir.');
   }
   private finishPostFuse(remark:string):void {
     this.postFuse=null;this.corridorStory.finishKnock();this.exitReminderArmed=true;
@@ -1096,10 +1102,12 @@ export class RussianStairwellGame {
     if(!this.exitReminderArmed)return;this.exitReminderArmed=false;
     // During the knocks nothing is said: the door just stays shut.
     if(this.needsFlashlight())this.storyCaption?.say('Hmm… je devrais peut-être prendre la lampe sur mon bureau.');
-    else if(!this.corridorStory.fuseDone)this.storyCaption?.say('Avant de sortir, je devrais jeter un œil au tableau électrique, dans l’entrée.');
+    else if(!this.corridorStory.fuseDone)this.storyCaption?.say('Avant de sortir, je devrais jeter un œil au tableau électrique, au fond de la pièce.');
   }
   private constrainExit(position:THREE.Vector3,movement:THREE.Vector3):void {
     this.encounter?.constrainMovement(position,movement);
+    // Hands on the breakers: the player stays at the panel until it has tripped back.
+    if(this.fuseBox?.isBusy||this.fuseHold>0){movement.x=0;movement.z=0;}
     if((!this.needsFlashlight()&&!this.needsFuseScene())||!this.apartment)return;
     const door=this.apartment.doorCenter,limit=door.x-.38;
     if(Math.abs(position.y-this.apartment.floorY-.865)>.7||Math.abs(position.z-door.z)>1.05)return;
@@ -1691,6 +1699,7 @@ export class RussianStairwellGame {
       if(this.player.position.distanceTo(this.gift?.group.position??this.player.position)>2.5)this.giftReminderArmed=true;
       this.fuseBox?.updatePrompt(this.camera.position,this.viewDirection,freeInteraction&&!this.objects?.isHolding&&this.fuseAvailable());
       if(this.fuseBox?.update(delta)==='tripped')this.onFuseTripped();
+      this.fuseHold=Math.max(0,this.fuseHold-delta);
       this.updatePostFuse(delta);
       this.escapeStreet?.update(this.elapsed);
       if(this.apartment&&this.player.position.distanceTo(this.apartment.doorCenter)>2)this.exitReminderArmed=true;

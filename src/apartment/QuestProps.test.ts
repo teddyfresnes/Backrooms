@@ -61,7 +61,7 @@ it('re-arms every breaker one after another, then trips them all back once', () 
   const ui = { setInteraction: vi.fn() }, flip = vi.fn(), trip = vi.fn(), click = vi.fn();
   const box = new FuseBox(8.64, { ui, flip, trip, click });
   const scene = new THREE.Scene(); scene.add(box.group); scene.updateMatrixWorld(true);
-  const eye = new THREE.Vector3(FUSE_BOX_MOUNT.wallX - 0.8, 8.64 + FUSE_BOX_MOUNT.height, FUSE_BOX_MOUNT.z), look = new THREE.Vector3(1, 0, 0);
+  const eye = new THREE.Vector3(FUSE_BOX_MOUNT.wallX + FUSE_BOX_MOUNT.facing * 0.8, 8.64 + FUSE_BOX_MOUNT.height, FUSE_BOX_MOUNT.z), look = new THREE.Vector3(-FUSE_BOX_MOUNT.facing, 0, 0);
   expect(box.interact(eye, look, false)).toBe(false);
   box.updatePrompt(eye, look, true);
   expect(ui.setInteraction).toHaveBeenLastCalledWith('Ouvrir le tableau électrique');

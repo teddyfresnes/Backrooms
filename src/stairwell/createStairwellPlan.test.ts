@@ -74,7 +74,7 @@ describe('Russian residential stairwell plan V23', () => {
 
 describe('escape through the hall door', () => {
   it('closes the door gap with its own collider and lays an invisible street strip beyond it', async () => {
-    const { createEscapeRunColliders, createStairwellColliders, HALL_DOOR_COLLIDER_ID } = await import('./createStairwellPlan');
+    const { createEscapeRunColliders, createStairwellColliders, HALL_DOOR_COLLIDER_ID, HALL_DOOR_LEFT_COLLIDER_ID } = await import('./createStairwellPlan');
     const { ESCAPE_RUN, FACADE_OUTER_Z } = await import('../monster/BacteriaLayout');
     const colliders = createStairwellColliders();
     const door = colliders.find(collider => collider.id === HALL_DOOR_COLLIDER_ID)!;
@@ -83,11 +83,12 @@ describe('escape through the hall door', () => {
     expect(door.center.x).toBeGreaterThan(0);
     expect(colliders.some(collider => collider.id === 'south-wall-door-left' && collider.center.x < 0)).toBe(true);
     expect(door.center.y - door.halfExtents.y).toBeLessThanOrEqual(0);
-    // No other wall piece blocks the doorway once it is disabled.
-    const gapX = door.center.x;
-    const blocking = colliders.filter(collider => collider.id.startsWith('south-wall') && collider.id !== HALL_DOOR_COLLIDER_ID
-      && Math.abs(collider.center.x - gapX) < collider.halfExtents.x && collider.center.y - collider.halfExtents.y < 2);
-    expect(blocking).toEqual([]);
+    // No other wall piece blocks either half of the doorway once both leaves are disabled.
+    for (const gapX of [-0.6, 0, 0.6]) {
+      const blocking = colliders.filter(collider => collider.id.startsWith('south-wall') && collider.id !== HALL_DOOR_COLLIDER_ID && collider.id !== HALL_DOOR_LEFT_COLLIDER_ID
+        && Math.abs(collider.center.x - gapX) < collider.halfExtents.x && collider.center.y - collider.halfExtents.y < 2);
+      expect(blocking.map(collider => collider.id)).toEqual([]);
+    }
     const run = createEscapeRunColliders(ESCAPE_RUN);
     const ground = run.find(collider => collider.id === 'escape-run-ground')!;
     expect(ground.center.y + ground.halfExtents.y).toBeCloseTo(ESCAPE_RUN.floorY, 5);

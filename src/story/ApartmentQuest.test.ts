@@ -25,7 +25,7 @@ it('follows mail, entry, light, gas, both devices, the rent mail, the bank balan
   quest.setGas(true); expect(quest.objective('home')).toContain('TV et la radio');
   quest.setRadio(true); expect(quest.objective('home')).toContain('TV');
   expect(quest.isComputerAvailable).toBe(false);
-  quest.setTelevision(true); expect(quest.objective('home')).toContain('mail de la régie');
+  quest.setTelevision(true); expect(quest.objective('home')).toContain('mails récents');
   expect(quest.isComputerAvailable).toBe(true);
   // Switching a device off later never takes the PC away.
   quest.setTelevision(false); expect(quest.isComputerAvailable).toBe(true); quest.setTelevision(true);
@@ -44,9 +44,9 @@ it.each(['tv-first', 'radio-first'])('accepts anticipated actions and %s without
   const quest = new ApartmentQuest(); quest.setGas(true); quest.setLight(true);
   if (order === 'tv-first') { quest.setTelevision(true); quest.setRadio(true); } else { quest.setRadio(true); quest.setTelevision(true); }
   expect(quest.objective('home')).toContain('dernier étage'); quest.reachHome();
-  expect(quest.objective('home')).toContain('mail de la régie');
+  expect(quest.objective('home')).toContain('mails récents');
   const restored = new ApartmentQuest(sanitizeComputerProgress(JSON.parse(JSON.stringify(quest.snapshot())))!);
-  expect(restored.objective('done')).toContain('mail de la régie'); expect(restored.devices.gasOn).toBe(true);
+  expect(restored.objective('done')).toContain('mails récents'); expect(restored.devices.gasOn).toBe(true);
 });
 it('plays short thoughts once in order, including the reaction after reading the actual mail', () => {
   const quest = new ApartmentQuest(); expect(quest.nextThought()).toBeNull();
@@ -55,7 +55,7 @@ it('plays short thoughts once in order, including the reaction after reading the
   quest.setGas(true); expect(quest.nextThought()?.id).toBe('gas');
   quest.setTelevision(true); expect(quest.nextThought()).toBeNull();
   quest.setRadio(true); expect(quest.nextThought()?.id).toBe('devices');
-  quest.readMail(RENT_MAIL_ID); expect(quest.nextThought()?.text).toMatch(/loyer.*compte/);
+  quest.readMail(RENT_MAIL_ID); expect(quest.nextThought()?.text).toMatch(/réparation.*compte/);
   quest.checkBank(); expect(quest.nextThought()?.text).toMatch(/Démineur/);
   const restored = new ApartmentQuest(sanitizeComputerProgress(quest.snapshot())!); restored.reachHome(); restored.readMail(RENT_MAIL_ID);
   expect(restored.nextThought()).toBeNull();

@@ -1,7 +1,10 @@
 # Objets et appareils de l’appartement
 
-`InventoryState` conserve cinq identités, dont un emplacement réservé à la lampe.
-Les quatre autres acceptent les petits props non cassables. `ApartmentObjectInteraction`
+`InventoryState` (v2) liste jusqu'à cinq identités dans l'ordre de prise ;
+`selected === items.length` est la main vide, toujours dessinée en dernière case
+par `InventoryHUD`, qui grandit avec les objets. Les snapshots v1 (cinq cases,
+lampe en case 0) migrent à la lecture. Lampe et boussole (`isQuestItem`) ne se
+rangent ni ne se posent ; la boussole a une icône SVG dessinée (`compassIcon`). `ApartmentObjectInteraction`
 désactive le corps rangé et réutilise son unique mesh pour l’équipement ; G le
 reprend physiquement ou le range. La molette choisit un emplacement hors portage,
 et conserve la distance pendant le portage. `EquipmentInput` attend le relâchement
@@ -37,7 +40,8 @@ parlée et l'indication de course, respectant le remappage et Maj droite. Le tem
 sont des extensions optionnelles de l’historique v2. L’événement historique de
 panne reste l’autorité du PC et de la radio, même après le rallumage des lampes.
 
-Après la lampe, `FuseBox` (mur de l'entrée, sud de la porte) s'ouvre et se
+Après la lampe, `FuseBox` (mur du fond du séjour, face à la porte à 8 m ; le
+joueur reste figé pendant le réarmement, `fuseHold`) s'ouvre et se
 réarme en vain ; `CorridorStory.fuseTried/knockDone` (optionnels, déduits pour
 les anciennes sauvegardes) bloquent la sortie jusqu'à la remarque puis aux trois
 coups et au coup grave, joués seulement porte fermée. La boussole sélectionnée

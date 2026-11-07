@@ -67,6 +67,8 @@
 .pc-mail-list time { font-size:10px; color:#5b6b6b; }
 .pc-mail-list strong { grid-column:1/-1; font-size:12px; font-weight:normal; }
 .pc-mail-list .pc-unread strong { font-weight:bold; }
+.pc-mail-list .pc-urgent strong { color:#b00000; }
+.pc-mail-list .pc-urgent.pc-unread { background:#fff0ee; }
 .pc-mail-list .pc-selected-mail { color:#eaf0e7; background:#20475e; }
 .pc-selected-mail time { color:#c6d8da; }
 .pc-mail-reader { padding:20px; overflow:auto; background:#eef0e6; }

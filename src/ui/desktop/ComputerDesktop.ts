@@ -1,5 +1,10 @@
 import { ApartmentQuest } from '../../story/ApartmentQuest';
-import { DESKTOP_DOCUMENTS, DESKTOP_MAIL } from './DesktopContent';
+import { DESKTOP_DOCUMENTS, DESKTOP_MAIL, desktopTime } from './DesktopContent';
+
+const SEGMENTS: Readonly<Record<string, string>> = { '0': 'abcdef', '1': 'bc', '2': 'abdeg', '3': 'abcdg', '4': 'bcfg', '5': 'acdfg', '6': 'acdefg', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg' };
+/** Seven-segment LCD for "HH:MM". */
+const clockFace = (time: string): string => `<div class="pc-lcd" role="img" aria-label="${time}">${time.split('').map(digit => digit === ':' ? '<b class="pc-colon">:</b>'
+  : `<span class="pc-digit">${'abcdefg'.split('').map(segment => `<i class="seg-${segment}${(SEGMENTS[digit] ?? '').includes(segment) ? ' lit' : ''}"></i>`).join('')}</span>`).join('')}</div>`;
 import { MinesGame } from './MinesGame';
 import './computer-desktop.css';
 
@@ -44,7 +49,7 @@ export class ComputerDesktop {
       <div class="pc-icons">${(['files', 'mail', 'web', 'mines', 'trash'] as AppId[]).map(id =>
         `<button type="button" class="pc-icon" data-action="app" data-app="${id}"><i class="pc-icon-${id}" aria-hidden="true">${APPS[id].symbol}</i><span>${id === 'files' ? 'Poste de travail' : APPS[id].title}</span></button>`).join('')}</div>
       <div class="pc-start-menu" hidden><strong>Vostok <b>98</b></strong><div>${(['mail', 'web', 'files', 'clock', 'mines', 'about'] as AppId[]).map(id => button(`<i aria-hidden="true">${APPS[id].symbol}</i>${APPS[id].title}`, 'app', `data-app="${id}"`)).join('')}${button('Quitter le PC', 'leave')}</div></div>
-      <footer class="pc-taskbar">${button('<i class="pc-start-mark" aria-hidden="true">▦</i> Démarrer', 'start', 'class="pc-start" aria-expanded="false"')}<div class="pc-tasks"></div>${button('◖ 00:30', 'app', 'data-app="clock" class="pc-tray" aria-label="Ouvrir l’horloge, 00:30"')}</footer>
+      <footer class="pc-taskbar">${button('<i class="pc-start-mark" aria-hidden="true">▦</i> Démarrer', 'start', 'class="pc-start" aria-expanded="false"')}<div class="pc-tasks"></div>${button(`◖ ${desktopTime()}`, 'app', `data-app="clock" class="pc-tray" aria-label="Ouvrir l’horloge, ${desktopTime()}"`)}</footer>
     </div><div class="pc-brand">SyncMaster 3 <span>●</span></div></div>`;
     this.screen = this.element.querySelector('.pc-screen')!;
     this.tasks = this.element.querySelector('.pc-tasks')!;
@@ -61,6 +66,15 @@ export class ComputerDesktop {
     container.append(this.element);
   }
   get isOpen(): boolean { return this.opened; }
+  private clockTimer?: number;
+  private shownTime = '';
+  /** Tray and clock window follow the real minutes (the hour stays 1 a.m.). */
+  private refreshClock(): void {
+    const time = desktopTime(); if (time === this.shownTime) return; this.shownTime = time;
+    const tray = this.element.querySelector<HTMLElement>('.pc-tray');
+    if (tray) { tray.textContent = `◖ ${time}`; tray.setAttribute('aria-label', `Ouvrir l’horloge, ${time}`); }
+    const clock = this.windows.get('clock')?.body; if (clock?.querySelector('.pc-lcd')) clock.innerHTML = clockFace(time);
+  }
   setPaused(paused: boolean): void {
     this.element.hidden = !this.opened || paused;
     this.element.inert = paused;
@@ -69,7 +83,8 @@ export class ComputerDesktop {
   }
   open(): void {
     if (this.opened || this.disposed || this.quest.isComputerBlocked) return;
-    this.opened = true; this.element.hidden = false; this.quest.useComputer();
+    this.opened = true; this.element.hidden = false; this.quest.useComputer(); this.refreshClock();
+    this.clockTimer ??= window.setInterval(() => { if (this.opened) this.refreshClock(); }, 5000);
     this.onOpen(); this.playClick();
     if (!this.windows.size) this.openApp('clock');
     this.element.focus({ preventScroll: true });
@@ -108,7 +123,7 @@ export class ComputerDesktop {
   }
   private renderApp(id: AppId): void {
     const body = this.windows.get(id)!.body;
-    if (id === 'clock') body.innerHTML = `<div class="pc-lcd" role="img" aria-label="00:30">${['0', '0', ':', '3', '0'].map(digit => digit === ':' ? '<b class="pc-colon">:</b>' : `<span class="pc-digit">${'abcdefg'.split('').map(segment => `<i class="seg-${segment}${({ '0': 'abcdef', '3': 'abcdg' }[digit] ?? '').includes(segment) ? ' lit' : ''}"></i>`).join('')}</span>`).join('')}</div>`;
+    if (id === 'clock') body.innerHTML = clockFace(desktopTime());
     if (id === 'mail') {
       body.innerHTML = `<div class="pc-mail-toolbar"><strong>Boîte de réception</strong><label><span class="pc-sr">Rechercher dans les mails</span><input type="search" data-search placeholder="Rechercher…" value="${escape(this.search)}" /></label></div><div class="pc-mail-layout"><div class="pc-mail-list" role="list" aria-label="Messages"></div><article class="pc-mail-reader"><p class="pc-mail-empty">Sélectionnez un message.</p></article></div><footer class="pc-status">alex.morin · ${DESKTOP_MAIL.length} messages · Connexion établie</footer>`;
       this.renderMailList(); if (this.selectedMail) this.readMail(this.selectedMail);
@@ -125,7 +140,7 @@ export class ComputerDesktop {
     const list = this.windows.get('mail')?.body.querySelector('.pc-mail-list'); if (!list) return;
     const read = new Set(this.quest.snapshot().readMailIds), query = normalize(this.search);
     const matches = DESKTOP_MAIL.filter(mail => normalize(`${mail.from} ${mail.subject} ${mail.body}`).includes(query));
-    list.innerHTML = matches.length ? matches.map(mail => `<button type="button" role="listitem" data-action="mail" data-id="${mail.id}" class="${read.has(mail.id) ? '' : 'pc-unread'} ${mail.id === this.selectedMail ? 'pc-selected-mail' : ''}" aria-pressed="${mail.id === this.selectedMail}"><span>${escape(mail.from)}</span><time>${mail.date}</time><strong>${escape(mail.subject)}</strong></button>`).join('') : '<p class="pc-no-results">Aucun message.</p>';
+    list.innerHTML = matches.length ? matches.map(mail => `<button type="button" role="listitem" data-action="mail" data-id="${mail.id}" class="${read.has(mail.id) ? '' : 'pc-unread'} ${mail.urgent ? 'pc-urgent' : ''} ${mail.id === this.selectedMail ? 'pc-selected-mail' : ''}" aria-pressed="${mail.id === this.selectedMail}"><span>${escape(mail.from)}</span><time>${mail.date}</time><strong>${escape(mail.subject)}</strong></button>`).join('') : '<p class="pc-no-results">Aucun message.</p>';
   }
   private readMail(id: string): void {
     const mail = DESKTOP_MAIL.find(entry => entry.id === id); if (!mail) return;
@@ -141,7 +156,7 @@ export class ComputerDesktop {
     body.innerHTML = `<div class="pc-browser-toolbar">${button('Accueil', 'web-home')}${button('Favoris : Régie Vostok', 'portal')}${button('Favoris : Banque Civile', 'bank')}<div class="pc-address">${address}</div></div><div class="pc-website">${this.page === 'home'
       ? `<header><small>LE WEB, EN PLUS LENT.</small><h2>Bonsoir, Alex.</h2></header><p>Tout le monde semble avoir quelque chose à vous vendre.</p><div class="pc-web-tiles">${button('Banque Civile · Mes comptes', 'bank')}${button('Régie Vostok · Mon compte locataire', 'portal')}<aside><strong>Transit Express</strong><p>Votre fidélité mérite<br>un grand soulagement.</p></aside><aside><strong>Nuit Privée · 18+</strong><p>Un message vous attend.<br>Comme tous les soirs.</p></aside></div>`
       : this.page === 'bank'
-        ? `<header class="pc-regie-head pc-bank-head"><strong>BANQUE CIVILE</strong><small>MES COMPTES</small></header><h2>Compte courant</h2><p>A. Morin · n° •••• 2207</p><div class="pc-account-card"><small>SOLDE DISPONIBLE</small><strong class="pc-debt">−48,32 €</strong><dl><div><dt>Prélèvement Régie Vostok · loyer</dt><dd>−561,40 €</dd></div><div><dt>Rejeté (provision insuffisante)</dt><dd>142,60 € non payés</dd></div><div><dt>Frais de dépassement de découvert</dt><dd>−8,00 € à venir</dd></div></dl><p>Votre autorisation de découvert est dépassée. Aucun nouveau prélèvement ne pourra être honoré.</p></div><p class="pc-after-account">Il manque 142,60 € pour le loyer, et le compte est déjà dans le rouge. Rien à faire ce soir.</p>`
+        ? `<header class="pc-regie-head pc-bank-head"><strong>BANQUE CIVILE</strong><small>MES COMPTES</small></header><h2>Compte courant</h2><p>A. Morin · n° •••• 2207</p><div class="pc-account-card"><small>SOLDE DISPONIBLE</small><strong class="pc-debt">−48,32 €</strong><dl><div><dt>Prélèvement Régie Vostok · loyer</dt><dd>−704,00 €</dd></div><div><dt>À venir · réparation colonne d’eau (9 h)</dt><dd>−142,60 €</dd></div><div><dt>Frais de dépassement de découvert</dt><dd>−8,00 € à venir</dd></div></dl><p>Votre autorisation de découvert est dépassée. Aucun nouveau prélèvement ne pourra être honoré.</p></div><p class="pc-after-account">142,60 € à sortir demain matin, et le compte est déjà dans le rouge. Rien à faire ce soir.</p>`
       : `<header class="pc-regie-head"><strong>VOSTOK</strong><small>GESTION LOCATIVE</small></header><h2>Espace locataire</h2><p>A. Morin · Référence RV-041 · Dernier étage</p>${this.page === 'portal' ? `<div class="pc-account-card"><strong>Un prélèvement a été rejeté.</strong><p>Votre situation locative a été actualisée.</p>${button('Consulter le solde', 'check-account')}</div>`
         : '<div class="pc-account-card"><small>RESTE À RÉGLER</small><strong class="pc-debt">142,60 €</strong><dl><div><dt>Loyer</dt><dd>615,00 €</dd></div><div><dt>Charges</dt><dd>89,00 €</dd></div><div><dt>Montant reçu</dt><dd>−561,40 €</dd></div></dl><p>Régularisation attendue demain. Le service ne répond pas la nuit.</p></div><p class="pc-after-account">Rien de plus à faire à cette heure-ci. Une partie de Démineur, puis dormir.</p>'}`}</div>`;
   }
@@ -150,7 +165,7 @@ export class ComputerDesktop {
     body.innerHTML = `<div class="pc-mine-tools"><output>${String(game.mineCount - game.flags.size).padStart(3, '0')}</output>${button(game.status === 'lost' ? '☹' : game.status === 'won' ? '☺' : '☻', 'restart-mines', 'aria-label="Nouvelle partie de Démineur"')}<label><input type="checkbox" data-flag-mode ${this.flagMode ? 'checked' : ''} /> Drapeau</label></div><div class="pc-mine-grid" role="group" aria-label="Grille du Démineur">${Array.from({ length: 81 }, (_, cell) => {
       const revealed = game.revealed.has(cell), count = revealed ? game.count(cell) : 0, mine = revealed && game.mines.has(cell);
       return button(mine ? '✳' : revealed ? count ? String(count) : '' : game.flags.has(cell) ? '⚑' : '', 'mine', `data-cell="${cell}" data-count="${count}" class="${revealed ? 'revealed' : ''}${mine ? ' mine' : ''}" aria-label="Case ${Math.floor(cell / 9) + 1}, ${cell % 9 + 1}${revealed ? mine ? ', mine' : `, ${count}` : ''}" ${game.status === 'lost' || game.status === 'won' ? 'disabled' : ''}`);
-    }).join('')}</div><footer class="pc-status">${game.status === 'lost' ? 'Perdu. Encore une ?' : game.status === 'won' ? 'Gagné. Il est toujours 00:30.' : 'Clic : découvrir · clic droit : drapeau'}</footer>`;
+    }).join('')}</div><footer class="pc-status">${game.status === 'lost' ? 'Perdu. Encore une ?' : game.status === 'won' ? `Gagné. Il est ${desktopTime()}.` : 'Clic : découvrir · clic droit : drapeau'}</footer>`;
   }
   private readonly input = (event: Event): void => {
     if ((event.target as HTMLElement).matches('[data-search]')) { this.search = (event.target as HTMLInputElement).value; this.renderMailList(); }
@@ -227,6 +242,7 @@ export class ComputerDesktop {
   };
   dispose(): void {
     this.disposed = true; this.opened = false; this.stopDrag();
+    if (this.clockTimer !== undefined) window.clearInterval(this.clockTimer); this.clockTimer = undefined;
     window.removeEventListener('keydown', this.key, true); window.removeEventListener('pointermove', this.pointerMove);
     window.removeEventListener('pointerup', this.pointerUp); window.removeEventListener('pointercancel', this.pointerUp);
     window.removeEventListener('blur', this.stopDrag);

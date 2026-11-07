@@ -4,7 +4,7 @@ import type {
   GameSaveVec3,
 } from './GameSave';
 import { sanitizeComputerUse, type ComputerUseProgress } from '../apartment/ComputerUseState';
-import { sanitizeInventory, type InventoryProgress } from '../apartment/InventoryState';
+import { FLASHLIGHT_ID, sanitizeInventory, type InventoryProgress } from '../apartment/InventoryState';
 import { sanitizeCorridor, type CorridorProgress } from '../story/CorridorProgress';
 import { sanitizeApartmentObjects, sanitizeApartmentFixtures, type ApartmentObjectsProgress, type ApartmentFixturesProgress } from '../apartment/ApartmentInteractionState';
 import type { CharacterVoiceId } from '../audio/VoiceCatalog';
@@ -330,7 +330,7 @@ const sanitizeRussianPayload = (value: unknown): RussianStairwellSavePayload | n
   if (objects === null || fixtures === null || pcUse===null || inventory===null || corridor===null) return null;
   if(value.objective!==undefined&&value.objective!==null&&(typeof value.objective!=='string'||value.objective.length>180))return null;
   if(corridor?.active&&!computer?.apartment?.outageTriggered)return null;
-  if(corridor?.triggered&&!inventory?.slots[0])return null;
+  if(corridor?.triggered&&!inventory?.items.some(item=>item.id===FLASHLIGHT_ID))return null;
   return Object.freeze({
     safePosition,
     quaternion,

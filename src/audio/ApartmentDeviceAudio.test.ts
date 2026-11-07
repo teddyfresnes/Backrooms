@@ -61,8 +61,8 @@ it('stops the playlist at the surge, starts Pressure afterward at the TV, and pa
   for (let i = 0; i < 14; i++) audio.sync(quest.devices, true, .05);
   expect(pressure!.src).toBe(PRESSURE_URL); expect(pressure!.paused).toBe(false);
   expect(panners.some(p => p.setPosition.mock.calls.some(args => args.join() === Object.values(positions.tv).join()))).toBe(true);
-  // The breaker's collapsing mains hum: three sine partials, created once.
-  expect(context.createOscillator).toHaveBeenCalledTimes(3);
+  // The collapsing mains hum (three sine partials, created once) plus the three groans of the cut.
+  expect(context.createOscillator).toHaveBeenCalledTimes(6);
   quest.setTelevision(false); audio.sync(quest.devices, true); expect(pressure!.paused).toBe(true);
   const starts = radio!.play.mock.calls.length; audio.radioStatic(); audio.sync(quest.devices, true);
   radio!.dispatchEvent(new Event('ended')); expect(next).not.toHaveBeenCalled(); expect(radio!.play).toHaveBeenCalledTimes(starts);

@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import type { StaticCollider, Vec3Data } from '../world/types';
 import { disposeObjectTree } from './CompassModel';
 
-/** Inside face of the entry wall, south of the front door (measured on the imported model). */
-export const FUSE_BOX_MOUNT = { wallX: -2.02, z: -3.6, height: 1.62 } as const;
+/** Far wall of the living space, facing the front door 8 m away (measured on the imported model). */
+export const FUSE_BOX_MOUNT = { wallX: -10.04, z: -0.55, height: 1.62, facing: 1 } as const;
 const SIZE = { width: 0.36, height: 0.46, depth: 0.085 } as const;
 const MODULE = 0.0178;
 const ROWS = [
@@ -61,13 +61,14 @@ export class FuseBox {
   }) {
     this.group.name = 'apartment-fuse-box';
     const { width: W, height: H, depth: D } = SIZE;
-    // Built facing +Z with its back at z = 0, then turned to face into the apartment (-X).
+    // Built facing +Z with its back at z = 0, then turned to face into the room (±X).
+    const facing = FUSE_BOX_MOUNT.facing;
     this.group.position.set(FUSE_BOX_MOUNT.wallX, floorY + FUSE_BOX_MOUNT.height, FUSE_BOX_MOUNT.z);
-    this.group.rotation.y = -Math.PI / 2;
-    this.center.copy(this.group.position).add(new THREE.Vector3(-D / 2, 0, 0));
+    this.group.rotation.y = facing * Math.PI / 2;
+    this.center.copy(this.group.position).add(new THREE.Vector3(facing * D / 2, 0, 0));
     this.collider = {
       id: 'apartment-fuse-box', kind: 'wall',
-      center: { x: FUSE_BOX_MOUNT.wallX - D / 2, y: floorY + FUSE_BOX_MOUNT.height, z: FUSE_BOX_MOUNT.z },
+      center: { x: FUSE_BOX_MOUNT.wallX + facing * D / 2, y: floorY + FUSE_BOX_MOUNT.height, z: FUSE_BOX_MOUNT.z },
       halfExtents: { x: D / 2, y: H / 2, z: W / 2 },
     };
     const plastic = new THREE.MeshStandardMaterial({ name: 'fuse-box-plastic', color: 0xe9e8e1, roughness: 0.55, metalness: 0 });

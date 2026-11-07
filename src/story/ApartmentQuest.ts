@@ -170,8 +170,8 @@ export class ApartmentQuest {
       home: this.state.lightOn ? 'Enfin chez moi…' : 'Enfin chez moi… Je vais allumer.',
       light: this.state.gasOn ? 'Le repas chauffe déjà.' : 'Je vais faire chauffer ça.',
       gas: this.state.tvOn && this.state.radioOn ? 'Un peu de bruit en attendant le repas.' : 'La télé et la radio, en attendant que ça chauffe.',
-      devices: this.progress.readMailIds.includes(RENT_MAIL_ID) ? 'Le PC est encore allumé.' : 'Il faudrait que je vérifie mes mails.',
-      mail: 'Encore ce loyer… Il faut que je regarde ce qu’il reste sur mon compte.',
+      devices: this.progress.readMailIds.includes(RENT_MAIL_ID) ? 'Le PC est encore allumé.' : 'Bon… voyons voir mes mails.',
+      mail: 'Une réparation à payer… avant neuf heures. Il faut que je regarde ce qu’il reste sur mon compte.',
       bank: 'Moins quarante-huit euros… Une partie de Démineur pour penser à autre chose.',
       mines: this.state.gasOn ? GAS_THOUGHT : 'Je vais vérifier le gaz.',
     };
@@ -208,7 +208,7 @@ export class ApartmentQuest {
     if (!this.state.lightSeen) return 'Allumer la lumière de l’appartement.';
     if (!this.state.gasSeen) return 'Allumer le gaz sous la poêle.';
     if (!this.state.tvSeen || !this.state.radioSeen) return 'Allumer la TV et la radio en attendant le repas.';
-    if (!this.progress.readMailIds.includes(RENT_MAIL_ID)) return 'Sur le PC, retrouver le mail de la régie.';
+    if (!this.progress.readMailIds.includes(RENT_MAIL_ID)) return 'Regarder mes mails récents.';
     if (!this.bankChecked) return 'Consulter le solde de mon compte bancaire sur Internet.';
     return this.state.firstGameFinished ? null : 'Terminer une première partie de Démineur.';
   }

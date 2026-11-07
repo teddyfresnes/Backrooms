@@ -185,6 +185,15 @@ export class ApartmentDeviceAudio {
     this.burst(panel, .045, .55, 1500, 'bandpass', range);
     this.burst(panel, .32, .7, 180, 'lowpass', range);
     this.hum(this.positions.pc, 100, .5, .05);
+    // The dread: arcing crackles, a deep blow through the building and the
+    // mains groaning down to nothing, then a fridge-like knock as it dies.
+    const wide = { refDistance: 4, maxDistance: 60, rolloff: .5 };
+    for (const [delay, level] of [[.03, .8], [.09, .55], [.16, .7], [.27, .4]] as const) this.burst(panel, .03, level, 3200, 'bandpass', range, delay);
+    this.burst(panel, 1.4, 1.1, 85, 'lowpass', wide, .05);
+    this.tone(panel, 54, 44, .5, .2, wide, .05);
+    this.tone(this.positions.pc, 140, 14, 2.6, .16, wide, .08, .04);
+    this.tone(this.positions.pc, 280, 26, 2.2, .05, wide, .1, .03);
+    this.burst(this.positions.pc, .22, .5, 140, 'lowpass', wide, 2.7);
   }
   /** A plain device button (radio): the recorded click only. */
   buttonClick(on: boolean): void { if (!this.disposed) this.recordedClick?.(on); }
@@ -221,26 +230,29 @@ export class ApartmentDeviceAudio {
     this.effects.add(effect); sources[0]!.onended = effect.cleanup;
     for (const s of sources) { s.start(); s.stop(context.currentTime + duration); }
   }
-  private burst(position: Vec3Data, duration: number, level: number, frequency: number, type: BiquadFilterType,range?:{refDistance:number;maxDistance:number;rolloff:number}): void {
+  private burst(position: Vec3Data, duration: number, level: number, frequency: number, type: BiquadFilterType,range?:{refDistance:number;maxDistance:number;rolloff:number},delay=0): void {
     if (this.disposed || this.bus.context.state !== 'running') return;
     const { context } = this.bus, source = context.createBufferSource(), filter = context.createBiquadFilter(), gain = context.createGain();
-    const chain = doorAudioChain(this.bus, position, 1,false,range);
+    const chain = doorAudioChain(this.bus, position, 1,false,range), start = context.currentTime + delay;
     filter.type = type; filter.frequency.value = frequency;
-    source.buffer = this.noise; gain.gain.setValueAtTime(level, context.currentTime);
-    gain.gain.exponentialRampToValueAtTime(.0001, context.currentTime + duration);
+    source.buffer = this.noise; gain.gain.setValueAtTime(level, start);
+    gain.gain.exponentialRampToValueAtTime(.0001, start + duration);
     source.connect(filter).connect(gain).connect(chain.input);
     const effect = { source, cleanup: () => { source.disconnect(); filter.disconnect(); gain.disconnect(); chain.dispose(); this.effects.delete(effect); } };
-    this.effects.add(effect); source.onended = effect.cleanup; source.start(); source.stop(context.currentTime + duration);
+    this.effects.add(effect); source.onended = effect.cleanup; source.start(start); source.stop(start + duration);
   }
-  private tone(position: Vec3Data, from: number, to: number, duration: number, level: number,range?:{refDistance:number;maxDistance:number;rolloff:number}): void {
+  private tone(position: Vec3Data, from: number, to: number, duration: number, level: number,range?:{refDistance:number;maxDistance:number;rolloff:number},delay=0,attack=0): void {
     if (this.disposed || this.bus.context.state !== 'running') return;
     const { context } = this.bus, source = context.createOscillator(), gain = context.createGain(), chain = doorAudioChain(this.bus, position, 1,false,range);
-    source.type = 'sawtooth'; source.frequency.setValueAtTime(from, context.currentTime);
-    source.frequency.exponentialRampToValueAtTime(to, context.currentTime + duration);
-    gain.gain.setValueAtTime(level, context.currentTime); gain.gain.exponentialRampToValueAtTime(.0001, context.currentTime + duration);
+    const start = context.currentTime + delay;
+    source.type = 'sawtooth'; source.frequency.setValueAtTime(from, start);
+    source.frequency.exponentialRampToValueAtTime(to, start + duration);
+    if (attack > 0) { gain.gain.setValueAtTime(.0001, start); gain.gain.exponentialRampToValueAtTime(level, start + attack); }
+    else gain.gain.setValueAtTime(level, start);
+    gain.gain.exponentialRampToValueAtTime(.0001, start + duration);
     source.connect(gain).connect(chain.input);
     const effect = { source, cleanup: () => { source.disconnect(); gain.disconnect(); chain.dispose(); this.effects.delete(effect); } };
-    this.effects.add(effect); source.onended = effect.cleanup; source.start(); source.stop(context.currentTime + duration);
+    this.effects.add(effect); source.onended = effect.cleanup; source.start(start); source.stop(start + duration);
   }
   dispose(): void {
     this.disposed = true; this.radio.element.removeEventListener('ended', this.ended);

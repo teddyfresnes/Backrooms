@@ -13,8 +13,8 @@ export const MAILBOX_NOTE: LetterContent = {
   heading: 'Juste un mot',
   paragraphs: [
     'Coucou,',
-    'Je suis passée tout à l’heure, mais tu n’étais pas là. Je t’ai laissé un cadeau sur le pas de ta porte.',
-    'Ouvre-le avant de rentrer, s’il te plaît.',
+    'Ça fait longtemps qu’on ne s’est pas parlé. Trop longtemps. Je ne savais plus trop comment revenir vers toi, alors je suis passée tout à l’heure, mais tu n’étais pas là.',
+    'Je t’ai laissé un cadeau sur le pas de ta porte. Ouvre-le avant de rentrer, s’il te plaît.',
   ],
   signature: 'Chloé',
 };

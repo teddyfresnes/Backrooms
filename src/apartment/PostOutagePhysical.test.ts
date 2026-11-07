@@ -92,6 +92,6 @@ it('stows and retrieves exact real small props without a visible double, collide
   const anchor=disk.parts[0]!.parent!;objects.presentEquipped(disk.id,new THREE.Vector3(-6.5,10,-4),new THREE.Quaternion());expect(anchor.visible).toBe(true);expect(anchor.position.x).toBe(-6.5);expect(body?.isEnabled()).toBe(false);
   objects.presentEquipped(undefined);expect(anchor.visible).toBe(false);expect(bag.storedIds).toEqual([disk.id]);
   // Bring the same stored item into a clear physical holding position.
-  camera.position.set(-6.6,a.floorY+1.5,-3.5);camera.lookAt(-6.6,a.floorY+1.5,-4.5);camera.updateMatrixWorld(true);bag.state.selected=1;
+  camera.position.set(-6.6,a.floorY+1.5,-3.5);camera.lookAt(-6.6,a.floorY+1.5,-4.5);camera.updateMatrixWorld(true);bag.state.selected=0;
   expect(objects.takeStored(disk.id)).toBe(true);expect(bag.takeSelected()?.id).toBe(disk.id);expect(body?.isEnabled()).toBe(true);expect(objects.isHolding).toBe(true);expect(bag.storedIds).toHaveLength(0);
 });

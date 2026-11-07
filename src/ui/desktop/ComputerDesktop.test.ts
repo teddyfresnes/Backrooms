@@ -13,17 +13,21 @@ it('supports mail → finished game, preserving the optional account site and al
   const quest = new ApartmentQuest(), open = vi.fn(), close = vi.fn();
   quest.reachHome(); quest.setLight(true); quest.setGas(true); quest.setTelevision(true); quest.setRadio(true);
   desktop = new ComputerDesktop(document.body, quest, open, close); desktop.open(); desktop.open();
-  expect(open).toHaveBeenCalledOnce(); expect(document.querySelector('.pc-lcd')?.getAttribute('aria-label')).toBe('00:30');
+  expect(open).toHaveBeenCalledOnce(); expect(document.querySelector('.pc-lcd')?.getAttribute('aria-label')).toMatch(/^01:[0-5][0-9]$/);
   click('.pc-icon[data-app="mail"]');
   expect(document.querySelectorAll('.pc-mail-list button')).toHaveLength(DESKTOP_MAIL.length);
   const search = document.querySelector<HTMLInputElement>('[data-search]')!;
-  search.value = 'prelevement'; search.dispatchEvent(new Event('input', { bubbles: true }));
+  // The urgent repair mail is the most recent one, at the top.
+  expect(document.querySelector('.pc-mail-list button')?.getAttribute('data-id')).toBe(RENT_MAIL_ID);
+  expect(document.querySelector('.pc-mail-list button')?.classList.contains('pc-urgent')).toBe(true);
+  search.value = 'colonne'; search.dispatchEvent(new Event('input', { bubbles: true }));
   expect(document.querySelectorAll('.pc-mail-list button')).toHaveLength(1);
   click(`[data-action="mail"][data-id="${RENT_MAIL_ID}"]`);
-  expect(quest.snapshot().stage).toBe('game'); expect(quest.snapshot().readMailIds).toContain(RENT_MAIL_ID);
-  expect(document.querySelector('.pc-mail-reader')?.textContent).toContain('RV-041');
-  click('.pc-mail-link'); click('[data-action="check-account"]');
-  expect(document.querySelector('.pc-debt')?.textContent).toBe('142,60 €'); expect(quest.snapshot().stage).toBe('game');
+  expect(quest.snapshot().stage).toBe('account'); expect(quest.snapshot().readMailIds).toContain(RENT_MAIL_ID);
+  expect(document.querySelector('.pc-mail-reader')?.textContent).toContain('URGENT');
+  expect(quest.objective('home')).toContain('solde');
+  click('[data-action="bank"]');
+  expect(document.querySelector('.pc-debt')?.textContent).toBe('−48,32 €'); expect(quest.snapshot().stage).toBe('game');
   expect(document.querySelector('.pc-objective')).toBeNull(); expect(quest.objective('home')).toContain('Démineur');
   click('.pc-icon[data-app="mines"]'); expect(document.querySelectorAll('[data-cell]')).toHaveLength(81);
   expect(quest.snapshot().stage).toBe('game');
@@ -61,7 +65,7 @@ it.each(['won', 'lost'] as const)('only completes the first game on a real %s re
   quest.reachHome(); quest.setLight(true); quest.setGas(true); quest.setRadio(true); quest.setTelevision(true);
   desktop = new ComputerDesktop(document.body, quest, () => {}, () => {}, sound); desktop.open();
   click('.pc-icon[data-app="mines"]'); click('[data-cell="40"]');
-  click('.pc-icon[data-app="mail"]'); click(`[data-id="${RENT_MAIL_ID}"]`);
+  click('.pc-icon[data-app="mail"]'); click(`[data-id="${RENT_MAIL_ID}"]`); quest.checkBank();
   const early = new MinesGame(); early.reveal(40); click(`[data-cell="${[...early.mines][0]}"]`);
   expect(quest.devices.firstGameFinished).toBe(false);
   click('[data-action="restart-mines"]'); expect(quest.devices.firstGameFinished).toBe(false);
@@ -74,11 +78,11 @@ it.each(['won', 'lost'] as const)('only completes the first game on a real %s re
 });
 it('does not validate physical entry merely by opening the desktop', () => {
   const quest = new ApartmentQuest(); desktop = new ComputerDesktop(document.body, quest, () => {}, () => {}); desktop.open();
-  expect(quest.snapshot().homeReached).toBe(false); expect(quest.devices.pcUsed).toBe(true);
+  expect(quest.snapshot().homeReached).toBe(false); expect(quest.devices.pcUsed).toBe(false);
   expect(document.querySelectorAll('.pc-objective')).toHaveLength(0);
 });
 it('interrupts without a normal-close callback and refuses the desktop after a consumed outage or reload',()=>{
-  const quest=new ApartmentQuest(),close=vi.fn();quest.reachHome();quest.setLight(true);quest.setGas(true);quest.setTelevision(true);quest.setRadio(true);quest.readMail(RENT_MAIL_ID);
+  const quest=new ApartmentQuest(),close=vi.fn();quest.reachHome();quest.setLight(true);quest.setGas(true);quest.setTelevision(true);quest.setRadio(true);quest.readMail(RENT_MAIL_ID);quest.checkBank();
   desktop=new ComputerDesktop(document.body,quest,()=>{},close);desktop.open();quest.finishGame('lost');quest.nextThought();reachPowerCut(quest);
   desktop.interrupt();expect(desktop.isOpen).toBe(false);expect(desktop.element.hidden).toBe(true);expect(close).not.toHaveBeenCalled();desktop.open();expect(desktop.isOpen).toBe(false);
   desktop.dispose();desktop=new ComputerDesktop(document.body,new ApartmentQuest(quest.snapshot()),()=>{},close);desktop.open();expect(desktop.isOpen).toBe(false);

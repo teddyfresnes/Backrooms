@@ -1204,7 +1204,7 @@ export class CharacterRuntime {
     this.heldUp.set(0, 1, 0);
     this.heldForward.crossVectors(this.heldUp, this.heldRight).normalize();
     const basis: HeldItemBasis = { origin: this.heldOrigin, forward: this.heldForward, up: this.heldUp, right: this.heldRight,
-      reach: { forward: 0.3, right: 0.06, up: -0.4 } };
+      reach: { forward: 0.32, right: 0.05, up: -0.27 } };
     this.heldPose.apply([this.rightUpperArmBone, this.rightForearmBone, this.rightHandBone], basis);
   }
   /** First-person rig: low in the view, following the look with a limited pitch. */
@@ -1220,7 +1220,7 @@ export class CharacterRuntime {
     this.heldRight.crossVectors(this.heldForward, new THREE.Vector3(0, 1, 0)).normalize();
     this.heldUp.crossVectors(this.heldRight, this.heldForward).normalize();
     const basis: HeldItemBasis = { origin: this.heldOrigin, forward: this.heldForward, up: this.heldUp, right: this.heldRight,
-      reach: { forward: 0.33, right: 0.09, up: -0.26 } };
+      reach: { forward: 0.36, right: 0.07, up: -0.16 } };
     this.firstPersonHeldPose.apply([this.firstPersonRightUpperArmBone, this.firstPersonRightForearmBone, this.firstPersonRightHandBone], basis);
   }
   getEquipmentHandPosition(output:THREE.Vector3):boolean {

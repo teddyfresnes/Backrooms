@@ -48,8 +48,13 @@ const lerpAngle = (from: number, to: number, amount: number): number => {
   return from + delta * amount;
 };
 const crossed = (time: number, delta: number, mark: number): boolean => time >= mark && time - delta < mark;
-/** The view is swung to the stairs, then handed back this early. */
-const SPOTTED_LOOK_RELEASE = 0.4;
+/** After the roar, this long before the head whips round to the flight down. */
+const SPOTTED_STAIR_TURN_DELAY = 0.2;
+/** Down the stairs it hangs this far behind a running player (path metres). */
+const ESCAPE_FOLLOW_GAP = 3.4;
+/** Slower than this along the route for this long, and the gap closes. */
+const ESCAPE_STALL_RATE = 2.4;
+const ESCAPE_STALL_SECONDS = 1.2;
 /** A point a couple of treads down the flight leaving the apartment landing. */
 const STAIR_LOOK_TARGET = { x: 1.05, z: -0.9 } as const;
 const STAIR_LOOK_DROP = 0.75;
@@ -202,6 +207,9 @@ export class BacteriaEncounter {
   private readonly fallForward = new THREE.Vector3();
   private readonly fallEuler = new THREE.Euler(0, 0, 0, 'YXZ');
   private fallYaw = 0;
+  private lastPlayerAlong = Number.NaN;
+  private playerRate = 0;
+  private stallTime = 0;
   /** Time into the fall when the camera reaches the maze (computed at the trip). */
   private fallCut = 4;
   private readonly below = new BackroomsBelow();
@@ -296,7 +304,7 @@ export class BacteriaEncounter {
 
   get locksInput(): boolean {
     return this.phase === 'jumpscare' || this.phase === 'dead' || this.phase === 'escaped'
-      || this.hidden;
+      || this.hidden || (this.phase === 'spotted' && this.phaseTime < S.release);
   }
 
   /**
@@ -789,27 +797,29 @@ export class BacteriaEncounter {
   private startSpotted(): void {
     const host = this.host;
     this.setPhase('spotted');
-    // Only the view is taken, briefly, and swung to the flight down; the legs
-    // stay the player's so the run starts at once.
+    // A short shot: the body stops on the landing and glances back into the
+    // flat; it has already turned. Then the head whips round to the flight
+    // down, so control returns already facing the run.
+    host.player.prepareScriptedStanding();
+    host.player.setInputEnabled(false);
     host.player.setLookLocked(true);
-    host.hud.showHint(host.sprintKeyLabel(), 'COURS ! Descends !', 4, true);
+    host.hud.hideHint();
     host.openEscape();
     this.distanceAlong = 0;
+    this.lastPlayerAlong = Number.NaN; this.playerRate = 0; this.stallTime = 0;
   }
 
   private updateSpotted(dt: number): void {
     const host = this.host;
     const t = this.phaseTime;
-    // You glance back: it has already turned. Once it roars, the head whips
-    // round to the flight down, so control returns already facing the run.
-    if (t < SPOTTED_LOOK_RELEASE) {
-      this.target.set(STAIR_LOOK_TARGET.x, this.eye.y - STAIR_LOOK_DROP, STAIR_LOOK_TARGET.z);
-      this.lookMatrix.lookAt(this.eye, this.target, UP);
-      this.lookQuaternion.setFromRotationMatrix(this.lookMatrix);
-      const current = host.player.getLookQuaternion();
-      this.nextLook.set(current.x, current.y, current.z, current.w).slerp(this.lookQuaternion, 1 - Math.exp(-dt * 16));
-      host.player.setLookQuaternion(this.nextLook);
-    } else if (crossed(t, dt, SPOTTED_LOOK_RELEASE)) host.player.setLookLocked(false);
+    const toStairs = t >= S.roar + SPOTTED_STAIR_TURN_DELAY;
+    if (toStairs) this.target.set(STAIR_LOOK_TARGET.x, this.eye.y - STAIR_LOOK_DROP, STAIR_LOOK_TARGET.z);
+    else this.actor.getHeadPosition(this.target);
+    this.lookMatrix.lookAt(this.eye, this.target, UP);
+    this.lookQuaternion.setFromRotationMatrix(this.lookMatrix);
+    const current = host.player.getLookQuaternion();
+    this.nextLook.set(current.x, current.y, current.z, current.w).slerp(this.lookQuaternion, 1 - Math.exp(-dt * (toStairs ? 15 : 9)));
+    host.player.setLookQuaternion(this.nextLook);
     if (crossed(t, dt, S.dropTelevision)) this.dropTelevision();
     if (crossed(t, dt, S.whip)) {
       this.targetYaw = this.yawToward(this.feet);
@@ -832,6 +842,8 @@ export class BacteriaEncounter {
       this.targetYaw = null;
       this.actor.setMotion('run');
       host.player.setLookLocked(false);
+      host.player.setInputEnabled(true);
+      host.hud.showHint(host.sprintKeyLabel(), 'COURS ! Descends !', 4, true);
     }
   }
 
@@ -841,12 +853,24 @@ export class BacteriaEncounter {
     if (isTripPosition(host.player.position) || this.outsideTime > ESCAPE_RUN.tripDelay) { this.startEscaped(); return; }
     const playerAlong = this.escapePath.project(this.feet);
     const gap = playerAlong - this.distanceAlong;
+    // How fast the player really progresses down the route (smoothed).
+    if (Number.isFinite(this.lastPlayerAlong) && dt > 0) {
+      const rate = THREE.MathUtils.clamp((playerAlong - this.lastPlayerAlong) / dt, -12, 12);
+      this.playerRate = THREE.MathUtils.lerp(this.playerRate, rate, 1 - Math.exp(-dt * 6));
+    }
+    this.lastPlayerAlong = playerAlong;
+    this.stallTime = this.playerRate < ESCAPE_STALL_RATE ? this.stallTime + dt : Math.max(0, this.stallTime - dt * 1.5);
     if (Math.abs(gap) < 1.6) {
       // On top of you: no more path, a lunge.
       this.pursue(dt, CHASE_SPEEDS.landing);
       this.distanceAlong = this.escapePath.project(this.monsterPosition);
     } else {
-      const speed = this.escapePath.speedAt(this.distanceAlong);
+      // Always right behind, never quite on you: it closes fast from afar,
+      // then hangs a few metres back at your pace. Stop, and it is on you.
+      const desired = this.stallTime > ESCAPE_STALL_SECONDS ? 0 : ESCAPE_FOLLOW_GAP;
+      const speed = gap >= desired
+        ? THREE.MathUtils.clamp(Math.max(0, this.playerRate) + (gap - desired) * 1.5, 3, 11)
+        : THREE.MathUtils.clamp(this.playerRate * 0.85, 0, 11);
       this.distanceAlong = THREE.MathUtils.clamp(this.distanceAlong + Math.sign(gap) * speed * dt, 0, this.escapePath.length);
       this.escapePath.sample(this.distanceAlong, this.monsterPosition);
       this.escapePath.heading(this.distanceAlong, this.heading);
@@ -1204,6 +1228,27 @@ export class BacteriaEncounter {
     }
     this.prompt = null;
     this.host.setPrompt(null);
+    return true;
+  }
+
+  /**
+   * Interact pressed while hidden, outside the held sneak. Still behind the
+   * door, the creature has not seen anything: climbing out is allowed and the
+   * hunt goes on. Once it is in the flat and before it is lost in the
+   * television (the "hold" prompt), climbing out is suicide: it is on you.
+   */
+  requestHiddenExit(): boolean {
+    if (!this.hidden) return false;
+    if (this.phase === 'chase' || this.phase === 'bang') {
+      this.hidden = false;
+      this.host.hud.hideHint();
+      this.host.hideSpot.release();
+      this.host.player.setLookLocked(false);
+      return true;
+    }
+    // The held exit owns the key once the prompt is up.
+    if ((this.phase === 'carry' || this.phase === 'sneak') && this.calm >= 1) return true;
+    this.burstFromHiding();
     return true;
   }
 

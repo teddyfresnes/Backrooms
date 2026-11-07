@@ -194,12 +194,13 @@ describe('BacteriaEncounter', () => {
     expect(world.quest()).toMatch(/sans courir/);
     // Tiptoe to the landing.
     world.until(() => world.events.includes('open-escape'), 4, () => { world.player.position.x = Math.min(threshold.x + 0.5, world.player.position.x + DT * 1.4); world.player.position.z = THREE.MathUtils.lerp(world.player.position.z, threshold.z, 0.05); });
-    // Spotted: the legs stay free, only the view is swung to the flight down.
-    expect(world.player.isInputEnabled).toBe(true);
+    // Spotted: a short shot looking back at it, then the view whips to the flight down.
+    expect(world.player.isInputEnabled).toBe(false);
     expect(world.player.lookLocked).toBe(true);
-    const glance = world.until(() => !world.player.lookLocked, 1);
-    expect(glance).toBeLessThan(0.6);
-    world.until(() => world.state.motion === 'run', SPOTTED_TIMELINE.release + 0.2);
+    const glance = world.until(() => !world.player.lookLocked, SPOTTED_TIMELINE.release + 0.2);
+    expect(glance).toBeGreaterThan(SPOTTED_TIMELINE.roar);
+    expect(world.player.isInputEnabled).toBe(true);
+    world.until(() => world.state.motion === 'run', 0.3);
     // Control returns facing the flight down, not the creature.
     const view = new THREE.Vector3(0, 0, -1).applyQuaternion(world.player.getLookQuaternion() as THREE.Quaternion).setY(0).normalize();
     const stairs = new THREE.Vector3(1.05 - world.player.position.x, 0, -0.9 - world.player.position.z).normalize();
@@ -347,5 +348,52 @@ describe('other hiding places', () => {
     world.until(() => world.state.motion === 'crouch', 20);
     const at = world.actor.root.position;
     expect(Math.hypot(at.x - front.x, at.z - front.z)).toBeLessThan(0.6);
+  });
+
+  it('lets the player climb out freely before the breach, but climbing out while it is inside is fatal', () => {
+    const early = setup({ tvOn: true });
+    playToHiding(early);
+    expect(early.encounter.requestHiddenExit()).toBe(true);
+    expect(early.encounter.isHidden).toBe(false);
+    expect(early.wardrobe.exits).toBe(1);
+    expect(early.events.filter(event => event.startsWith('death'))).toEqual([]);
+    const late = setup({ tvOn: true });
+    playToHiding(late);
+    late.until(() => late.events.includes('breach'), 20);
+    late.step(0.5);
+    expect(late.encounter.requestHiddenExit()).toBe(true);
+    expect(late.encounter.isHidden).toBe(false);
+    late.until(() => late.events.some(event => event.startsWith('death')), 6);
+  });
+
+  it('keeps right behind a running player down the stairs, and gets them once they stop', () => {
+    const world = setup({ tvOn: true });
+    playToHiding(world);
+    world.until(() => world.events.includes('breach'), 20);
+    world.until(() => world.state.motion === 'carry', 20);
+    world.step(CALM_SECONDS);
+    world.setSprint(true);
+    world.until(() => !world.encounter.isHidden, SNEAK_HOLD_SECONDS + 1);
+    world.setSprint(false);
+    world.until(() => world.events.includes('open-escape'), 4, () => { world.player.position.x = Math.min(threshold.x + 0.5, world.player.position.x + DT * 1.4); world.player.position.z = THREE.MathUtils.lerp(world.player.position.z, threshold.z, 0.05); });
+    world.until(() => world.state.motion === 'run', SPOTTED_TIMELINE.release + 0.5);
+    const path = new ChasePath(createEscapeWaypoints());
+    let along = path.project({ x: threshold.x + 0.5, y: threshold.y, z: threshold.z });
+    const feet = new THREE.Vector3(), monster = new THREE.Vector3();
+    const gaps: number[] = [];
+    world.step(5, () => {
+      along = Math.min(path.length, along + 6.2 * DT);
+      path.sample(along, feet);
+      world.player.position.set(feet.x, feet.y + PLAYER_CENTER_HEIGHT, feet.z);
+      monster.copy(world.actor.root.position);
+      gaps.push(along - path.project(monster));
+    });
+    expect(world.events.filter(event => event.startsWith('death'))).toEqual([]);
+    // Close behind for the last seconds: never on you, never left far behind.
+    const late = gaps.slice(-120);
+    expect(Math.max(...late)).toBeLessThan(6);
+    expect(Math.min(...late)).toBeGreaterThan(1.6);
+    // Standing still on the stairs: it is on you within a few seconds.
+    world.until(() => world.events.some(event => event.startsWith('death')), 5);
   });
 });

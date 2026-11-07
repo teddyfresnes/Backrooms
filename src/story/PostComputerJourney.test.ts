@@ -1,7 +1,7 @@
 import {expect,it} from 'vitest';
 import {ApartmentQuest,RENT_MAIL_ID,sanitizeComputerProgress} from './ApartmentQuest';
 import {gasOrigin,gasTarget} from '../../tests/support/gas-journey';
-const make=()=>{const q=new ApartmentQuest();q.reachHome();q.setLight(true);q.setGas(true);q.setTelevision(true);q.setRadio(true);q.readMail(RENT_MAIL_ID);q.finishGame('lost');return q;};
+const make=()=>{const q=new ApartmentQuest();q.reachHome();q.setLight(true);q.setGas(true);q.setTelevision(true);q.setRadio(true);q.readMail(RENT_MAIL_ID);q.checkBank();q.finishGame('lost');return q;};
 const at=(t:number)=>({x:gasOrigin.x+(gasTarget.x-gasOrigin.x)*t,y:gasOrigin.y,z:gasOrigin.z+(gasTarget.z-gasOrigin.z)*t});
 it('round-trips before/after the rise and both sides of the midpoint, without a repeated consumed cue',()=>{
   let q=make();q.nextThought();q.advanceNarration(.4,false);

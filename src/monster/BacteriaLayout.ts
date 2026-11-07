@@ -172,7 +172,7 @@ export const FACADE_OUTER_Z = STAIRWELL_BOUNDS.minZ - STAIRWELL_WALL_THICKNESS *
  * sides, long enough that the trip always happens before its end.
  */
 export const ESCAPE_RUN = {
-  halfWidth: 3.2,
+  halfWidth: 14,
   floorY: 0,
   /** Far end of the strip (the block across the street starts near -21.4). */
   endZ: FACADE_OUTER_Z - 26,

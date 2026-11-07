@@ -85,10 +85,11 @@ export class HeldItemPose {
 
     // Palm up, tilted toward the eyes, fingers pointing ahead and slightly inward.
     if (!this.palmBasis(hand)) return;
-    this.wantedNormal.copy(basis.up).multiplyScalar(0.8).addScaledVector(basis.forward, -0.6).normalize();
-    this.wantedFingers.copy(basis.forward).multiplyScalar(0.88).addScaledVector(basis.right, -0.48);
+    this.wantedNormal.copy(basis.up).multiplyScalar(0.72).addScaledVector(basis.forward, -0.69).normalize();
+    this.wantedFingers.copy(basis.forward).multiplyScalar(0.9).addScaledVector(basis.right, -0.42);
     this.wantedFingers.addScaledVector(this.wantedNormal, -this.wantedFingers.dot(this.wantedNormal)).normalize();
-    this.wantedThumb.crossVectors(this.wantedNormal, this.wantedFingers);
+    // Right hand, palm up, fingers ahead: the thumb points out to the right.
+    this.wantedThumb.crossVectors(this.wantedFingers, this.wantedNormal);
     this.current.makeBasis(this.fingers, this.thumbSide, this.normal);
     this.wanted.makeBasis(this.wantedFingers, this.wantedThumb, this.wantedNormal);
     this.rotation.setFromRotationMatrix(this.wanted.multiply(this.current.transpose()));
@@ -107,8 +108,8 @@ export class HeldItemPose {
     hand.getWorldPosition(this.a);
     markers.middle!.getWorldPosition(this.b);
     output.position.copy(this.a).lerp(this.b, 0.62).addScaledVector(this.normal, 0.024);
-    // Case basis: x = -thumb side, y = palm normal, z = back toward the wrist.
-    this.wanted.makeBasis(this.thumbSide.clone().negate(), this.normal, this.fingers.clone().negate());
+    // Case basis: x = thumb side, y = out of the palm, z = back toward the wrist.
+    this.wanted.makeBasis(this.thumbSide, this.normal, this.fingers.clone().negate());
     output.quaternion.setFromRotationMatrix(this.wanted);
     return true;
   }
@@ -126,9 +127,9 @@ export class HeldItemPose {
     this.thumbSide.subVectors(this.b, this.c);
     if (this.fingers.lengthSq() < 1e-8 || this.thumbSide.lengthSq() < 1e-8) return false;
     this.fingers.normalize();
-    // Right hand: fingers × thumb side points out of the palm.
-    this.normal.crossVectors(this.fingers, this.thumbSide).normalize();
-    this.thumbSide.crossVectors(this.normal, this.fingers).normalize();
+    // Right hand: thumb side × fingers points out of the palm (not the back of the hand).
+    this.normal.crossVectors(this.thumbSide, this.fingers).normalize();
+    this.thumbSide.crossVectors(this.fingers, this.normal).normalize();
     return true;
   }
 }

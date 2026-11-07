@@ -68,7 +68,10 @@ placard d'entrée ou salle de bain : `HIDE_SPOTS`, le monstre renifle devant cel
 utilisée). TV allumée : le monstre la porte et se calme (sa voix seule ; le cri ne
 joue qu'en poursuite), sortie discrète en maintenant E (`SNEAK_HOLD_SECONDS`) :
 le maintien pilote l'animation, le relâcher fait jaillir le joueur et le monstre
-charge. Puis fuite dans la cage restaurée (`restoreStairwell`) et par la porte du
+charge. E reste libre en cachette (`requestHiddenExit`) : avant l'intrusion on
+ressort, monstre dans l'appartement avant l'invite on meurt. Repéré sur le
+palier, un bref plan regarde la créature puis l'escalier ; dans la cage elle
+suit en élastique (`ESCAPE_FOLLOW_GAP`, rattrape si le joueur s'arrête). Puis fuite dans la cage restaurée (`restoreStairwell`) et par la porte du
 hall : la porte entière disparaît (objet masqué, `HALL_DOOR_COLLIDER_ID` et
 `HALL_DOOR_LEFT_COLLIDER_ID` désactivés). `createEscapeRunColliders` monte une
 bande de rue invisible ; `EscapeStreet` dessine un bas-côté de 180 m (cartes
