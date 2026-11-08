@@ -2543,7 +2543,8 @@ describe('epic structure rendering', () => {
       const preview = getEpic3BackroomsGalleryLayout(template, feature.bounds, feature.passageFacadeBounds!, side);
       expect(preview.wallRects).toHaveLength(8);
       expect(preview.lintelRects).toHaveLength(0);
-      expect(walked.wallRects).toHaveLength(12);
+      // Back wall pieces between the doorways, plus the seven bay fins.
+      expect(walked.wallRects).toHaveLength(EPIC3_DOORWAY_LANES.length + 1 + 7);
       expect(walked.lintelRects).toHaveLength(EPIC3_DOORWAY_LANES.length);
       const backZ = side === 'north' ? feature.bounds.minZ + 0.09 : feature.bounds.maxZ - 0.09;
       for (const along of EPIC3_DOORWAY_LANES) {
@@ -2558,7 +2559,20 @@ describe('epic structure rendering', () => {
     }
     const otherGalleryLevels = galleryLevels.length - 1;
     expect(previews.geometry.getAttribute('position').count)
-      .toBe((otherGalleryLevels * 2 * 8 + 2 * (12 + EPIC3_DOORWAY_LANES.length)) * 24);
+      .toBe((otherGalleryLevels * 2 * 8 + 2 * (EPIC3_DOORWAY_LANES.length * 2 + 8)) * 24);
+    // Every portal of every row has a capped sill and soffit across the wall
+    // thickness: looking down past the plank's bearing never shows the void.
+    const sills = mesh('epic-ascending-passages-portal-sills');
+    const soffits = mesh('epic-ascending-passages-portal-soffits');
+    const portalCount = levels.reduce((total, level) => total + level.passages.length, 0);
+    expect(sills.geometry.getAttribute('position').count).toBe(portalCount * 24);
+    expect(soffits.geometry.getAttribute('position').count).toBe(portalCount * 24);
+    const walkedPortal = template.find((passage) => passage.side === 'south')!;
+    const downward = new THREE.Raycaster(
+      new THREE.Vector3(walkedPortal.along, 1, feature.passageFacadeBounds!.maxZ - 0.09),
+      new THREE.Vector3(0, -1, 0), 0, 1.2,
+    );
+    expect(downward.intersectObject(sills)[0]?.point.y).toBeCloseTo(0, 4);
     expect(horizontalTriangleHeights(previews.geometry).every((height) =>
       Math.abs(height - EPIC3_DOORWAY_HEIGHT) < 1e-5 || Math.abs(height - 3.35) < 1e-5
     )).toBe(true);

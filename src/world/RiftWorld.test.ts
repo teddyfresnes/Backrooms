@@ -111,6 +111,15 @@ describe('epic3 rift', () => {
         }
         // ...to the brink of every portal, along the continuous gallery lane.
         for (const along of EPIC3_LANES) expect(walk.at(along, sign * (EPIC3_FACADE_HALF_DEPTH + 0.5))).toBe(hall);
+        // A straight sightline stays open along each lane, from the brink to the far end of the hall.
+        for (const along of EPIC3_LANES) {
+          for (let z = EPIC3_FACADE_HALF_DEPTH + 0.5; z < 53; z += 0.5) {
+            // Through the 2.3 m doorway itself only its axis; a wider band beyond it.
+            for (const dx of z > EPIC3_OUTER_HALF_DEPTH + 0.5 ? [-1.2, 0, 1.2] : [0]) {
+              expect(walk.at(along + dx, sign * z)).toBe(hall);
+            }
+          }
+        }
         // The void itself is never floored.
         expect(walk.at(along0(), 0)).toBe(-1);
       }

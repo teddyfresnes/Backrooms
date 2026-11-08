@@ -1220,6 +1220,9 @@ const splitEpicFacadeIntervals = (
   return intervals;
 };
 
+/** Facade bands are centred on their bounds edge, this far on either side. */
+const EPIC_FACADE_HALF_THICKNESS = 0.18;
+
 const createEpicFacadeBandGeometries = (
   bounds: Rect,
   passages: readonly EpicPassagePreview[],
@@ -1231,7 +1234,7 @@ const createEpicFacadeBandGeometries = (
   removeFloorCaps = false,
 ): THREE.BufferGeometry[] => {
   const geometries: THREE.BufferGeometry[] = [];
-  const thickness = 0.36;
+  const thickness = EPIC_FACADE_HALF_THICKNESS * 2;
   for (const side of sides) {
     const horizontal = side === 'north' || side === 'south';
     const fixed = side === 'north'
@@ -2668,6 +2671,8 @@ export class WorldView {
     const previewWalls: THREE.BufferGeometry[] = [];
     const distantPreviewCaps: THREE.BufferGeometry[] = [];
     const previewCeilings: THREE.BufferGeometry[] = [];
+    const portalSills: THREE.BufferGeometry[] = [];
+    const portalSoffits: THREE.BufferGeometry[] = [];
     const entryY = (feature.entryLevel ?? 0) * INFINITE_STORY_PITCH;
     const nearbyPreviewBand = (y: number): boolean =>
       Math.abs(y) < 0.01 ||
@@ -2705,7 +2710,26 @@ export class WorldView {
         0.84 + (rowIndex % 4) * 0.025,
         true,
       ));
-      if (nearbyPreviewBand(level.y)) {
+      // The bands are stacked without caps: close the wall thickness at each
+      // portal's sill and soffit, or the void shows through a thin slot right
+      // at the edge (under the plank's bearing). Where a gallery floor or
+      // ceiling already covers the inner half, only the void half is capped.
+      const detailed = nearbyPreviewBand(level.y);
+      for (const passage of level.passages) {
+        const fixed = passage.side === 'north' ? facadeBounds.minZ : facadeBounds.maxZ;
+        const toVoid = passage.side === 'north' ? 1 : -1;
+        const nearEdge = fixed + toVoid * (EPIC_FACADE_HALF_THICKNESS - 0.003);
+        const farEdge = detailed ? fixed : fixed - toVoid * (EPIC_FACADE_HALF_THICKNESS - 0.003);
+        const rect: Rect = {
+          minX: passage.along - passage.width * 0.5 + 0.002,
+          maxX: passage.along + passage.width * 0.5 - 0.002,
+          minZ: Math.min(nearEdge, farEdge),
+          maxZ: Math.max(nearEdge, farEdge),
+        };
+        portalSills.push(boxForRect(rect, 0.012, level.y - 0.012, 0.86));
+        portalSoffits.push(boxForRect(rect, 0.012, level.y + 3.35, 0.88));
+      }
+      if (detailed) {
         const walkedRow = Math.abs(level.y) <= 0.01;
         for (const side of ['north', 'south'] as const) {
           const layout = getEpic3BackroomsGalleryLayout(
@@ -2779,6 +2803,8 @@ export class WorldView {
       'epic-ascending-passages-corridor-ceilings',
       group,
     );
+    makeMesh(mergeOrSingle(portalSills), this.materials.floor, 'epic-ascending-passages-portal-sills', group);
+    makeMesh(mergeOrSingle(portalSoffits), this.materials.wall, 'epic-ascending-passages-portal-soffits', group);
     const fogCenter = rectCenter(voidBounds);
     const fogTint = this.plan.visualBiome === 'red'
       ? new THREE.Color(0x160302)

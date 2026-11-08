@@ -312,8 +312,8 @@ export class Game {
       });
     if (!this.options.onRequestContinue) await this.audio.setSuspended(true);
     emitProgress();
-    // What followed down the hole is only needed until the rift is behind the player.
-    const creatureReady = this.journey && this.savedRift?.stage !== 'done'
+    // What followed down the hole: at the rift, then hunting the far bank.
+    const creatureReady = this.journey
       ? BacteriaActor.load().catch((error) => { console.warn('[rift] creature unavailable', error); return undefined; })
       : Promise.resolve(undefined);
 

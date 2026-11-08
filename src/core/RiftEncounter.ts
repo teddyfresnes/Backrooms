@@ -14,6 +14,7 @@ import {
   BalanceModel,
   freshRiftProgress,
   isInRiftGallery,
+  isOverRiftVoid,
   nearestRiftLane,
   northProgress,
   PLANK_BEARING,
@@ -46,18 +47,38 @@ const bodyYaw = (x: number, z: number): number => Math.atan2(x, z);
 
 type Phase =
   | 'arrival' | 'north' | 'edge' | 'plank' | 'crossing' | 'crossed' | 'turn'
-  | 'standoff' | 'dropping' | 'chase' | 'falling' | 'caught' | 'dead' | 'done';
+  | 'standoff' | 'dropping' | 'chase' | 'falling' | 'caught' | 'dead' | 'done' | 'stalk';
 
-/** How long the creature lets the player stare before it steps onto the board. */
-const STANDOFF_WAIT = 1.9;
-const CREATURE_PLANK_SPEED = 1.6;
+/** At the edge, how long it rears and screams before stepping onto the board. */
+const STANDOFF_WAIT = 0.9;
+const CREATURE_PLANK_SPEED = 1.8;
 const CREATURE_RUN_SPEED = 5.35;
+/** It first appears this far down the lane corridor behind the far portal. */
+const CREATURE_APPROACH_DEPTH = 21;
+const CREATURE_CHARGE_SPEED = 6.4;
+const CREATURE_FLEE_SPEED = 7;
+// Past the rift: sudden appearances at the end of a corridor, then the hunt.
+const STALK_FIRST_DELAY = 25;
+const STALK_MIN_WALK = 35;
+const STALK_CHANCE = 0.22;
+const STALK_SIGHT_MIN = 13;
+const STALK_SIGHT_MAX = 44;
+const STALK_SCREAM_HOLD = 0.75;
+const STALK_START_SPEED = 5.2;
+const STALK_TOP_SPEED = 7.3;
+const STALK_ACCELERATION = 1.1;
+const STALK_CORNER_SPEED = 3;
+const STALK_LOSE_SECONDS = 2.4;
+const STALK_LINES = ['Non… pas encore !', 'Elle est là !', 'Merde, merde, merde…'] as const;
 const CATCH_RADIUS = 1.15;
 const GIVE_UP_GAP = 30;
 const GIVE_UP_SECONDS = 20;
-const CROSSING_SPEED_SCALE = 0.38;
-const EDGE_DURATION = 8.8;
-const TURN_DURATION = 5.1;
+/** Over the void the walk is slowed this much; on the board's bearings it is normal. */
+const CROSSING_SPEED_SCALE = 0.62;
+/** First person until here, then the exterior shot from the void. */
+const EDGE_EXTERIOR = 1.75;
+const EDGE_DURATION = 6.7;
+const TURN_DURATION = 4.3;
 const FALL_DURATION = 3.3;
 const DEATH_HOLD = 3;
 
@@ -140,7 +161,10 @@ export class RiftEncounter {
   private cameraSag = 0;
   private fovOverride: number | null = null;
   // Edge cinematic.
-  private edge = { across: 0, away: 0, plankYaw: 0, plankPitch: 0 };
+  private readonly edge = {
+    across: 0, bank: 1 as 1 | -1, side: 1, presenting: false,
+    feet: new THREE.Vector3(), from: new THREE.Vector3(), fromQuaternion: new THREE.Quaternion(),
+  };
   // Death fall.
   private readonly fallCamera = { position: new THREE.Vector3(), velocity: 0, yaw: 0, pitch: 0, roll: 0, sign: 1 };
   private death: { title: string; detail: string; respawn: Checkpoint } | null = null;
@@ -152,7 +176,9 @@ export class RiftEncounter {
   private readonly creaturePosition = new THREE.Vector3();
   private creatureYaw = 0;
   private creatureAlong = 0;
-  private creatureMode: 'hidden' | 'emerge' | 'wait' | 'plank' | 'run' | 'falling' | 'leaving' | 'lost' = 'hidden';
+  private creatureMode:
+    | 'hidden' | 'distant' | 'charge' | 'wait' | 'plank' | 'run' | 'falling' | 'flee' | 'retreat'
+    | 'stalk-scream' | 'stalk-run' | 'stalk-lost' = 'hidden';
   private creatureTime = 0;
   private readonly creatureVelocity = new THREE.Vector3();
   private readonly creatureSpin = new THREE.Vector3();
@@ -204,6 +230,7 @@ export class RiftEncounter {
       case 'crossed': return { text: 'Traverser la faille sur la planche', urgent: false };
       case 'standoff': return { text: `Pousser la planche dans le vide (${this.host.keyLabel('interact')}) — ou fuir !`, urgent: true };
       case 'chase': return { text: 'COURS !', urgent: true };
+      case 'stalk': return { text: 'Sème-la ! Enchaîne les virages', urgent: true };
       case 'done': return { text: 'Continuer vers le nord', urgent: false };
       default: return null;
     }
@@ -219,12 +246,15 @@ export class RiftEncounter {
     this.flushLines();
     this.trackWalkedFloor();
     this.cameraLean = 0; this.cameraRoll = 0; this.cameraSag = 0; this.fovOverride = null;
+    this.screamerKick = Math.max(0, this.screamerKick - dt * 2.4);
     if (this.phase !== 'falling' && this.phase !== 'dead' && this.phase !== 'caught' && this.detectFall()) return;
     switch (this.phase) {
       case 'arrival': this.updateArrival(dt); break;
       case 'north': this.updateNorth(); break;
       case 'edge': this.updateEdge(dt); break;
-      case 'plank': case 'done': this.updatePlankIdle(); break;
+      case 'plank': this.updatePlankIdle(); break;
+      case 'done': this.updatePlankIdle(); if (this.phase === 'done') this.updateStalkerSpawn(dt); break;
+      case 'stalk': this.updateStalk(dt); break;
       case 'crossing': this.updateCrossing(dt); break;
       case 'crossed': this.updateCrossed(); break;
       case 'turn': this.updateTurn(dt); break;
@@ -251,6 +281,14 @@ export class RiftEncounter {
     if (this.cameraRoll !== 0) camera.quaternion.multiply(this.quaternion.setFromAxisAngle(Z_AXIS, this.cameraRoll));
     if (this.fovOverride !== null && Math.abs(camera.fov - this.fovOverride) > 1e-3) {
       camera.fov = this.fovOverride;
+      camera.updateProjectionMatrix();
+    }
+    if (this.screamerKick > 0) {
+      // The screamer hits the lens: a punch of the field of view and a hard shake.
+      const kick = this.screamerKick * this.screamerKick * this.motionScale(), time = this.phaseTime;
+      camera.quaternion.multiply(this.quaternion.setFromEuler(new THREE.Euler(
+        Math.sin(time * 71) * 0.03 * kick, Math.sin(time * 53 + 1) * 0.03 * kick, Math.sin(time * 37 + 2) * 0.05 * kick)));
+      camera.fov += 12 * kick;
       camera.updateProjectionMatrix();
     }
   }
@@ -307,7 +345,7 @@ export class RiftEncounter {
     if (edge > 0 && edge < EPIC3_OUTER_HALF_DEPTH - EPIC3_FACADE_HALF_DEPTH + 24) {
       this.say('draught', true);
       // Out of sight, behind the gallery wall: the board already lies over the void.
-      if (!this.plank) this.placePlank(nearestRiftLane(position.x) + (this.random.chance(0.5) ? 2 : -2), this.currentStory(), riftBank(position.z));
+      if (!this.plank) this.placePlank(nearestRiftLane(position.x) + (this.random.chance(0.5) ? 1 : -1), this.currentStory(), riftBank(position.z));
     }
     const lane = this.brinkLane();
     if (lane !== null) this.startEdge(lane);
@@ -426,10 +464,10 @@ export class RiftEncounter {
   private startEdge(lane: number): void {
     const story = this.currentStory();
     const offset = this.plank ? this.plank.lane - lane : 0;
-    if (!this.plank || this.plank.story !== story || Math.abs(offset) < 1 || Math.abs(offset) > 3) {
-      // Re-lay the board two portals away, unless the player is already looking at it.
+    if (!this.plank || this.plank.story !== story || Math.abs(offset) !== 1) {
+      // Re-lay the board across the neighbouring portal pair, unless the player already saw it.
       if (!this.plank || !this.plankVisible()) {
-        const choices = this.random.chance(0.5) ? [2, -2] : [-2, 2];
+        const choices = this.random.chance(0.5) ? [1, -1] : [-1, 1];
         this.placePlank(lane + choices[0]!, story, riftBank(this.host.player.position.z));
         if (this.plankVisible()) this.placePlank(lane + choices[1]!, story, riftBank(this.host.player.position.z));
       }
@@ -439,44 +477,78 @@ export class RiftEncounter {
     player.setLookLocked(true);
     this.startLook.setFromQuaternion(player.getLookQuaternion(this.quaternion), 'YXZ');
     const bank = riftBank(player.position.z);
+    this.edge.bank = bank;
     this.edge.across = viewYaw(0, -bank);
-    this.plankCenter(this.vector);
-    this.host.renderCamera.getWorldPosition(this.vectorB);
-    this.vector.sub(this.vectorB);
-    this.edge.plankYaw = viewYaw(this.vector.x, this.vector.z);
-    this.edge.plankPitch = Math.atan2(this.vector.y, Math.hypot(this.vector.x, this.vector.z));
-    const side = Math.sign(wrap(this.edge.plankYaw - this.edge.across)) || 1;
-    this.edge.away = this.edge.across - side * 1.2;
+    this.edge.feet.copy(player.position);
+    this.edge.side = Math.sign(riftLaneX(this.plank!.lane) - player.position.x) || 1;
+    this.edge.presenting = false;
+    this.edge.from.copy(this.host.renderCamera.position);
+    this.edge.fromQuaternion.copy(this.host.renderCamera.quaternion);
     this.enter('edge');
   }
 
+  /**
+   * First person: out over the void, the drop below. Then outside, from the
+   * void itself: he looks one way, the other, and the lens slides along the
+   * facade to the board across the next pair of portals.
+   */
   private updateEdge(dt: number): void {
-    const t = this.phaseTime, base = this.host.baseFieldOfView();
-    if (crossed(t, dt, 0.4)) this.say('edge');
-    if (crossed(t, dt, 6)) this.say('plank');
-    if (crossed(t, dt, 6.3)) this.host.sound.creak(0.5, 0.25);
-    const keys: readonly [number, number, number][] = [
-      [0, this.startLook.y, this.startLook.x],
-      [0.9, this.edge.across, -0.1],
-      [2.6, this.edge.across, -0.62],
-      [3.9, this.edge.away, -0.2],
-      [5.5, this.edge.plankYaw, this.edge.plankPitch],
-      [EDGE_DURATION, this.edge.plankYaw, this.edge.plankPitch],
-    ];
-    let index = 0;
-    while (index < keys.length - 2 && t > keys[index + 1]![0]) index += 1;
-    const [t0, yaw0, pitch0] = keys[index]!, [t1, yaw1, pitch1] = keys[index + 1]!;
-    const u = smooth((t - t0) / Math.max(0.01, t1 - t0));
-    this.setLook(lerpAngle(yaw0, yaw1, u), THREE.MathUtils.lerp(pitch0, pitch1, u));
-    // Leaning out over the void, then the long lens on the board.
-    this.cameraLean = 0.3 * smooth((t - 0.3) / 0.8) * (1 - smooth((t - 7.4) / 1.1));
-    const zoom = smooth((t - 5.6) / 1.3) * (1 - smooth((t - 7.9) / 0.8));
-    this.fovOverride = THREE.MathUtils.lerp(base, this.host.reducedMotion() ? base * 0.75 : 21, zoom);
+    const t = this.phaseTime, base = this.host.baseFieldOfView(), edge = this.edge;
+    if (crossed(t, dt, 0.3)) this.say('edge');
+    if (crossed(t, dt, 4.4)) this.say('plank');
+    if (crossed(t, dt, 4.7)) this.host.sound.creak(0.5, 0.25);
+    if (t < EDGE_EXTERIOR) {
+      const across = smooth(t / 0.7), down = smooth((t - 0.7) / 0.9);
+      this.setLook(lerpAngle(this.startLook.y, edge.across, across),
+        THREE.MathUtils.lerp(THREE.MathUtils.lerp(this.startLook.x, -0.15, across), -0.62, down));
+      this.cameraLean = 0.28 * smooth((t - 0.2) / 0.6);
+      return;
+    }
+    const character = this.host.character, camera = this.host.renderCamera;
+    if (!edge.presenting) {
+      edge.presenting = true;
+      this.owns = true;
+      edge.from.copy(camera.position);
+      edge.fromQuaternion.copy(camera.quaternion);
+      if (character) { character.setActive(false, true); character.beginComputerPresentation(); }
+    }
+    const shotTime = t - EDGE_EXTERIOR, feet = edge.feet, bank = edge.bank;
+    const plankX = riftLaneX(this.plank!.lane), floor = feet.y - EYE;
+    const body = bodyYaw(0, -bank);
+    const toPlank = wrap(bodyYaw(plankX - feet.x, RIFT_CENTER_Z - feet.z) - body);
+    // Looks the other way first, then toward the board.
+    const head = THREE.MathUtils.lerp(-Math.sign(toPlank || 1) * 0.75 * smooth((shotTime - 0.35) / 0.55),
+      THREE.MathUtils.clamp(toPlank, -0.9, 0.9), smooth((shotTime - 1.35) / 0.7));
+    const frame = character?.sampleCorridorPresentation(feet, body, head, t, false);
+    const headPoint = frame ? this.vectorB.copy(frame.head) : this.vectorB.copy(feet).add({ x: 0, y: 0.78, z: 0 });
+    // Out over the void, a little to the side away from the board, below his eyes.
+    const outside = this.shot.position.set(feet.x - edge.side * 2.3, floor + 1.25, RIFT_CENTER_Z + bank * (EPIC3_FACADE_HALF_DEPTH - 3.7));
+    const plankPoint = this.vector.set(plankX, floor + 0.15, RIFT_CENTER_Z + bank * 1.5);
+    const pan = smooth((shotTime - 2.1) / 1.3);
+    this.shot.lookAt(headPoint);
+    const onHim = this.quaternion.copy(this.shot.quaternion);
+    this.shot.lookAt(plankPoint);
+    const onPlank = this.shot.quaternion;
+    const enter = smooth(shotTime / 0.35), leave = smooth((shotTime - (EDGE_DURATION - EDGE_EXTERIOR - 0.6)) / 0.6);
+    const eye = frame?.eye ?? headPoint;
+    // Back in his eyes, turned along the gallery toward that board.
+    this.pov.position.copy(eye);
+    this.pov.lookAt(plankX, eye.y - 0.25, RIFT_CENTER_Z + bank * (EPIC3_FACADE_HALF_DEPTH + 1.2));
+    camera.position.lerpVectors(edge.from, outside, enter).lerp(eye, leave);
+    camera.quaternion.slerpQuaternions(edge.fromQuaternion, onHim, enter).slerp(onPlank, pan).slerp(this.pov.quaternion, leave);
+    const zoom = smooth((shotTime - 2.3) / 1.2) * (1 - leave);
+    camera.fov = THREE.MathUtils.lerp(THREE.MathUtils.lerp(Math.min(base, 62), this.host.reducedMotion() ? 45 : 30, zoom), base, leave);
+    camera.near = 0.03;
+    camera.updateProjectionMatrix();
     if (t < EDGE_DURATION) return;
+    this.host.player.setLookQuaternion(this.pov.quaternion);
+    character?.endComputerPresentation(true);
+    this.owns = false;
+    camera.fov = base; camera.updateProjectionMatrix();
     this.releasePlayer();
     // The new phase first: saving is refused while a scripted phase is running.
     this.enter('plank');
-    this.setStage('plank', { plank: { lane: this.plank!.lane, story: this.plank!.story, bank: riftBank(this.host.player.position.z) } });
+    this.setStage('plank', { plank: { lane: this.plank!.lane, story: this.plank!.story, bank } });
   }
 
   private setLook(yaw: number, pitch: number, roll = 0): void {
@@ -535,7 +607,10 @@ export class RiftEncounter {
     }
     const toward = -this.crossFrom;
     const along = movement.z * toward;
-    movement.z = toward * along * (along >= 0 ? CROSSING_SPEED_SCALE : CROSSING_SPEED_SCALE * 0.7);
+    // Only the part over the void is slow; the ends resting on the floor are walked normally.
+    const overVoid = riftEdgeDistance(position.z) < 0;
+    const scale = overVoid ? CROSSING_SPEED_SCALE : 1;
+    movement.z = toward * along * (along >= 0 ? scale : scale * 0.75);
     const target = riftLaneX(plank.lane) + THREE.MathUtils.clamp(balance.lean * 0.24, -0.15, 0.15);
     movement.x = (target - position.x) * 0.2;
   };
@@ -551,12 +626,16 @@ export class RiftEncounter {
       this.cameraRoll = Math.sign(balance.lean) * Math.min(1.1, 0.7 + this.fallOff * 1.6) * this.motionScale();
       // Caught on the edge of the board by the capsule: go anyway.
       if (this.fallOff > 1.1) { this.startFalling(); return; }
-    } else {
+    } else if (riftEdgeDistance(player.position.z) < 0) {
       balance.step(dt, intent.right, walking, progress);
       if (balance.fallen) {
         this.fallOff = dt;
         this.host.sound.creak(1, 0.8);
       }
+    } else {
+      // On a bearing over solid floor: the body steadies itself.
+      balance.lean *= Math.exp(-dt * 5);
+      balance.rate *= Math.exp(-dt * 8);
     }
     const sway = this.host.reducedMotion() ? 0 : Math.sin(this.phaseTime * 1.7) * 0.04;
     this.setLook(viewYaw(0, -this.crossFrom) + balance.lean * 0.12, -0.6 + sway);
@@ -626,9 +705,10 @@ export class RiftEncounter {
     return target.set(riftLaneX(plank.lane), riftFloorY(plank.story), RIFT_CENTER_Z + this.crossFrom * (EPIC3_FACADE_HALF_DEPTH + 0.45));
   }
 
+  /** Far down the straight corridor behind the portal the player came through. */
   private resetCreature(): void {
     const plank = this.plank!;
-    this.creaturePosition.set(riftLaneX(plank.lane), riftFloorY(plank.story), RIFT_CENTER_Z + this.crossFrom * (EPIC3_FACADE_HALF_DEPTH + 5.2));
+    this.creaturePosition.set(riftLaneX(plank.lane), riftFloorY(plank.story), RIFT_CENTER_Z + this.crossFrom * (EPIC3_OUTER_HALF_DEPTH + CREATURE_APPROACH_DEPTH));
     this.creatureYaw = bodyYaw(0, -this.crossFrom);
     this.creatureMode = 'hidden';
     this.creatureTime = 0;
@@ -641,24 +721,32 @@ export class RiftEncounter {
 
   private updateTurn(dt: number): void {
     const t = this.phaseTime, camera = this.host.renderCamera, character = this.host.character;
-    const feet = this.turn.feet;
-    const turnAmount = smooth((t - 0.75) / 1.35);
+    const feet = this.turn.feet, plank = this.plank!, toward = this.crossFrom;
+    const turnAmount = smooth((t - 0.55) / 1.05);
     const yaw = lerpAngle(this.turn.yawFrom, this.turn.yawTo, turnAmount);
-    const headLead = wrap(this.turn.yawTo - yaw) * smooth((t - 0.45) / 0.5) * 0.55;
+    const headLead = wrap(this.turn.yawTo - yaw) * smooth((t - 0.35) / 0.45) * 0.55;
     const frame = character?.sampleCorridorPresentation(feet, yaw, THREE.MathUtils.clamp(headLead, -0.9, 0.9), t, false);
     const head = frame ? this.vectorB.copy(frame.head) : this.vectorB.copy(feet).add({ x: 0, y: 0.78, z: 0 });
-    if (crossed(t, dt, 2.15)) { this.creatureMode = 'emerge'; this.creatureTime = 0; this.host.creatureSound.startVoice(); }
-    if (crossed(t, dt, 3.35)) { this.host.creature()?.snapHead(); this.host.creatureSound.roar(); }
+    // Far off, standing in the corridor behind the other portal, then the charge.
+    if (crossed(t, dt, 1.6)) { this.creatureMode = 'distant'; this.creatureTime = 0; this.host.creatureSound.startVoice(); }
+    if (crossed(t, dt, 2.55)) {
+      this.host.creature()?.snapHead();
+      this.host.creatureSound.roar();
+      this.host.hud.pulseFlash(0.45);
+      this.creatureMode = 'charge';
+      this.creatureTime = 0;
+    }
     const facing = new THREE.Vector3(Math.sin(this.turn.yawFrom), 0, Math.cos(this.turn.yawFrom));
     const right = new THREE.Vector3(-Math.cos(this.turn.yawFrom), 0, Math.sin(this.turn.yawFrom));
     // Shot A: in front of him as he freezes and turns round.
     const shotA = this.safeCameraPoint(head, facing.clone().multiplyScalar(2.45).addScaledVector(right, 0.85).add({ x: 0, y: 0.05, z: 0 }));
-    const toCreature = new THREE.Vector3(Math.sin(this.turn.yawTo), 0, Math.cos(this.turn.yawTo));
-    const rightB = new THREE.Vector3(-Math.cos(this.turn.yawTo), 0, Math.sin(this.turn.yawTo));
-    // Shot B: over his shoulder, across the void, at what came out of the dark.
-    const shotB = this.safeCameraPoint(head, toCreature.clone().multiplyScalar(-1.55).addScaledVector(rightB, 0.42).add({ x: 0, y: 0.12, z: 0 }));
+    // Shot B: on the lane axis behind him, the long lens straight through both
+    // portals, the far doorway and down the corridor where it stands.
+    const behindZ = RIFT_CENTER_Z - toward * THREE.MathUtils.clamp(Math.abs(feet.z - RIFT_CENTER_Z) + 1.3,
+      EPIC3_FACADE_HALF_DEPTH + 1.2, EPIC3_OUTER_HALF_DEPTH - 0.4);
+    const shotB = new THREE.Vector3(riftLaneX(plank.lane) + 0.45, riftFloorY(plank.story) + 1.55, behindZ);
     const creatureChest = this.vector.copy(this.creaturePosition).add({ x: 0, y: 1.55, z: 0 });
-    const wide = smooth(t / 0.45), cut = smooth((t - 2.05) / 0.3), back = smooth((t - 4.4) / 0.6);
+    const wide = smooth(t / 0.4), cut = smooth((t - 1.7) / 0.25), back = smooth((t - 3.65) / 0.6);
     const base = this.host.baseFieldOfView();
     this.shot.position.copy(shotA);
     this.shot.lookAt(head.x, head.y - 0.05, head.z);
@@ -671,7 +759,7 @@ export class RiftEncounter {
     this.pov.lookAt(creatureChest);
     camera.position.lerpVectors(this.turn.fromPosition, shotA, wide).lerp(shotB, cut).lerp(eye, back);
     camera.quaternion.slerpQuaternions(this.turn.from, quaternionA, wide).slerp(quaternionB, cut).slerp(this.pov.quaternion, back);
-    camera.fov = THREE.MathUtils.lerp(THREE.MathUtils.lerp(Math.min(base, 58), 36 + 8 * smooth((t - 2.4) / 2), cut), base, back);
+    camera.fov = THREE.MathUtils.lerp(THREE.MathUtils.lerp(Math.min(base, 58), 26 + 14 * smooth((t - 2.5) / 1.2), cut), base, back);
     camera.near = 0.03;
     camera.updateProjectionMatrix();
     if (t < TURN_DURATION) return;
@@ -712,7 +800,17 @@ export class RiftEncounter {
     this.recordTrail();
     if (this.nearPlankEnd()) this.host.hud.showHint(this.host.keyLabel('interact'), 'Pousser la planche dans le vide', 0.3, true);
     this.host.sound.heartbeat(dt, 0.55 + 0.45 * this.creatureProximity);
-    if (this.creatureMode === 'hidden' || this.creatureMode === 'emerge') { this.creatureMode = 'wait'; this.creatureTime = 0; }
+    if (this.creatureMode === 'hidden' || this.creatureMode === 'distant') { this.creatureMode = 'charge'; this.creatureTime = 0; }
+    if (this.creatureMode === 'charge') {
+      const brink = this.creatureBrink(this.vectorB);
+      if (Math.abs(this.creaturePosition.z - brink.z) < 0.05) {
+        // At the edge: it rears and screams across the void before stepping on.
+        this.creatureMode = 'wait';
+        this.creatureTime = 0;
+        this.host.creatureSound.roar();
+        this.host.creature()?.snapHead();
+      }
+    }
     if (this.creatureMode === 'wait' && this.creatureTime > STANDOFF_WAIT) { this.creatureMode = 'plank'; this.creatureTime = 0; this.creatureAlong = 0; }
     // Walking back out onto the board to meet it.
     const feet = this.vector.copy(this.host.player.position).setY(this.host.player.position.y - EYE);
@@ -737,9 +835,12 @@ export class RiftEncounter {
     if (onBoard) {
       this.say('dropFall');
     } else {
+      // Cut off: a scream of rage across the void, then it runs back the way it came, howling.
       this.say('dropLeave');
-      this.creatureMode = 'leaving';
+      this.creatureMode = 'flee';
       this.creatureTime = 0;
+      this.host.creatureSound.startScream();
+      this.host.creatureSound.setScreamActive(true);
       this.host.creatureSound.roar();
       this.host.creature()?.snapHead();
     }
@@ -777,12 +878,13 @@ export class RiftEncounter {
     }
     if (this.phaseTime < 4.6) return;
     this.enter('done');
-    this.finishDrop();
+    // The creature finishes its own exit (falling out of sight or running off).
+    this.finishDrop(false);
   }
 
-  private finishDrop(): void {
+  private finishDrop(hideCreature: boolean): void {
     if (this.plank) this.plank.root.visible = false;
-    if (this.creatureMode !== 'hidden') {
+    if (hideCreature && this.creatureMode !== 'hidden') {
       this.host.creature()?.setVisible(false);
       this.creatureMode = 'hidden';
       this.host.creatureSound.stopAll(1.2);
@@ -831,21 +933,48 @@ export class RiftEncounter {
     if (this.creatureMode === 'run') {
       const distance = this.creaturePosition.distanceTo(this.vector.copy(this.host.player.position).setY(this.host.player.position.y - EYE));
       if (distance < CATCH_RADIUS) { this.startCaught(); return; }
-      if (this.trailGap() > GIVE_UP_GAP || this.chaseTime > GIVE_UP_SECONDS) {
-        this.creatureMode = 'lost';
-        this.creatureTime = 0;
-        this.host.creatureSound.roar();
-      }
+      if (this.trailGap() > GIVE_UP_GAP || this.chaseTime > GIVE_UP_SECONDS) this.loseTrack();
     }
-    if (this.creatureMode === 'lost' && this.creatureTime > 1.4) {
-      this.host.creature()?.setVisible(false);
-      this.creatureMode = 'hidden';
-      this.host.creatureSound.stopAll(1.6);
+    if (this.creatureMode === 'hidden' || this.creatureMode === 'retreat') {
+      // It gives up: back out of sight, its howl fading behind the walls.
       this.enter('done');
       this.setStage('done', { resolution: 'fled' });
       this.say('lost', true);
       this.say('onward', true);
     }
+  }
+
+  /** Lost the scent: gone at once if unseen, otherwise it turns back along its path, howling. */
+  private loseTrack(): void {
+    this.host.creatureSound.roar();
+    this.creatureTime = 0;
+    if (!this.creatureSeen(true)) {
+      this.hideCreature(1.8);
+      return;
+    }
+    this.creatureMode = 'retreat';
+  }
+
+  private hideCreature(fade: number): void {
+    this.host.creature()?.setVisible(false);
+    this.creatureMode = 'hidden';
+    this.host.creatureSound.stopAll(fade);
+  }
+
+  private seenTimer = 0;
+  private lastSeen = false;
+  /** Line of sight from its head to the player's eyes (throttled unless forced). */
+  private creatureSeen(force = false): boolean {
+    if (!force && this.seenTimer > 0) return this.lastSeen;
+    this.seenTimer = 0.12;
+    const camera = this.host.renderCamera.position;
+    const head = this.vector.copy(this.creaturePosition).add({ x: 0, y: 1.95, z: 0 });
+    const direction = this.vectorB.copy(camera).sub(head);
+    const distance = direction.length();
+    if (distance < 0.3) return (this.lastSeen = true);
+    const hit = this.host.physics.castEnvironmentRay(head, direction.normalize(), distance);
+    this.lastSeen = !hit || hit.distance > distance - 0.35;
+    return this.lastSeen;
   }
 
   // ---------------------------------------------------------------- deaths
@@ -861,7 +990,7 @@ export class RiftEncounter {
 
   private startFalling(): void {
     const player = this.host.player, camera = this.host.renderCamera;
-    if (this.phase === 'dropping') this.finishDrop();
+    if (this.phase === 'dropping') this.finishDrop(true);
     const respawn = this.checkpoint();
     if (this.phase === 'crossing') this.stopCrossing();
     this.host.hud.hideHint();
@@ -902,8 +1031,8 @@ export class RiftEncounter {
     this.enter('dead');
   }
 
-  private startCaught(): void {
-    const respawn = this.checkpoint();
+  private startCaught(stalked?: Checkpoint): void {
+    const respawn = stalked ?? this.checkpoint();
     this.owns = true;
     this.host.player.setInputEnabled(false);
     this.host.player.setLookLocked(true);
@@ -913,7 +1042,7 @@ export class RiftEncounter {
     this.host.creatureSound.jumpscare();
     this.creatureMode = 'wait';
     this.host.creature()?.setMotion('lunge');
-    this.death = { title: 'Elle t’a eu.', detail: 'Reprise de l’autre côté de la faille…', respawn };
+    this.death = { title: 'Elle t’a eu.', detail: stalked ? 'Reprise un peu plus loin…' : 'Reprise de l’autre côté de la faille…', respawn };
     this.enter('caught');
   }
 
@@ -950,8 +1079,9 @@ export class RiftEncounter {
     const camera = this.host.renderCamera;
     camera.fov = this.host.baseFieldOfView(); camera.updateProjectionMatrix();
     if (respawn.phase === 'standoff') {
+      // Down its corridor again, already running.
       this.resetCreature();
-      this.creatureMode = 'emerge';
+      this.creatureMode = 'charge';
       this.host.creatureSound.startVoice();
     } else {
       this.host.creature()?.setVisible(false);
@@ -962,6 +1092,7 @@ export class RiftEncounter {
 
   /** Where a death in the rift resumes, facing the void. */
   private checkpoint(): Checkpoint {
+    if (this.phase === 'stalk' && this.stalkRespawn) return this.stalkRespawn;
     const plank = this.plank;
     const afterCrossing = ['crossed', 'turn', 'standoff', 'chase', 'dropping', 'caught'].includes(this.phase) && plank;
     const lookAcross = (bank: 1 | -1): THREE.Quaternion =>
@@ -1004,15 +1135,22 @@ export class RiftEncounter {
     this.vector.copy(eye).sub(this.creaturePosition).setY(0);
     if (this.vector.lengthSq() > 1e-4) this.vector.normalize();
     this.creatureLight.position.copy(this.creaturePosition).addScaledVector(this.vector, 1.1).add({ x: 0, y: 1.9, z: 0 });
-    creature.setLookTarget(mode === 'falling' || mode === 'leaving' && this.creatureTime > 1.2 ? null : eye);
-    if (mode === 'emerge' && plank) {
+    creature.setLookTarget(mode === 'falling' || mode === 'flee' || mode === 'retreat' || mode === 'stalk-lost' ? null : eye);
+    this.seenTimer -= dt;
+    if (mode === 'distant') {
+      // Far down the corridor, swaying, staring across at him.
+      creature.setMotion('idle');
+      this.creatureYaw = bodyYaw(0, -this.crossFrom);
+    } else if (mode === 'charge' && plank) {
+      // Straight up the clear lane corridor, through the doorway and the bay, to the edge.
+      creature.setMotion('run');
       const brink = this.creatureBrink(this.vectorB);
-      const step = Math.min(1, dt * 1.9 / Math.max(0.1, this.creaturePosition.distanceTo(brink)));
-      creature.setMotion(step >= 1 ? 'crouch' : 'stalk');
-      this.creaturePosition.lerp(brink, step);
+      const remaining = Math.abs(brink.z - this.creaturePosition.z);
+      this.creaturePosition.z += Math.sign(brink.z - this.creaturePosition.z) * Math.min(remaining, dt * CREATURE_CHARGE_SPEED);
+      this.creaturePosition.x = brink.x;
       this.creatureYaw = bodyYaw(0, -this.crossFrom);
     } else if (mode === 'wait') {
-      creature.setMotion(this.phase === 'caught' ? 'lunge' : 'crouch');
+      creature.setMotion(this.phase === 'caught' ? 'lunge' : this.creatureTime < 0.7 ? 'lunge' : 'crouch');
       if (this.phase === 'caught') {
         // In the face: lunge out of the dark at the lens.
         this.host.renderCamera.getWorldDirection(this.vector);
@@ -1031,46 +1169,38 @@ export class RiftEncounter {
       if (Math.floor(this.creatureAlong / 0.8) !== Math.floor((this.creatureAlong - dt * CREATURE_PLANK_SPEED) / 0.8)) {
         this.host.sound.creak(0.75, 0.5);
       }
-    } else if (mode === 'run') {
+    } else if (mode === 'run' || mode === 'stalk-run') {
       creature.setMotion('run');
-      let budget = dt * CREATURE_RUN_SPEED;
-      while (budget > 0 && this.trailIndex < this.trail.length) {
-        const target = this.trail[this.trailIndex]!;
-        const dx = target.x - this.creaturePosition.x, dz = target.z - this.creaturePosition.z, distance = Math.hypot(dx, dz);
-        if (distance <= budget) { this.creaturePosition.copy(target); budget -= distance; this.trailIndex += 1; continue; }
-        this.creaturePosition.x += dx / distance * budget;
-        this.creaturePosition.z += dz / distance * budget;
-        this.creaturePosition.y = THREE.MathUtils.lerp(this.creaturePosition.y, target.y, 0.2);
-        this.creatureYaw = lerpAngle(this.creatureYaw, bodyYaw(dx, dz), 1 - Math.exp(-dt * 10));
-        budget = 0;
-      }
-      if (this.trailIndex >= this.trail.length) {
-        const player = this.host.player.position;
-        const dx = player.x - this.creaturePosition.x, dz = player.z - this.creaturePosition.z, distance = Math.hypot(dx, dz);
-        if (distance > 0.01) {
-          const move = Math.min(distance, budget);
-          this.creaturePosition.x += dx / distance * move; this.creaturePosition.z += dz / distance * move;
-          this.creatureYaw = bodyYaw(dx, dz);
-        }
-      }
-    } else if (mode === 'lost') {
-      creature.setMotion('idle');
+      this.followTrail(dt, mode === 'stalk-run');
+    } else if (mode === 'stalk-scream') {
+      // The screamer: it is simply there at the end of the corridor, mouth split open.
+      creature.setMotion('lunge');
+      const player = this.host.player.position;
+      this.creatureYaw = bodyYaw(player.x - this.creaturePosition.x, player.z - this.creaturePosition.z);
+    } else if (mode === 'retreat' || mode === 'stalk-lost') {
+      // Back the way it came along its own path, out of sight.
+      creature.setMotion('run');
+      this.followTrailBack(dt);
+      if (!this.creatureSeen() || this.creatureTime > 4.5) this.hideCreature(1.8);
     } else if (mode === 'falling') {
       this.creatureVelocity.y = Math.max(-30, this.creatureVelocity.y - 9.8 * dt);
       this.creaturePosition.addScaledVector(this.creatureVelocity, dt);
       creature.root.rotation.x += this.creatureSpin.x * dt;
       creature.root.rotation.z += this.creatureSpin.z * dt;
       this.creatureYaw += this.creatureSpin.y * dt;
-      if (this.creatureTime > 3.6) { this.creatureMode = 'hidden'; creature.setVisible(false); creature.root.rotation.x = 0; creature.root.rotation.z = 0; }
-    } else if (mode === 'leaving' && plank) {
-      // A roar across the void, then it turns its back and is gone into the gallery.
-      if (this.creatureTime < 1.2) creature.setMotion('lunge');
-      else {
-        creature.setMotion('stalk');
-        this.creatureYaw = lerpAngle(this.creatureYaw, bodyYaw(0, this.crossFrom), 1 - Math.exp(-dt * 4));
-        this.creaturePosition.z += this.crossFrom * dt * 1.5;
+      if (this.creatureTime > 3.6) { this.hideCreature(0.8); creature.root.rotation.x = 0; creature.root.rotation.z = 0; }
+    } else if (mode === 'flee' && plank) {
+      // Rage at the edge for a moment, then it bolts back down its corridor, howling, until it is gone.
+      if (this.creatureTime < 0.9) {
+        creature.setMotion('lunge');
+      } else {
+        creature.setMotion('run');
+        this.creatureYaw = lerpAngle(this.creatureYaw, bodyYaw(0, this.crossFrom), 1 - Math.exp(-dt * 9));
+        if (this.creatureTime > 1.15) this.creaturePosition.z += this.crossFrom * dt * CREATURE_FLEE_SPEED;
+        if (crossed(this.creatureTime, dt, 2.4)) this.host.creatureSound.roar();
       }
-      if (this.creatureTime > 3.9) { this.creatureMode = 'hidden'; creature.setVisible(false); this.host.creatureSound.stopAll(1.4); }
+      const away = Math.abs(this.creaturePosition.z - RIFT_CENTER_Z);
+      if (away > EPIC3_OUTER_HALF_DEPTH + 40 || this.creatureTime > 9) this.hideCreature(2.2);
     }
     if (mode !== 'falling') { creature.root.rotation.x = 0; creature.root.rotation.z = 0; }
     const rotationX = creature.root.rotation.x, rotationZ = creature.root.rotation.z;
@@ -1087,7 +1217,177 @@ export class RiftEncounter {
     camera.getWorldDirection(this.viewDirection);
     const right = this.vectorB.crossVectors(this.viewDirection, UP).normalize();
     const pan = distance > 0.01 ? right.dot(toward.normalize()) : 0;
-    this.host.creatureSound.updateSpatial(distance, pan, 0);
+    // In the maze its howl is muffled behind the walls once it loses sight of him.
+    const occluded = (this.phase === 'stalk' || this.creatureMode === 'retreat' || this.creatureMode === 'stalk-lost') && !this.lastSeen;
+    this.host.creatureSound.updateSpatial(distance, pan, occluded ? 0.85 : 0);
+  }
+
+  /** Along the player's own footsteps (always walkable). In the maze it is fast on
+   * straights but brakes hard into every corner: chained turns shake it off. */
+  private followTrail(dt: number, stalking: boolean): void {
+    if (stalking) this.stalkSpeed = Math.min(STALK_TOP_SPEED, this.stalkSpeed + dt * STALK_ACCELERATION);
+    let budget = dt * (stalking ? this.stalkSpeed : CREATURE_RUN_SPEED);
+    while (budget > 0 && this.trailIndex < this.trail.length) {
+      const target = this.trail[this.trailIndex]!;
+      const dx = target.x - this.creaturePosition.x, dz = target.z - this.creaturePosition.z, distance = Math.hypot(dx, dz);
+      this.creatureYaw = lerpAngle(this.creatureYaw, bodyYaw(dx, dz), 1 - Math.exp(-dt * 10));
+      if (distance > budget) {
+        this.creaturePosition.x += dx / distance * budget;
+        this.creaturePosition.z += dz / distance * budget;
+        this.creaturePosition.y = THREE.MathUtils.lerp(this.creaturePosition.y, target.y, 0.2);
+        break;
+      }
+      this.creaturePosition.copy(target);
+      budget -= distance;
+      this.trailIndex += 1;
+      const ahead = this.trail[Math.min(this.trail.length - 1, this.trailIndex + 3)];
+      if (stalking && ahead && distance > 0.05) {
+        const ax = ahead.x - target.x, az = ahead.z - target.z;
+        if (Math.hypot(ax, az) > 0.6 && Math.abs(wrap(Math.atan2(ax, az) - Math.atan2(dx, dz))) > 0.6) {
+          this.stalkSpeed = Math.min(this.stalkSpeed, STALK_CORNER_SPEED);
+          budget = Math.min(budget, dt * STALK_CORNER_SPEED);
+        }
+      }
+    }
+    if (this.trailIndex < this.trail.length || budget <= 0) return;
+    const player = this.host.player.position;
+    const dx = player.x - this.creaturePosition.x, dz = player.z - this.creaturePosition.z, distance = Math.hypot(dx, dz);
+    if (distance < 0.01) return;
+    const move = Math.min(distance, budget);
+    this.creaturePosition.x += dx / distance * move;
+    this.creaturePosition.z += dz / distance * move;
+    this.creatureYaw = bodyYaw(dx, dz);
+  }
+
+  /** Back along its own path, away from him. */
+  private followTrailBack(dt: number): void {
+    let budget = dt * CREATURE_FLEE_SPEED;
+    while (budget > 0 && this.trailIndex > 0) {
+      const target = this.trail[this.trailIndex - 1]!;
+      const dx = target.x - this.creaturePosition.x, dz = target.z - this.creaturePosition.z, distance = Math.hypot(dx, dz);
+      this.creatureYaw = lerpAngle(this.creatureYaw, bodyYaw(dx, dz), 1 - Math.exp(-dt * 10));
+      if (distance > budget) {
+        this.creaturePosition.x += dx / distance * budget;
+        this.creaturePosition.z += dz / distance * budget;
+        return;
+      }
+      this.creaturePosition.copy(target);
+      budget -= distance;
+      this.trailIndex -= 1;
+    }
+  }
+
+  // --------------------------------------------- the far bank: it hunts him
+
+  private stalkCooldown = STALK_FIRST_DELAY;
+  private stalkCheck = 0;
+  private stalkWalked = 0;
+  private stalkSpeed = STALK_START_SPEED;
+  private stalkUnseen = 0;
+  private screamerKick = 0;
+  private stalkRespawn?: Checkpoint;
+  private readonly stalkLastPosition = new THREE.Vector3(Number.NaN, 0, 0);
+  private readonly stalkDirection = new THREE.Vector3();
+  private readonly down = new THREE.Vector3(0, -1, 0);
+
+  /** Past the rift, now and then, it is suddenly there at the end of a corridor. */
+  private updateStalkerSpawn(dt: number): void {
+    if (this.creatureMode !== 'hidden' || !this.host.creature()) return;
+    const position = this.host.player.position;
+    if (!Number.isNaN(this.stalkLastPosition.x)) {
+      this.stalkWalked += Math.hypot(position.x - this.stalkLastPosition.x, position.z - this.stalkLastPosition.z);
+    }
+    this.stalkLastPosition.copy(position);
+    this.stalkCooldown -= dt;
+    if (riftBank(position.z) !== -this.crossFrom || Math.abs(position.z - RIFT_CENTER_Z) < 26) return;
+    if (this.stalkCooldown > 0 || this.stalkWalked < STALK_MIN_WALK) return;
+    this.stalkCheck -= dt;
+    if (this.stalkCheck > 0) return;
+    this.stalkCheck = 1.2;
+    if (!this.random.chance(STALK_CHANCE)) return;
+    const spawn = this.findCorridorEnd();
+    if (spawn) this.startStalk(spawn);
+  }
+
+  /** The far end of the straight corridor he is looking down, on his floor, with floor all the way. */
+  private findCorridorEnd(): THREE.Vector3 | null {
+    const camera = this.host.renderCamera, physics = this.host.physics;
+    camera.getWorldDirection(this.stalkDirection);
+    if (Math.abs(this.stalkDirection.y) > 0.45) return null;
+    this.stalkDirection.setY(0).normalize();
+    const eye = camera.position;
+    const hit = physics.castEnvironmentRay(eye, this.stalkDirection, STALK_SIGHT_MAX);
+    if (!hit || hit.distance < STALK_SIGHT_MIN) return null;
+    const reach = hit.distance - 1.1, feetY = this.host.player.position.y - EYE;
+    let spawn: THREE.Vector3 | null = null;
+    for (const share of [0.35, 0.65, 1]) {
+      const probe = eye.clone().addScaledVector(this.stalkDirection, reach * share);
+      const floor = physics.castEnvironmentRay(probe, this.down, 3.2);
+      if (!floor) return null;
+      const floorY = probe.y - floor.distance;
+      if (Math.abs(floorY - feetY) > 0.5) return null;
+      if (share === 1) spawn = probe.setY(floorY);
+    }
+    return spawn && !isOverRiftVoid(spawn.z, -2) ? spawn : null;
+  }
+
+  private startStalk(spawn: THREE.Vector3): void {
+    const player = this.host.player.position;
+    this.creaturePosition.copy(spawn);
+    this.creatureYaw = bodyYaw(player.x - spawn.x, player.z - spawn.z);
+    this.creatureMode = 'stalk-scream';
+    this.creatureTime = 0;
+    this.trail.length = 0;
+    this.trailIndex = 0;
+    this.trail.push(new THREE.Vector3(player.x, player.y - EYE, player.z));
+    this.stalkSpeed = STALK_START_SPEED;
+    this.stalkUnseen = 0;
+    this.chaseTime = 0;
+    this.stalkCooldown = this.random.float(55, 95);
+    this.stalkWalked = 0;
+    this.lastSeen = true;
+    this.stalkRespawn = {
+      position: player.clone(),
+      look: new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.05, viewYaw(player.x - spawn.x, player.z - spawn.z), 0, 'YXZ')),
+      phase: 'done',
+    };
+    // The screamer.
+    this.host.creatureSound.startScream();
+    this.host.creatureSound.setScreamActive(true);
+    this.host.creatureSound.roar();
+    this.host.sound.stinger();
+    this.host.hud.pulseFlash(0.9);
+    this.host.creature()?.snapHead();
+    this.screamerKick = 1;
+    this.host.say(STALK_LINES[this.random.int(0, STALK_LINES.length - 1)]!);
+    this.enter('stalk');
+  }
+
+  private updateStalk(dt: number): void {
+    const position = this.host.player.position;
+    const tail = this.trail[this.trail.length - 1];
+    if (tail && Math.hypot(position.x - tail.x, position.z - tail.z) > 0.5) this.trail.push(new THREE.Vector3(position.x, position.y - EYE, position.z));
+    if (this.trail.length > 800) { this.trail.splice(0, 300); this.trailIndex = Math.max(0, this.trailIndex - 300); }
+    this.chaseTime += dt;
+    this.host.sound.heartbeat(dt, 0.9);
+    if (this.creatureMode === 'stalk-scream' && this.creatureTime > STALK_SCREAM_HOLD) {
+      this.creatureMode = 'stalk-run';
+      this.creatureTime = 0;
+    }
+    if (this.creatureMode === 'stalk-run') {
+      const feet = this.vectorB.copy(position).setY(position.y - EYE);
+      if (this.creaturePosition.distanceTo(feet) < CATCH_RADIUS) { this.startCaught(this.stalkRespawn); return; }
+      this.stalkUnseen = this.creatureSeen() ? 0 : this.stalkUnseen + dt;
+      const gap = this.trailGap();
+      if ((this.stalkUnseen > STALK_LOSE_SECONDS && gap > 9) || gap > 44 || this.chaseTime > 40) {
+        this.host.say('Je… je crois que je l’ai semée.');
+        this.host.creatureSound.roar();
+        this.creatureTime = 0;
+        if (this.lastSeen) this.creatureMode = 'stalk-lost';
+        else this.hideCreature(2);
+      }
+    }
+    if (this.creatureMode === 'hidden') this.enter('done');
   }
 
   private updateAmbience(dt: number): void {

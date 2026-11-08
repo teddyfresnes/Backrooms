@@ -46,6 +46,9 @@ const createHarness = (saved?: RiftProgress, arrivedByFall = true) => {
   };
   const camera = new THREE.PerspectiveCamera(72, 16 / 9, 0.04, 180);
   const silent = new Proxy({}, { get: () => () => undefined });
+  /** A tiny stand-in for the maze: a flat floor at y = 0, an optional corridor
+   * end straight ahead of the eyes, an optional wall hiding the player. */
+  const world = { corridor: 0, wallBetween: false };
   const host = {
     scene: new THREE.Scene(),
     renderCamera: camera,
@@ -53,7 +56,12 @@ const createHarness = (saved?: RiftProgress, arrivedByFall = true) => {
     physics: {
       addChunk: (key: string) => { state.chunks.add(key); },
       removeChunk: (key: string) => state.chunks.delete(key),
-      castEnvironmentRay: () => null,
+      castEnvironmentRay: (origin: THREE.Vector3Like, direction: THREE.Vector3Like, max: number) => {
+        if (direction.y < -0.5) return origin.y > 0 && origin.y < max ? { distance: origin.y, normal: { x: 0, y: 1, z: 0 } } : null;
+        const fromEyes = Math.hypot(origin.x - camera.position.x, origin.y - camera.position.y, origin.z - camera.position.z) < 1e-6;
+        if (fromEyes) return world.corridor > 0 && world.corridor <= max ? { distance: world.corridor, normal: { x: 0, y: 0, z: 1 } } : null;
+        return world.wallBetween ? { distance: 1, normal: { x: 1, y: 0, z: 0 } } : null;
+      },
     },
     character: {
       isDown: false,
@@ -89,6 +97,8 @@ const createHarness = (saved?: RiftProgress, arrivedByFall = true) => {
   /** Runs frames; `move` lets the test walk the capsule (through the plank constraint when set). */
   const run = (seconds: number, move?: (dt: number) => THREE.Vector3 | void) => {
     for (let t = 0; t < seconds; t += DT) {
+      // Like the rig: the presented camera sits in the player's eyes unless a shot owns it.
+      if (!encounter.ownsCharacter) { camera.position.copy(position).add({ x: 0, y: 0.8, z: 0 }); camera.quaternion.copy(look); }
       encounter.update(DT);
       const step = move?.(DT);
       if (step) {
@@ -98,7 +108,7 @@ const createHarness = (saved?: RiftProgress, arrivedByFall = true) => {
       }
     }
   };
-  return { encounter, internals, state, position, intent, run, creature };
+  return { encounter, internals, state, position, intent, run, creature, world, look };
 };
 
 const walkOn = (harness: ReturnType<typeof createHarness>) => {
@@ -119,15 +129,22 @@ describe('rift encounter', () => {
     expect(harness.encounter.questText?.text).toBe('Suivre la boussole vers le nord');
     harness.position.set(riftLaneX(0), EYE, RIFT_CENTER_Z + 24);
     harness.run(0.2);
-    // Laid while the player is still behind the gallery wall, two portals away.
+    // Laid while the player is still behind the gallery wall, across the next portal pair.
     expect(harness.state.chunks.has('rift-plank')).toBe(true);
-    expect(Math.abs(harness.internals.plank!.lane)).toBe(2);
+    expect(Math.abs(harness.internals.plank!.lane)).toBe(1);
     harness.position.set(riftLaneX(0), EYE, RIFT_CENTER_Z + 6.4);
     harness.run(0.1);
     expect(harness.internals.phase).toBe('edge');
     expect(harness.state.inputEnabled).toBe(false);
     expect(harness.state.lookLocked).toBe(true);
-    harness.run(9);
+    // First person over the void, then the exterior shot from the void (third person).
+    harness.run(1);
+    expect(harness.encounter.ownsCharacter).toBe(false);
+    harness.run(1.5);
+    expect(harness.encounter.ownsCharacter).toBe(true);
+    expect(harness.state.presentation).toBe(1);
+    harness.run(6.5);
+    expect(harness.state.presentation).toBe(0);
     expect(harness.internals.phase).toBe('plank');
     expect(harness.state.inputEnabled).toBe(true);
     expect(harness.state.saves.at(-1)?.stage).toBe('plank');
@@ -170,7 +187,7 @@ describe('rift encounter', () => {
     harness.position.set(riftLaneX(lane), PLANK_THICKNESS + EYE, RIFT_CENTER_Z + 6.4);
     harness.intent.forward = 1;
     let held = 0;
-    harness.run(16, (dt) => {
+    harness.run(11, (dt) => {
       const balance = harness.internals.balance;
       if (balance) {
         if (Math.abs(balance.lean) > 0.16) held = -Math.sign(balance.lean);
@@ -196,20 +213,44 @@ describe('rift encounter', () => {
   it('crosses with a steady hand, turns round on what followed, and drops it into the void', () => {
     const harness = createHarness();
     const lane = crossOver(harness);
-    // Waits at the far brink, then steps onto the board.
+    // Still charging down its corridor toward the far edge: the board goes first.
     harness.position.set(riftLaneX(lane), EYE, RIFT_CENTER_Z - 7.2);
-    harness.run(3);
+    harness.run(0.5);
     expect(harness.creature.isVisible).toBe(true);
+    expect(Math.abs(harness.creature.root.position.z - RIFT_CENTER_Z)).toBeGreaterThan(12);
     expect(harness.state.hints).toBeGreaterThan(0);
     expect(harness.encounter.handleInteract()).toBe(true);
     expect(harness.state.chunks.has('rift-plank')).toBe(false);
-    harness.run(5);
+    // Not a vanishing act: it bolts back down its corridor, still in sight for a while.
+    const atDrop = Math.abs(harness.creature.root.position.z - RIFT_CENTER_Z);
+    harness.run(2.5);
+    expect(harness.creature.isVisible).toBe(true);
+    expect(Math.abs(harness.creature.root.position.z - RIFT_CENTER_Z)).toBeGreaterThan(atDrop + 5);
+    harness.run(7);
     expect(harness.internals.phase).toBe('done');
     expect(harness.state.saves.at(-1)).toMatchObject({ stage: 'done', resolution: 'dropped' });
     expect(harness.state.saves.at(-1)?.plank).toBeUndefined();
     expect(harness.creature.isVisible).toBe(false);
     expect(harness.encounter.questText?.text).toBe('Continuer vers le nord');
     expect(harness.state.blockedSaves).toBe(0);
+  });
+
+  it('sends the creature down the void with the board when it is already on it', () => {
+    const harness = createHarness();
+    const lane = crossOver(harness);
+    harness.position.set(riftLaneX(lane), EYE, RIFT_CENTER_Z - 7.2);
+    const mode = () => (harness.encounter as unknown as { creatureMode: string }).creatureMode;
+    for (let waited = 0; waited < 12 && mode() !== 'plank'; waited += 0.1) harness.run(0.1);
+    harness.run(1.5);
+    expect(mode()).toBe('plank');
+    expect(harness.encounter.handleInteract()).toBe(true);
+    const before = harness.creature.root.position.y;
+    harness.run(1.5);
+    expect(mode()).toBe('falling');
+    expect(harness.creature.root.position.y).toBeLessThan(before - 4);
+    harness.run(4);
+    expect(harness.creature.isVisible).toBe(false);
+    expect(harness.internals.phase).toBe('done');
   });
 
   it('lets a runner outpace the creature once it is across, and catches one who stays', () => {
@@ -229,6 +270,55 @@ describe('rift encounter', () => {
     stayer.run(16);
     expect(stayer.state.deaths).toContain('Elle t’a eu.');
     expect(['dead', 'standoff']).toContain(stayer.internals.phase);
+  });
+
+  /** Wanders the far bank (back and forth along x) until it shows up at the end of the corridor ahead. */
+  const awaitStalker = (harness: ReturnType<typeof createHarness>) => {
+    harness.position.set(40, EYE, RIFT_CENTER_Z - 60);
+    harness.world.corridor = 20;
+    let time = 0;
+    for (let waited = 0; waited < 120 && harness.internals.phase === 'done'; waited += 0.5) {
+      harness.run(0.5, (dt) => {
+        time += dt;
+        return harness.internals.phase === 'done' ? new THREE.Vector3(Math.sign(Math.sin(time / 4)) * 2 * dt, 0, 0) : undefined;
+      });
+    }
+    expect(harness.internals.phase).toBe('stalk');
+    expect(harness.creature.isVisible).toBe(true);
+    // Right at the end of the sightline, on his floor.
+    expect(harness.position.z - harness.creature.root.position.z).toBeCloseTo(20 - 1.1, 0);
+    expect(harness.creature.root.position.y).toBeCloseTo(0, 5);
+    expect(harness.encounter.questText).toMatchObject({ urgent: true });
+    expect(harness.encounter.blocksSaving).toBe(true);
+    return harness.position.clone();
+  };
+
+  it('hunts the far bank from the end of a corridor and catches a player who freezes', () => {
+    const harness = createHarness({ version: 1, stage: 'done', resolution: 'dropped', spoken: [] }, false);
+    const spawnedAt = awaitStalker(harness);
+    harness.run(8);
+    expect(harness.state.deaths).toContain('Elle t’a eu.');
+    harness.run(5);
+    expect(harness.internals.phase).toBe('done');
+    expect(harness.state.teleports.at(-1)!.distanceTo(spawnedAt)).toBeLessThan(0.01);
+    expect(harness.creature.isVisible).toBe(false);
+  });
+
+  it('is shaken off by chaining turns out of its sight', () => {
+    const harness = createHarness({ version: 1, stage: 'done', resolution: 'dropped', spoken: [] }, false);
+    awaitStalker(harness);
+    harness.world.wallBetween = true;
+    let time = 0;
+    // A sprint through a zigzag of short corridors, every corner out of sight.
+    harness.run(12, (dt) => {
+      time += dt;
+      if (harness.internals.phase !== 'stalk') return undefined;
+      return Math.floor(time / 0.7) % 2 === 0 ? new THREE.Vector3(6.6 * dt, 0, 0) : new THREE.Vector3(0, 0, 6.6 * dt);
+    });
+    expect(harness.state.deaths).toHaveLength(0);
+    expect(harness.internals.phase).toBe('done');
+    expect(harness.creature.isVisible).toBe(false);
+    expect(harness.state.lines.some((line) => line.includes('semée'))).toBe(true);
   });
 
   it('restores a laid plank from a save and never replays spoken lines', () => {

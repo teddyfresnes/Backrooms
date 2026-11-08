@@ -43,8 +43,10 @@ const EPIC3_LOWER_STORIES = 11;
 const EPIC3_GALLERY_LANE_DEPTH = 4.15;
 /** Facing portal pairs repeat every 14 m, so the rhythm survives every seam. */
 export const EPIC3_LANES = [-49, -35, -21, -7, 7, 21, 35, 49] as const;
-/** Lanes whose bay opens onto the approach hall through the gallery's back wall. */
-export const EPIC3_DOORWAY_LANES = [-35, -7, 21, 49] as const;
+/** Every bay opens onto the approach hall through the gallery's back wall. */
+export const EPIC3_DOORWAY_LANES = EPIC3_LANES;
+/** Half width of the straight corridor kept clear along each lane through the approach halls. */
+export const EPIC3_LANE_CORRIDOR_HALF_WIDTH = 1.7;
 export const EPIC3_DOORWAY_WIDTH = 2.3;
 export const EPIC3_DOORWAY_HEIGHT = 2.32;
 export const EPIC3_GALLERY_HEIGHT = 3.35;
@@ -1507,7 +1509,9 @@ export interface Epic3ApproachLayout {
  * chunk between its boundary and the gallery back walls. Free-standing
  * partitions and pillars are confined to separate cells with clearances on
  * every side, so no arrangement can cut a boundary gate or a gallery doorway
- * off from the rest of the hall; the halls run on across x seams.
+ * off from the rest of the hall; the halls run on across x seams. Cells sit
+ * between lanes: a straight corridor stays clear along every lane, from its
+ * doorway to the far end of the hall (long sightlines through each portal).
  */
 export const getEpic3ApproachLayout = (
   feature: Pick<EpicStructureFeature, 'bounds'>,
@@ -1534,13 +1538,13 @@ export const getEpic3ApproachLayout = (
     const freeMin = hall.minZ + 3, freeMax = hall.maxZ - 3;
     const rows = Math.max(1, Math.floor((freeMax - freeMin) / 8.5));
     const rowDepth = (freeMax - freeMin) / rows;
-    const cellWidth = 14, margin = 1.5;
+    const margin = 1.5, corridor = EPIC3_LANE_CORRIDOR_HALF_WIDTH + 0.4;
     for (let row = 0; row < rows; row += 1) {
-      for (let column = 0; column < planSize / cellWidth; column += 1) {
+      for (let column = 0; column < EPIC3_LANES.length - 1; column += 1) {
         const cellRng = sideRng.fork(`cell-${row}-${column}`);
         const cell: Rect = {
-          minX: -half + column * cellWidth + margin,
-          maxX: -half + (column + 1) * cellWidth - margin,
+          minX: EPIC3_LANES[column]! + corridor,
+          maxX: EPIC3_LANES[column + 1]! - corridor,
           minZ: freeMin + row * rowDepth + margin,
           maxZ: freeMin + (row + 1) * rowDepth - margin,
         };

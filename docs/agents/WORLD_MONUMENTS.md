@@ -44,17 +44,22 @@ propriétaires monumentaux du monde régional.
   de portails face à face suivent `EPIC3_LANES` (tous les 14 m, donc continues
   d'un segment à l'autre). Derrière chaque façade, `getEpic3BackroomsGalleryLayout`
   construit une galerie de 8,5 m ; sur l'étage marché seulement, son mur du fond
-  est percé de portes (`EPIC3_DOORWAY_LANES`, linteaux compris dans le rendu et
-  les colliders) vers `getEpic3ApproachLayout` : deux halls bas qui remplissent
-  le chunk jusqu'à ses bords, cloisons et piliers isolés dans des cellules
-  séparées pour ne jamais couper une porte ni une entrée de chunk. Il n'y a pas
-  de rangée d'arrivée surélevée (`entryLevel` 0). Lumières de galerie hors de
-  `voidBounds` sous le plafond à 3,35 m, celles des halls à `wallHeight`.
-  `isInsideEpicStoryVolume` est semi-ouvert en x pour qu'un seul segment épingle
-  le streaming sur une couture. Des panneaux sombres et brumeux ferment le haut
-  et le bas : la faille paraît sans fin (le runtime assombrit aussi le
-  brouillard près d'elle). `RiftWorld.test.ts` vérifie classement, continuité
-  et accès par flood-fill depuis le bord du chunk jusqu'à chaque portail.
+  est percé d'une porte face à chaque portail (`EPIC3_DOORWAY_LANES`, linteaux
+  compris dans le rendu et les colliders) vers `getEpic3ApproachLayout` : deux
+  halls bas qui remplissent le chunk jusqu'à ses bords. Cloisons et piliers sont
+  isolés dans des cellules entre les voies : ils ne coupent jamais une porte ni
+  une entrée de chunk, et un couloir droit de ±`EPIC3_LANE_CORRIDOR_HALF_WIDTH`
+  reste libre dans l'axe de chaque voie jusqu'au fond du hall (ligne de vue à
+  travers les deux portails, utilisée par la créature). Il n'y a pas de rangée
+  d'arrivée surélevée (`entryLevel` 0). Lumières de galerie hors de `voidBounds`
+  sous le plafond à 3,35 m, celles des halls à `wallHeight`. Les bandes de façade
+  sont empilées sans faces horizontales : chaque portail reçoit un seuil et une
+  sous-face fines sur l'épaisseur du mur (sinon le vide se voit par une fente au
+  bord, sous l'appui de la planche). `isInsideEpicStoryVolume` est semi-ouvert en
+  x pour qu'un seul segment épingle le streaming sur une couture. Des panneaux
+  sombres et brumeux ferment le haut et le bas : la faille paraît sans fin (le
+  runtime assombrit aussi le brouillard près d'elle). `RiftWorld.test.ts` vérifie
+  classement, continuité, couloirs d'axe et accès par flood-fill jusqu'à chaque portail.
 - `epic4` dérive ses volées, paliers, ouverture sommitale et petit labyrinthe
   supérieur de `getEpicStairwellLayout`; le rendu et Rapier consomment ce même
   tracé. `applyEpicStructure` conserve le labyrinthe ordinaire hors de la zone
