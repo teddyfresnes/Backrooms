@@ -75,9 +75,11 @@ palier, un bref plan regarde la créature puis l'escalier ; dans la cage elle
 suit en élastique (`followSpeed`, `ESCAPE_FOLLOW_GAP`), dehors en poursuite
 directe ; la chute se déclenche à 14 m de la porte dans toute direction, bien
 avant les limites invisibles (±40 m). Arrivé dans les Backrooms par la chute
-(`arrivedByFall`), aucun PNJ n'apparaît. `collapseOnArrival` prépare une vraie
+(`arrivedByFall`), aucun PNJ n'apparaît (ni après un chargement). `collapseOnArrival` prépare une vraie
 pose couchée et la caméra au sol avant la première image ; les yeux s'ouvrent
 pendant 3,6 s de temps joué, puis l'invite E autorise le relevé habituel.
+L'inventaire suit la chute ; `RiftEncounter` mène ensuite à la faille `epic3`
+(voir [Après la chute](RIFT_JOURNEY.md)).
 Puis fuite dans la cage restaurée (`restoreStairwell`) et par la porte du
 hall : la porte entière disparaît (objet masqué, `HALL_DOOR_COLLIDER_ID` et
 `HALL_DOOR_LEFT_COLLIDER_ID` désactivés). `createEscapeRunColliders` monte une

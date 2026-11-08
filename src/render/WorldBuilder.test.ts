@@ -18,6 +18,9 @@ import {
   getEpicAbyssPassageLayout,
   getEpicAbyssRoomPreviewLayout,
   getEpic3BackroomsGalleryLayout,
+  EPIC3_DOORWAY_HEIGHT,
+  EPIC3_DOORWAY_LANES,
+  EPIC3_LANES,
   getEpicConcourseWalls,
   getEpicGroundObstacles,
   getEpicStairRoomWalls,
@@ -2459,7 +2462,7 @@ describe('epic structure rendering', () => {
     Object.values(materials).forEach((material) => material.dispose());
   });
 
-  it('renders epic3 as a long fissure connected to continuous Backrooms galleries', () => {
+  it('renders each epic3 segment as an endless rift between continuous Backrooms galleries', () => {
     const { materials, plan, view } = createEpicView(3, 'EPIC3-HIGH-0');
     const feature = plan.features.find(
       (candidate): candidate is EpicStructureFeature =>
@@ -2468,232 +2471,125 @@ describe('epic structure rendering', () => {
     const root = view.group.getObjectByName(
       'epic-structure-3-ascending-passages',
     ) as THREE.Group;
-    const facades = root.getObjectByName('epic-ascending-passages-facades') as THREE.Mesh;
-    const previews = root.getObjectByName(
-      'epic-ascending-passages-corridor-previews',
-    ) as THREE.Mesh;
-    const previewFloors = root.getObjectByName(
-      'epic-ascending-passages-corridor-floors',
-    ) as THREE.Mesh;
-    const previewCeilings = root.getObjectByName(
-      'epic-ascending-passages-corridor-ceilings',
-    ) as THREE.Mesh;
-    const distantHints = root.getObjectByName(
-      'epic-ascending-passages-distant-maze-hints',
-    ) as THREE.Mesh;
-    const upperFog = root.getObjectByName(
-      'epic-ascending-passages-upper-fog',
-    ) as THREE.Mesh;
-    const lowerFog = root.getObjectByName(
-      'epic-ascending-passages-lower-fog',
-    ) as THREE.Mesh;
+    const mesh = (name: string) => root.getObjectByName(name) as THREE.Mesh;
+    const facades = mesh('epic-ascending-passages-facades');
+    const previews = mesh('epic-ascending-passages-corridor-previews');
+    const previewFloors = mesh('epic-ascending-passages-corridor-floors');
+    const previewCeilings = mesh('epic-ascending-passages-corridor-ceilings');
+    const distantHints = mesh('epic-ascending-passages-distant-maze-hints');
+    const upperFog = mesh('epic-ascending-passages-upper-fog');
+    const lowerFog = mesh('epic-ascending-passages-lower-fog');
+    const endlessDark = mesh('epic-ascending-passages-endless-dark');
 
-    expect(root).toBeDefined();
-    expect(facades).toBeDefined();
-    expect(previews).toBeDefined();
-    expect(previewFloors).toBeDefined();
-    expect(previewCeilings).toBeDefined();
-    expect(distantHints).toBeDefined();
-    expect(upperFog).toBeDefined();
-    expect(lowerFog).toBeDefined();
+    for (const part of [facades, previews, previewFloors, previewCeilings, distantHints, upperFog, lowerFog, endlessDark]) {
+      expect(part).toBeDefined();
+    }
     expect(root.getObjectByName('epic-ascending-passages-platforms')).toBeUndefined();
-    expect(root.getObjectByName('epic-ascending-passages-distant-floor-slivers')).toBeUndefined();
-    expect(root.getObjectByName('epic-ascending-passages-dark-openings')).toBeUndefined();
     expect(root.getObjectByName('epic-3-upper-shell')).toBeUndefined();
     expect(view.group.getObjectByName('distant-elevated-tiled-ceilings')).toBeUndefined();
-    expect(plan.columns).toHaveLength(0);
     expect(getEpicGroundObstacles(feature)).toHaveLength(0);
-    expect(rectWidth(feature.bounds) / rectDepth(feature.bounds)).toBeGreaterThan(7.5);
-    expect(rectWidth(feature.bounds)).toBeGreaterThan(220);
+    // A full 112 m segment: the neighbouring segments continue it at x = ±56.
+    expect(rectWidth(feature.bounds)).toBeCloseTo(112, 5);
     expect(rectDepth(feature.bounds)).toBeCloseTo(29, 5);
-    expect(feature.passageFacadeBounds).toBeDefined();
-    expect(feature.voidBounds).toBeDefined();
     expect(rectDepth(feature.passageFacadeBounds!)).toBeCloseTo(12, 5);
+    expect(rectWidth(feature.voidBounds!)).toBeCloseTo(112, 5);
     expect(rectDepth(feature.voidBounds!)).toBeCloseTo(12, 5);
-    expect(plan.floorRects.every((floor) =>
-      floor.minX >= feature.bounds.minX - 1e-6 &&
-      floor.maxX <= feature.bounds.maxX + 1e-6 &&
-      floor.minZ >= feature.bounds.minZ - 1e-6 &&
-      floor.maxZ <= feature.bounds.maxZ + 1e-6
-    )).toBe(true);
+    expect(feature.entryLevel).toBe(0);
+    // The approach halls belong to the same plan, outside the rift volume.
+    expect(plan.columns.every((column) => column.z < feature.bounds.minZ || column.z > feature.bounds.maxZ)).toBe(true);
+    expect(plan.floorRects).toHaveLength(4);
     expect(plan.floorRects.every((floor) =>
       floor.maxZ <= feature.voidBounds!.minZ + 1e-6 ||
       floor.minZ >= feature.voidBounds!.maxZ - 1e-6
     )).toBe(true);
-    expect(plan.floorRects).toHaveLength(2);
-    expect(plan.floorRects.every((floor) =>
-      rectWidth(floor) === rectWidth(feature.bounds) &&
-      Math.abs(rectDepth(floor) - 8.5) < 1e-6
-    )).toBe(true);
+    expect(plan.floorRects.filter((floor) => Math.abs(rectDepth(floor) - 8.5) < 1e-6)).toHaveLength(2);
 
-    facades.geometry.computeBoundingBox();
-    previews.geometry.computeBoundingBox();
-    upperFog.geometry.computeBoundingBox();
-    lowerFog.geometry.computeBoundingBox();
+    for (const part of [facades, previews, upperFog, lowerFog, endlessDark]) part.geometry.computeBoundingBox();
     expect(facades.geometry.boundingBox?.max.y).toBeCloseTo(feature.height, 5);
     expect(facades.geometry.boundingBox?.min.y).toBeLessThan(-59);
-    expect(previews.geometry.boundingBox?.max.y).toBeLessThan(feature.height);
-    expect(previews.geometry.boundingBox?.min.y).toBeCloseTo(0, 5);
+    // No end wall closes the rift.
+    expect(facades.geometry.boundingBox?.min.x).toBeCloseTo(-56, 5);
+    expect(facades.geometry.boundingBox?.max.x).toBeCloseTo(56, 5);
+    expect(horizontalTriangleHeights(facades.geometry)).toHaveLength(0);
+    // Detailed galleries span four rows below and three above the walked one.
+    expect(previews.geometry.boundingBox?.min.y).toBeCloseTo(-4 * 5.4, 4);
     expect(lowerFog.geometry.boundingBox?.min.y).toBeLessThan(-58);
     expect(upperFog.geometry.boundingBox?.max.y).toBeGreaterThan(63);
-    expect(upperFog.geometry.getAttribute('position').count).toBe(5 * 4);
-    expect(lowerFog.geometry.getAttribute('position').count).toBe(5 * 4);
-    const upperFogMaterial = upperFog.material as THREE.ShaderMaterial;
-    const lowerFogMaterial = lowerFog.material as THREE.ShaderMaterial;
-    expect(upperFogMaterial.transparent).toBe(true);
-    expect(upperFogMaterial.fragmentShader).toContain('fogFbm');
-    expect(lowerFogMaterial.fragmentShader).toContain('fogFbm');
-    expect(upperFogMaterial.uniforms.farOpacity?.value)
-      .toBeGreaterThan(lowerFogMaterial.uniforms.farOpacity?.value);
+    expect(endlessDark.geometry.boundingBox?.max.y).toBeCloseTo(feature.height, 5);
+    expect(endlessDark.geometry.boundingBox?.min.y).toBeLessThan(-59);
+    expect((upperFog.material as THREE.ShaderMaterial).fragmentShader).toContain('fogFbm');
 
     const levels = feature.passageLevels ?? [];
     expect(levels).toHaveLength(23);
     expect(levels[0]?.y).toBeCloseTo(-59.4, 5);
     expect(levels.at(-1)?.y).toBeCloseTo(59.4, 5);
-    const template = levels[0]?.passages;
-    expect(template).toHaveLength(34);
+    const template = levels[0]!.passages;
+    expect(template).toHaveLength(16);
     for (const level of levels) {
       expect(level.passages).toEqual(template);
       const north = level.passages.filter((passage) => passage.side === 'north');
       const south = level.passages.filter((passage) => passage.side === 'south');
-      expect(north).toHaveLength(17);
-      expect(south).toHaveLength(17);
+      expect(north.map(({ along }) => along)).toEqual([...EPIC3_LANES]);
       expect(south.map(({ along, width }) => ({ along, width })))
         .toEqual(north.map(({ along, width }) => ({ along, width })));
-      expect(level.passages.every((passage) => {
-        const outwardEdge = passage.side === 'north'
-          ? feature.passageFacadeBounds!.minZ - passage.corridorDepth
-          : feature.passageFacadeBounds!.maxZ + passage.corridorDepth;
-        return outwardEdge >= feature.bounds.minZ - 1e-6 &&
-          outwardEdge <= feature.bounds.maxZ + 1e-6;
-      })).toBe(true);
     }
 
-    const entryY = (feature.entryLevel ?? 0) * 5.4;
-    const galleryLevels = levels.filter((level) =>
-      Math.abs(level.y) < 0.01 ||
-      (
-        level.y >= entryY - 4 * 5.4 - 0.01 &&
-        level.y <= entryY + 3 * 5.4 + 0.01
-      )
-    );
-    expect(galleryLevels.length).toBeGreaterThanOrEqual(8);
-    const galleryLayouts = (['north', 'south'] as const).map((side) =>
-      getEpic3BackroomsGalleryLayout(
-        template ?? [],
-        feature.bounds,
-        feature.passageFacadeBounds!,
-        side,
-      )
-    );
-    for (const [sideIndex, layout] of galleryLayouts.entries()) {
-      expect(layout.floorRects).toHaveLength(1);
-      expect(layout.ceilingRects).toHaveLength(1);
-      expect(layout.wallRects).toHaveLength(17);
-      for (const rect of [...layout.floorRects, ...layout.ceilingRects, ...layout.wallRects]) {
-        expect(rect.minX).toBeGreaterThanOrEqual(feature.bounds.minX - 1e-6);
-        expect(rect.maxX).toBeLessThanOrEqual(feature.bounds.maxX + 1e-6);
-        expect(rect.minZ).toBeGreaterThanOrEqual(feature.bounds.minZ - 1e-6);
-        expect(rect.maxZ).toBeLessThanOrEqual(feature.bounds.maxZ + 1e-6);
+    const galleryLevels = levels.filter((level) => level.y >= -4 * 5.4 - 0.01 && level.y <= 3 * 5.4 + 0.01);
+    expect(galleryLevels).toHaveLength(8);
+    for (const side of ['north', 'south'] as const) {
+      const walked = getEpic3BackroomsGalleryLayout(
+        template, feature.bounds, feature.passageFacadeBounds!, side, EPIC3_DOORWAY_LANES,
+      );
+      const preview = getEpic3BackroomsGalleryLayout(template, feature.bounds, feature.passageFacadeBounds!, side);
+      expect(preview.wallRects).toHaveLength(8);
+      expect(preview.lintelRects).toHaveLength(0);
+      expect(walked.wallRects).toHaveLength(12);
+      expect(walked.lintelRects).toHaveLength(EPIC3_DOORWAY_LANES.length);
+      const backZ = side === 'north' ? feature.bounds.minZ + 0.09 : feature.bounds.maxZ - 0.09;
+      for (const along of EPIC3_DOORWAY_LANES) {
+        expect(walked.wallRects.some((wall) =>
+          along > wall.minX && along < wall.maxX && backZ > wall.minZ && backZ < wall.maxZ)).toBe(false);
+        expect(walked.lintelRects.some((lintel) => along > lintel.minX && along < lintel.maxX)).toBe(true);
       }
-      const side = sideIndex === 0 ? 'north' : 'south';
       const laneZ = side === 'north'
         ? feature.passageFacadeBounds!.minZ - 2.2
         : feature.passageFacadeBounds!.maxZ + 2.2;
-      expect(layout.wallRects.every((wall) => laneZ < wall.minZ || laneZ > wall.maxZ))
-        .toBe(true);
-      for (const passage of template?.filter((candidate) => candidate.side === side) ?? []) {
-        expect(layout.floorRects.some((floor) =>
-          passage.along >= floor.minX && passage.along <= floor.maxX &&
-          laneZ >= floor.minZ && laneZ <= floor.maxZ
-        )).toBe(true);
-      }
+      expect(walked.wallRects.every((wall) => laneZ < wall.minZ || laneZ > wall.maxZ)).toBe(true);
     }
+    const otherGalleryLevels = galleryLevels.length - 1;
+    expect(previews.geometry.getAttribute('position').count)
+      .toBe((otherGalleryLevels * 2 * 8 + 2 * (12 + EPIC3_DOORWAY_LANES.length)) * 24);
+    expect(horizontalTriangleHeights(previews.geometry).every((height) =>
+      Math.abs(height - EPIC3_DOORWAY_HEIGHT) < 1e-5 || Math.abs(height - 3.35) < 1e-5
+    )).toBe(true);
+    expect(previewFloors.geometry.getAttribute('position').count).toBe(otherGalleryLevels * 2 * 24);
+    expect(previewCeilings.geometry.getAttribute('position').count).toBe(galleryLevels.length * 2 * 24);
     const distantPassageCount = levels
       .filter((level) => !galleryLevels.includes(level))
       .reduce((total, level) => total + level.passages.length, 0);
-    expect(previews.geometry.getAttribute('position').count)
-      .toBe(galleryLevels.length * 2 * 17 * 24);
-    expect(previewFloors.geometry.getAttribute('position').count)
-      .toBe(galleryLevels.filter((level) => Math.abs(level.y) > 0.01).length * 2 * 24);
-    expect(previewCeilings.geometry.getAttribute('position').count)
-      .toBe(galleryLevels.length * 2 * 24);
-    expect(horizontalTriangleHeights(facades.geometry)).toHaveLength(0);
-    expect(horizontalTriangleHeights(previews.geometry)).toHaveLength(0);
-    expect(horizontalTriangleHeights(previewFloors.geometry).some((height) =>
-      Math.abs(height) < 1e-5
-    )).toBe(false);
     expect(distantHints.geometry.getAttribute('position').count).toBe(distantPassageCount * 4);
-    expect((distantHints.material as THREE.Material).name).toBe('preview-wallpaper');
-    const distantLevel = levels.find((level) => !galleryLevels.includes(level))!;
-    const distantPassage = distantLevel.passages.find((passage) => passage.side === 'north')!;
-    for (const offset of [-distantPassage.width * 0.42, distantPassage.width * 0.42]) {
-      const ray = new THREE.Raycaster(
-        new THREE.Vector3(
-          distantPassage.along + offset,
-          distantLevel.y + 1.6,
-          feature.passageFacadeBounds!.minZ + 0.4,
-        ),
-        new THREE.Vector3(0, 0, -1),
-        0,
-        3,
-      );
-      expect(ray.intersectObject(distantHints).length).toBeGreaterThan(0);
-    }
-    expect(plan.lights.length).toBeGreaterThan(0);
-    expect(plan.lights.every((light) =>
-      !feature.voidBounds ||
-      light.x < feature.voidBounds.minX || light.x > feature.voidBounds.maxX ||
-      light.z < feature.voidBounds.minZ || light.z > feature.voidBounds.maxZ
-    )).toBe(true);
-    expect(plan.lights.every((light) => {
-      const rowY = light.level * 5.4;
-      return Math.abs(light.ceilingY - (rowY + 3.35)) < 1e-5;
-    })).toBe(true);
 
-    expect(feature.destination.y).toBeGreaterThan(1);
-    const arrivalFloor = plan.colliders.find(
-      (collider) =>
-        collider.id.startsWith('epic3-elevated-gallery-floor-') &&
-        Math.abs(feature.destination.x - collider.center.x) <= collider.halfExtents.x &&
-        Math.abs(feature.destination.z - collider.center.z) <= collider.halfExtents.z,
-    );
-    const elevatedFacade = plan.colliders.filter((collider) =>
-      collider.id.startsWith('epic3-elevated-facade-')
-    );
-    expect(arrivalFloor).toBeDefined();
-    expect(plan.colliders.some((collider) =>
-      collider.id.includes('gallery-back') || collider.id.includes('ledge-floor')
-    )).toBe(false);
-    expect(elevatedFacade.length).toBeGreaterThan(0);
-    expect(elevatedFacade.every((collider) =>
-      collider.id.includes('-north-') || collider.id.includes('-south-')
+    const galleryLights = plan.lights.filter((light) =>
+      light.z > feature.bounds.minZ && light.z < feature.bounds.maxZ);
+    expect(galleryLights.length).toBeGreaterThan(0);
+    expect(plan.lights.every((light) =>
+      light.z < feature.voidBounds!.minZ || light.z > feature.voidBounds!.maxZ
     )).toBe(true);
-    for (const collider of elevatedFacade) {
-      expect(collider.center.y - collider.halfExtents.y)
-        .toBeCloseTo((feature.entryLevel ?? 0) * 5.4, 5);
-    }
-    const northOpeningIsClear = elevatedFacade
-      .filter((collider) => collider.id.includes('-north-'))
-      .every((collider) =>
-        Math.abs(feature.destination.x - collider.center.x) > collider.halfExtents.x + 0.02 ||
-        Math.abs(feature.destination.y - collider.center.y) > collider.halfExtents.y + 0.02
-      );
-    expect(northOpeningIsClear).toBe(true);
-    if (arrivalFloor) {
-      expect(arrivalFloor.center.y + arrivalFloor.halfExtents.y)
-        .toBeCloseTo(feature.destination.y - 0.865, 5);
-      expect(Math.abs(feature.destination.x - arrivalFloor.center.x))
-        .toBeLessThan(arrivalFloor.halfExtents.x);
-      expect(Math.abs(feature.destination.z - arrivalFloor.center.z))
-        .toBeLessThan(arrivalFloor.halfExtents.z);
-    }
+    expect(galleryLights.every((light) => Math.abs(light.ceilingY - 3.35) < 1e-5)).toBe(true);
+    expect(plan.lights.filter((light) => !galleryLights.includes(light))
+      .every((light) => Math.abs(light.ceilingY - plan.wallHeight) < 1e-5)).toBe(true);
+
+    expect(feature.destination.y).toBeCloseTo(0.865, 5);
+    expect(plan.colliders.some((collider) => collider.id.startsWith('epic3-elevated-'))).toBe(false);
+    expect(plan.colliders.filter((collider) =>
+      collider.id.includes('epic3-ground-gallery-wall-') && collider.id.includes('-lintel-')))
+      .toHaveLength(2 * EPIC3_DOORWAY_LANES.length);
 
     view.dispose();
     Object.values(materials).forEach((material) => material.dispose());
   });
 
-  it('keeps the infinite epic3 chasm physically enclosed without an opaque shaft mesh', () => {
+  it('keeps the endless epic3 chasm physically open along the rift without an opaque shaft mesh', () => {
     const { materials, plan, view } = createEpicView(3, 'EPIC3-BOTTOMLESS');
     const feature = plan.features.find(
       (candidate): candidate is EpicStructureFeature =>
@@ -2702,18 +2598,16 @@ describe('epic structure rendering', () => {
     const root = view.group.getObjectByName(
       'epic-structure-3-ascending-passages',
     ) as THREE.Group;
-    const upperFog = root.getObjectByName('epic-ascending-passages-upper-fog') as THREE.Mesh;
-    const lowerFog = root.getObjectByName('epic-ascending-passages-lower-fog') as THREE.Mesh;
     const shaftWalls = plan.colliders.filter((collider) =>
       collider.id.startsWith('epic3-bottomless-shaft-wall-')
     );
 
     expect(feature.bottomless).toBe(true);
-    expect(feature.voidBounds).toBeDefined();
-    expect(upperFog).toBeDefined();
-    expect(lowerFog).toBeDefined();
     expect(root.getObjectByName('epic-ascending-passages-bottomless-shaft')).toBeUndefined();
-    expect(shaftWalls).toHaveLength(4);
+    // Only the two facades line the drop; the rift stays open toward its neighbours.
+    expect(shaftWalls).toHaveLength(2);
+    expect(shaftWalls.every((collider) =>
+      collider.id.includes('-north-') || collider.id.includes('-south-'))).toBe(true);
     for (const collider of shaftWalls) {
       expect(collider.center.y - collider.halfExtents.y).toBeCloseTo(-64.8, 5);
       expect(collider.center.y + collider.halfExtents.y).toBeCloseTo(0, 5);

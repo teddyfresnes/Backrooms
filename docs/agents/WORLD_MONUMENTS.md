@@ -4,10 +4,15 @@ Contrats du pipeline historique dans `EpicStructures.ts`, conservé par les
 propriétaires monumentaux du monde régional.
 
 - Le pavage épique utilise des supercellules 32×32 dépendantes du seed. Chacune
-  contient exactement `epic1`, `epic2`, `epic3`, `epic4` et `epic5`, soit
-  5 chunks monumentaux sur 1024. Les huit slots candidats, leurs transformations
-  et leur marge garantissent qu’aucun epic ne touche un autre, même en diagonale
-  ou sur une couture de supercellule.
+  tire encore cinq slots, mais seuls `epic1`, `epic2`, `epic4` et `epic5` y sont
+  construits : le slot `epic3` est retiré. Les huit slots candidats, leurs
+  transformations et leur marge garantissent qu’aucun epic ne touche un autre,
+  même en diagonale ou sur une couture de supercellule.
+- `epic3` est la faille : toute la rangée `EPIC3_RIFT_CHUNK_Z` (−4, ≈ 450 m au
+  nord de l'origine, là où pointe la boussole) sur tous les x et tous les étages.
+  `epicStructureIndexForCoord` la classe avant le pavage ; les rangées voisines
+  (±1) restent ordinaires (halo), et `getNearestEpicStructureCoord(…, 3, o)`
+  rend `{ x: o.x, z: −4, story: o.story }`.
 - Le slot horizontal ne dépend pas de l’étage : les grands volumes restent
   cohérents verticalement. Dans `epic1`, chaque story absolue dérive toutefois
   sa propre rangée de passages. Le plan sérialise quatre rangées au-dessus et
@@ -33,15 +38,23 @@ propriétaires monumentaux du monde régional.
   panneaux en retrait. La couronne s’arrête à `passageFacadeBounds` ; au niveau
   actif, seuls les vrais couloirs la prolongent jusqu’aux bords du chunk, et sur
   les niveaux prévisualisés seuls les aperçus détaillés reçoivent un sol.
-- `epic3` est une faille longue de 220 m : `passageFacadeBounds` place deux
-  façades intérieures symétriques et `voidBounds` les rejoint, sans corniche
-  longitudinale ni rebord aux extrémités. Derrière chaque façade,
-  `getEpic3BackroomsGalleryLayout` construit une galerie commune de 8,5 m de
-  profondeur. Toutes les entrées d’une rangée partagent son sol praticable ;
-  les cloisons intermédiaires laissent une voie continue près de la façade.
-  L’étage zéro et l’étage d’arrivée publient les mêmes sols et murs dans les
-  colliders. Les luminaires de ces deux rangées sont obligatoirement hors de
-  `voidBounds` et utilisent le plafond de galerie à 3,35 m.
+- Chaque segment `epic3` mesure exactement 112 m : vide, façades et galeries
+  vont de couture à couture (aucun mur de bout, ni rendu ni collider, ni puits
+  latéral) et `WorldStream` monte normalement les segments voisins. Les paires
+  de portails face à face suivent `EPIC3_LANES` (tous les 14 m, donc continues
+  d'un segment à l'autre). Derrière chaque façade, `getEpic3BackroomsGalleryLayout`
+  construit une galerie de 8,5 m ; sur l'étage marché seulement, son mur du fond
+  est percé de portes (`EPIC3_DOORWAY_LANES`, linteaux compris dans le rendu et
+  les colliders) vers `getEpic3ApproachLayout` : deux halls bas qui remplissent
+  le chunk jusqu'à ses bords, cloisons et piliers isolés dans des cellules
+  séparées pour ne jamais couper une porte ni une entrée de chunk. Il n'y a pas
+  de rangée d'arrivée surélevée (`entryLevel` 0). Lumières de galerie hors de
+  `voidBounds` sous le plafond à 3,35 m, celles des halls à `wallHeight`.
+  `isInsideEpicStoryVolume` est semi-ouvert en x pour qu'un seul segment épingle
+  le streaming sur une couture. Des panneaux sombres et brumeux ferment le haut
+  et le bas : la faille paraît sans fin (le runtime assombrit aussi le
+  brouillard près d'elle). `RiftWorld.test.ts` vérifie classement, continuité
+  et accès par flood-fill depuis le bord du chunk jusqu'à chaque portail.
 - `epic4` dérive ses volées, paliers, ouverture sommitale et petit labyrinthe
   supérieur de `getEpicStairwellLayout`; le rendu et Rapier consomment ce même
   tracé. `applyEpicStructure` conserve le labyrinthe ordinaire hors de la zone

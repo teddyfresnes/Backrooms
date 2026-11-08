@@ -72,6 +72,7 @@ Si l'aperçu est indisponible, le signaler et continuer sans tentatives répét�
 | Ajouter une feature architecturale | `docs/ADDING_FEATURES.md`, puis `docs/agents/WORLD_GENERATION.md` |
 | Appartement : objets, appareils, cachettes | `docs/agents/APARTMENT_INTERACTIONS.md` |
 | Cage d’escalier, arrivée, voisins | `docs/agents/STAIRWELL_FLOW.md` |
+| Après la chute : boussole, faille `epic3`, planche, créature | `docs/agents/RIFT_JOURNEY.md` |
 | PC et bureau | `docs/agents/COMPUTER_USE.md` |
 
 ## Dépôt léger

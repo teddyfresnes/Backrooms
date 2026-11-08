@@ -1,4 +1,6 @@
 import type {
+  ColumnSlot,
+  RoomRecord,
   EpicPassageLevel,
   EpicPassagePreview,
   EpicPassageSide,
@@ -24,17 +26,28 @@ const EPIC_PASSAGE_HEIGHT = 3.35;
 const EPIC1_VOID_HALF_SPAN = 53.35;
 const EPIC1_FACADE_HALF_SPAN = 54.4;
 const EPIC1_LEDGE_DEPTH = EPIC1_FACADE_HALF_SPAN - EPIC1_VOID_HALF_SPAN;
-// Epic3 deliberately spans the two horizontal neighbours of its owner chunk.
-// WorldStream keeps those neighbours unmounted while the player is inside the
-// fissure, so its 220 m perspective is real geometry rather than a backdrop.
-const EPIC3_HALF_LENGTH = 110.8;
-const EPIC3_FACADE_HALF_DEPTH = 6;
-const EPIC3_OUTER_HALF_DEPTH = 14.5;
-const EPIC3_VOID_HALF_LENGTH = 110.35;
+/**
+ * Epic3 is the rift: every chunk of one east-west row, on every story, is a
+ * 112 m segment of the same fissure. Walking north (world -Z, where the
+ * compass points) from the origin always meets it, whatever the floor.
+ */
+export const EPIC3_RIFT_CHUNK_Z = -4;
+export const isEpic3RiftCoord = (coord: Pick<EpicCoord, 'z'>): boolean => coord.z === EPIC3_RIFT_CHUNK_Z;
+const EPIC3_HALF_LENGTH = 56;
+export const EPIC3_FACADE_HALF_DEPTH = 6;
+export const EPIC3_OUTER_HALF_DEPTH = 14.5;
+const EPIC3_VOID_HALF_LENGTH = EPIC3_HALF_LENGTH;
 const EPIC3_VOID_HALF_DEPTH = EPIC3_FACADE_HALF_DEPTH;
 const EPIC3_PREVIEW_DEPTH = EPIC3_OUTER_HALF_DEPTH - EPIC3_FACADE_HALF_DEPTH;
 const EPIC3_LOWER_STORIES = 11;
 const EPIC3_GALLERY_LANE_DEPTH = 4.15;
+/** Facing portal pairs repeat every 14 m, so the rhythm survives every seam. */
+export const EPIC3_LANES = [-49, -35, -21, -7, 7, 21, 35, 49] as const;
+/** Lanes whose bay opens onto the approach hall through the gallery's back wall. */
+export const EPIC3_DOORWAY_LANES = [-35, -7, 21, 49] as const;
+export const EPIC3_DOORWAY_WIDTH = 2.3;
+export const EPIC3_DOORWAY_HEIGHT = 2.32;
+export const EPIC3_GALLERY_HEIGHT = 3.35;
 const EPIC4_ROOM_HALF_SPAN = 9.6;
 const EPIC4_CORE_HALF_SPAN = 4.8;
 const EPIC4_STAIR_OUTER_SPAN = 7;
@@ -177,15 +190,22 @@ export const getEpicStructureSlotsForMacro = (
   });
 };
 
+/** A tiled monument keeps its empty halo from the rift row; the tiled epic3 slot is retired. */
+const isRetiredEpicSlot = (slot: EpicStructureSlot): boolean =>
+  slot.index === 3 || Math.abs(slot.z - EPIC3_RIFT_CHUNK_Z) <= 1;
+
 export const epicStructureIndexForCoord = (
   seed: string,
   coord: Pick<EpicCoord, 'x' | 'z'>,
 ): EpicStructureIndex | null => {
+  if (isEpic3RiftCoord(coord)) return 3;
+  if (Math.abs(coord.z - EPIC3_RIFT_CHUNK_Z) <= 1) return null;
   const macroX = Math.floor(coord.x / EPIC_MACRO_SIZE);
   const macroZ = Math.floor(coord.z / EPIC_MACRO_SIZE);
-  return getEpicStructureSlotsForMacro(seed, macroX, macroZ).find(
-    (slot) => slot.x === coord.x && slot.z === coord.z,
-  )?.index ?? null;
+  const slot = getEpicStructureSlotsForMacro(seed, macroX, macroZ).find(
+    (candidate) => candidate.x === coord.x && candidate.z === coord.z,
+  );
+  return slot && !isRetiredEpicSlot(slot) ? slot.index : null;
 };
 
 export const getNearestEpicStructureCoord = (
@@ -193,6 +213,8 @@ export const getNearestEpicStructureCoord = (
   index: EpicStructureIndex,
   origin: Readonly<EpicCoord>,
 ): Readonly<EpicCoord> => {
+  // The rift is a whole row: its nearest segment shares the origin's column.
+  if (index === 3) return Object.freeze({ x: origin.x, z: EPIC3_RIFT_CHUNK_Z, story: origin.story });
   const originMacroX = Math.floor(origin.x / EPIC_MACRO_SIZE);
   const originMacroZ = Math.floor(origin.z / EPIC_MACRO_SIZE);
   let best: EpicStructureSlot | undefined;
@@ -202,6 +224,7 @@ export const getNearestEpicStructureCoord = (
       const candidate = getEpicStructureSlotsForMacro(seed, macroX, macroZ).find(
         (slot) => slot.index === index,
       )!;
+      if (isRetiredEpicSlot(candidate)) continue;
       const distance = (candidate.x - origin.x) ** 2 + (candidate.z - origin.z) ** 2;
       if (
         distance < bestDistance ||
@@ -316,14 +339,12 @@ const createAscendingLayout = (seed: string): AscendingLayout => {
     maxX: EPIC3_VOID_HALF_LENGTH,
     maxZ: EPIC3_VOID_HALF_DEPTH,
   };
-  const entryLevel = rng.fork('entry-level').int(4, 7);
+  // The rift is entered on the walker's own story: no elevated arrival row.
+  const entryLevel = 0;
   const rowCount = Math.floor((64 - 3.8) / STORY_PITCH);
   const laneRng = rng.fork('symmetric-passage-template');
-  const lanes = Array.from({ length: 17 }, (_, index) => (index - 8) * 12.5);
-  const passageTemplate = lanes.flatMap((along, laneIndex): EpicPassagePreview[] => {
-    const width = along === 0
-      ? 5.8
-      : laneRng.fork(`lane-${laneIndex}`).float(4.1, 5.5);
+  const passageTemplate = EPIC3_LANES.flatMap((along, laneIndex): EpicPassagePreview[] => {
+    const width = Math.round(laneRng.fork(`lane-${laneIndex}`).float(4.1, 5.5) * 100) / 100;
     const common = {
       along,
       width,
@@ -349,10 +370,11 @@ const createAscendingLayout = (seed: string): AscendingLayout => {
     passageLevels,
     entryLevel,
     bottomless: true,
+    // In the south gallery, in front of a portal: the side the compass walk arrives from.
     destination: {
-      x: 0,
+      x: EPIC3_DOORWAY_LANES[1],
       y: entryLevel * STORY_PITCH + 0.865,
-      z: -(EPIC3_FACADE_HALF_DEPTH + 2.2),
+      z: EPIC3_FACADE_HALF_DEPTH + 2.2,
     },
   };
 };
@@ -464,15 +486,22 @@ export const isInsideEpicStoryVolume = (
 ): boolean => {
   // epic1 deliberately hands off to the next logical story like an ordinary pit.
   if (feature.variant === 'endless-abyss') return false;
+  // Rift segments tile along x: ownership is half-open there so exactly one
+  // mounted segment claims a player standing on a seam.
+  const riftSegment = feature.variant === 'ascending-passages';
+  const inside = (rect: Rect, padding: number): boolean => riftSegment
+    ? position.x >= rect.minX && position.x < rect.maxX
+      && position.z >= rect.minZ - padding && position.z <= rect.maxZ + padding
+    : pointInRect(position.x, position.z, rect, padding);
   if (
-    feature.variant === 'ascending-passages' &&
+    riftSegment &&
     feature.bottomless &&
     feature.voidBounds &&
     position.y < 0.08 &&
     position.y > -(EPIC3_LOWER_STORIES + 1) * STORY_PITCH &&
-    pointInRect(position.x, position.z, feature.voidBounds, 0.08)
+    inside(feature.voidBounds, 0.08)
   ) return true;
-  const insideHorizontalVolume = pointInRect(position.x, position.z, feature.bounds, 0.4);
+  const insideHorizontalVolume = inside(feature.bounds, 0.4);
   return position.y >= 0.08 &&
     position.y < feature.height - 0.08 &&
     insideHorizontalVolume;
@@ -1361,25 +1390,30 @@ const abyssPassageColliders = (
 export interface Epic3PassagePreviewLayout {
   readonly floorRects: readonly Rect[];
   readonly ceilingRects: readonly Rect[];
+  /** Full-height (gallery height) wall footprints. */
   readonly wallRects: readonly Rect[];
+  /** Back-wall lintels over the doorways, from EPIC3_DOORWAY_HEIGHT to the gallery ceiling. */
+  readonly lintelRects: readonly Rect[];
 }
 
 /**
  * One continuous Backrooms gallery behind an epic3 facade. Every portal opens
  * onto the same navigable lane; partition fins break the long sightline without
- * sealing an entrance into a private dead end.
+ * sealing an entrance into a private dead end. On the walked story the back
+ * wall is pierced by doorways from the approach hall (`doorways`, x centres).
  */
 export const getEpic3BackroomsGalleryLayout = (
   passages: readonly EpicPassagePreview[],
   envelope: Rect,
   facade: Rect,
   side: 'north' | 'south',
+  doorways: readonly number[] = [],
 ): Epic3PassagePreviewLayout => {
   const sidePassages = passages
     .filter((passage) => passage.side === side)
     .sort((left, right) => left.along - right.along);
   if (sidePassages.length === 0) {
-    return { floorRects: [], ceilingRects: [], wallRects: [] };
+    return { floorRects: [], ceilingRects: [], wallRects: [], lintelRects: [] };
   }
   const wallThickness = 0.18;
   const innerZ = side === 'north' ? facade.minZ : facade.maxZ;
@@ -1390,9 +1424,19 @@ export const getEpic3BackroomsGalleryLayout = (
     minZ: Math.min(innerZ, outerZ),
     maxZ: Math.max(innerZ, outerZ),
   };
-  const outerWall: Rect = side === 'north'
+  const outerWallBand: Rect = side === 'north'
     ? { ...gallery, maxZ: gallery.minZ + wallThickness }
     : { ...gallery, minZ: gallery.maxZ - wallThickness };
+  const doorwayPassages = doorways.map((along): EpicPassagePreview => ({
+    side, along, width: EPIC3_DOORWAY_WIDTH, platformDepth: 0, corridorDepth: 0,
+  }));
+  const outerWalls = subtractPortalIntervals(outerWallBand.minX, outerWallBand.maxX, doorwayPassages)
+    .map((interval): Rect => ({ ...outerWallBand, minX: interval.min, maxX: interval.max }));
+  const lintelRects = doorwayPassages.map((doorway): Rect => ({
+    ...outerWallBand,
+    minX: doorway.along - doorway.width * 0.5,
+    maxX: doorway.along + doorway.width * 0.5,
+  }));
   const finOuterZ = side === 'north'
     ? gallery.minZ + wallThickness
     : gallery.maxZ - wallThickness;
@@ -1412,7 +1456,8 @@ export const getEpic3BackroomsGalleryLayout = (
   return {
     floorRects: [gallery],
     ceilingRects: [gallery],
-    wallRects: [outerWall, ...dividerWalls],
+    wallRects: [...outerWalls, ...dividerWalls],
+    lintelRects,
   };
 };
 
@@ -1420,19 +1465,131 @@ const epic3GalleryColliders = (
   layout: Epic3PassagePreviewLayout,
   bottom: number,
   idPrefix: string,
-): StaticCollider[] => layout.wallRects.map((rect, wallIndex): StaticCollider => {
-  const center = rectCenter(rect);
-  return {
-    id: `${idPrefix}-${wallIndex}`,
-    center: { x: center.x, y: bottom + EPIC_PASSAGE_HEIGHT * 0.5, z: center.z },
-    halfExtents: {
-      x: rectWidth(rect) * 0.5,
-      y: EPIC_PASSAGE_HEIGHT * 0.5,
-      z: rectDepth(rect) * 0.5,
-    },
-    kind: 'wall',
-  };
-});
+): StaticCollider[] => [
+  ...layout.wallRects.map((rect, wallIndex): StaticCollider => {
+    const center = rectCenter(rect);
+    return {
+      id: `${idPrefix}-${wallIndex}`,
+      center: { x: center.x, y: bottom + EPIC_PASSAGE_HEIGHT * 0.5, z: center.z },
+      halfExtents: {
+        x: rectWidth(rect) * 0.5,
+        y: EPIC_PASSAGE_HEIGHT * 0.5,
+        z: rectDepth(rect) * 0.5,
+      },
+      kind: 'wall',
+    };
+  }),
+  ...layout.lintelRects.map((rect, lintelIndex): StaticCollider => {
+    const center = rectCenter(rect);
+    const height = EPIC_PASSAGE_HEIGHT - EPIC3_DOORWAY_HEIGHT;
+    return {
+      id: `${idPrefix}-lintel-${lintelIndex}`,
+      center: { x: center.x, y: bottom + EPIC3_DOORWAY_HEIGHT + height * 0.5, z: center.z },
+      halfExtents: { x: rectWidth(rect) * 0.5, y: height * 0.5, z: rectDepth(rect) * 0.5 },
+      kind: 'wall',
+    };
+  }),
+];
+
+const riftLightColor = (visualBiome: WorldPlan['visualBiome']): number =>
+  visualBiome === 'red' ? 0xff241c : visualBiome === 'white' ? 0xe9f1f2 : 0xfff4c2;
+
+export interface Epic3ApproachLayout {
+  readonly rooms: RoomRecord[];
+  readonly floorRects: Rect[];
+  readonly walls: WallSegment[];
+  readonly columns: ColumnSlot[];
+  readonly lights: LightSlot[];
+}
+
+/**
+ * The ordinary Backrooms on both banks of the rift: two low halls filling the
+ * chunk between its boundary and the gallery back walls. Free-standing
+ * partitions and pillars are confined to separate cells with clearances on
+ * every side, so no arrangement can cut a boundary gate or a gallery doorway
+ * off from the rest of the hall; the halls run on across x seams.
+ */
+export const getEpic3ApproachLayout = (
+  feature: Pick<EpicStructureFeature, 'bounds'>,
+  planSize: number,
+  wallHeight: number,
+  layoutSeed: string,
+  visualBiome: WorldPlan['visualBiome'],
+): Epic3ApproachLayout => {
+  const half = planSize * 0.5;
+  const rng = new SeededRandom(`${layoutSeed}::rift-approach:v1`);
+  const result: Epic3ApproachLayout = { rooms: [], floorRects: [], walls: [], columns: [], lights: [] };
+  for (const side of ['north', 'south'] as const) {
+    const sideRng = rng.fork(side);
+    const inner = side === 'north' ? feature.bounds.minZ : feature.bounds.maxZ;
+    const outer = side === 'north' ? -half : half;
+    const hall: Rect = { minX: -half, maxX: half, minZ: Math.min(inner, outer), maxZ: Math.max(inner, outer) };
+    const roomId = `epic3-approach-${side}`;
+    result.rooms.push({
+      id: roomId, bounds: { ...hall }, kind: 'open-hall', level: 0, ceilingHeight: wallHeight,
+      detailDensity: 0, access: 'open',
+    });
+    result.floorRects.push({ ...hall });
+    // Keep a free strip along the gallery wall and the chunk boundary.
+    const freeMin = hall.minZ + 3, freeMax = hall.maxZ - 3;
+    const rows = Math.max(1, Math.floor((freeMax - freeMin) / 8.5));
+    const rowDepth = (freeMax - freeMin) / rows;
+    const cellWidth = 14, margin = 1.5;
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < planSize / cellWidth; column += 1) {
+        const cellRng = sideRng.fork(`cell-${row}-${column}`);
+        const cell: Rect = {
+          minX: -half + column * cellWidth + margin,
+          maxX: -half + (column + 1) * cellWidth - margin,
+          minZ: freeMin + row * rowDepth + margin,
+          maxZ: freeMin + (row + 1) * rowDepth - margin,
+        };
+        const roll = cellRng.float(0, 1);
+        const tint = 0.86 + cellRng.float(0, 0.06);
+        const id = `epic3-approach-${side}-partition-${row}-${column}`;
+        if (roll < 0.36) {
+          const length = cellRng.float(4.5, rectWidth(cell));
+          const x = cellRng.float(cell.minX + length * 0.5, cell.maxX - length * 0.5);
+          const z = cellRng.float(cell.minZ, cell.maxZ);
+          result.walls.push({
+            id, roomId, x, z, length, orientation: 'x', bottom: 0, height: wallHeight,
+            thickness: 0.22, tint, collision: true, kind: 'wallpaper',
+          });
+        } else if (roll < 0.62) {
+          const length = cellRng.float(2.8, rectDepth(cell));
+          const z = cellRng.float(cell.minZ + length * 0.5, cell.maxZ - length * 0.5);
+          const x = cellRng.float(cell.minX, cell.maxX);
+          result.walls.push({
+            id, roomId, x, z, length, orientation: 'z', bottom: 0, height: wallHeight,
+            thickness: 0.22, tint, collision: true, kind: 'wallpaper',
+          });
+        } else if (roll < 0.8) {
+          const center = rectCenter(cell);
+          result.columns.push({
+            x: center.x + cellRng.float(-2, 2), z: center.z + cellRng.float(-1, 1),
+            width: 0.9, depth: 0.9, height: wallHeight, tint, kind: 'column',
+          });
+        }
+      }
+    }
+    // Ceiling troffers on a regular grid, a few dead or flickering.
+    const lightRng = sideRng.fork('lights');
+    let index = 0;
+    for (let x = -half + 7; x < half; x += 14) {
+      for (let z = hall.minZ + 4.5; z < hall.maxZ - 2; z += 8) {
+        const roll = lightRng.float(0, 1);
+        result.lights.push({
+          id: `epic3-approach-${side}-light-${index}`, x, ceilingY: wallHeight, z,
+          rotation: index % 2 === 0 ? 0 : Math.PI * 0.5, width: 1.25, intensity: 1.12,
+          color: riftLightColor(visualBiome), dead: roll < 0.08, unstable: roll > 0.92,
+          phase: (index + 1) * 0.61, roomId, level: 0,
+        });
+        index += 1;
+      }
+    }
+  }
+  return result;
+};
 
 const createEpicLights = (
   feature: EpicStructureFeature,
@@ -1644,19 +1801,25 @@ export const applyEpicStructure = (
   const planBounds: Rect = { minX: -halfSize, minZ: -halfSize, maxX: halfSize, maxZ: halfSize };
   const epic3Facade = feature.passageFacadeBounds ?? feature.bounds;
   const epic3GroundRow = feature.passageLevels?.find((level) => Math.abs(level.y) <= 0.01);
+  const riftApproach = feature.variant === 'ascending-passages'
+    ? getEpic3ApproachLayout(feature, plan.size, plan.wallHeight, instanceSeed(plan.seed, context), plan.visualBiome)
+    : undefined;
   const abyssFacade = feature.passageFacadeBounds ?? feature.voidBounds;
   const abyssGroundRow = feature.passageLevels?.find((level) => Math.abs(level.y) <= 0.01);
   const floorRects = feature.variant === 'impossible-stairwell'
     ? [{ ...planBounds }]
     : feature.variant === 'ascending-passages'
-      ? (['north', 'south'] as const).flatMap((side) =>
-          getEpic3BackroomsGalleryLayout(
-            epic3GroundRow?.passages ?? [],
-            feature.bounds,
-            epic3Facade,
-            side,
-          ).floorRects
-        )
+      ? [
+          ...(['north', 'south'] as const).flatMap((side) =>
+            getEpic3BackroomsGalleryLayout(
+              epic3GroundRow?.passages ?? [],
+              feature.bounds,
+              epic3Facade,
+              side,
+            ).floorRects
+          ),
+          ...(riftApproach?.floorRects ?? []),
+        ]
     : feature.variant === 'endless-abyss' && feature.voidBounds && abyssFacade
       ? [
           ...floorCellsAroundVoid(abyssFacade, feature.voidBounds),
@@ -1781,6 +1944,7 @@ export const applyEpicStructure = (
         feature.bounds,
         facadeBounds,
         side,
+        EPIC3_DOORWAY_LANES,
       )
     );
     colliders.push(...facadeWallColliders(
@@ -1793,13 +1957,7 @@ export const applyEpicStructure = (
     colliders.push(...groundGalleryLayouts.flatMap((layout, sideIndex) =>
       epic3GalleryColliders(layout, 0, `epic3-ground-gallery-wall-${sideIndex}`)
     ));
-    colliders.push(...facadeWallColliders(
-      feature.bounds,
-      [],
-      0,
-      STORY_PITCH,
-      'epic3-ground-end-cap',
-    ).filter((collider) => collider.id.includes('-west-') || collider.id.includes('-east-')));
+    // No end caps: the rift continues into the neighbouring segments at x = ±56.
     if (feature.bottomless && feature.voidBounds) {
       const shaftBottom = -(EPIC3_LOWER_STORIES + 1) * STORY_PITCH;
       colliders.push(...facadeWallColliders(
@@ -1808,7 +1966,16 @@ export const applyEpicStructure = (
         shaftBottom,
         -shaftBottom,
         'epic3-bottomless-shaft-wall',
-      ));
+      ).filter((collider) => collider.id.includes('-north-') || collider.id.includes('-south-')));
+    }
+    if (riftApproach) {
+      colliders.push(...riftApproach.walls.map(epicWallCollider));
+      colliders.push(...riftApproach.columns.map((column, index): StaticCollider => ({
+        id: `epic3-approach-column-${index}`,
+        center: { x: column.x, y: column.height * 0.5, z: column.z },
+        halfExtents: { x: column.width * 0.5, y: column.height * 0.5, z: column.depth * 0.5 },
+        kind: 'column',
+      })));
     }
   }
 
@@ -1900,11 +2067,11 @@ export const applyEpicStructure = (
   const keptColliders = retained?.colliders.filter((collider) =>
     collider.kind !== 'floor' && !rectsOverlap(colliderFootprint(collider), clearance)
   ) ?? [];
-  plan.rooms = [...keptRooms, epicRoom];
-  plan.walls = [...keptWalls, ...architecturalWalls];
-  plan.columns = [...keptColumns, ...epicColumns];
+  plan.rooms = [...keptRooms, epicRoom, ...(riftApproach?.rooms ?? [])];
+  plan.walls = [...keptWalls, ...architecturalWalls, ...(riftApproach?.walls ?? [])];
+  plan.columns = [...keptColumns, ...epicColumns, ...(riftApproach?.columns ?? [])];
   plan.solidMasses = keptMasses;
-  plan.lights = [...keptLights, ...epicLights];
+  plan.lights = [...keptLights, ...epicLights, ...(riftApproach?.lights ?? [])];
   plan.missingCeilingTiles = [];
   plan.features = [feature];
   plan.detailSockets = retained?.detailSockets.filter((socket) =>

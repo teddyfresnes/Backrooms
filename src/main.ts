@@ -12,6 +12,7 @@ import {
   type GameSaveEntry,
 } from './core/SaveHistory';
 import type { RussianStairwellLaunch } from './core/RussianStairwellGame';
+import type { InventoryProgress } from './apartment/InventoryState';
 import { siteAudio } from './audio/SiteAudio';
 import { OpeningIntro } from './ui/OpeningIntro';
 import { NewGameIntro } from './ui/NewGameIntro';
@@ -188,8 +189,8 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
       // Finish the current input/frame stack before disposing the stairwell
       // runtime that completed the scripted fall.
       // Out of a fall that ends on black: the loading screen fades in from it.
-      onEnterBackrooms: () => queueMicrotask(() => void startBackrooms(
-        { kind: 'new' },
+      onEnterBackrooms: (inventory) => queueMicrotask(() => void startBackrooms(
+        { kind: 'new', inventory },
         true,
         false,
         true,
@@ -239,7 +240,7 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
 }
 
 async function startBackrooms(
-  launch: { readonly kind: 'new' } | { readonly kind: 'load'; readonly save: BackroomsGameSave },
+  launch: { readonly kind: 'new'; readonly inventory?: InventoryProgress } | { readonly kind: 'load'; readonly save: BackroomsGameSave },
   autosaveOnReady = false,
   menuBackground = false,
   fadeIn = false,

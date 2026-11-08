@@ -15,13 +15,15 @@ describe('experience routing', () => {
     ]);
 
     expect(stairwell).not.toContain('HallExitInteraction');
-    expect(stairwell.match(/this\.callbacks\.onEnterBackrooms\(\)/g)).toHaveLength(1);
+    // The fall hands the carried torch and compass down to the Backrooms.
+    expect(stairwell.match(/this\.callbacks\.onEnterBackrooms\(this\.inventory\.snapshot\(\)\)/g)).toHaveLength(1);
     expect(stairwell).toContain('onEscaped: () => this.escapeToBackrooms()');
     expect(stairwell.indexOf("this.saveNow('autosave');", stairwell.indexOf('this.initialized = true')))
       .toBeLessThan(stairwell.indexOf('this.renderer.setAnimationLoop(this.frame)'));
     expect(main).toContain("await import('./core/Game')");
     expect(main).toContain("import { OpeningIntro } from './ui/OpeningIntro'");
-    expect(main).toContain('onEnterBackrooms: () => queueMicrotask');
+    expect(main).toContain('onEnterBackrooms: (inventory) => queueMicrotask');
+    expect(main).toContain("{ kind: 'new', inventory }");
   });
 
   it('prebundles shared Three.js helpers before switching dynamic experiences', async () => {

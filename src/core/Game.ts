@@ -42,6 +42,24 @@ import {
 import { captureGameSavePreview } from './SavePreview';
 import { prepareOriginPlan } from './PrepareOriginPlan';
 import { yieldToBrowser } from './CooperativeWork';
+import { COMPASS_ID, FLASHLIGHT_ID, InventoryState, freshInventory, type InventoryProgress } from '../apartment/InventoryState';
+import { Compass } from '../apartment/Compass';
+import { Flashlight } from '../apartment/Flashlight';
+import type { PalmFrame } from '../character/HeldItemPose';
+import { EquipmentInput } from '../input/EquipmentInput';
+import { formatKeyLabel } from '../input/ControlBindings';
+import { InventoryHUD } from '../ui/InventoryHUD';
+import { compassIcon } from '../ui/InventoryIcons';
+import { NarrativeCaption } from '../ui/NarrativeCaption';
+import { QuestTracker } from '../ui/QuestTracker';
+import { StoryHud } from '../ui/StoryHud';
+import { BalanceMeter } from '../ui/BalanceMeter';
+import { RiftAudio } from '../audio/RiftAudio';
+import { BacteriaActor } from '../monster/BacteriaActor';
+import { BacteriaAudio } from '../monster/BacteriaAudio';
+import { RiftEncounter } from './RiftEncounter';
+import type { RiftProgress } from '../story/RiftProgress';
+import { RIFT_LINES } from '../story/RiftJourney';
 
 export type DebugExperience = DiagnosticsSnapshot;
 
@@ -71,7 +89,7 @@ export interface GameOptions {
   onRequestMainMenu?(): void;
   onRequestLoadGame?(id: string): void;
   launch?:
-    | { readonly kind: 'new' }
+    | { readonly kind: 'new'; readonly inventory?: InventoryProgress }
     | { readonly kind: 'load'; readonly save: BackroomsGameSave };
   autosaveOnReady?: boolean;
   autoEnterOnReady?: boolean;
@@ -81,6 +99,21 @@ export interface GameOptions {
 }
 
 const AUTOSAVE_INTERVAL_SECONDS = 30;
+/** The rift's own dark: fog and sky fade to it near the void so its ends never show. */
+const RIFT_DARK = 0x0f0c06;
+const RIFT_FOG_DENSITY = 0.0125;
+
+/**
+ * Torch and compass are never lost on the way down: an older Backrooms save
+ * (or an arrival without a snapshot) still carries both.
+ */
+const carriedInventory = (saved?: InventoryProgress): InventoryState => {
+  const inventory = new InventoryState(saved ?? freshInventory());
+  if (!inventory.hasLamp) inventory.acquireLamp();
+  if (!inventory.hasCompass) inventory.acquireCompass();
+  if (!saved) inventory.state.selected = inventory.state.items.findIndex((item) => item.id === COMPASS_ID);
+  return inventory;
+};
 
 export class Game {
   static async create(container: HTMLElement, options: GameOptions, signal?: AbortSignal): Promise<Game> {
@@ -147,6 +180,25 @@ export class Game {
   private diagnosticsVisible = false;
   private disposed = false;
   private transitionSuspended = false;
+  // The walk after the fall (absent from the menu background).
+  private readonly journey: boolean;
+  private readonly inventory?: InventoryState;
+  private inventoryHUD?: InventoryHUD;
+  private equipmentInput?: EquipmentInput;
+  private flashlight?: Flashlight;
+  private compass?: Compass;
+  private caption?: NarrativeCaption;
+  private questTracker?: QuestTracker;
+  private storyHud?: StoryHud;
+  private balanceMeter?: BalanceMeter;
+  private readonly riftAudio = new RiftAudio(() => this.audio.getOutput());
+  private readonly creatureAudio = new BacteriaAudio(() => this.audio.getOutput());
+  private creature?: BacteriaActor;
+  private rift?: RiftEncounter;
+  private readonly savedRift?: RiftProgress;
+  private readonly palm: PalmFrame = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
+  private readonly equipmentHand = new THREE.Vector3();
+  private readonly riftDark = new THREE.Color(RIFT_DARK);
 
   constructor(
     private readonly container: HTMLElement,
@@ -215,6 +267,23 @@ export class Game {
       completeConsole: (value, mode) => this.completeConsole(value, mode),
       consoleVisibility: (open) => this.setConsoleVisibility(open),
     }, this.settings, 'backrooms');
+    this.journey = !this.options.onRequestContinue;
+    if (this.journey) {
+      const launch = this.options.launch;
+      const saved = launch?.kind === 'load' ? launch.save.payload : undefined;
+      this.inventory = carriedInventory(launch?.kind === 'new' ? launch.inventory : saved?.inventory);
+      this.savedRift = saved?.rift;
+      this.inventoryHUD = new InventoryHUD(this.root);
+      this.inventoryHUD.setQuestIcon(COMPASS_ID, compassIcon());
+      this.questTracker = new QuestTracker(this.root);
+      this.caption = new NarrativeCaption(this.root);
+      this.storyHud = new StoryHud(this.root);
+      this.balanceMeter = new BalanceMeter(this.root);
+      this.equipmentInput = new EquipmentInput(() => this.settings.controls, () => this.canUseEquipment(), () => {
+        if (this.inventory?.toggleLamp()) { this.inventoryHUD?.reveal(); this.audio.lightSwitch(this.inventory.state.lampOn); }
+      }, () => undefined);
+      this.renderer.domElement.addEventListener('wheel', this.onInventoryWheel, { passive: false });
+    }
     this.configureScene();
     this.resize();
     window.addEventListener('resize', this.resize);
@@ -243,6 +312,10 @@ export class Game {
       });
     if (!this.options.onRequestContinue) await this.audio.setSuspended(true);
     emitProgress();
+    // What followed down the hole is only needed until the rift is behind the player.
+    const creatureReady = this.journey && this.savedRift?.stage !== 'done'
+      ? BacteriaActor.load().catch((error) => { console.warn('[rift] creature unavailable', error); return undefined; })
+      : Promise.resolve(undefined);
 
     const materials = await MaterialLibrary.load(this.renderer);
     if (this.disposed) {
@@ -258,6 +331,12 @@ export class Game {
       return;
     }
     this.physics = physics;
+    if (this.journey) {
+      // Carried, never on a desk here: the model only shows in the hand.
+      this.flashlight = new Flashlight(this.scene, physics);
+      this.compass = new Compass(this.scene);
+      this.inventoryHUD?.setObjectSources([], this.flashlight.model);
+    }
     setVisualProgress(0.24, 'Création de la scène');
     this.worldStream = new WorldStream(
       this.seed,
@@ -354,14 +433,22 @@ export class Game {
       if (this.disposed) return;
       if (this.options.arrivedByFall) {
         if (!this.character.collapseOnArrival()) throw new Error('Impossible de préparer l’arrivée au sol.');
-      } else this.character.spawnNearbyPartner();
+      } else if (!this.journey) this.character.spawnNearbyPartner();
       this.character.setActive(false);
     } else this.camera.copy(this.playerCamera);
+    if (this.journey) {
+      this.creature = await creatureReady;
+      if (this.disposed) { this.creature?.dispose(); return; }
+      if (this.creature) { this.creature.setVisible(false); this.scene.add(this.creature.root); }
+      this.rift = this.createRiftEncounter();
+    }
 
     this.postFX = new PostFX(this.renderer, this.scene, this.camera, this.settings.lighting);
     this.resize();
     await this.postFX.waitUntilReady();
-    const characterWarmup = this.character?.renderWarmupRoots.map(root => ({ root, visible: root.visible })) ?? [];
+    const characterWarmup = [
+      ...(this.character?.renderWarmupRoots ?? []), ...(this.creature?.warmupRoots ?? []), ...(this.rift?.warmupRoots ?? []),
+    ].map(root => ({ root, visible: root.visible }));
     for (const { root } of characterWarmup) root.visible = true;
     try { await compileSceneProgressively(this.renderer, this.scene, this.camera, { cancelled: () => this.disposed }); }
     finally { for (const { root, visible } of characterWarmup) root.visible = visible; }
@@ -375,6 +462,8 @@ export class Game {
     if (this.disposed) return;
     setVisualProgress(0.98, 'Préparation du son');
     await audioReady.catch(error => console.warn('[audio] preparation incomplete', error));
+    if (this.disposed) return;
+    if (this.creature) await this.creatureAudio.load();
     if (this.disposed) return;
     setVisualProgress(1, 'Prêt');
     this.updateDebugState(true);
@@ -402,10 +491,26 @@ export class Game {
     this.applyAtmosphere(this.plan.visualBiome ?? 'yellow', 1);
   }
 
+  private updateJourneyHud(delta: number, playing: boolean): void {
+    if (!this.journey || !this.inventory) return;
+    this.updateEquipment(playing ? delta : 0);
+    const visible = playing && !this.ui.isConsoleOpen;
+    this.caption?.update(delta, playing);
+    this.storyHud?.setPlaying(playing);
+    this.storyHud?.update(playing ? delta : 0);
+    const quest = this.rift?.questText ?? null;
+    // Urgent orders take the centre of the screen; the calm objective stays top left.
+    this.storyHud?.setQuest(quest?.urgent ? quest.text : null, 'urgent');
+    this.questTracker?.update(quest && !quest.urgent ? quest.text : null, visible && !!quest && !quest.urgent && !this.rift?.ownsCharacter);
+    this.questTracker?.tick(delta, playing, !this.settings.cameraMotion);
+    this.inventoryHUD?.update(this.inventory, delta, visible && !this.rift?.ownsCharacter, playing, '', '', !this.settings.cameraMotion);
+  }
+
   private updateAtmosphere(delta: number): void {
     if (!this.worldStream || !this.player) return;
     const context = this.worldStream.getLightingContext(this.player.position);
     const blend = 1 - Math.exp(-Math.max(0, delta) * 1.6);
+    this.riftAmount = this.journey ? this.rift?.atmosphereAt(this.camera.position) ?? 0 : 0;
     this.applyAtmosphere(context.biome, blend);
     const legacy = this.settings.lighting === 'legacy';
     const darknessRate = context.darkness > this.darkness ? 1.25 : 2;
@@ -424,11 +529,15 @@ export class Game {
     this.postFX?.setDarkness(this.darkness);
   }
 
+  private riftAmount = 0;
+
   private applyAtmosphere(biome: VisualBiome, blend: number): void {
     const legacy = this.settings.lighting === 'legacy';
     const target = (legacy ? LEGACY_ATMOSPHERE : ATMOSPHERE)[biome];
-    this.backgroundColor.lerp(this.atmosphereTargetColor.setHex(target.background), blend);
-    this.fog.color.lerp(this.atmosphereTargetColor.setHex(target.fog), blend);
+    // Near the rift both fade to its dark, so its far ends and its depth dissolve.
+    const rift = this.riftAmount;
+    this.backgroundColor.lerp(this.atmosphereTargetColor.setHex(target.background).lerp(this.riftDark, rift), blend);
+    this.fog.color.lerp(this.atmosphereTargetColor.setHex(target.fog).lerp(this.riftDark, rift), blend);
     this.hemisphere.color.lerp(this.atmosphereTargetColor.setHex(target.hemisphereSky), blend);
     this.hemisphere.groundColor.lerp(
       this.atmosphereTargetColor.setHex(target.hemisphereGround),
@@ -436,7 +545,7 @@ export class Game {
     );
     this.ambientFill.color.lerp(this.atmosphereTargetColor.setHex(target.ambient), blend);
     this.directionalKey.color.lerp(this.atmosphereTargetColor.setHex(target.key), blend);
-    this.fog.density = legacy ? 0.0042 : 0.0015;
+    this.fog.density = THREE.MathUtils.lerp(legacy ? 0.0042 : 0.0015, RIFT_FOG_DENSITY, rift);
     this.directionalKey.position.set(legacy ? 3.5 : 4.5, legacy ? 8 : 7.5, legacy ? 2.5 : 3.2);
     if (legacy) {
       this.hemisphere.intensity = 0.17 * this.brightnessProfile.relativeGain;
@@ -507,6 +616,7 @@ export class Game {
     this.ui.setLocked(locked);
     this.player?.setInputEnabled(locked && !this.ui.isConsoleOpen);
     this.character?.setActive(locked && !this.ui.isConsoleOpen, true);
+    if (this.rift?.locksInput) this.player?.setInputEnabled(false);
     void this.audio.setSuspended(!locked || document.hidden);
     this.previousTime = performance.now();
     this.accumulator = 0;
@@ -546,7 +656,65 @@ export class Game {
     void this.audio.start();
   }
 
+  private createRiftEncounter(): RiftEncounter | undefined {
+    if (!this.player || !this.physics || !this.storyHud || !this.balanceMeter) return undefined;
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+    return new RiftEncounter({
+      scene: this.scene,
+      renderCamera: this.camera,
+      player: this.player,
+      physics: this.physics,
+      character: this.character,
+      hud: this.storyHud,
+      balanceMeter: this.balanceMeter,
+      sound: this.riftAudio,
+      creatureSound: this.creatureAudio,
+      seed: this.seed,
+      creature: () => this.creature,
+      baseFieldOfView: () => this.settings.fieldOfView,
+      reducedMotion: () => !this.settings.cameraMotion || reduced.matches,
+      keyLabel: (action) => formatKeyLabel(this.settings.controls[action]),
+      say: (text) => {
+        this.caption?.say(text);
+        // "J'ai encore la lampe… et la boussole": the rail shows them.
+        if (text === RIFT_LINES.items) this.inventoryHUD?.reveal();
+      },
+      captionBusy: () => !!this.caption?.isActive,
+      onProgress: () => { this.saveNow('autosave'); },
+    }, this.savedRift, !!this.options.arrivedByFall);
+  }
+
+  private canUseEquipment(): boolean {
+    return !!this.player?.isLocked && !this.disposed && !document.hidden && !this.ui.isConsoleOpen && !this.ui.isPaused
+      && !this.ui.isMainMenuOpen && !this.character?.isBusy && !this.rift?.blocksEquipment;
+  }
+
+  private readonly onInventoryWheel = (event: WheelEvent): void => {
+    if (!this.inventory || !this.canUseEquipment() || event.deltaY === 0) return;
+    event.preventDefault();
+    this.inventory.select(event.deltaY);
+    this.inventoryHUD?.reveal();
+  };
+
+  /** The torch and Chloé's compass in the right hand, exactly as in the stairwell. */
+  private updateEquipment(delta: number): void {
+    const inventory = this.inventory;
+    if (!inventory || !this.flashlight || !this.compass) return;
+    const hidden = !!this.rift?.ownsCharacter;
+    const free = !hidden && !this.character?.isBusy;
+    const torch = inventory.hasLamp && inventory.equipped?.id === FLASHLIGHT_ID && free;
+    const reading = inventory.equipped?.id === COMPASS_ID && free;
+    this.character?.setHeldItem(reading ? 'compass' : torch ? 'torch' : null);
+    const frame = (reading || torch) && this.character?.getHeldItemFrame(this.palm) ? this.palm : undefined;
+    const hand = this.character?.getEquipmentHandPosition(this.equipmentHand) ? this.equipmentHand : undefined;
+    this.flashlight.update(this.camera, hand, inventory.hasLamp, torch, inventory.state.lampOn, delta,
+      !this.settings.cameraMotion, torch && !reading ? frame : undefined);
+    this.compass.update(this.camera, reading ? frame : undefined, reading && (!!frame || !this.character),
+      this.rift?.creatureProximity ?? 0, delta);
+  }
+
   private tryInteract(mode: DoorOpenMode): void {
+    if (this.rift?.handleInteract()) return;
     if (!this.player || !this.worldStream || this.character?.isBusy || this.player.isTraversing || this.player.isNoclipEnabled) return;
     this.player.getViewDirection(this.lookDirection);
     const interaction = this.worldStream.getInteraction(this.player.position, this.lookDirection);
@@ -578,6 +746,8 @@ export class Game {
 
   private saveNow(kind: GameSaveKind): boolean {
     if (!this.storage || !this.player || !this.worldStream) return false;
+    // Never in the middle of the rift: the edge shot, the plank, the creature.
+    if (this.rift?.blocksSaving) return false;
     const chunk = this.worldStream.supportedCoordAt(this.lastSafePosition);
     const offset = getChunkWorldOffset(chunk);
     const look = this.player.getLookQuaternion();
@@ -600,6 +770,8 @@ export class Game {
           z: this.lastSafePosition.z - offset.z,
         },
         quaternion: { x: look.x, y: look.y, z: look.z, w: look.w },
+        ...(this.inventory ? { inventory: this.inventory.snapshot() } : {}),
+        ...(this.rift ? { rift: this.rift.snapshot } : {}),
       },
     });
     if (result.ok) {
@@ -639,6 +811,7 @@ export class Game {
   private setConsoleVisibility(open: boolean): void {
     this.player?.setInputEnabled(!open && !!this.player?.isLocked);
     this.character?.setActive(!open && !!this.player?.isLocked);
+    if (this.rift?.locksInput) this.player?.setInputEnabled(false);
     if (open) this.ui.setInteraction(null);
   }
 
@@ -943,7 +1116,10 @@ export class Game {
       this.playableSeconds += rawDelta;
       this.autosaveElapsed += rawDelta;
       if (this.autosaveElapsed >= AUTOSAVE_INTERVAL_SECONDS) this.saveNow('autosave');
-      this.character?.update(rawDelta);
+      // The rift scripts the player before the rig steps, and frames the shot after it.
+      this.rift?.update(rawDelta);
+      if (!this.rift?.ownsCharacter) this.character?.update(rawDelta);
+      this.rift?.applyCamera();
       const partner = this.character?.getInteractionPartnerPosition();
       if (partner && (partner.distanceTo(this.player.position) > 45 || Math.abs(partner.y - this.player.position.y) > 8)) {
         this.character?.setInteractionPartner(null);
@@ -963,8 +1139,10 @@ export class Game {
       if (mainMenuOpen) this.updateMenuCinematic();
     }
     this.updateAtmosphere(rawDelta);
+    this.updateJourneyHud(rawDelta, playing);
     this.player.getViewDirection(this.lookDirection);
     const interaction = !playing || this.character?.isBusy || this.player.isTraversing || this.player.isNoclipEnabled
+      || this.rift?.ownsCharacter
       ? null
       : this.worldStream.getInteraction(this.player.position, this.lookDirection);
     this.ui.setInteraction(interaction?.label ?? null);
@@ -1205,6 +1383,20 @@ export class Game {
     window.removeEventListener('pagehide', this.onPageHide);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.renderer.domElement.removeEventListener('click', this.onCanvasClick);
+    this.renderer.domElement.removeEventListener('wheel', this.onInventoryWheel);
+    // The rift releases its scripted pose, plank collider and shot before the rig goes.
+    this.rift?.dispose();
+    this.creature?.dispose();
+    this.creatureAudio.dispose();
+    this.riftAudio.dispose();
+    this.flashlight?.dispose();
+    this.compass?.dispose();
+    this.equipmentInput?.dispose();
+    this.inventoryHUD?.dispose();
+    this.caption?.dispose();
+    this.questTracker?.dispose();
+    this.storyHud?.dispose();
+    this.balanceMeter?.dispose();
     this.character?.dispose();
     this.player?.dispose();
     this.worldStream?.dispose();

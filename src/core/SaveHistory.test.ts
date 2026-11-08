@@ -409,3 +409,19 @@ it('restores PC transition recovery and accepts an already-consumed version-43 o
   reachPowerCut(quest);const legacy=quest.snapshot();legacy.apartment!.outageLeadSeconds=1.12;
   const old=writeGameSave(storage,{...input,payload:{...input.payload,computer:legacy}});expect(old.ok).toBe(true);const restored=new ApartmentQuest(legacy);expect(restored.isComputerBlocked).toBe(true);expect(restored.advanceOutage(gasOrigin,gasTarget,true)).toBe(false);
 });
+
+it('carries the torch, the compass and the rift progress in Backrooms saves', () => {
+  const storage = new MemoryStorage(), bag = new InventoryState();
+  bag.acquireLamp(); bag.acquireCompass(); bag.toggleLamp();
+  const rift = { version: 1 as const, stage: 'plank' as const, plank: { lane: -2, story: 0, bank: 1 as const }, spoken: ['wake', 'edge'] };
+  const base = backroomsInput();
+  const result = writeGameSave(storage, { ...base, payload: { ...base.payload, inventory: bag.snapshot(), rift } });
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw Error('Save failed');
+  const saved = loadGameSave(storage, result.save.id);
+  expect(saved?.experienceId === 'backrooms' && saved.payload.inventory).toEqual(bag.snapshot());
+  expect(saved?.experienceId === 'backrooms' && saved.payload.rift).toEqual(rift);
+  // Older Backrooms saves without either key stay valid; a broken rift snapshot does not.
+  expect(writeGameSave(storage, base).ok).toBe(true);
+  expect(writeGameSave(storage, { ...base, payload: { ...base.payload, rift: { ...rift, plank: undefined } } }).ok).toBe(false);
+});

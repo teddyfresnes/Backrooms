@@ -31,6 +31,7 @@ import {
 import {
   EPIC1_PORTAL_HEIGHT,
   EPIC_STRUCTURE_DEFINITIONS,
+  EPIC3_RIFT_CHUNK_Z,
   epicStructureIndexForCoord,
   getEpic1FunnelStoryBounds,
   getEpicStairwellLayout,
@@ -182,11 +183,15 @@ const epicAuditSlots = getEpicStructureSlotsForMacro(
   epicAuditMacro.x,
   epicAuditMacro.z,
 );
-const epicAuditStructureCoords: ChunkCoord[] = epicAuditSlots.map((slot) => ({
-  x: slot.x,
-  z: slot.z,
-  story: epicAuditStory,
-}));
+// The tiled epic3 slot is retired: epic3 is the rift row, audited on one of its segments.
+const epicAuditStructureCoords: ChunkCoord[] = [
+  ...epicAuditSlots.filter((slot) => slot.index !== 3).map((slot) => ({
+    x: slot.x,
+    z: slot.z,
+    story: epicAuditStory,
+  })),
+  { x: epicAuditSlots[0]!.x, z: EPIC3_RIFT_CHUNK_Z, story: epicAuditStory },
+];
 const epicAuditOrdinaryCoords: ChunkCoord[] = epicAuditSlots.slice(0, 3).map((slot) => ({
   x: slot.x + 1,
   z: slot.z + 1,
@@ -312,22 +317,9 @@ describe('legacy monument and migration chunk contracts', () => {
       for (const coord of epicAuditStructureCoords) {
         const plan = epicAuditPlan(coord);
         const marker = epicMarker(plan)!;
-        if (marker.index === 3) {
-          expect(marker.entryLevel).toBeGreaterThan(0);
-          expect(marker.destination.y).toBeGreaterThan(0.865);
-          const supportingSurfaceY = marker.destination.y - 0.865;
-          expect(plan.colliders.some((collider) =>
-            collider.kind === 'floor' &&
-            colliderContainsPoint(collider, marker.destination) &&
-            Math.abs(
-              collider.center.y + collider.halfExtents.y - supportingSurfaceY,
-            ) < 0.02
-          )).toBe(true);
-        } else {
-          expect(plan.floorRects.some((floor) =>
-            containsPoint(floor, marker.destination)
-          )).toBe(true);
-        }
+        expect(plan.floorRects.some((floor) =>
+          containsPoint(floor, marker.destination)
+        )).toBe(true);
         expect(getFloorOpenings(plan).some((opening) =>
           containsPoint(opening, marker.destination)
         )).toBe(false);
@@ -341,7 +333,8 @@ describe('legacy monument and migration chunk contracts', () => {
       const plan = epicAuditPlan(coord);
       const marker = epicMarker(plan)!;
 
-      expect(rectWidth(marker.bounds)).toBeGreaterThan(INFINITE_CHUNK_SIZE * 1.9);
+      // One full-width segment of the endless rift.
+      expect(rectWidth(marker.bounds)).toBeCloseTo(INFINITE_CHUNK_SIZE, 5);
       expect(rectDepth(marker.passageFacadeBounds!)).toBeCloseTo(
         rectDepth(marker.voidBounds!),
         5,
@@ -351,9 +344,10 @@ describe('legacy monument and migration chunk contracts', () => {
         wall.id.includes('/biome-transition-west-') ||
         wall.id.includes('/biome-transition-east-')
       )).toBe(false);
-      expect(plan.floorRects).toHaveLength(2);
+      // Two galleries and the two approach halls, all running seam to seam.
+      expect(plan.floorRects).toHaveLength(4);
       expect(plan.floorRects.every((floor) =>
-        Math.abs(rectWidth(floor) - rectWidth(marker.bounds)) < 1e-5
+        Math.abs(rectWidth(floor) - INFINITE_CHUNK_SIZE) < 1e-5
       )).toBe(true);
       expect(plan.colliders.some((collider) =>
         collider.id.includes('gallery-back') || collider.id.includes('ledge-floor')

@@ -57,6 +57,8 @@ import {
   getEpicAbyssThroughPassageLayout,
   getEpic1FunnelStoryBounds,
   getEpic3BackroomsGalleryLayout,
+  EPIC3_DOORWAY_HEIGHT,
+  EPIC3_DOORWAY_LANES,
   getEpicStairRoomWalls,
   getEpicStairwellLayout,
 } from '../world/EpicStructures';
@@ -2704,20 +2706,26 @@ export class WorldView {
         true,
       ));
       if (nearbyPreviewBand(level.y)) {
+        const walkedRow = Math.abs(level.y) <= 0.01;
         for (const side of ['north', 'south'] as const) {
           const layout = getEpic3BackroomsGalleryLayout(
             level.passages,
             feature.bounds,
             facadeBounds,
             side,
+            // Only the walked story opens onto its approach halls.
+            walkedRow ? EPIC3_DOORWAY_LANES : [],
           );
-          if (Math.abs(level.y) > 0.01) {
+          if (!walkedRow) {
             previewFloors.push(...layout.floorRects.map((rect) =>
               boxForRect(rect, 0.2, level.y - 0.2, 0.86)
             ));
           }
           previewWalls.push(...layout.wallRects.map((rect) =>
             removeHorizontalCaps(boxForRect(rect, 3.35, level.y, 0.88))
+          ));
+          previewWalls.push(...layout.lintelRects.map((rect) =>
+            boxForRect(rect, 3.35 - EPIC3_DOORWAY_HEIGHT, level.y + EPIC3_DOORWAY_HEIGHT, 0.88)
           ));
           previewCeilings.push(...layout.ceilingRects.map((rect) =>
             boxForRect(rect, 0.18, level.y + 3.35, 0.91)
@@ -2740,36 +2748,7 @@ export class WorldView {
       }
     }
     const minimumY = Math.min(...feature.passageLevels.map((level) => level.y));
-    facades.push(...createEpicFacadeBandGeometries(
-      feature.bounds,
-      [],
-      minimumY,
-      -minimumY,
-      0,
-      ['west', 'east'],
-      0.88,
-      true,
-    ));
-    facades.push(...createEpicFacadeBandGeometries(
-      feature.bounds,
-      [],
-      0,
-      INFINITE_STORY_PITCH,
-      3.35,
-      ['west', 'east'],
-      0.88,
-      true,
-    ));
-    facades.push(...createEpicFacadeBandGeometries(
-      feature.bounds,
-      [],
-      INFINITE_STORY_PITCH,
-      feature.height - INFINITE_STORY_PITCH,
-      0,
-      ['west', 'east'],
-      0.88,
-      true,
-    ));
+    // No end walls: each segment runs on into its neighbours at x = ±56.
     makeMesh(
       mergeOrSingle(facades),
       this.materials.wall,
@@ -2862,6 +2841,24 @@ export class WorldView {
       minimumY,
       0.03,
       0.27,
+    );
+    // Beyond the last facade rows there is nothing to see: an unlit, fogged
+    // dark above and below, so the rift reads as endless in both directions.
+    const abyssDark = new THREE.MeshBasicMaterial({
+      name: 'epic-ascending-passages-endless-dark-material',
+      color: fogTint.clone().multiplyScalar(0.35),
+      side: THREE.DoubleSide,
+      fog: true,
+    });
+    this.ownedMaterials.push(abyssDark);
+    makeMesh(
+      mergeOrSingle([
+        createEpicGlowPanel(rectWidth(voidBounds), rectDepth(voidBounds), fogCenter.x, feature.height, fogCenter.z),
+        createEpicGlowPanel(rectWidth(voidBounds), rectDepth(voidBounds), fogCenter.x, minimumY, fogCenter.z),
+      ]),
+      abyssDark,
+      'epic-ascending-passages-endless-dark',
+      group,
     );
   }
 

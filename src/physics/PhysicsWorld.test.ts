@@ -324,7 +324,7 @@ describe('PhysicsWorld chunk ownership', () => {
     )).toBe(true);
   });
 
-  it('keeps epic3 open through the central fissure while supporting its elevated arrival gallery', async () => {
+  it('keeps the epic3 rift open while its approach hall leads through a doorway to the brink', async () => {
     const plan = makePlan();
     plan.size = 112;
     const feature = applyEpicStructure(plan, 3) as EpicStructureFeature;
@@ -333,34 +333,32 @@ describe('PhysicsWorld chunk ownership', () => {
 
     expect(feature.voidBounds).toBeDefined();
     expect(feature.passageFacadeBounds).toBeDefined();
-    expect(castDownAt(physics, 0, 2, 0)).toBeNull();
-    expect(castDownAt(physics, 0, 2, -5.5)).toBeNull();
-    expect(castDownAt(physics, 0, 2, feature.bounds.minZ - 0.3)).toBeNull();
-    expect(castDownAt(physics, feature.bounds.maxX + 0.3, 2, -6.5)).toBeNull();
-
-    const arrivalSurfaceY = feature.destination.y - 0.865;
-    const arrivalHit = castDownAt(
-      physics,
-      feature.destination.x,
-      arrivalSurfaceY + 2,
-      feature.destination.z,
-    );
-    expect(arrivalHit).not.toBeNull();
-    expect(arrivalSurfaceY + 2 - arrivalHit!.timeOfImpact).toBeCloseTo(arrivalSurfaceY, 3);
-
-    physics.teleport(feature.destination);
-    for (let index = 0; index < 175; index += 1) {
-      physics.move({ x: 0.08, y: -0.015, z: 0 });
+    // Open from seam to seam: no floor anywhere in the void, even at its ends.
+    for (const x of [0, -55.8, 55.8]) {
+      expect(castDownAt(physics, x, 2, 0)).toBeNull();
+      expect(castDownAt(physics, x, 2, -5.5)).toBeNull();
     }
-    expect(physics.getPosition().x).toBeGreaterThan(12.5);
-    expect(physics.getPosition().y).toBeCloseTo(feature.destination.y, 1);
+    // Gallery and approach hall are both floored at the walked datum.
+    const gallery = castDownAt(physics, feature.destination.x, 2, feature.destination.z);
+    expect(gallery).not.toBeNull();
+    expect(2 - gallery!.timeOfImpact).toBeCloseTo(0, 3);
+    expect(castDownAt(physics, 0, 2, feature.bounds.maxZ + 1.5)).not.toBeNull();
 
-    physics.teleport(feature.destination);
-    for (let index = 0; index < 140; index += 1) {
-      physics.move({ x: 0, y: -0.015, z: 0.04 });
+    // From the hall, straight through the doorway of lane -7, across the
+    // gallery and out of the portal: the player falls into the rift.
+    physics.teleport({ x: -7, y: 0.865, z: feature.bounds.maxZ + 2 });
+    for (let index = 0; index < 360; index += 1) {
+      physics.move({ x: 0, y: -0.015, z: -0.04 });
     }
-    expect(physics.getPosition().z).toBeGreaterThan(feature.passageFacadeBounds!.minZ + 0.25);
+    expect(physics.getPosition().z).toBeLessThan(feature.passageFacadeBounds!.maxZ - 0.25);
     expect(physics.getPosition().y).toBeLessThan(feature.destination.y - 0.2);
+
+    // Beside the doorway, the gallery back wall stops the same walk.
+    physics.teleport({ x: -7 + 3.2, y: 0.865, z: feature.bounds.maxZ + 2 });
+    for (let index = 0; index < 160; index += 1) {
+      physics.move({ x: 0, y: -0.015, z: -0.04 });
+    }
+    expect(physics.getPosition().z).toBeGreaterThan(feature.bounds.maxZ);
   });
 
   it('crosses every aligned epic5 threshold and blocks the solid wall spans', async () => {

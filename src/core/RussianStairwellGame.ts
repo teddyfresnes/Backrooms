@@ -1,4 +1,4 @@
-import { InventoryState, FLASHLIGHT_ID, COMPASS_ID, isQuestItem } from '../apartment/InventoryState';
+import { InventoryState, FLASHLIGHT_ID, COMPASS_ID, isQuestItem, type InventoryProgress } from '../apartment/InventoryState';
 import { Compass } from '../apartment/Compass';
 import { compassIcon } from '../ui/InventoryIcons';
 import { FuseBox } from '../apartment/FuseBox';
@@ -121,7 +121,8 @@ export interface RussianStairwellGameCallbacks {
   onRequestNewGame(): void;
   onRequestMainMenu(): void;
   onRequestLoadGame(id: string): void;
-  onEnterBackrooms(): void;
+  /** The scripted fall: hand the torch and the compass down to the Backrooms. */
+  onEnterBackrooms(inventory: InventoryProgress): void;
 }
 
 const AUTOSAVE_INTERVAL_SECONDS = 30;
@@ -1217,7 +1218,7 @@ export class RussianStairwellGame {
   private escapeToBackrooms():void {
     if(this.disposed)return;
     this.corridorStory.completeBacteria();
-    this.callbacks.onEnterBackrooms();
+    this.callbacks.onEnterBackrooms(this.inventory.snapshot());
   }
   private updateEquipment(delta:number):void {
     const owned=this.inventory.hasLamp,equipped=owned&&this.inventory.equipped?.id===FLASHLIGHT_ID&&!this.objects?.isHolding&&!this.pcUse?.isActive&&!this.closet?.isActive&&!this.peephole?.isActive&&!this.character?.isBusy;

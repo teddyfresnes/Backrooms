@@ -1,0 +1,88 @@
+/* Balance on the plank: a gauge under the crosshair and a vignette that closes in. */
+.rift-balance {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+  font-family: 'JetBrains Mono Variable', monospace;
+  opacity: 0;
+  transition: opacity 320ms ease-out;
+}
+
+.rift-balance.is-visible { opacity: 1; }
+
+.rift-balance-vignette {
+  position: absolute;
+  inset: 0;
+  opacity: var(--danger, 0);
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 38%, rgba(40, 6, 2, 0.55) 78%, rgba(12, 2, 0, 0.92) 100%);
+}
+
+.rift-balance-gauge {
+  position: absolute;
+  bottom: 17%;
+  left: 50%;
+  display: grid;
+  grid-template-columns: auto min(320px, 56vw) auto;
+  align-items: center;
+  gap: 12px;
+  transform: translateX(-50%);
+  color: #efeee7;
+  font-size: 12px;
+  text-shadow: 0 1px 3px #000;
+}
+
+.rift-balance-gauge kbd {
+  min-width: 30px;
+  padding: 3px 7px;
+  border: 1px solid rgba(239, 224, 145, 0.6);
+  border-bottom-width: 3px;
+  border-radius: 4px;
+  color: #efe091;
+  font: inherit;
+  font-weight: 700;
+  text-align: center;
+  background: rgba(10, 11, 8, 0.7);
+}
+
+.rift-balance-gauge kbd.is-pressed { background: rgba(239, 224, 145, 0.28); transform: translateY(1px); }
+
+.rift-balance-track {
+  position: relative;
+  height: 10px;
+  border: 1px solid rgba(239, 238, 231, 0.42);
+  border-radius: 6px;
+  background:
+    linear-gradient(90deg, rgba(210, 52, 43, 0.75) 0 12%, rgba(218, 202, 115, 0.35) 12% 34%, rgba(239, 238, 231, 0.18) 34% 66%, rgba(218, 202, 115, 0.35) 66% 88%, rgba(210, 52, 43, 0.75) 88% 100%);
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
+}
+
+.rift-balance-marker {
+  position: absolute;
+  top: -6px;
+  left: calc(50% + var(--lean, 0) * 50%);
+  width: 4px;
+  height: 20px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: #efeee7;
+  box-shadow: 0 0 8px rgba(239, 238, 231, 0.8);
+}
+
+.rift-balance.is-critical .rift-balance-marker { background: #ff5a4a; box-shadow: 0 0 10px rgba(255, 90, 74, 0.9); }
+
+.rift-balance-caption {
+  position: absolute;
+  bottom: calc(17% + 30px);
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(239, 238, 231, 0.75);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rift-balance { transition: none; }
+}

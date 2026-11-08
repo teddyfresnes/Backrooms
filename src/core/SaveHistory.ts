@@ -6,6 +6,7 @@ import type {
 import { sanitizeComputerUse, type ComputerUseProgress } from '../apartment/ComputerUseState';
 import { FLASHLIGHT_ID, sanitizeInventory, type InventoryProgress } from '../apartment/InventoryState';
 import { sanitizeCorridor, type CorridorProgress } from '../story/CorridorProgress';
+import { sanitizeRiftProgress, type RiftProgress } from '../story/RiftProgress';
 import { sanitizeApartmentObjects, sanitizeApartmentFixtures, type ApartmentObjectsProgress, type ApartmentFixturesProgress } from '../apartment/ApartmentInteractionState';
 import type { CharacterVoiceId } from '../audio/VoiceCatalog';
 import { sanitizeComputerProgress, type ComputerProgress } from '../story/ApartmentQuest';
@@ -63,6 +64,10 @@ export interface BackroomsSavePayload {
   readonly localPosition: Readonly<GameSaveVec3>;
   readonly quaternion: Readonly<GameSaveQuaternion>;
   readonly surface?: { readonly version: number; readonly id: string; readonly layer: string };
+  /** The torch and the compass carried down from the stairwell. */
+  readonly inventory?: InventoryProgress;
+  /** The walk north to the rift and what happened on the plank. */
+  readonly rift?: RiftProgress;
 }
 
 interface GameSaveInputBase {
@@ -364,11 +369,16 @@ const sanitizeChunk = (value: unknown): BackroomsSavePayload['chunk'] | null => 
   return Object.freeze({ x: x as number, z: z as number, story: story as number });
 };
 
+const BACKROOMS_REQUIRED_KEYS = ['seed', 'chunk', 'localPosition', 'quaternion'] as const;
+const BACKROOMS_OPTIONAL_KEYS = new Set(['surface', 'inventory', 'rift']);
 const sanitizeBackroomsPayload = (value: unknown): BackroomsSavePayload | null => {
-  if (!isRecord(value) || (!hasExactKeys(value, ['seed', 'chunk', 'localPosition', 'quaternion']) &&
-    !hasExactKeys(value, ['seed', 'chunk', 'localPosition', 'quaternion', 'surface']))) {
+  if (!isRecord(value) || !BACKROOMS_REQUIRED_KEYS.every((key) => Object.hasOwn(value, key))
+    || !Object.keys(value).every((key) => (BACKROOMS_REQUIRED_KEYS as readonly string[]).includes(key) || BACKROOMS_OPTIONAL_KEYS.has(key))) {
     return null;
   }
+  const inventory = value.inventory === undefined ? undefined : sanitizeInventory(value.inventory);
+  const rift = value.rift === undefined ? undefined : sanitizeRiftProgress(value.rift);
+  if (inventory === null || rift === null) return null;
   if (
     typeof value.seed !== 'string'
     || value.seed.length === 0
@@ -387,7 +397,10 @@ const sanitizeBackroomsPayload = (value: unknown): BackroomsSavePayload | null =
       typeof s.id !== 'string' || !s.id || s.id.length > 512 || typeof s.layer !== 'string' || !s.layer || s.layer.length > 256) return null;
     surface = { version: s.version as number, id: s.id, layer: s.layer };
   }
-  return Object.freeze({ seed: value.seed, chunk, localPosition, quaternion, ...(surface ? { surface } : {}) });
+  return Object.freeze({
+    seed: value.seed, chunk, localPosition, quaternion, ...(surface ? { surface } : {}),
+    ...(inventory ? { inventory } : {}), ...(rift ? { rift } : {}),
+  });
 };
 
 const sanitizeEntry = (value: unknown): GameSaveEntry | null => {

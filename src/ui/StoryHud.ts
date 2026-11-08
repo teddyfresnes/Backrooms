@@ -18,6 +18,7 @@ export class StoryHud {
   private readonly flash = document.createElement('div');
   private readonly fade = document.createElement('div');
   private readonly death = document.createElement('section');
+  private readonly deathTitle = document.createElement('h2');
   private readonly deathDetail = document.createElement('p');
   private hintRemaining = 0;
   private flashLevel = 0;
@@ -40,10 +41,9 @@ export class StoryHud {
     this.fade.className = 'story-fade';
     this.death.className = 'story-death';
     this.death.hidden = true;
-    const title = document.createElement('h2');
-    title.textContent = 'Il t’a eu.';
+    this.deathTitle.textContent = 'Il t’a eu.';
     this.deathDetail.textContent = 'Retour dans le hall…';
-    this.death.append(title, this.deathDetail);
+    this.death.append(this.deathTitle, this.deathDetail);
     this.root.append(this.quest, this.hint, this.flash, this.fade, this.death);
     container.append(this.root);
   }
@@ -86,9 +86,10 @@ export class StoryHud {
   /** Plain black over everything (0..1), e.g. the end of the fall before loading. */
   setFade(level: number): void { this.fade.style.opacity = Math.min(1, Math.max(0, level)).toFixed(3); }
 
-  showDeath(visible: boolean, detail?: string): void {
+  showDeath(visible: boolean, detail?: string, title = 'Il t’a eu.'): void {
     this.death.hidden = !visible;
     if (detail) this.deathDetail.textContent = detail;
+    if (visible) this.deathTitle.textContent = title;
   }
 
   setPlaying(playing: boolean): void { this.root.classList.toggle('is-paused', !playing); }

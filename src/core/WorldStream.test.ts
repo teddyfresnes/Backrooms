@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EPIC_MACRO_SIZE,
   EPIC_STRUCTURE_DEFINITIONS,
+  EPIC3_RIFT_CHUNK_Z,
   epicStructureIndexForCoord,
   getEpicLocateDestination,
   getEpicStructureDefinition,
@@ -142,22 +143,30 @@ describe('sparse epic structure slots', () => {
     });
   });
 
-  it('places exactly five epic chunks in every 32x32 macrocell', () => {
+  it('tiles the four sparse monuments per 32x32 macrocell while epic3 owns the rift row', () => {
     for (const [macroX, macroZ] of [[0, 0], [-1, -1], [3, -4]] as const) {
       const slots = getEpicStructureSlotsForMacro(seed, macroX, macroZ);
       expect(slots).toHaveLength(5);
       expect(slots.map((slot) => slot.index).sort((left, right) => left - right))
         .toEqual(activeIndices);
+      // The tiled epic3 slot is retired; a slot touching the rift row keeps its halo.
+      const expected = slots
+        .filter((slot) => slot.index !== 3 && Math.abs(slot.z - EPIC3_RIFT_CHUNK_Z) > 1)
+        .map((slot) => slot.index)
+        .sort((left, right) => left - right);
 
       const observed: number[] = [];
       for (let z = macroZ * EPIC_MACRO_SIZE; z < (macroZ + 1) * EPIC_MACRO_SIZE; z += 1) {
         for (let x = macroX * EPIC_MACRO_SIZE; x < (macroX + 1) * EPIC_MACRO_SIZE; x += 1) {
           const index = epicStructureIndexForCoord(seed, { x, z });
+          if (Math.abs(z - EPIC3_RIFT_CHUNK_Z) <= 1) {
+            expect(index).toBe(z === EPIC3_RIFT_CHUNK_Z ? 3 : null);
+            continue;
+          }
           if (index !== null) observed.push(index);
         }
       }
-      expect(observed).toHaveLength(5);
-      expect(observed.sort((left, right) => left - right)).toEqual(activeIndices);
+      expect(observed.sort((left, right) => left - right)).toEqual(expected);
     }
   });
 
