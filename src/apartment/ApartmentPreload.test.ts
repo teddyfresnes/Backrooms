@@ -21,10 +21,40 @@ it('downloads without decoding until the film has finished, then releases the wo
 });
 it('contains preparation errors until consumption and aborts an obsolete preload without an unhandled rejection', async () => {
   vi.stubGlobal('Worker', WorkerMock); vi.stubGlobal('window', { location: { href: 'https://game.test/' } });
-  const preload = new ApartmentPreload('/apartment.json'); WorkerMock.latest.onerror?.();
-  await expect(preload.take()).rejects.toThrow('échoué');
+  const preload = new ApartmentPreload('/apartment.json'); WorkerMock.latest.onmessage?.({ data: { error: 'Appartement incomplet' } } as MessageEvent);
+  await expect(preload.take()).rejects.toThrow('incomplet');
   const cancelled = new ApartmentPreload('/apartment.json'); cancelled.dispose();
   await expect(cancelled.take()).rejects.toMatchObject({ name: 'AbortError' });
+});
+
+it('loads a saved-game scene when the worker module fails, without decoding during the intro', async () => {
+  vi.stubGlobal('Worker', WorkerMock); vi.stubGlobal('window', { location: { href: 'https://game.test/' } });
+  const document = { object: { name: 'Saved apartment' }, geometries: [{ data: { attributes: { position: { type: 'Float32Array', itemSize: 3, array: [0, 0, 0, 1, 2, 3] } } } }] };
+  const fetch = vi.fn(async () => new Response(JSON.stringify(document)));
+  vi.stubGlobal('fetch', fetch);
+  const preload = new ApartmentPreload('/fallback-apartment.json'), worker = WorkerMock.latest;
+  worker.onerror?.();
+  expect(worker.terminate).toHaveBeenCalledOnce(); expect(fetch).not.toHaveBeenCalled();
+  const loaded = await preload.take();
+  expect(loaded.object).toEqual(document.object);
+  const geometry = loaded.geometries![0]!.data as { attributes: { position: { array: Float32Array } }; runtimeBounds: unknown };
+  expect(geometry.attributes.position.array).toBeInstanceOf(Float32Array);
+  expect(geometry.runtimeBounds).toEqual({ min: [0, 0, 0], max: [1, 2, 3] });
+  expect(fetch).toHaveBeenCalledOnce();
+});
+
+it('aborts a fallback download when a save load is cancelled', async () => {
+  vi.stubGlobal('Worker', WorkerMock); vi.stubGlobal('window', { location: { href: 'https://game.test/' } });
+  let downloadSignal: AbortSignal | undefined;
+  vi.stubGlobal('fetch', vi.fn((_url: string, options: RequestInit) => new Promise((_resolve, reject) => {
+    downloadSignal = options.signal!;
+    downloadSignal.addEventListener('abort', () => reject(downloadSignal!.reason), { once: true });
+  })));
+  const preload = new ApartmentPreload('/cancel-fallback.json'); WorkerMock.latest.onerror?.();
+  const abort = new AbortController(), pending = preload.take(abort.signal);
+  abort.abort();
+  await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  expect(downloadSignal?.aborted).toBe(true);
 });
 it('can hold downloaded bytes through a long hidden-tab pause, with a fresh deadline for decoding', async () => {
   vi.useFakeTimers();

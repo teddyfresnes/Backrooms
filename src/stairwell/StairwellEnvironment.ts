@@ -175,6 +175,8 @@ export const STAIRWELL_LIGHTING_PROFILES: Record<LightingMode, StairwellLighting
 export class StairwellEnvironment {
   readonly group = new THREE.Group();
   readonly structure = new THREE.Group();
+  /** The apartment's masonry reveal survives the replacement of the stair cage. */
+  readonly entrySurround = new THREE.Group();
   readonly exterior = new THREE.Group();
   readonly furnitureColliders: StaticCollider[] = [];
   readonly rainAudioOpenings: RainOpening[] = [];
@@ -252,7 +254,7 @@ export class StairwellEnvironment {
 
   private *buildSteps(): Generator<void> {
     this.buildLandingsAndStairs(); yield;
-    this.buildShell(); yield;
+    this.buildShell(); batchStaticMeshes(this.entrySurround); yield;
     this.buildRailings(); yield;
     this.buildFacadeGlazing(); yield;
     this.buildUtilities(); yield;
@@ -264,7 +266,8 @@ export class StairwellEnvironment {
     this.buildExteriorDoomer(); yield;
     this.exterior.name = 'persistent-exterior-weather';
     this.exterior.add(...this.group.children);
-    this.group.add(this.structure, this.exterior);
+    this.entrySurround.name = 'persistent-apartment-entry-surround';
+    this.group.add(this.structure, this.exterior, this.entrySurround);
     // Lights stay on the root even when the corridor replaces the structure.
     // Three's light counts are shader defines; toggling them recompiles every
     // affected apartment material at the power cut.
@@ -630,14 +633,15 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
       const baseY = floorY(level);
       const levelHeight = Math.min(STAIRWELL_FLOOR_HEIGHT, STAIRWELL_ROOF_Y - baseY);
       const prefix = `${side}-wall-shell-${level}`;
+      const parent = side === 'west' && level === STAIRWELL_LEVEL_COUNT - 1 ? this.entrySurround : this.group;
 
-      this.group.add(
+      parent.add(
         wallBox(`${prefix}-south`, [wall, levelHeight, southDepth], [x, baseY + levelHeight * 0.5, STAIRWELL_BOUNDS.minZ + southDepth * 0.5], this.materials.upperPlaster),
         wallBox(`${prefix}-north`, [wall, levelHeight, northDepth], [x, baseY + levelHeight * 0.5, openingMaxZ + northDepth * 0.5], this.materials.upperPlaster),
       );
 
       if (openingBottom > 0.001) {
-        this.group.add(wallBox(
+        parent.add(wallBox(
           `${prefix}-threshold-wall`,
           [wall, openingBottom, APARTMENT_ENTRY_DOOR.width],
           [x, baseY + openingBottom * 0.5, APARTMENT_ENTRY_DOOR.centerZ],
@@ -651,7 +655,7 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
       // front-sided material, so the wall no longer needs to be deleted as a
       // workaround for the blinking upper trim.
       if (headerHeight > 0.001) {
-        this.group.add(wallBox(
+        parent.add(wallBox(
           `${prefix}-header`,
           [wall, headerHeight, APARTMENT_ENTRY_DOOR.width],
           [x, baseY + openingTop + headerHeight * 0.5, APARTMENT_ENTRY_DOOR.centerZ],

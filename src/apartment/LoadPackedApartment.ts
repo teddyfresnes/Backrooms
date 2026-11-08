@@ -12,8 +12,9 @@ interface ApartmentParts {
 
 /** Download compressed bytes only. Keep the 349 MB JSON and geometry conversion
  * out of the photographic phase, including their memory/GC pressure. */
-export async function downloadPackedApartment(manifestUrl: string, suppliedManifest?: Response, onProgress?: (event: ApartmentLoadEvent) => void): Promise<Blob> {
-  const response = suppliedManifest ?? await fetch(manifestUrl);
+export async function downloadPackedApartment(manifestUrl: string, suppliedManifest?: Response, onProgress?: (event: ApartmentLoadEvent) => void, signal?: AbortSignal): Promise<Blob> {
+  signal?.throwIfAborted();
+  const response = suppliedManifest ?? await fetch(manifestUrl, { signal });
   if (!response.ok) throw new Error('Le modèle de l’appartement est indisponible.');
   const manifest = await response.json() as ApartmentParts;
   if (![1, 2].includes(manifest.version) || manifest.compression !== 'gzip' || !Array.isArray(manifest.parts)
@@ -31,6 +32,8 @@ export async function downloadPackedApartment(manifestUrl: string, suppliedManif
   notify();
   const base = manifestUrl.slice(0, manifestUrl.lastIndexOf('/') + 1);
   const abort = new AbortController();
+  const cancel = () => abort.abort(signal?.reason);
+  signal?.addEventListener('abort', cancel, { once: true });
   const parts: Blob[] = new Array(manifest.parts.length);
   let index = 0;
   try {
@@ -56,11 +59,12 @@ export async function downloadPackedApartment(manifestUrl: string, suppliedManif
     notify(true);
     return new Blob(parts, { type: manifest.version === 2 ? 'application/x-apartment-binary-gzip' : 'application/gzip' });
   }
-  finally { abort.abort(); }
+  finally { signal?.removeEventListener('abort', cancel); abort.abort(); }
 }
 
-export async function decodePackedApartment(packed: Blob): Promise<unknown> {
-  const response = new Response(packed.stream().pipeThrough(new DecompressionStream('gzip')));
+export async function decodePackedApartment(packed: Blob, signal?: AbortSignal): Promise<unknown> {
+  signal?.throwIfAborted();
+  const response = new Response(packed.stream().pipeThrough(new DecompressionStream('gzip'), { signal }));
   return packed.type === 'application/x-apartment-binary-gzip'
     ? decodeApartmentBinary(await response.arrayBuffer()) : await response.json() as unknown;
 }

@@ -200,6 +200,11 @@ export class ImportedApartmentDoorInteraction {
     return this.doorLocked;
   }
 
+  /** Scripted darkness hides this snap; it updates the real leaf and collider without a door sound. */
+  closeSilently(): void {
+    if (!this.broken) this.restoreState({ progress: 0, targetProgress: 0, locked: this.doorLocked });
+  }
+
   /** Closed, or close enough that nothing can slip through the remaining gap. */
   isSecured(): boolean {
     if (this.state === 'closed' || this.state === 'blocked-closing' || this.state === 'blocked-opening') return true;

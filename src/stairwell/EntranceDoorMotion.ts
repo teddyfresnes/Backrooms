@@ -41,7 +41,7 @@ export class EntranceDoorMotion {
     this.grip.position.copy(this.pivot.worldToLocal(contact)); this.pivot.add(this.grip);
     const leafBounds = new THREE.Box3();
     for (const { mesh } of this.originals) leafBounds.union(new THREE.Box3().setFromObject(mesh));
-    const closingContact = new THREE.Vector3(leafBounds.min.x + .10, bounds.min.y + 1.08, leafBounds.max.z + .018);
+    const closingContact = new THREE.Vector3(leafBounds.min.x + .10, bounds.min.y + 1.14, leafBounds.max.z + .018);
     this.closingGrip.name = 'entrance-door-closing-contact';
     this.closingGrip.position.copy(this.pivot.worldToLocal(closingContact)); this.pivot.add(this.closingGrip);
     this.batchParts(parts);

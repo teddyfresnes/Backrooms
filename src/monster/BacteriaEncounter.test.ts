@@ -243,6 +243,22 @@ describe('BacteriaEncounter', () => {
     expect(world.events).toContain('stairwell');
   });
 
+  it('restores the corridor checkpoint when the player leaves hiding during the television lure', () => {
+    const world = setup({ tvOn: true });
+    playToHiding(world);
+    world.until(() => world.events.includes('stairwell'), 40);
+    // The landing has returned, but the later closet checkpoint is not armed yet.
+    expect(world.encounter.requestHiddenExit()).toBe(true);
+    world.until(() => world.events.some(event => event.startsWith('death')), 5);
+    world.setRevealReady(false); world.step(4);
+    expect(world.events).toContain('retry:corridor');
+    expect(world.encounter.isHidden).toBe(false);
+    expect(world.player.position.x).toBeCloseTo(threshold.x + 1.2);
+    world.setRevealReady(true);
+    playToHiding(world);
+    world.until(() => world.events.filter(event => event === 'stairwell').length === 2, 40);
+  });
+
   it('hears a hold released too early, and restarts in the closet with the set in its arms', () => {
     const world = setup({ tvOn: true });
     playToHiding(world);

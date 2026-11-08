@@ -551,6 +551,32 @@ describe('PlayerController running contact', () => {
 });
 
 describe('PlayerController look state', () => {
+  it('briefly limits strike look across the yaw seam and discards rejected mouse motion', () => {
+    const physics = new FakePhysics({ x: 0, y: .865, z: 0 });
+    const { controller, pointerDocument } = createController(physics);
+    vi.spyOn(controller, 'isPointerCaptured', 'get').mockReturnValue(true);
+    controller.setLookQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(.2, Math.PI - .05, 0, 'YXZ')));
+    const start = controller.getContinuousAimYawRadians();
+    const move = (x: number, y = 0) => {
+      const event = new Event('mousemove'); Object.defineProperties(event, { movementX: { value: x }, movementY: { value: y } });
+      pointerDocument.dispatchEvent(event);
+    };
+    controller.limitStrikeLook(.22);
+    for (let i = 0; i < 20; i++) move(-1000, 1000);
+    const limited = controller.getContinuousAimYawRadians();
+    expect(limited - start).toBeGreaterThan(.1); expect(limited - start).toBeLessThan(.25);
+    const pitch = new THREE.Euler().setFromQuaternion(controller.getLookQuaternion(), 'YXZ').x;
+    expect(pitch).toBeGreaterThan(.02); expect(pitch).toBeLessThan(.2);
+    for (let i = 0; i < 30; i++) controller.renderUpdate(1 / 60, 1);
+    expect(controller.getContinuousAimYawRadians()).toBeCloseTo(limited);
+    move(-1000);
+    expect(controller.getContinuousAimYawRadians() - limited).toBeGreaterThan(.25);
+    controller.limitStrikeLook(.22); controller.limitStrikeLook(0);
+    const cleared = controller.getContinuousAimYawRadians(); move(-1000);
+    expect(controller.getContinuousAimYawRadians() - cleared).toBeGreaterThan(.25);
+    controller.dispose();
+  });
+
   it('round-trips the internal normalized look quaternion independently from camera roll', () => {
     const physics = new FakePhysics({ x: 0, y: 0.865, z: 0 });
     const { camera, controller } = createController(physics);

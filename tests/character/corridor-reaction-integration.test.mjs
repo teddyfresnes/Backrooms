@@ -8,12 +8,18 @@ const{CorridorStory,corridorLampTime}=await import('../../.character-test-dist/c
 const lab=await createLab({useWardrobe:true});lab.setInteractionPartner(null);after(()=>lab.dispose());
 const doorway=new THREE.Vector3(-30,0,-8),position=new THREE.Vector3(-9.9,.865,-8),camera=lab.host.renderCamera;
 function story(){const s=new CorridorStory();s.activate();for(let i=0;i<=202;i++)s.observe({x:-30+i*.1,y:.865,z:-8},doorway,true,Math.PI/2);assert.equal(s.state.triggered,true);return s;}
-function prepare(){lab.player.teleport(position);lab.player.setLookQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),-Math.PI/2));lab.getArrivalPOV(camera);}
+function prepare(){lab.player.teleport(position);lab.player.setLookQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),-Math.PI/2));lab.getArrivalPOV(camera);lab.setHeldItem('torch');}
 test('turns the selected dressed character root and head, frames the actual body, then blends to its eyes while lamps continue',()=>{
   prepare();const s=story(),reaction=new CorridorReaction(lab.scene,s,lab,lab.player,camera,doorway),original=lab.character;
   assert.ok(original.userData.wardrobeProfile);let startYaw,turnedYaw,headStart,headTurned,previous,maximumStep=0;
   let framed=0;for(let i=0;i<620;i++){
     const wasModal=s.modal;s.update(1/60,true);if(wasModal)reaction.update(false);
+    if(wasModal&&lab.computerPose){
+      const grip={position:new THREE.Vector3(),quaternion:new THREE.Quaternion()};
+      assert.ok(lab.getHeldItemFrame(grip),'the cinematic must expose the animated grip');
+      const wrist=lab.rightHandBone.getWorldPosition(new THREE.Vector3());
+      assert.ok(wrist.distanceTo(grip.position)<.15,`torch floating away from the hand at ${i}`);
+    }
     if(i===5){startYaw=lab.avatarAnchor.rotation.y;headStart=lab.headBone.getWorldQuaternion(new THREE.Quaternion());}
     if(i===210){turnedYaw=lab.avatarAnchor.rotation.y;headTurned=lab.headBone.getWorldQuaternion(new THREE.Quaternion());}
     if(i>60&&s.state.elapsed<corridorLampTime(s.firstLamp,s.firstLamp)){camera.updateMatrixWorld(true);for(const p of [lab.headBone.getWorldPosition(new THREE.Vector3()),lab.leftFootBone.getWorldPosition(new THREE.Vector3()),lab.rightFootBone.getWorldPosition(new THREE.Vector3())]){const ndc=p.project(camera);assert.ok(Math.abs(ndc.x)<1&&Math.abs(ndc.y)<1,`body outside frame ${i}: ${ndc.toArray()}`);framed++;}}

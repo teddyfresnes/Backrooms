@@ -12,7 +12,7 @@ import { collectApartmentPickables, type ApartmentPickable } from './ApartmentPi
 import { splitApartmentBooks } from './ApartmentBookGeometry';
 import { batchStaticMeshesAsync } from '../stairwell/AsyncStaticBatch';
 import type { StaticCollider } from '../world/types';
-import { floorY, midLandingY, STAIRWELL_BOUNDS, STAIRWELL_LEVEL_COUNT } from '../stairwell/layout';
+import { floorY, STAIRWELL_BOUNDS, STAIRWELL_LEVEL_COUNT } from '../stairwell/layout';
 import { APARTMENT_ENTRY_DOOR } from './layout';
 import { PLAYER_APARTMENT_DOOR_ID } from './DoorIdentity';
 
@@ -1248,25 +1248,6 @@ export class ImportedApartmentEnvironment {
         // Preserve the actual source hinge through the placement transform.
         neighborLeaf.userData.neighborHinge = this.entryDoor.pivot.getWorldPosition(new THREE.Vector3()).applyMatrix4(delta).toArray();
       }
-    }
-
-    // Also populate the blank wall side of the stairwell with apartment doors,
-    // so the hall no longer reads as having apartments only on the window side.
-    // These doors sit on the north wall, centered on each mid-landing.
-    for (let level = 0; level < STAIRWELL_LEVEL_COUNT - 1; level += 1) {
-      const targetCenter = new THREE.Vector3(
-        0,
-        midLandingY(level) + relativeCenterY,
-        STAIRWELL_BOUNDS.maxZ,
-      );
-      const delta = new THREE.Matrix4()
-        .makeTranslation(targetCenter.x, targetCenter.y, targetCenter.z)
-        .multiply(new THREE.Matrix4().makeRotationY(-Math.PI * 0.5))
-        .multiply(new THREE.Matrix4().makeTranslation(-sourceCenter.x, -sourceCenter.y, -sourceCenter.z));
-      const prefix = `north-neighbor-door-${level}`;
-
-      this.cloneAtWorldMatrix(entryFrame, delta.clone().multiply(sourceFrameWorld), `${prefix}-frame`);
-      this.cloneAtWorldMatrix(entryLeaf, delta.clone().multiply(sourceLeafWorld), `${prefix}-leaf`);
     }
 
     this.group.updateMatrixWorld(true);

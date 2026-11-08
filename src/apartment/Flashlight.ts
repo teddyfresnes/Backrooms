@@ -30,7 +30,7 @@ export class Flashlight {
     return !wall||wall.timeOfImpact>=hit.distance-.035;
   }
   /** `grip`, when the rig holds it, is the stable frame of the rubber grip (+Y toward the lens). */
-  update(camera:THREE.Camera,hand:THREE.Vector3|undefined,owned:boolean,equipped:boolean,on:boolean,delta:number,reduced:boolean,grip?:{position:THREE.Vector3;quaternion:THREE.Quaternion}):void {
+  update(camera:THREE.Camera,hand:THREE.Vector3|undefined,owned:boolean,equipped:boolean,on:boolean,delta:number,reduced:boolean,grip?:{position:THREE.Vector3;quaternion:THREE.Quaternion},aimFromGrip=false):void {
     this.model.visible=!owned||equipped;this.light.intensity=owned&&equipped&&on?32:0;
     if(!owned){this.model.position.copy(this.deskPosition);return;}
     if(!equipped)return;
@@ -42,7 +42,8 @@ export class Flashlight {
     this.light.position.set(0,.277,0).applyQuaternion(this.smoothed).add(this.model.position);
     // Aim from the real lens toward the view ray, compensating the equipped
     // hand offset rather than sending a parallel beam past the crosshair.
-    this.target.position.copy(camera.position).addScaledVector(this.direction,12);
+    if(grip&&aimFromGrip)this.target.position.copy(this.light.position).addScaledVector(new THREE.Vector3(0,1,0).applyQuaternion(this.smoothed),12);
+    else this.target.position.copy(camera.position).addScaledVector(this.direction,12);
     const beam=this.target.position.clone().sub(this.light.position).normalize();
     const obstruction=this.physics.world.castRay(new RAPIER.Ray(this.light.position,beam),28,true,undefined,undefined,undefined,undefined,this.physics.isEnvironmentCollider);
     // Keep the usable range; shortening distance to the nearest wall made the

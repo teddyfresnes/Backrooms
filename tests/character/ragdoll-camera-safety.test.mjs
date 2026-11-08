@@ -4,6 +4,7 @@ import { createLab, stepLab, THREE } from './support/headless-character.mjs';
 import { EnvironmentCameraGuard } from '../../.character-test-dist/character/EnvironmentCameraGuard.js';
 import { CharacterEnvironment } from '../../.character-test-dist/character/CharacterEnvironment.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
+import { RagdollSystem } from '../../.character-test-dist/physics/RagdollSystem.js';
 
 let lab;
 before(async () => { lab = await createLab(); lab.setInteractionPartner(null); });
@@ -13,6 +14,30 @@ const clear = (environment, camera, guard) => {
   assert.ok(environment.resolveSphereOverlap(p, guard.radius(camera)), 'no feasible camera sphere');
   assert.ok(p.distanceTo(camera.position) < .0002, `camera still penetrates: ${p.distanceTo(camera.position)}`);
 };
+
+test('a real fall in a dense streamed world retains fast contacts and reduces slow-contact solves', async () => {
+  const walls = Array.from({length:9000}, (_, i) => ({id:`dense-${i}`,kind:'wall',
+    center:{x:20+(i%100)*3,y:1.5,z:Math.floor(i/100)*3},halfExtents:{x:1,y:1.5,z:.1}}));
+  const physics = await lab.physics.constructor.create({seed:'DENSE-FALL',spawn:{x:0,y:2,z:0},colliders:[
+    {id:'floor',kind:'floor',center:{x:0,y:-.1,z:0},halfExtents:{x:15,y:.1,z:15}},...walls]});
+  physics.setPlayerColliderEnabled(false);
+  const root = new THREE.Group(), character = clone(lab.character);
+  root.scale.copy(lab.avatarAnchor.scale);root.position.y=1.5;root.add(character);
+  const mixer = new THREE.AnimationMixer(character);mixer.clipAction(lab.animations.get('idle').clip).play();mixer.update(0);root.updateMatrixWorld(true);
+  const ragdoll = RagdollSystem.create(physics,character,{velocity:new THREE.Vector3(1,-2,0),yawRateRadians:.3,activeResponseScale:1});
+  const step = physics.world.step.bind(physics.world), counts=[];
+  let count=0;physics.world.step=(...args)=>{count++;return step(...args);};
+  try {
+    const timestep=physics.world.timestep;
+    for(let i=0;i<360;i++){const before=count;ragdoll.fixedUpdate(1/60);if(count>before)counts.push(count-before);}
+    assert.equal(counts[0],5,'the hand-off lost its fine contact solve');
+    assert.ok(counts.includes(2),'calm floor contacts still solve the whole world five times');
+    assert.ok(count/counts.length<3.5,`too many full-world solves: ${count} / ${counts.length} active ticks`);
+    assert.ok(ragdoll.isSettled,'the optimisation prevents rest');
+    assert.equal(physics.world.timestep,timestep,'ragdoll stepping changed the shared-world timestep');
+    const asleep=count;ragdoll.fixedUpdate(1/60);assert.equal(count,asleep,'a fully sleeping world was stepped');
+  } finally { ragdoll.dispose();physics.dispose(); }
+});
 
 test('guards the complete near plane against floors, walls, a ceiling, slopes, steps and a moving door', () => {
   const environment = new CharacterEnvironment(lab.physics);

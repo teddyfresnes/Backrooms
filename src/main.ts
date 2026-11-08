@@ -186,7 +186,7 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
       onRequestMainMenu: () => queueMicrotask(() => void startInitialExperience()),
       onRequestLoadGame: loadFromHistory,
       // Finish the current input/frame stack before disposing the stairwell
-      // runtime that detected the E interaction.
+      // runtime that completed the scripted fall.
       // Out of a fall that ends on black: the loading screen fades in from it.
       onEnterBackrooms: () => queueMicrotask(() => void startBackrooms(
         { kind: 'new' },

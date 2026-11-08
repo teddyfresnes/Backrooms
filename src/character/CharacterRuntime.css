@@ -1,6 +1,15 @@
 .character-runtime { position:fixed; inset:0; pointer-events:none; z-index:8; color:#edf2f6; }
 .character-runtime[hidden] { display:none; }
 
+.character-runtime__arrival-eyes { position: absolute; inset: 0; z-index: 6; overflow: hidden; --eye-open: 0; background: rgba(0,0,0,calc(1 - var(--eye-open))); }
+.character-runtime__arrival-eyes[hidden] { display: none; }
+.character-runtime__arrival-eyes::before, .character-runtime__arrival-eyes::after {
+  content: ''; position: absolute; left: -10%; width: 120%; height: 65%; background: #000;
+  transform: translateY(calc(var(--eye-open) * -110%)); border-radius: 0 0 50% 50%;
+}
+.character-runtime__arrival-eyes::before { top: -10%; }
+.character-runtime__arrival-eyes::after { bottom: -10%; border-radius: 50% 50% 0 0; transform: translateY(calc(var(--eye-open) * 110%)); }
+
 .character-runtime { --injury-gray: 0; --injury-saturation: 1; --injury-vignette: 0; --injury-contrast: 1; --injury-brightness: 1; --death-veil: 0; position: fixed; inset: 0; background: transparent; color: #edf2f6; }
 
 

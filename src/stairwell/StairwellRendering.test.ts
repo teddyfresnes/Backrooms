@@ -90,10 +90,13 @@ describe('stairwell surfaces and complete procedural scene budget', () => {
 
   it('replaces only indoor architecture at the outage, keeps every shader light slot and continues the same exterior rain',()=>{
     const env=create(),lights:THREE.Light[]=[];env.group.traverseVisible(o=>{if(o instanceof THREE.Light)lights.push(o);});
+    const surround=new THREE.Box3().setFromObject(env.entrySurround,true);
+    expect(env.entrySurround.parent).toBe(env.group);expect(surround.isEmpty()).toBe(false);
     const rain=env.group.getObjectByName('doomer-rain-lines') as THREE.LineSegments,positions=rain.geometry.getAttribute('position');
     env.update(1);const before=positions.array.slice();env.setPowerAvailable(false);env.showPostOutage();env.update(1.1);
     const after:THREE.Light[]=[];env.group.traverseVisible(o=>{if(o instanceof THREE.Light)after.push(o);});
     expect(after.map(l=>l.uuid)).toEqual(lights.map(l=>l.uuid));expect(env.structure.visible).toBe(false);expect(env.exterior.visible).toBe(true);
+    expect(env.entrySurround.visible).toBe(true);expect(new THREE.Box3().setFromObject(env.entrySurround,true)).toEqual(surround);
     expect(positions.array).not.toEqual(before);expect(rain.parent).toBe(env.exterior);expect(after.filter(l=>l instanceof THREE.PointLight).every(l=>l.intensity===0)).toBe(true);
   });
 

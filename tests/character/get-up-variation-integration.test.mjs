@@ -151,10 +151,11 @@ for (const side of ['back', 'belly']) for (const id of ['floor', 'floor-opposite
     try {
       lab.startGetUp(); assert.ok(lab.recovery); assert.equal(lab.recovery.action.getClip(), choices.find(v => v.id === id).clip);
       assert.equal(lab.recovery.duration, sideClip.duration);
-      let finalYaw, finalHip, finalHead;
+      let finalYaw, finalHip, finalHead, finalView;
       while (lab.recovery) {
         finalYaw = lab.recovery.root.rotation.y; finalHip = lab.recovery.getPelvisPosition().y; finalHead = lab.recovery.getHeadPose().position.y;
         lab.player.setLookQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, finalYaw + 2.4 - Math.PI, 0, 'YXZ')));
+        finalView = new THREE.Euler().setFromQuaternion(lab.firstPersonCamera.quaternion, 'YXZ').y;
         stepLab(lab);
       }
       assert.ok(Math.abs(angle(lab.bodyYaw - finalYaw)) < 241 / 60 * Math.PI / 180);
@@ -166,6 +167,8 @@ for (const side of ['back', 'belly']) for (const id of ['floor', 'floor-opposite
         assert.ok(Math.abs(angle(lab.firstPersonAvatarAnchor.rotation.y - lab.bodyYaw)) < 1e-7);
       }
       assert.equal(lab.player.isIncapacitated, false); assert.equal(lab.physics.playerCollider.isEnabled(), true);
+      const standingView = new THREE.Euler().setFromQuaternion(lab.host.renderCamera.quaternion, 'YXZ').y;
+      assert.ok(Math.abs(angle(standingView - finalView)) < .08, 'the settled get-up restored an old view heading');
     } finally { lab.playerGetUpVariation.choose = pick; lab.getUpVariants.set(otherSide, originalPool); }
   });
 }

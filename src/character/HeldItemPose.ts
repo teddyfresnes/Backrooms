@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { solveCombatTwoBone } from './CombatRig';
+import { HandPose, TORCH_REFERENCE_HAND_SPAN } from './HandPose';
 
 export type HeldArmChain = readonly [THREE.Bone | undefined, THREE.Bone | undefined, THREE.Bone | undefined];
 export type HeldItemKind = 'compass' | 'torch';
@@ -9,6 +10,9 @@ export interface PalmFrame { position: THREE.Vector3; quaternion: THREE.Quaterni
 
 /** How the right hand meets the object: palm centre, out-of-palm normal, finger direction, curl. */
 export interface HandGrip {
+  kind?: HeldItemKind;
+  handSpan?: number;
+  physical?: boolean;
   readonly palm: THREE.Vector3;
   readonly normal: THREE.Vector3;
   readonly fingers: THREE.Vector3;
@@ -48,6 +52,7 @@ const findMarkers = (hand: THREE.Bone): HandMarkers => {
  */
 export class HeldItemPose {
   private weight = 0;
+  private handPose?: HandPose;
   private readonly markers = new WeakMap<THREE.Bone, HandMarkers>();
   private readonly wrist = new THREE.Vector3();
   private readonly palmNow = new THREE.Vector3();
@@ -72,6 +77,26 @@ export class HeldItemPose {
 
   get active(): boolean { return this.weight > 0.001; }
   get blend(): number { return this.weight; }
+  useHandPose(pose: HandPose): void { this.handPose = pose; }
+
+  /** A scripted shot starts with the object already gripped. */
+  snap(holding: boolean): void { this.weight = holding ? 1 : 0; }
+
+  getPalmPosition(hand: THREE.Bone, output: THREE.Vector3): boolean {
+    let markers = this.markers.get(hand);
+    if (!markers) { markers = findMarkers(hand); this.markers.set(hand, markers); }
+    if (!markers.middle) return false;
+    hand.updateWorldMatrix(true, true);
+    this.palmCentre(hand, markers, output);
+    return true;
+  }
+
+  getHandSpan(hand: THREE.Bone | undefined): number {
+    if (!hand) return TORCH_REFERENCE_HAND_SPAN;
+    let markers = this.markers.get(hand);
+    if (!markers) { markers = findMarkers(hand); this.markers.set(hand, markers); }
+    return markers.middle ? hand.getWorldPosition(this.a).distanceTo(markers.middle.getWorldPosition(this.b)) : TORCH_REFERENCE_HAND_SPAN;
+  }
 
   /** Eases the grip in and out; returns the current blend. */
   advance(holding: boolean, delta: number): number {
@@ -110,6 +135,15 @@ export class HeldItemPose {
       hand.quaternion.copy(this.parent.invert().multiply(this.handWorld)).normalize();
       hand.updateWorldMatrix(false, true);
       this.palmBasis(hand);
+    }
+    if (grip.kind === 'torch') {
+      if (!this.handPose) {
+        let root: THREE.Object3D = hand;
+        while (root.parent && !(root.parent as THREE.Scene).isScene) root = root.parent;
+        this.handPose = new HandPose(root);
+      }
+      this.handPose.gripTorch(hand, grip.handSpan ?? this.getHandSpan(hand), this.wantedFingers, grip.normal, this.weight, grip.physical);
+      return;
     }
     if (grip.curl <= 0) return;
     // Close the fingers toward the palm, joint by joint, about the knuckle axis.
@@ -175,21 +209,32 @@ export function heldItemFrame(kind: HeldItemKind, view: THREE.Matrix4, aim: THRE
 }
 
 /** The hand meeting the object's frame (see heldItemFrame), in world space. */
-export function gripForItem(kind: HeldItemKind, frame: PalmFrame, right: THREE.Vector3, up: THREE.Vector3, grip: { palm: THREE.Vector3; normal: THREE.Vector3; fingers: THREE.Vector3; pole: THREE.Vector3 }): number {
+export function gripForItem(
+  kind: HeldItemKind, frame: PalmFrame, right: THREE.Vector3, up: THREE.Vector3,
+  grip: Omit<HandGrip, 'curl'>, handSpan = TORCH_REFERENCE_HAND_SPAN, physical = false,
+): number {
+  grip.kind = kind;
+  grip.handSpan = handSpan;
+  grip.physical = physical;
   grip.pole.copy(right).multiplyScalar(0.55).addScaledVector(up, -1);
   if (kind === 'compass') {
     grip.normal.set(0, 1, 0).applyQuaternion(frame.quaternion);
     const far = new THREE.Vector3(0, 0, -1).applyQuaternion(frame.quaternion);
     grip.fingers.copy(far).multiplyScalar(0.85).addScaledVector(right, -0.5);
-    // The case's bottom rests on the palm.
-    grip.palm.copy(frame.position).addScaledVector(grip.normal, -0.02);
-    return 0.12;
+    // The marker is inside the hand, below the skin supporting the brass case.
+    grip.palm.copy(frame.position).addScaledVector(grip.normal, -0.047);
+    return 0.08;
   }
-  // Torch: palm against its right side around the rubber grip, fingers under it, thumb along the barrel.
+  // The wrist stays below the grip; pointing the knuckles down instead makes
+  // the forearm reach over the hand and turns the whole wrist upside down.
   const axis = new THREE.Vector3(0, 1, 0).applyQuaternion(frame.quaternion);
   const side = right.clone().addScaledVector(axis, -right.dot(axis)).normalize();
   grip.normal.copy(side).negate();
-  grip.fingers.copy(up).negate().addScaledVector(axis, -up.clone().negate().dot(axis)).normalize();
-  grip.palm.copy(frame.position).addScaledVector(side, 0.03);
-  return 1;
+  grip.fingers.copy(up).addScaledVector(axis, -up.dot(axis));
+  // Body right and world up can cease to be perpendicular after projecting
+  // them onto a steep aiming plane. Use the same basis for palm and fingers.
+  grip.fingers.addScaledVector(side, -grip.fingers.dot(side)).normalize();
+  const scale = handSpan / TORCH_REFERENCE_HAND_SPAN;
+  grip.palm.copy(frame.position).addScaledVector(side, .0193 + (physical ? .024 : .0197) * scale).addScaledVector(grip.fingers, -.018 * scale);
+  return 0;
 }

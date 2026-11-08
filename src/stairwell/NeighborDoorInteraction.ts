@@ -10,6 +10,11 @@ import { isPlayerApartmentDoor } from '../apartment/DoorIdentity';
 import { PLAYER_APARTMENT_DOOR_ID } from '../apartment/DoorIdentity';
 export { NEIGHBOR_LINES, neighborReply } from './NeighborProfiles';
 
+const isDisplayed = (object: THREE.Object3D): boolean => {
+  for (let current: THREE.Object3D | null = object; current; current = current.parent) if (!current.visible) return false;
+  return true;
+};
+
 interface DoorState {
   id:string; bounds:THREE.Box3; center:THREE.Vector3; voice?:CharacterVoiceId;
   soundCooldown:number; responseCooldown:number; annoyance:number; quiet:number;
@@ -80,7 +85,7 @@ export class NeighborDoorInteraction {
     let closest=2.3,target:{id:string;bell:boolean;own?:boolean}|undefined;
     // The real leaf is an occluder even though opening it is owned by the door
     // controller. Never let a ray through it select a neighbour across the hall.
-    if(this.ownLeaf){
+    if(this.ownLeaf&&isDisplayed(this.ownLeaf)){
       this.ownLeaf.updateWorldMatrix(true,true);
       const ownBounds=new THREE.Box3().setFromObject(this.ownLeaf);
       const hit=this.ray.intersectBox(ownBounds,this.hit);
@@ -92,6 +97,7 @@ export class NeighborDoorInteraction {
       if(distance<Math.min(2.1,closest+.04)){closest=distance;target={id:bell.id,bell:true,own:bell.own||isPlayerApartmentDoor(bell.id)};}
     }
     for(const door of this.doors){
+      if(!isDisplayed(door.leaf))continue;
       if(Math.abs(this.eye.y-door.center.y)>1.5||this.eye.distanceToSquared(door.center)>9)continue;
       const hit=this.ray.intersectBox(door.bounds,this.hit),distance=hit?.distanceTo(this.eye)??Infinity;
       if(distance>.08&&distance<closest){closest=distance;target={id:door.id,bell:false};}

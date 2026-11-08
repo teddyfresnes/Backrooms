@@ -50,7 +50,7 @@ blocage.
 | UI/audio/styles | test disponible, sinon build | contrôle navigateur |
 | Historique de sauvegarde | `SaveHistory.test.ts` | accueil sans/avec save + rechargement des deux runtimes |
 | Escalier/appartement | tests `src/stairwell` et `src/apartment` | `PhysicsWorld.test.ts` + contrôle visuel |
-| Porte du hall / route Backrooms | `HallExitInteraction.test.ts`, `ExperienceRouting.test.ts` | descente au RDC + interaction E |
+| Fuite / route Backrooms | `BacteriaEncounter.test.ts`, `ExperienceRouting.test.ts` | aucune entrée directe au RDC ; chute après poursuite |
 
 `npm run validate` inclut les essais du personnage sur les véritables FBX,
 avec Three.js, Rapier et un DOM hors écran. Seule la surface WebGL est absente ;
@@ -71,7 +71,7 @@ et vérifier que **Continuer** ouvre un historique vide.
 Lancer une partie, déplacer/orienter le joueur, ouvrir la porte et utiliser
 **Sauvegarder** dans le menu de pause : la nouvelle ligne doit restaurer pose,
 vue et porte. Masquer la page ou ouvrir la pause ne doit créer aucune autosave.
-Franchir ensuite la porte du hall : une seule autosave **Niveau 0** doit apparaître
+Après la poursuite et la chute : une seule autosave **Niveau 0** doit apparaître
 après le chargement. Corrompre une entrée pour confirmer qu’elle est ignorée sans
 erreur console ni requête asset 404.
 

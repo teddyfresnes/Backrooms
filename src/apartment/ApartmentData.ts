@@ -5,18 +5,21 @@ export interface ApartmentDocument extends DataRecord { geometries?: DataRecord[
 
 /** Download only; the returned decoder is explicitly gated by the film's end. */
 export async function downloadApartmentDocument(url: string, onProgress?: (event: ApartmentLoadEvent) => void,
-  cachedBytes?: Blob, onDownloaded?: (bytes: Blob) => void): Promise<() => Promise<ApartmentDocument>> {
+  cachedBytes?: Blob, onDownloaded?: (bytes: Blob) => void, signal?: AbortSignal): Promise<() => Promise<ApartmentDocument>> {
+  signal?.throwIfAborted();
   const packed = url.split(/[?#]/,1)[0]!.endsWith('.parts.json');
   let bytes = cachedBytes;
   if (!bytes) {
-    const response = await fetch(url, { priority: 'low' });
+    const response = await fetch(url, { priority: 'low', signal });
     if (!response.ok) throw new Error('Le modèle de l’appartement est indisponible.');
-    bytes = packed ? await downloadPackedApartment(url, response, onProgress) : await response.blob();
+    bytes = packed ? await downloadPackedApartment(url, response, onProgress, signal) : await response.blob();
   } else onProgress?.({ phase: 'network', progress: 1, durationMs: 0, receivedBytes: bytes.size, totalBytes: bytes.size });
   onDownloaded?.(bytes);
   return async () => {
+    signal?.throwIfAborted();
     const start = performance.now(); onProgress?.({ phase: 'decode', progress: 0 });
-    const data = (packed ? await decodePackedApartment(bytes!) : await new Response(bytes).json()) as ApartmentDocument;
+    const data = (packed ? await decodePackedApartment(bytes!, signal) : await new Response(bytes).json()) as ApartmentDocument;
+    signal?.throwIfAborted();
     onProgress?.({ phase: 'decode', progress: 1, durationMs: performance.now() - start });
     return data;
   };

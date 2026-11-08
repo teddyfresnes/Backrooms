@@ -16,7 +16,7 @@ src/main.ts
       ├─ PhysicsWorld (plan statique + trimesh de l’appartement)
       ├─ PlayerController + porte, verrou, interrupteur et stores interactifs
       ├─ SaveHistory (niveau, pose, porte/verrou, lumière, stores et temps de jeu)
-      └─ HallExitInteraction -- E sur la porte du RDC ─┐
+      └─ BacteriaEncounter -- chute après la fuite ───┐
                                                        ↓
   └─ import dynamique de Game (labyrinthe procédural précédent)
       └─ SaveHistory (seed, chunk, pose et temps de jeu)
@@ -40,8 +40,8 @@ hall neuf. Les deux runtimes utilisent le même `ExperienceUI`, toujours présen
 comme le menu Backrooms. La scène russe
 reste finie et statique : ne pas la faire passer par `WorldStream`, dont les
 coordonnées de chunks et d’étages appartiennent au monde procédural. `src/main.ts`
-détruit ce runtime avant d’instancier `Game` lorsque la porte-portail du hall est
-activée.
+détruit ce runtime avant d’instancier `Game` après la chute du scénario de fuite.
+La porte du RDC n’est jamais un portail interactif au début de la partie.
 
 Au premier chargement de la page, `OpeningIntro` attend le fond Level 0, les
 polices et le décodage audio au-dessus de `#app`. Le clic de lancement débloque
@@ -75,8 +75,10 @@ palier, un bref plan regarde la créature puis l'escalier ; dans la cage elle
 suit en élastique (`followSpeed`, `ESCAPE_FOLLOW_GAP`), dehors en poursuite
 directe ; la chute se déclenche à 14 m de la porte dans toute direction, bien
 avant les limites invisibles (±40 m). Arrivé dans les Backrooms par la chute
-(`arrivedByFall`), aucun PNJ n'apparaît et le joueur est au sol
-(`collapseOnArrival`, E pour se relever). Puis fuite dans la cage restaurée (`restoreStairwell`) et par la porte du
+(`arrivedByFall`), aucun PNJ n'apparaît. `collapseOnArrival` prépare une vraie
+pose couchée et la caméra au sol avant la première image ; les yeux s'ouvrent
+pendant 3,6 s de temps joué, puis l'invite E autorise le relevé habituel.
+Puis fuite dans la cage restaurée (`restoreStairwell`) et par la porte du
 hall : la porte entière disparaît (objet masqué, `HALL_DOOR_COLLIDER_ID` et
 `HALL_DOOR_LEFT_COLLIDER_ID` désactivés). `createEscapeRunColliders` monte une
 bande de rue invisible ; `EscapeStreet` dessine un bas-côté de 180 m (cartes
@@ -90,7 +92,8 @@ vent de chute, teinte jaune dans les derniers instants, fondu au noir
 TV éteinte : le placard est arraché. Les timings sont couverts par
 `BacteriaLayout.test.ts` et la machine à états par `BacteriaEncounter.test.ts`.
 Aucune sauvegarde pendant la rencontre ; une mort avant la cachette ramène à
-l'entrée du couloir, après elle au placard. `bacteriaSurvived` (anciennes
+l'entrée du couloir (décor et collisions remontés ensemble, même si la cage était
+déjà revenue pendant le leurre), après elle au placard. `bacteriaSurvived` (anciennes
 sauvegardes) rouvre directement la porte du hall.
 
 Dans le garde-robe, la géométrie et les poses inverses du squelette restent dans

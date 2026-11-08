@@ -26,7 +26,7 @@ export interface CorridorProgress {
   bacteriaSurvived?: boolean;
   /** The breakers were thrown back on, in vain (after the lamp). */
   fuseTried?: boolean;
-  /** The knocks at the door are over (or were skipped, the door being open). */
+  /** The knocks at the closed entrance are over. */
   knockDone?: boolean;
 }
 export const freshCorridor = (): CorridorProgress => ({version:1,active:false,distance:0,triggered:false,elapsed:0,returned:false,apartmentRelit:false,entryConsumed:false});

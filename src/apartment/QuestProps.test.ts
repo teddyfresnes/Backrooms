@@ -84,8 +84,14 @@ it('re-arms every breaker one after another, then trips them all back once', () 
   box.updatePrompt(eye, look, true);
   expect(ui.setInteraction).toHaveBeenLastCalledWith('Réarmer les disjoncteurs');
   expect(box.interact(eye, look, true)).toBe(true);
+  expect(box.locksMovement).toBe(true);
   let tripped = 0;
-  for (let i = 0; i < 400; i++) if (box.update(1 / 60) === 'tripped') tripped++;
+  for (let i = 0; i < 400; i++) {
+    if (box.update(1 / 60) === 'tripped') tripped++;
+    if (flip.mock.calls.length === 20) expect(box.locksMovement).toBe(false);
+    else expect(box.locksMovement).toBe(true);
+    if (flip.mock.calls.length === 20 && !tripped) expect(box.isBusy).toBe(true);
+  }
   expect(tripped).toBe(1); expect(trip).toHaveBeenCalledOnce(); expect(flip).toHaveBeenCalledTimes(20);
   expect(box.collider.halfExtents.x).toBeGreaterThan(0.02);
   box.dispose();

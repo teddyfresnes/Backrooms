@@ -78,12 +78,20 @@ it('blocks movement keys, gives skip a short safe POV transition, and disposes w
 
 it('keeps the pushing hand on the real handle, uses an opaque face close-up, and cuts to POV behind full occlusion', async () => {
   const s = await fixture(), camera = s.pov.clone();
-  const hand = s.avatar.getObjectByName('mixamorigRightHandIndex2')!;
+  const hand = s.avatar.getObjectByName('mixamorigRightHand')!;
+  const point = (suffix: string) => s.avatar.getObjectByName(`mixamorigRightHand${suffix}`)!.getWorldPosition(new THREE.Vector3());
   const grip = s.scene.getObjectByName('entrance-door-hand-contact')!;
+  const pivot = s.scene.getObjectByName('entrance-right-leaf-hinge')!;
   for (const time of [1.9, 2.1, 2.4, 2.65, 2.8]) {
     cinematic.sample(7.5 + time, camera);
-    const distance = hand.getWorldPosition(new THREE.Vector3()).distanceTo(grip.getWorldPosition(new THREE.Vector3()));
-    expect(distance, `hand contact at ${time}s`).toBeLessThan(.08);
+    const wrist = hand.getWorldPosition(new THREE.Vector3()), middle = point('Middle1');
+    const fingers = middle.clone().sub(wrist).normalize();
+    const normal = new THREE.Vector3().crossVectors(point('Index1').sub(point('Pinky1')), fingers).normalize();
+    const facing = new THREE.Vector3(0, 0, 1).applyQuaternion(pivot.getWorldQuaternion(new THREE.Quaternion()));
+    const distance = wrist.lerp(middle, .62).distanceTo(grip.getWorldPosition(new THREE.Vector3()));
+    expect(distance, `palm contact at ${time}s`).toBeLessThan(.035);
+    expect(normal.dot(facing), `the back of the hand pushes the door at ${time}s`).toBeGreaterThan(.95);
+    expect(fingers.y).toBeGreaterThan(.9);
   }
   cinematic.sample(6, camera);
   const head = s.avatar.getObjectByName('mixamorigHead')!.getWorldPosition(new THREE.Vector3());
@@ -153,9 +161,11 @@ it('closes with the left-hand gesture on screen and keeps the body outside the s
     expect(obb.intersectsSphere(body), `body intersects door at ${time}s`).toBe(false);
   }
   cinematic.sample(7.5 + 5.15, camera);
-  const hand = s.avatar.getObjectByName('mixamorigLeftHandIndex3')!.getWorldPosition(new THREE.Vector3());
+  const wrist = s.avatar.getObjectByName('mixamorigLeftHand')!.getWorldPosition(new THREE.Vector3());
+  const middle = s.avatar.getObjectByName('mixamorigLeftHandMiddle1')!.getWorldPosition(new THREE.Vector3());
+  const hand = wrist.lerp(middle, .62);
   const contact = s.scene.getObjectByName('entrance-door-closing-contact')!.getWorldPosition(new THREE.Vector3());
-  expect(hand.distanceTo(contact)).toBeLessThan(.10);
+  expect(hand.distanceTo(contact)).toBeLessThan(.025);
   expect(camera.position.z).toBeGreaterThan(cinematic.root.position.z); // door remains behind the actor in view
   cinematic.sample(7.5 + 5.9, camera); expect(pivot.rotation.y).toBe(0);
   expect(cinematic.finalStandingPosition.z).toBeGreaterThan(-4.8);

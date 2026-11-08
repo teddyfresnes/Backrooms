@@ -38,7 +38,7 @@ function createHaloTexture(size=64):THREE.DataTexture{
 /** Every tube holds steady once lit, like the generated levels. */
 const BAD_TUBES = new Set<number>();
 
-export interface CorridorDoorway { closedBox:THREE.Box3;frameBox:THREE.Box3;outward:THREE.Vector3 }
+export interface CorridorDoorway { closedBox:THREE.Box3;frameBox:THREE.Box3;outward:THREE.Vector3;surroundBox?:THREE.Box3 }
 
 /**
  * The post-outage hallway behind the apartment door. Surfaces reuse the Level 0
@@ -83,7 +83,8 @@ export class LongCorridor {
     const localBox=(box:THREE.Box3)=>{
       const b=new THREE.Box3();for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z])b.expandByPoint(this.group.worldToLocal(new THREE.Vector3(x,y,z)));return b;
     };
-    const leaf=localBox(door.closedBox),frame=localBox(door.frameBox),entry=frame.max.x-.008;
+    const leaf=localBox(door.closedBox),frame=localBox(door.frameBox);
+    const entry=Math.max(frame.max.x,door.surroundBox?localBox(door.surroundBox).max.x:frame.max.x)+.006;
     // The reveal starts on the exterior of the imported frame, clear of the
     // apartment's switch, bolt and hardware. Its aperture overlaps the frame.
     const openingMin=leaf.min.z-.012,openingMax=leaf.max.z+.012,openingTop=frame.max.y-.025;
@@ -92,7 +93,9 @@ export class LongCorridor {
     const collider=(id:string,c:THREE.Vector3,size:THREE.Vector3,kind:StaticCollider['kind'])=>{const center=c.applyMatrix4(this.group.matrixWorld),q=this.group.quaternion;this.colliders.push({id,center:{x:center.x,y:center.y,z:center.z},halfExtents:{x:size.x/2,y:size.y/2,z:size.z/2},rotation:{x:q.x,y:q.y,z:q.z,w:q.w},kind});};
     const panelGeoForVista=createFluorescentPanelGeometry();this.geometries.add(panelGeoForVista);
     const W=CORRIDOR_WIDTH,L=CORRIDOR_LENGTH,H=CORRIDOR_HEIGHT,bounds={minX:entry,maxX:L,minZ:-W/2,maxZ:W/2};
-    const floorRects=[bounds,{minX:frame.min.x-.09,maxX:entry,minZ:openingMin,maxZ:openingMax}];
+    // The imported sill and retained masonry own the threshold. Rendering
+    // carpet over that same support produced two coplanar surfaces blinking.
+    const floorRects=[bounds];
     const ceilingRects=[bounds];
     for(const [index,alcove] of CORRIDOR_ALCOVES.entries()){
       const r={minX:alcove.at-ALCOVE_WIDTH/2,maxX:alcove.at+ALCOVE_WIDTH/2,minZ:alcove.side>0?W/2:-W/2-ALCOVE_DEPTH,maxZ:alcove.side>0?W/2+ALCOVE_DEPTH:-W/2};

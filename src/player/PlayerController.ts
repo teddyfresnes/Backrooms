@@ -163,6 +163,9 @@ export class PlayerController {
   private downedLookYawCenter = 0;
   private downedLookPitchCenter = 0;
   private combatGuardLookConstraint = false;
+  private strikeLookSeconds = 0;
+  private strikeLookYaw = 0;
+  private strikeLookPitch = 0;
   private readonly combatDriveDirection = new THREE.Vector3();
   private readonly combatDriveTargetDirection = new THREE.Vector3();
   private readonly combatDriveVelocity = new THREE.Vector3();
@@ -757,6 +760,14 @@ export class PlayerController {
     this.lookRoll = 0;
     this.lookLift = 0;
     this.turnPitchKick = 0;
+  }
+
+  /** A short commitment around a strike. Rejected mouse motion is discarded,
+   * so releasing this cone never applies a buffered half-turn. */
+  limitStrikeLook(seconds: number): void {
+    this.strikeLookSeconds = Math.max(0, seconds);
+    this.strikeLookYaw = this.continuousAimYaw;
+    this.strikeLookPitch = new THREE.Euler().setFromQuaternion(this.lookCamera.quaternion, 'YXZ').x;
   }
 
   setLookQuaternion(quaternion: Readonly<QuaternionData>): boolean {
@@ -1773,6 +1784,7 @@ export class PlayerController {
 
   renderUpdate(delta: number, interpolationAlpha: number): void {
     const frameDelta = THREE.MathUtils.clamp(delta, 0, 0.05);
+    this.strikeLookSeconds = Math.max(0, this.strikeLookSeconds - frameDelta);
     const alpha = THREE.MathUtils.clamp(interpolationAlpha, 0, 1);
     this.cameraClock += frameDelta;
     const centerOffset = this.physics.crouchCenterOffset;
@@ -2080,11 +2092,22 @@ export class PlayerController {
     rawHorizontal = THREE.MathUtils.clamp(rawHorizontal, -140, 140);
     rawVertical = THREE.MathUtils.clamp(rawVertical, -140, 140);
     this.lookEuler.setFromQuaternion(this.lookCamera.quaternion, 'YXZ');
+    const previousYaw = this.continuousAimYaw, previousPitch = this.lookEuler.x, previousWrappedYaw = this.lookEuler.y;
     this.lookEuler.y -= rawHorizontal * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed;
     this.lookEuler.x = THREE.MathUtils.clamp(
       this.lookEuler.x - rawVertical * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed,
       Math.PI / 2 - this.controls.maxPolarAngle, Math.PI / 2 - this.controls.minPolarAngle,
     );
+    if (this.strikeLookSeconds > 0) {
+      const wantedYaw = this.continuousAimYaw - rawHorizontal * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed;
+      const yaw = THREE.MathUtils.clamp(wantedYaw, this.strikeLookYaw - .22, this.strikeLookYaw + .22);
+      const pitch = THREE.MathUtils.clamp(this.lookEuler.x, this.strikeLookPitch - .16, this.strikeLookPitch + .16);
+      const scale = POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed;
+      rawHorizontal = scale > 0 ? (previousYaw - yaw) / scale : 0;
+      rawVertical = scale > 0 ? (previousPitch - pitch) / scale : 0;
+      this.lookEuler.y = previousWrappedYaw + yaw - previousYaw;
+      this.lookEuler.x = pitch;
+    }
     this.lookCamera.quaternion.setFromEuler(this.lookEuler);
     if (rawHorizontal !== 0 || rawVertical !== 0) this.lookActivitySerial += 1;
     const horizontal = THREE.MathUtils.clamp(rawHorizontal, -140, 140);

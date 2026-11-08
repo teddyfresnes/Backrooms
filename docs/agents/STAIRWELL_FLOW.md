@@ -34,13 +34,18 @@ pendant les photos. Le routeur prépare la scène après le film. Passer annule 
 Un token de transition ignore les anciens callbacks, et un lancement déjà engagé
 ne crée pas un second runtime. Une remise en jeu attend aussi un onglet visible.
 Les tableaux sont transférés à `LoadApartmentScene` ; toute annulation termine le worker.
+Un échec de démarrage ou de transfert du worker reprend la lecture du même pack
+après `take()`, sur le fil principal, jamais pendant les photos. Cette reprise
+reste annulable et conserve l'erreur du worker si la lecture échoue aussi.
 `NewGameRouting` et `apartment.worker` vérifient ces deux phases, y compris Passer
 avant la fin du téléchargement et une transition annulée pendant les photos.
 Après le warmup, `ArrivalCinematic` anime un clone du personnage choisi avec les
 deux clips fournis et le vrai vantail de porte. Les corrections de tête et de bras sont restaurées avant chaque échantillon du
 mixer : un temps identique ne doit jamais accumuler de rotations. La main droite
-suit position et orientation de la poignée pendant la poussée ; la gauche suit
-le bord intérieur au début de la fermeture (5–5,85 s du clip de porte). Le trajet
+suit la poignée avec le centre de la paume, face au vantail et doigts vers le haut,
+pendant la poussée ; la gauche suit le bord intérieur au début de la fermeture
+(5–5,85 s du clip de porte). Les doigts corrigés sont restaurés avant le mixer.
+Le trajet
 avance et se décale avant la fermeture ; la caméra montre le vrai vantail derrière
 le personnage. `EntranceFacade` ferme les vides latéraux sans boucher les fenêtres. `ArrivalExpression` applique la tristesse à une
 géométrie privée du clone ; le visage sauvegardé et le corps jouable restent réutilisables.
@@ -124,6 +129,8 @@ repoussé par le spam. L'agacement suit la cadence puis décroît au calme. Les 
 suivent le temps joué et disparaissent au démontage ; acteurs, agacement et dernier
 index de réplique persistent dans `SaveHistory.neighbors` (champs optionnels).
 `DoorIdentity` exclut toujours la vraie porte du joueur de l'attribution des voisins.
+Le mur nord des paliers, avec numéro d'étage et lampe, n'a aucune porte copiée ;
+une feuille masquée ou sous un parent masqué ne peut pas proposer de toquer.
 `NeighborVoice` lit de vrais clips du pack de Dillon Becker : refus 1–10,
 raclement de gorge 13, toux 15 et hésitation `hmm`. Deux voix au maximum ;
 un marmonnement atténue et filtre le même acteur, sans changer sa hauteur. Les courtes phrases françaises sont des

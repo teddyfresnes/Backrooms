@@ -52,7 +52,6 @@ const PASSIVE_VHS = .06;
 const FALL_BLACK = new THREE.Color(0x000000);
 const FALL_YELLOW = new THREE.Color(0xc8b35c);
 import { compactSceneDataMaps, restoreSceneDataMaps, warmSceneForPlay, waitForSceneGpu } from '../render/SceneWarmup';
-import { HallExitInteraction } from '../stairwell/HallExitInteraction';
 import { HallArrivalStory, MAIL_STAIR_GATE, MAIL_SECOND_FLIGHT_GATE, MAIL_SAFE_LANDING } from '../stairwell/HallArrivalStory';
 import { ArrivalCinematic } from '../stairwell/ArrivalCinematic';
 import { prepareSadArrivalExpression } from '../stairwell/ArrivalExpression';
@@ -159,7 +158,6 @@ export class RussianStairwellGame {
   private keypadAudio?: KeypadAudio;
   private lightSwitch?: ApartmentLightSwitchInteraction;
   private windowBlinds?: ApartmentWindowBlindsInteraction;
-  private hallExit?: HallExitInteraction;
   private arrivalStory?: HallArrivalStory;
   private arrivalCinematic?: ArrivalCinematic;
   private arrivalCompleted = false;
@@ -192,8 +190,6 @@ export class RussianStairwellGame {
   private postFuse:{time:number;knock:boolean|null}|null=null;
   /** Extra camcorder disturbance after the deep knock, decaying. */
   private knockScare=0;
-  /** Seconds the player still stands at the panel after it tripped. */
-  private fuseHold=0;
   private corridor?:LongCorridor;
   private reaction?:CorridorReaction;
   private corridorMounted=false;
@@ -352,12 +348,16 @@ export class RussianStairwellGame {
     void this.bacteriaAudio.load();
 
     const plan = createStairwellPlan();
-    this.stairwellColliders = plan.colliders;
+    const entrySurroundColliders = plan.colliders.filter(collider => collider.id.startsWith('west-wall-top-'));
+    const stairwellColliders = this.stairwellColliders = plan.colliders.filter(collider => !collider.id.startsWith('west-wall-top-'));
     const materialsReady = progress.measure('materials', () => StairwellMaterials.load(this.renderer));
     progress.start('physics');
     const environmentReady = materialsReady.then(materials => StairwellEnvironment.load(materials.materials, this.loadingAbort.signal));
     const [physicsResult, materialsResult, apartmentResult, environmentResult] = await Promise.allSettled([
-      PhysicsWorld.create(plan).then(physics => { progress.end('physics'); progress.report('physics', .25); return physics; }), materialsReady,
+      PhysicsWorld.create({ ...plan, colliders: stairwellColliders }).then(physics => {
+        physics.addChunk('apartment-entry-surround', entrySurroundColliders, { x: 0, y: 0, z: 0 });
+        progress.end('physics'); progress.report('physics', .25); return physics;
+      }), materialsReady,
       ImportedApartmentEnvironment.load(this.loadingAbort.signal, preload, progress).then(apartment => { progress.complete('scene'); return apartment; }), environmentReady,
     ]);
     if (physicsResult.status === 'rejected' || materialsResult.status === 'rejected'
@@ -495,11 +495,6 @@ export class RussianStairwellGame {
     if (!environment.hallEntranceDoor) {
       throw new Error('La porte du hall d’escalier est absente.');
     }
-    this.hallExit = new HallExitInteraction(
-      environment.hallEntranceDoor,
-      this.ui,
-      () => this.callbacks.onEnterBackrooms(),
-    );
     if (!environment.entranceMailbox) throw new Error('Les boîtes aux lettres du hall sont indisponibles.');
     const config = useCharacterState.getState().config;
     const voice = effectiveCharacterVoice(config);
@@ -597,7 +592,7 @@ export class RussianStairwellGame {
     if(this.corridorStory.state.fuseTried&&!this.corridorStory.state.knockDone)this.postFuse={time:KNOCK_START-1,knock:null};
     this.corridorMaterials=await MaterialLibrary.load(this.renderer,undefined,'yellow');
     if(this.disposed){this.corridorMaterials.dispose();return;}
-    this.corridor=new LongCorridor(apartment.corridorDoorway,apartment.corridorFloorY,this.corridorMaterials.materials,physics);
+    this.corridor=new LongCorridor({...apartment.corridorDoorway,surroundBox:new THREE.Box3().setFromObject(environment.entrySurround,true)},apartment.corridorFloorY,this.corridorMaterials.materials,physics);
     this.scene.add(this.corridor.group);
     // The far tubes racing away behind the creature: faint, thinned clacks.
     this.corridor.onLampStrike=(index)=>{if(index>=CORRIDOR_LAMPS)this.audio.tubeStrike?.(CORRIDOR_LENGTH+(index-CORRIDOR_LAMPS)*4-(this.player?.position.distanceTo(this.corridor!.threshold)??0),index);};
@@ -621,6 +616,7 @@ export class RussianStairwellGame {
         new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, 1),
       ));
     }
+    if(this.quest.devices.outageTriggered&&!this.corridorStory.knockDone&&!this.corridorStory.state.triggered&&this.player.position.x<apartment.doorCenter.x)this.door.closeSilently();
     this.applyApartmentPower();
     this.lastSafePosition.copy(this.player.position);
     if (this.arrivalStory.blocksStairs && this.player.position.y > MAIL_SAFE_LANDING.y + .2) {
@@ -795,6 +791,17 @@ export class RussianStairwellGame {
             this.corridorBlackout = -1;
             this.corridorStory.rewindBacteria();
             this.lastSafePosition.copy(this.player!.position);
+            if (this.stairwellRestored) {
+              this.stairwellRestored = false;
+              this.postOutageSettled = false;
+              this.escapeOpen = false;
+              this.escapeOutside = 0;
+              this.escapeStreet?.setVisible(false);
+              this.physics?.removeChunk('escape-run');
+              this.environment?.setExteriorDark(false);
+              if (this.environment?.hallEntranceDoor) this.environment.hallEntranceDoor.visible = true;
+              this.syncCorridor(false);
+            }
             this.saveNow('autosave');
           }
         },
@@ -976,18 +983,13 @@ export class RussianStairwellGame {
     if (this.arrivalStory?.interact(this.player.position, this.viewDirection, this.player.isLocked && !this.ui.isConsoleOpen)) {
       this.player.setInputEnabled(false); return;
     }
-    if (this.neighbors?.interact(this.player.position, this.viewDirection, this.player.isLocked && !this.ui.isConsoleOpen, mode, this.camera.position)) return;
+    if (!this.quest.devices.outageTriggered && this.neighbors?.interact(this.player.position, this.viewDirection, this.player.isLocked && !this.ui.isConsoleOpen, mode, this.camera.position)) return;
     if (this.lightSwitch?.interact(
       this.player.position,
       this.viewDirection,
       this.player.isLocked,
     )) return;
     if (this.windowBlinds?.interact(
-      this.player.position,
-      this.viewDirection,
-      this.player.isLocked,
-    )) return;
-    if (!this.corridorMounted && this.hallExit?.interact(
       this.player.position,
       this.viewDirection,
       this.player.isLocked,
@@ -1029,14 +1031,13 @@ export class RussianStairwellGame {
     this.letterReader?.open(()=>this.storyCaption?.say('Chloé… Une boussole.'),GIFT_LETTER);
   }
   private onFuseTripped():void {
-    this.fuseHold=1.1;
     if(this.corridorStory.tryFuse()){
       this.postFuse={time:0,knock:null};
       this.storyCaption?.say('Rien. Tout redescend dès que je réarme… Le problème ne vient pas de chez moi.');
       this.saveNow('autosave');
     }else this.storyCaption?.say('Ça ne tient pas.');
   }
-  /** After the remark: three hard knocks and a deep one, only on a closed door. */
+  /** After the remark: the closed entrance always receives the four knocks. */
   private updatePostFuse(delta:number):void {
     const sequence=this.postFuse;
     if(!sequence||!this.apartment||!this.door)return;
@@ -1044,8 +1045,8 @@ export class RussianStairwellGame {
     const at=(mark:number)=>before<mark&&sequence.time>=mark;
     // The remark is read in full before anything happens at the door.
     if(sequence.knock===null&&sequence.time>=KNOCK_START){
-      sequence.knock=this.door.isSecured()&&!this.door.isBroken;
-      if(!sequence.knock){this.finishPostFuse('Il faut que je trouve un voisin. Eux ont peut-être encore du courant.');return;}
+      this.door.closeSilently();
+      sequence.knock=true;
     }
     if(!sequence.knock)return;
     const door=this.apartment.doorCenter,position={x:door.x+.05,y:this.apartment.floorY+1.35,z:door.z};
@@ -1106,8 +1107,8 @@ export class RussianStairwellGame {
   }
   private constrainExit(position:THREE.Vector3,movement:THREE.Vector3):void {
     this.encounter?.constrainMovement(position,movement);
-    // Hands on the breakers: the player stays at the panel until it has tripped back.
-    if(this.fuseBox?.isBusy||this.fuseHold>0){movement.x=0;movement.z=0;}
+    // Release the player as soon as the last breaker is raised, before the trip or dialogue.
+    if(this.fuseBox?.locksMovement){movement.x=0;movement.z=0;}
     if((!this.needsFlashlight()&&!this.needsFuseScene())||!this.apartment)return;
     const door=this.apartment.doorCenter,limit=door.x-.38;
     if(Math.abs(position.y-this.apartment.floorY-.865)>.7||Math.abs(position.z-door.z)>1.05)return;
@@ -1115,7 +1116,7 @@ export class RussianStairwellGame {
       this.hesitateAtExit();movement.x=Math.max(0,limit-position.x);
     }
   }
-  private syncCorridor():void {
+  private syncCorridor(autosave=true):void {
     if(this.stairwellRestored&&this.quest.devices.outageTriggered&&!this.postOutageSettled){
       // After the hiding the cage is back, still without power; the neighbours stay silent.
       this.postOutageSettled=true;this.corridorStory.activate();this.neighbors?.suspend();this.applyApartmentPower();
@@ -1134,7 +1135,7 @@ export class RussianStairwellGame {
     this.scene.fog=new THREE.Fog(0x080b09,150,560);this.scene.background=new THREE.Color(0x080b09);this.camera.far=600;this.playerCamera.far=600;
     this.camera.updateProjectionMatrix();this.playerCamera.updateProjectionMatrix();this.applyApartmentPower();
     this.lastLampCount=this.corridorStory.litCount;this.corridor.setLights(this.lastLampCount,resolveLightingBrightness(this.settings.brightness).relativeGain,this.corridorStory.firstLamp,false);
-    if(this.initialized)this.saveNow('autosave');
+    if(this.initialized&&autosave)this.saveNow('autosave');
   }
   /** The corridor was never there: the stairwell returns behind the broken door. */
   private restoreStairwell():void {
@@ -1229,7 +1230,7 @@ export class RussianStairwellGame {
     const reading=small?.id===COMPASS_ID&&free;
     this.character?.setHeldItem(reading?'compass':equipped&&free?'torch':null);
     const frame=(reading||equipped)&&this.character?.getHeldItemFrame(this.palm)?this.palm:undefined;
-    this.flashlight?.update(this.camera,hand,owned,!!equipped,this.inventory.state.lampOn,delta,!this.settings.cameraMotion,equipped&&!reading?frame:undefined);
+    this.flashlight?.update(this.camera,hand,owned,!!equipped,this.inventory.state.lampOn,delta,!this.settings.cameraMotion,equipped&&!reading?frame:undefined,this.corridorStory.modal);
     this.compass?.update(this.camera,reading?frame:undefined,!!reading&&(!!frame||!this.character),this.encounter?.creatureProximity??0,delta);
   }
 
@@ -1502,6 +1503,7 @@ export class RussianStairwellGame {
       const free=!this.pcUse?.isActive&&!this.computerDesktop?.isOpen&&!this.closet?.isActive&&!this.peephole?.isActive&&!this.character?.isBusy;
       if(this.gasPosition&&this.player&&this.quest.advanceOutage(this.player.position,this.gasPosition,free)){
         this.neighborCaption?.clear();this.neighbors?.suspend();this.arrivalStory?.suspend();siteAudio.stopVoice();
+        this.door?.closeSilently();
         this.applyApartmentPower();this.deviceAudio?.powerCut();this.devices?.update(0,true,false);
         caption.say('Merde… une coupure.');
         this.saveNow('autosave');
@@ -1601,7 +1603,10 @@ export class RussianStairwellGame {
       if(this.corridorStory.finished)this.saveNow('autosave');
     }
     if(reacting){
-      if(active)this.reaction?.update(!this.settings.cameraMotion||matchMedia('(prefers-reduced-motion: reduce)').matches);
+      if(active){
+        this.character?.setHeldItem(this.inventory.equipped?.id===COMPASS_ID?'compass':this.inventory.equipped?.id===FLASHLIGHT_ID?'torch':null);
+        this.reaction?.update(!this.settings.cameraMotion||matchMedia('(prefers-reduced-motion: reduce)').matches);
+      }
       if(active){this.stepPassivePhysics(delta);this.elapsed+=delta;this.playableSeconds+=delta;this.autosaveElapsed+=delta;if(this.autosaveElapsed>=AUTOSAVE_INTERVAL_SECONDS)this.saveNow('autosave');}
       this.apartment?.updateVisibility(this.camera.position,true);this.fixtures?.update(delta,active,false);this.devices?.update(delta,active,false);
       this.environment.update(this.elapsed);this.audio.updateInteriorGain(this.interiorRainGain(this.currentSurface()));
@@ -1655,7 +1660,7 @@ export class RussianStairwellGame {
       this.apartment?.updateVisibility(this.camera.position,true);
       this.camera.getWorldDirection(this.viewDirection);
       setDoorAudioListener(this.audio.spatialBus,this.camera.position,this.viewDirection);
-      this.neighbors?.update(delta,this.player.position,this.viewDirection,!this.ui.isConsoleOpen,this.camera.position);
+      this.neighbors?.update(delta,this.player.position,this.viewDirection,!this.ui.isConsoleOpen&&!this.quest.devices.outageTriggered,this.camera.position);
       this.neighborCaption?.update(delta,!this.ui.isConsoleOpen);
       this.ui.setInteraction(null);
     } else if (cinematic) {
@@ -1687,7 +1692,6 @@ export class RussianStairwellGame {
       const chaseOwnsInteraction = !!(this.encounter?.isActive || this.encounter?.isHidden);
       const freeInteraction = canInteract && !chaseOwnsInteraction;
       this.door.update(0, this.player.position, this.viewDirection, canInteract && !this.encounter?.locksInput);
-      if(!this.corridorMounted)this.hallExit?.update(this.player.position, this.viewDirection, freeInteraction);
       this.lightSwitch?.update(this.player.position, this.viewDirection, freeInteraction);
       this.windowBlinds?.update(delta, this.player.position, this.viewDirection, freeInteraction);
       this.arrivalStory?.update(delta, this.player.position, this.viewDirection, freeInteraction);
@@ -1707,7 +1711,6 @@ export class RussianStairwellGame {
       if(this.player.position.distanceTo(this.gift?.group.position??this.player.position)>2.5)this.giftReminderArmed=true;
       this.fuseBox?.updatePrompt(this.camera.position,this.viewDirection,freeInteraction&&!this.objects?.isHolding&&this.fuseAvailable());
       if(this.fuseBox?.update(delta)==='tripped')this.onFuseTripped();
-      this.fuseHold=Math.max(0,this.fuseHold-delta);
       this.updatePostFuse(delta);
       this.escapeStreet?.update(this.elapsed);
       if(this.apartment&&this.player.position.distanceTo(this.apartment.doorCenter)>2)this.exitReminderArmed=true;
@@ -1930,7 +1933,6 @@ export class RussianStairwellGame {
     this.door?.dispose();
     this.lightSwitch?.dispose();
     this.windowBlinds?.dispose();
-    this.hallExit?.dispose();
     this.character?.dispose();
     this.player?.dispose();
     this.apartment?.dispose();

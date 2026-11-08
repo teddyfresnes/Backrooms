@@ -15,3 +15,14 @@ it('emits from the equipped lens toward the view target, reaches distant surface
     torch.update(camera,undefined,true,false,true,1/60,false);expect(torch.light.intensity).toBe(0);expect(torch.model.visible).toBe(false);
   }finally{torch.dispose();}
 });
+it('keeps the cinematic beam aligned with the held torch instead of the external camera',()=>{
+ const physics={world:{castRay:()=>null},isEnvironmentCollider:()=>true}as unknown as PhysicsWorld;
+ const torch=new Flashlight(new THREE.Scene(),physics),camera=new THREE.PerspectiveCamera();camera.updateMatrixWorld(true);
+ const grip={position:new THREE.Vector3(2,1.4,3),quaternion:new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(1,0,0))};
+ try{
+  torch.update(camera,undefined,true,true,true,1/60,false,grip,true);
+  const beam=torch.light.target.position.clone().sub(torch.light.position).normalize();
+  expect(beam.distanceTo(new THREE.Vector3(1,0,0))).toBeLessThan(.00001);
+  expect(torch.model.position.clone().addScaledVector(new THREE.Vector3(1,0,0),.09).distanceTo(grip.position)).toBeLessThan(.00001);
+ }finally{torch.dispose();}
+});

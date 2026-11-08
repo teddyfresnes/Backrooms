@@ -18,8 +18,9 @@ Après la reprise du PC, `CorridorStory` remplace une seule fois la cage par
 fait hésiter devant la sortie sans lampe, sans collider invisible ni déplacement
 du vantail ouvert. Les 168 m reprennent `MaterialLibrary` jaune, les UV et les diffuseurs HDR
 partagés avec `WorldView`. Sol et Rapier suivent le support réel sous le seuil ;
-les retours commencent à l'extérieur du cadre importé, sans couvrir verrou et
-interrupteur. Les luminaires sont instanciés, leur champ analytique persiste
+la maçonnerie et le cadre de l'entrée restent en place avec leurs collisions.
+La moquette et les retours commencent à l'extérieur de cet ensemble, sans
+superposer un second sol au seuil ni couvrir verrou et interrupteur. Les luminaires sont instanciés, leur champ analytique persiste
 indépendamment de la caméra.
 Au-delà des 168 m jouables, une enfilade non éclairée de 420 m (matériaux basiques,
 brouillard 150–560 m) prolonge le couloir derrière la créature ; un collider
@@ -41,13 +42,26 @@ sont des extensions optionnelles de l’historique v2. L’événement historiqu
 panne reste l’autorité du PC et de la radio, même après le rallumage des lampes.
 
 Après la lampe, `FuseBox` (mur du fond du séjour, face à la porte à 8 m ; le
-joueur reste figé pendant le réarmement, `fuseHold`) s'ouvre et se
+joueur reste figé jusqu'au dernier levier relevé, `locksMovement`) s'ouvre et se
 réarme en vain ; `CorridorStory.fuseTried/knockDone` (optionnels, déduits pour
 les anciennes sauvegardes) bloquent la sortie jusqu'à la remarque puis aux trois
-coups et au coup grave, joués seulement porte fermée. Boussole et lampe en main :
+coups et au coup grave. La coupure ferme silencieusement la vraie porte ; les
+coups ne sont plus sautés lorsqu'elle avait été laissée ouverte. Boussole et lampe en main :
 `heldItemFrame` fixe d'abord l'objet (dans la vue en 1P, sans balancement de
 marche ; devant le torse en 3P), puis `HeldItemPose` amène la main droite par IK
-(paume sous la boussole, doigts refermés sur la lampe). L'aiguille s'affole selon
+(paume sous la boussole, doigts refermés sur la lampe), après les autres corrections
+du bras. L'origine du bras de présentation suit la vue pour garder la prise
+atteignable, sans avancer ni redimensionner le corps 1P. La prise réserve
+l'épaisseur de la peau et du pouce autour du boîtier ; les phalanges de la lampe
+pointent vers le haut pour garder le poignet sous la prise. `HandPose` règle
+chaque phalange autour du manche selon l'échelle réelle de la main ; le pouce
+oppose une pose de référence fixe, indépendante de la marche. La paume et les
+doigts utilisent le même repère orthogonal, même en visée oblique. En 3P et dans
+les plans animés, la lampe suit la paume résolue si le bras atteint sa limite.
+Un obstacle rétracte
+l'objet et la prise ensemble. La réaction du couloir
+évalue aussi cette prise sur le corps animé ; le faisceau suit la lampe pendant
+le plan extérieur. L'aiguille s'affole selon
 `BacteriaEncounter.creatureProximity`.
 
 `RussianStairwellGame` possède les systèmes ci-dessous et les détruit avant

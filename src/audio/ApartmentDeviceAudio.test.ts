@@ -61,8 +61,10 @@ it('stops the playlist at the surge, starts Pressure afterward at the TV, and pa
   for (let i = 0; i < 14; i++) audio.sync(quest.devices, true, .05);
   expect(pressure!.src).toBe(PRESSURE_URL); expect(pressure!.paused).toBe(false);
   expect(panners.some(p => p.setPosition.mock.calls.some(args => args.join() === Object.values(positions.tv).join()))).toBe(true);
-  // The collapsing mains hum (three sine partials, created once) plus the three groans of the cut.
-  expect(context.createOscillator).toHaveBeenCalledTimes(6);
+  // Only fixed mains harmonics remain: the outage has no pitched arcade sweep.
+  const harmonics = context.createOscillator.mock.results.map(result => result.value);
+  expect(harmonics.map(source => source.frequency.value)).toEqual([50, 100, 150]);
+  expect(harmonics.every(source => source.frequency.exponentialRampToValueAtTime.mock.calls.length === 0)).toBe(true);
   quest.setTelevision(false); audio.sync(quest.devices, true); expect(pressure!.paused).toBe(true);
   const starts = radio!.play.mock.calls.length; audio.radioStatic(); audio.sync(quest.devices, true);
   radio!.dispatchEvent(new Event('ended')); expect(next).not.toHaveBeenCalled(); expect(radio!.play).toHaveBeenCalledTimes(starts);

@@ -15,7 +15,7 @@ const feetMatchWorld = () => {
   }
 };
 function eyeClearance() {
-  const eye = lab.firstPersonCamera.position;
+  const eye = lab.host.renderCamera.position;
   for (const chain of [[lab.firstPersonLeftUpperArmBone, lab.firstPersonLeftForearmBone, lab.firstPersonLeftHandBone],
     [lab.firstPersonRightUpperArmBone, lab.firstPersonRightForearmBone, lab.firstPersonRightHandBone]]) {
     for (let i = 0; i < 2; i++) {
@@ -35,13 +35,13 @@ for (const fps of [30, 60, 120]) for (const pitch of [-1.32, -.7, 0, .7, 1.32]) 
       assert.ok(lab.firstPersonCamera.position.distanceTo(eye) < .008, 'guard framing moved the gameplay eye');
     }
     if (pitch < -1) {
-      lab.firstPersonCamera.updateMatrixWorld(true);
+      lab.host.renderCamera.updateMatrixWorld(true);
       let visibleLegVertices = 0;
       for (const mesh of meshes()) {
         mesh.skeleton.update();
         const leg = mesh.geometry.attributes.fpLowerBodyMask, body = mesh.geometry.attributes.fpCombatBodyMask;
         for (let j = 0; j < leg.count; j += 3) if (leg.getX(j) > .7 && body.getX(j) > .7) {
-          const p = mesh.getVertexPosition(j, new THREE.Vector3()).applyMatrix4(mesh.matrixWorld).project(lab.firstPersonCamera);
+          const p = mesh.getVertexPosition(j, new THREE.Vector3()).applyMatrix4(mesh.matrixWorld).project(lab.host.renderCamera);
           if (Math.abs(p.x) < .95 && Math.abs(p.y) < .95 && p.z > -1 && p.z < 1) visibleLegVertices++;
         }
       }

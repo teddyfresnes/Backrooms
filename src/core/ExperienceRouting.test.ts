@@ -7,15 +7,16 @@ const loadNodeFs = async () => {
 };
 
 describe('experience routing', () => {
-  it('routes the Russian hall exit to the previous procedural Backrooms runtime', async () => {
+  it('enters the procedural Backrooms only through the scripted escape fall', async () => {
     const { readFile } = await loadNodeFs();
     const [main, stairwell] = await Promise.all([
       readFile(new URL('../main.ts', import.meta.url), 'utf8'),
       readFile(new URL('./RussianStairwellGame.ts', import.meta.url), 'utf8'),
     ]);
 
-    expect(stairwell).toContain('HallExitInteraction');
-    expect(stairwell).toContain('this.callbacks.onEnterBackrooms()');
+    expect(stairwell).not.toContain('HallExitInteraction');
+    expect(stairwell.match(/this\.callbacks\.onEnterBackrooms\(\)/g)).toHaveLength(1);
+    expect(stairwell).toContain('onEscaped: () => this.escapeToBackrooms()');
     expect(stairwell.indexOf("this.saveNow('autosave');", stairwell.indexOf('this.initialized = true')))
       .toBeLessThan(stairwell.indexOf('this.renderer.setAnimationLoop(this.frame)'));
     expect(main).toContain("await import('./core/Game')");

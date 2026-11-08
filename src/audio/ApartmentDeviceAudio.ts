@@ -173,27 +173,23 @@ export class ApartmentDeviceAudio {
     for (const [frequency, duration] of [[2280, .36], [3810, .22], [1450, .51]]) this.tone(position, frequency!, 1200, duration!, .055);
   }
   /**
-   * The mains trip: a hard breaker clack in the entry panel, the transformer's
-   * low thump as the load drops, then a short collapsing hum. Dry and immediate,
-   * no synth sweep; it shares the master bus and volume setting.
+   * The building loses power: a dry electrical snap, irregular arcing and a
+   * heavy, muffled shudder. Fixed mains harmonics die into the room noise;
+   * pitched oscillator sweeps made the failure sound like an arcade effect.
    */
   powerCut(): void {
     this.pressureDelay = .65;
     const panel = this.positions.panel ?? this.positions.pc;
     const range = { refDistance: 2.5, maxDistance: 40, rolloff: .8 };
-    this.burst(panel, .018, .95, 4200, 'bandpass', range);
-    this.burst(panel, .045, .55, 1500, 'bandpass', range);
-    this.burst(panel, .32, .7, 180, 'lowpass', range);
-    this.hum(this.positions.pc, 100, .5, .05);
-    // The dread: arcing crackles, a deep blow through the building and the
-    // mains groaning down to nothing, then a fridge-like knock as it dies.
+    this.burst(panel, .014, .8, 1900, 'bandpass', range);
+    this.burst(panel, .06, .45, 720, 'bandpass', range);
     const wide = { refDistance: 4, maxDistance: 60, rolloff: .5 };
-    for (const [delay, level] of [[.03, .8], [.09, .55], [.16, .7], [.27, .4]] as const) this.burst(panel, .03, level, 3200, 'bandpass', range, delay);
-    this.burst(panel, 1.4, 1.1, 85, 'lowpass', wide, .05);
-    this.tone(panel, 54, 44, .5, .2, wide, .05);
-    this.tone(this.positions.pc, 140, 14, 2.6, .16, wide, .08, .04);
-    this.tone(this.positions.pc, 280, 26, 2.2, .05, wide, .1, .03);
-    this.burst(this.positions.pc, .22, .5, 140, 'lowpass', wide, 2.7);
+    for (const [delay, level] of [[.035, .36], [.12, .22], [.265, .3]] as const) this.burst(panel, .025, level, 3100, 'highpass', range, delay);
+    this.burst(panel, .55, 1.05, 125, 'lowpass', wide, .018);
+    this.burst(this.positions.pc, 1.85, 1.15, 78, 'lowpass', wide, .045);
+    this.burst(panel, 1.05, .32, 260, 'bandpass', wide, .16);
+    this.hum(this.positions.pc, 50, 1.45, .075);
+    this.burst(this.positions.pc, .18, .38, 155, 'lowpass', wide, 1.7);
   }
   /** A plain device button (radio): the recorded click only. */
   buttonClick(on: boolean): void { if (!this.disposed) this.recordedClick?.(on); }

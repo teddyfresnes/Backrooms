@@ -17,6 +17,14 @@ function fixture(){
  };
  resources.push(()=>{geometry.dispose();material.dispose();});return{root,callbacks,ui,create};
 }
+it('does not offer a knock on an invisible leaf or a hidden parent',()=>{
+ const f=fixture(),i=f.create(),leaf=f.root.getObjectByName('west-neighbor-door-1-leaf')!;
+ const parent=new THREE.Group();f.root.add(parent);parent.add(leaf);parent.visible=false;
+ expect(i.interact(p,left,true)).toBe(false);i.update(.1,p,left,true);
+ expect(f.ui.setInteraction).not.toHaveBeenCalledWith('Toquer');expect(f.callbacks.sound).not.toHaveBeenCalled();
+ parent.visible=true;leaf.visible=false;expect(i.interact(p,left,true)).toBe(false);
+ leaf.visible=true;expect(i.interact(p,left,true)).toBe(true);
+});
 const p=new THREE.Vector3(0,.865,-3),left=new THREE.Vector3(-1,0,0),right=new THREE.Vector3(1,0,0);
 const advance=(i:NeighborDoorInteraction,seconds:number,point=p,direction=left)=>{for(let t=0;t<seconds;t+=.02)i.update(.02,point,direction,true);};
 it('answers promptly, counts presses during speech, escalates by cadence and coalesces the response queue',()=>{

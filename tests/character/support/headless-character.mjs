@@ -2,7 +2,7 @@ import { build } from 'esbuild';
 import { Window } from 'happy-dom';
 import * as THREE from 'three';
 import { readFileSync, mkdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 const root=fileURLToPath(new URL('../../../',import.meta.url));
 export const testAssetRoot=process.env.CHARACTER_TEST_ASSET_ROOT??path.join(root,'public');
@@ -20,11 +20,11 @@ window.HTMLCanvasElement.prototype.getContext=function(){return new Proxy({canva
 THREE.TextureLoader.prototype.load=function(url,onLoad){const texture=new THREE.Texture();queueMicrotask(()=>onLoad?.(texture));return texture;};
 THREE.FileLoader.prototype.load=function(url,onLoad,_progress,onError){try{const data=readFileSync(path.join(testAssetRoot,url));const result=this.responseType==='json'?JSON.parse(data.toString('utf8')):this.responseType==='text'?data.toString('utf8'):data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength);queueMicrotask(()=>onLoad(result));}catch(e){queueMicrotask(()=>onError?.(e));}};
 globalThis.fetch=async url=>{try{const pathname=new URL(String(url),'http://localhost').pathname;return new Response(readFileSync(path.join(testAssetRoot,decodeURIComponent(pathname))));}catch{return new Response(null,{status:404});}};
-export const {CharacterRuntime}=await import(out);
-const { PhysicsWorld } = await import(path.join(root,'.character-test-dist/physics/PhysicsWorld.js'));
-const { PlayerController } = await import(path.join(root,'.character-test-dist/player/PlayerController.js'));
-const { loadGameSettings } = await import(path.join(root,'.character-test-dist/ui/settings.js'));
-const { createMovementLabPlan, MOVEMENT_LAB_PITS, MOVEMENT_LAB_IDLE_NPC } = await import(path.join(root,'.character-test-dist/fixture-world.js'));
+export const {CharacterRuntime}=await import(pathToFileURL(out).href);
+const { PhysicsWorld } = await import(pathToFileURL(path.join(root,'.character-test-dist/physics/PhysicsWorld.js')).href);
+const { PlayerController } = await import(pathToFileURL(path.join(root,'.character-test-dist/player/PlayerController.js')).href);
+const { loadGameSettings } = await import(pathToFileURL(path.join(root,'.character-test-dist/ui/settings.js')).href);
+const { createMovementLabPlan, MOVEMENT_LAB_PITS, MOVEMENT_LAB_IDLE_NPC } = await import(pathToFileURL(path.join(root,'.character-test-dist/fixture-world.js')).href);
 export async function createLab(options={}){
  const app=document.createElement('div'),canvas=document.createElement('canvas'); app.append(canvas);document.body.append(app);
  const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(72,1,.01,140),renderCamera=camera.clone();

@@ -1083,6 +1083,7 @@ export class BacteriaEncounter {
     }
     this.restoreWorld();
     this.restoreTelevision();
+    this.stairwellRestored = false;
     host.door.repair();
     if (this.hidden) host.hideSpot.forceOut();
     this.hidden = false;

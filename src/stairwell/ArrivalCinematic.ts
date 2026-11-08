@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { solveCombatTwoBone } from '../character/CombatRig';
+import { HandPose } from '../character/HandPose';
 import { EntranceDoorMotion } from './EntranceDoorMotion';
 import { retargetEntryMotion, type EntryMotions } from './EntryMotion';
 import './arrival-cinematic.css';
@@ -35,14 +36,11 @@ export class ArrivalCinematic {
   private readonly wrist = new THREE.Vector3();
   private readonly handRotation = new THREE.Quaternion();
   private readonly parentRotation = new THREE.Quaternion();
-  private readonly contactRotation = new THREE.Quaternion();
-  private readonly openingPalm = new THREE.Quaternion();
-  private readonly closingPalm = new THREE.Quaternion();
+  private readonly handPose: HandPose;
   private readonly head: THREE.Object3D | undefined;
   private readonly arm: THREE.Bone | undefined;
   private readonly forearm: THREE.Bone | undefined;
   private readonly hand: THREE.Bone | undefined;
-  private readonly finger: THREE.Object3D | undefined;
   private readonly leftArm: THREE.Bone | undefined;
   private readonly leftForearm: THREE.Bone | undefined;
   private readonly leftHand: THREE.Bone | undefined;
@@ -77,6 +75,7 @@ export class ArrivalCinematic {
     this.root.name = 'arrival-cinematic-actor';
     this.fill.name = 'arrival-cinematic-fill';
     this.root.add(avatar); this.scene.add(this.root, this.fill);
+    this.handPose = new HandPose(avatar);
     this.entrance = new EntranceDoorMotion(entranceDoor);
     this.code = retargetEntryMotion(motions.code, avatar);
     this.door = retargetEntryMotion(motions.door, avatar);
@@ -88,12 +87,11 @@ export class ArrivalCinematic {
     this.arm = avatar.getObjectByName('mixamorigRightArm') as THREE.Bone | undefined;
     this.forearm = avatar.getObjectByName('mixamorigRightForeArm') as THREE.Bone | undefined;
     this.hand = avatar.getObjectByName('mixamorigRightHand') as THREE.Bone | undefined;
-    this.finger = avatar.getObjectByName('mixamorigRightHandIndex2') ?? this.hand;
     this.leftArm = avatar.getObjectByName('mixamorigLeftArm') as THREE.Bone | undefined;
     this.leftForearm = avatar.getObjectByName('mixamorigLeftForeArm') as THREE.Bone | undefined;
     this.leftHand = avatar.getObjectByName('mixamorigLeftHand') as THREE.Bone | undefined;
     this.leftFinger = avatar.getObjectByName('mixamorigLeftHandIndex3') ?? this.leftHand;
-    for (const bone of [this.head, this.arm, this.forearm, this.hand, this.leftArm, this.leftForearm, this.leftHand]) {
+    for (const bone of [this.head, this.arm, this.forearm, this.hand, this.leftArm, this.leftForearm, this.leftHand, ...this.handPose.correctedBones]) {
       if (bone) this.correctedBones.push({ bone, authored: bone.quaternion.clone() });
     }
     // Place the physical keypad at the authored typing finger, on the right
@@ -110,12 +108,6 @@ export class ArrivalCinematic {
     this.buildKeypad(target);
     this.door.translation(this.door.clip.duration, this.rootMotion);
     this.finalStandingPosition.copy(this.origin).add(this.rootMotion).add(new THREE.Vector3(.45, 0, .45)); this.finalStandingPosition.y = .865;
-    // Capture palms relative to the leaf once. Contact then follows the moving
-    // door's orientation as well as its position, without accumulating IK.
-    for (const [time, opening, hand, palm] of [[1.9, 0, this.hand, this.openingPalm], [5.1, 1, this.leftHand, this.closingPalm]] as const) {
-      this.pose(1, time); this.placeActor(time); this.entrance.setOpen(opening);
-      if (hand) { hand.getWorldQuaternion(palm); this.entrance.pivot.getWorldQuaternion(this.parentRotation).invert(); palm.premultiply(this.parentRotation); }
-    }
     this.fill.position.set(this.origin.x + .5, 2.1, this.origin.z - .35);
     this.sample(0, this.cameraRig);
     this.root.visible = false;
@@ -266,25 +258,30 @@ export class ArrivalCinematic {
 
   private matchDoorHand(time: number): void {
     const weight = smooth((time - 1.5) / .4) * (1 - smooth((time - 2.8) / .3));
-    this.matchContact(this.arm, this.forearm, this.hand, this.finger, this.entrance.grip, this.openingPalm, weight);
+    this.matchContact(this.arm, this.forearm, this.hand, this.entrance.grip, 1, weight);
     const closingWeight = smooth((time - 4.92) / .16) * (1 - smooth((time - 5.2) / .24));
-    this.matchContact(this.leftArm, this.leftForearm, this.leftHand, this.leftFinger, this.entrance.closingGrip, this.closingPalm, closingWeight);
+    this.matchContact(this.leftArm, this.leftForearm, this.leftHand, this.entrance.closingGrip, -1, closingWeight);
   }
 
   private matchContact(arm: THREE.Bone | undefined, forearm: THREE.Bone | undefined, hand: THREE.Bone | undefined,
-    finger: THREE.Object3D | undefined, grip: THREE.Object3D, palm: THREE.Quaternion, weight: number): void {
-    if (!arm || !forearm || !hand || !finger || weight <= 0) return;
-    hand.getWorldQuaternion(this.handRotation);
-    this.entrance.pivot.getWorldQuaternion(this.contactRotation).multiply(palm);
-    this.handRotation.slerp(this.contactRotation, weight);
-    hand.parent!.getWorldQuaternion(this.parentRotation).invert();
-    hand.quaternion.copy(this.parentRotation.multiply(this.handRotation)); arm.updateWorldMatrix(true, true);
-    hand.getWorldPosition(this.wrist); finger.getWorldPosition(this.contact);
-    this.contact.sub(this.wrist);
-    grip.getWorldPosition(this.wrist).sub(this.contact);
-    solveCombatTwoBone(arm, forearm, hand, this.wrist, weight, undefined, .985, Math.PI / 4);
-    hand.parent!.getWorldQuaternion(this.parentRotation).invert();
-    hand.quaternion.copy(this.parentRotation.multiply(this.handRotation)); arm.updateWorldMatrix(false, true);
+    grip: THREE.Object3D, face: number, weight: number): void {
+    if (!arm || !forearm || !hand?.parent || weight <= 0) return;
+    const leaf = this.entrance.pivot.getWorldQuaternion(new THREE.Quaternion());
+    const normal = new THREE.Vector3(0, 0, face).applyQuaternion(leaf);
+    const fingers = new THREE.Vector3(0, 1, 0).applyQuaternion(leaf);
+    const frame = { position: new THREE.Vector3(), normal: new THREE.Vector3(), fingers: new THREE.Vector3() };
+    for (let pass = 0; pass < 2; pass++) {
+      this.handPose.alignPalm(hand, normal, fingers, weight);
+      if (!this.handPose.sample(hand, frame)) return;
+      hand.getWorldQuaternion(this.handRotation);
+      hand.getWorldPosition(this.wrist);
+      this.contact.copy(frame.position).sub(this.wrist);
+      grip.getWorldPosition(this.wrist).sub(this.contact);
+      solveCombatTwoBone(arm, forearm, hand, this.wrist, weight, undefined, .985, Math.PI / 4);
+      hand.parent.getWorldQuaternion(this.parentRotation).invert();
+      hand.quaternion.copy(this.parentRotation.multiply(this.handRotation)); arm.updateWorldMatrix(false, true);
+    }
+    this.handPose.curl(hand, .07, weight);
   }
 
   private beginBlend(camera: THREE.PerspectiveCamera): void {

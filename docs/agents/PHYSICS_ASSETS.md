@@ -43,12 +43,12 @@ suspend la fin de fermeture sans commander une ouverture. Son verrou
 intérieur est raycasté sur le mur côté appartement. Engagé, il limite
 l'ouverture à 5,5 % de la course, puis ramène automatiquement le vantail au bâti.
 
-La double porte importée du rez-de-chaussée reste statique et collidable, mais
-`HallExitInteraction` la raycast comme un portail. Un appui sur l’action
-configurable **interagir** déclenche le routeur de `main.ts` : la sauvegarde du
-stairwell n’est pas réécrite, tous ses systèmes sont détruits, puis le `Game`
-procédural est chargé dynamiquement. La transition est différée à une microtâche
-afin de ne pas détruire Rapier au milieu du tick d’entrée courant. Une fois le
+La double porte importée du rez-de-chaussée reste statique et collidable jusqu’à
+la poursuite. `openEscape` masque ses deux vantaux et désactive leurs colliders ;
+elle n’a aucune interaction de portail. Seule la chute du scénario de fuite
+déclenche le routeur de `main.ts` : la sauvegarde du stairwell n’est pas réécrite,
+tous ses systèmes sont détruits, puis le `Game` procédural est chargé dynamiquement.
+La transition est différée à une microtâche afin de ne pas détruire Rapier au milieu du tick courant. Une fois le
 niveau 0 réellement initialisé, le nouveau runtime écrit son checkpoint
 automatique de destination.
 
@@ -83,9 +83,10 @@ ne doit pas faire avancer les corps d'un tick supplémentaire.
 Le ragdoll actif conduit le monde partagé ; les anciens corps et le NPC passent
 par `passiveUpdate()`, y compris pendant une nouvelle chute. Un conducteur endormi
 doit encore avancer les autres acteurs éveillés ; un monde entièrement endormi
-ne fait aucun solve. Le hand-off et les volumes proches du
-décor gardent cinq sous-pas ; une boîte balayée englobant tous les membres permet
-deux sous-pas uniquement en vol libre après 0,4 s. CCD et solveur restent actifs.
+ne fait aucun solve. Le hand-off garde cinq sous-pas pendant 0,4 s. Ensuite, les
+contacts utilisent deux à cinq sous-pas selon la vitesse linéaire et angulaire
+des membres ; une boîte balayée vide autorise deux sous-pas même en chute rapide.
+CCD et solveur restent actifs, et le timestep du monde partagé est restauré.
 Les impacts utilisent le point et la normale d'un vrai manifold du décor,
 sans recherche de boîtes/rayons après une impulsion interne aux articulations.
 Le relevé est sondé au plus toutes les 120 ms, avec sondage immédiat pour l'aide.
@@ -95,6 +96,8 @@ pendant la chute et le relevé. Sa sphère couvre le plan proche entier ; balaya
 et dépénétration interrogent seulement le décor Rapier. Le décor prime sur la
 contrainte du visage. `RagdollHeadMask`, préparé au chargement, masque seulement
 la tête du corps actif en première personne, sans changer les os ni la physique.
+À la fin du relevé 1P, l'orientation des yeux animés devient celle du contrôleur ;
+ne jamais restaurer la direction de souris précédant la chute.
 Les quatre corps persistants les plus récents restent physiques. Au relevé ou
 au retrait d'un ancien corps, toutes ses articulations détenues sont détachées
 avant les rigid bodies : cela évite le callback Rapier défectueux sans accumuler
@@ -167,5 +170,12 @@ Retour au [routeur runtime](RUNTIME_RENDERING.md).
 
 Le corps de présentation 1P utilise le même échantillon de mélange pour son échelle
 et son placement. Le changement garde/posture est borné relativement au corps
-physique ; il ne doit pas déplacer la capsule ou la caméra. Une application de
-réglages sans changement de vue ne doit pas forcer ce mélange à son extrémité.
+physique ; il ne doit pas déplacer la capsule ou la caméra de visée. La caméra
+rendue suit l'avant du cou en combat, avec la même protection contre le décor
+que le ragdoll ; cette correction ne déplace pas le torse. Équiper un objet
+conserve le placement et l'échelle d'exploration. Une application de réglages
+sans changement de vue ne doit pas forcer ce mélange à son extrémité.
+`HandPose` ferme les quatre doigts depuis les rotations de bind avec des flexions
+bornées, sans additionner une fermeture à des doigts déjà pliés par le clip.
+Un coup 1P borne brièvement le regard dans `PlayerController` (au plus 0,28 s) ;
+la souris refusée est consommée, jamais rejouée à la libération.

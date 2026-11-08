@@ -512,7 +512,7 @@ export class RagdollSystem {
     // destabilise than one large 60 Hz solve. The world timestep is restored
     // immediately afterwards so the live PlayerController keeps its contract.
     const previousTimestep = this.physics.world.timestep;
-    const substeps = this.ballisticStepIsClear(safeDelta) ? BALLISTIC_SUBSTEPS : RAGDOLL_SUBSTEPS;
+    const substeps = this.simulationSubsteps(safeDelta);
     const substep = safeDelta / substeps;
     try {
       this.physics.world.timestep = substep;
@@ -550,9 +550,23 @@ export class RagdollSystem {
     if (!rested) this.updateSettling();
   }
 
-  /** Conservatively bound every limb and its possible travel this tick. The
-   * hand-off, self-collision activation and all nearby contacts keep 300 Hz.
-   * Only an empty swept volume uses 120 Hz; CCD/solver settings stay intact. */
+  private simulationSubsteps(delta: number): number {
+    if (this.ballisticStepIsClear(delta)) return BALLISTIC_SUBSTEPS;
+    // The hand-off and fast contacts retain 300 Hz. Slow floor contacts do not
+    // need to solve the entire streamed world five times every 60 Hz tick.
+    if (this.elapsed < .4) return RAGDOLL_SUBSTEPS;
+    let required = 2;
+    for (const part of this.bodies.values()) {
+      const linear = part.body.linvel(), angular = part.body.angvel();
+      required = Math.max(required,
+        Math.ceil(Math.hypot(linear.x, linear.y, linear.z) * delta / .035),
+        Math.ceil(Math.hypot(angular.x, angular.y, angular.z) * delta / .12));
+    }
+    return Math.min(RAGDOLL_SUBSTEPS, required);
+  }
+
+  /** An empty swept volume permits two substeps even at high fall speed.
+   * Nearby contacts use the velocity budget; CCD/solver settings stay intact. */
   private ballisticStepIsClear(delta: number): boolean {
     if (this.elapsed < .4 || this.fatalFallImpactElapsed >= 0 || this.groundRestCandidate) return false;
     let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity, speed = 0;

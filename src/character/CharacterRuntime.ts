@@ -5,7 +5,7 @@ import { GaitTransition, sampleGaitPhase, alignGaitPhase, createSlideSprintRecov
 import { createCrouchLocomotionClips, CROUCH_LOCOMOTION_IDS, CROUCH_GAIT_REFERENCE_SPEED } from './CrouchLocomotion';
 import { advanceStrikeClock, CombatImpactAudio } from './CombatFeel';
 import { createCombatPushClip, applyCombatPushPose, combatPushEnvelope, sampleCombatPalm, transferCombatStance } from './CombatPushMotion';
-import { FirstPersonCombatPose, offsetFirstPersonUpperBody } from './FirstPersonCombatPose';
+import { FirstPersonCombatPose } from './FirstPersonCombatPose';
 import { FirstPersonObstaclePose } from './FirstPersonObstaclePose';
 import { EnvironmentStrikeContact } from './EnvironmentStrikeContact';
 import { EnvironmentCameraGuard } from './EnvironmentCameraGuard';
@@ -128,6 +128,7 @@ import {
 } from './FirstPersonLook';
 import './CharacterRuntime.css';
 import { gripForItem, heldItemFrame, HeldItemPose, type HeldItemKind, type PalmFrame } from './HeldItemPose';
+import { HandPose } from './HandPose';
 
 const FIXED_DELTA = 1 / 60;
 const MAX_ACCUMULATOR = 0.12;
@@ -1175,10 +1176,18 @@ export class CharacterRuntime {
     this.computerPose?.dispose();this.computerPose=undefined;this.headMaskWarmup.value=0;
     for(const [o,visible] of this.computerHidden)o.visible=visible;this.computerHidden.clear();
     this.viewMode=forceFirstPerson?'first-person':this.computerViewMode??this.viewMode;this.computerViewMode=undefined;
-    this.playAnimation('idle',true,1,false,true);this.updateAvatarTransform(0,true);this.applyViewMode(true);this.presentCamera();
+    this.playAnimation('idle',true,1,false,true);this.updateAvatarTransform(0,true);this.applyViewMode(true);
+    if(this.viewMode==='first-person'){
+      this.firstPersonHeldPose.snap(this.heldItemAllowed());
+      this.applyFirstPersonHeldItemPose(0);
+    }else this.applyHeldItemPose(0);
+    this.presentCamera();
   }
   /** The right hand holds a quest item (presentation only): the compass or the torch. */
-  setHeldItem(kind: HeldItemKind | null): void { this.heldKind = kind; }
+  setHeldItem(kind: HeldItemKind | null): void {
+    if (kind !== this.heldKind) this.firstPersonHeldPose.snap(!!kind);
+    this.heldKind = kind;
+  }
   /**
    * The stable frame of the held item for the drawn view: fixed in the view in
    * first person (no gait sway), in front of the chest in third person.
@@ -1196,9 +1205,14 @@ export class CharacterRuntime {
   private readonly heldGrip = { palm: new THREE.Vector3(), normal: new THREE.Vector3(), fingers: new THREE.Vector3(), pole: new THREE.Vector3(), curl: 0 };
   private readonly heldView = new THREE.Matrix4();
   private readonly heldAim = new THREE.Vector3();
+  private readonly heldProbe = new THREE.Vector3();
+  private readonly heldAxis = new THREE.Vector3();
+  private readonly heldPalm = new THREE.Vector3();
+  private readonly heldCollision = { center: new THREE.Vector3(), normal: new THREE.Vector3() };
   /** Third-person rig: the item in front of the chest, aimed where the player looks. */
-  private applyHeldItemPose(delta: number): void {
-    const weight = this.heldPose.advance(this.heldItemAllowed(), delta);
+  private applyHeldItemPose(delta: number, presentationAim?: THREE.Vector3): void {
+    if (presentationAim) this.heldPose.snap(!!this.heldKind);
+    const weight = this.heldPose.advance(!!presentationAim || this.heldItemAllowed(), delta);
     if (this.viewMode !== 'first-person') this.heldFrameValid = false;
     if (weight <= 0 || !this.heldKind || !this.headBone || !this.leftUpperArmBone || !this.rightUpperArmBone) return;
     this.headBone.getWorldPosition(this.heldOrigin);
@@ -1210,12 +1224,18 @@ export class CharacterRuntime {
     this.heldUp.set(0, 1, 0);
     this.heldForward.crossVectors(this.heldUp, this.heldRight).normalize();
     this.heldView.makeBasis(this.heldRight, this.heldUp, this.heldShoulder.copy(this.heldForward).negate()).setPosition(this.heldOrigin);
-    this.firstPersonCamera.getWorldDirection(this.heldAim).multiplyScalar(12).add(this.firstPersonCamera.getWorldPosition(this.heldShoulder));
-    const frame = this.viewMode === 'first-person' ? this.heldScratch : this.heldFrame;
+    if (presentationAim) this.heldAim.copy(presentationAim);
+    else this.firstPersonCamera.getWorldDirection(this.heldAim).multiplyScalar(12).add(this.firstPersonCamera.getWorldPosition(this.heldShoulder));
+    const frame = this.viewMode === 'first-person' && !presentationAim ? this.heldScratch : this.heldFrame;
     heldItemFrame(this.heldKind, this.heldView, this.heldAim, false, frame);
     if (frame === this.heldFrame) this.heldFrameValid = true;
-    this.heldGrip.curl = gripForItem(this.heldKind, frame, this.heldRight, this.heldUp, this.heldGrip);
+    this.heldGrip.curl = gripForItem(this.heldKind, frame, this.heldRight, this.heldUp, this.heldGrip, this.heldPose.getHandSpan(this.rightHandBone), true);
     this.heldPose.apply([this.rightUpperArmBone, this.rightForearmBone, this.rightHandBone], this.heldGrip);
+    if (this.heldKind === 'torch' && this.rightHandBone && this.heldPose.getPalmPosition(this.rightHandBone, this.heldPalm)) {
+      // The physical arm may reach its limit in a crouched pose or a scripted
+      // shot. Keep the lamp on that solved hand rather than beside its target.
+      frame.position.add(this.heldPalm.sub(this.heldGrip.palm));
+    }
   }
   /** First-person rig: the item fixed in the view, the hand brought to it. */
   private applyFirstPersonHeldItemPose(delta: number): void {
@@ -1226,12 +1246,36 @@ export class CharacterRuntime {
     this.heldView.copy(this.firstPersonCamera.matrixWorld);
     this.firstPersonCamera.getWorldDirection(this.heldAim).multiplyScalar(12).add(this.firstPersonCamera.getWorldPosition(this.heldOrigin));
     heldItemFrame(this.heldKind, this.heldView, this.heldAim, true, this.heldFrame);
+    // Retract the object and its grip together near a wall. A later arm-only
+    // obstacle correction would leave the fixed object floating beside the hand.
+    this.constrainFirstPersonHeldFrame();
     this.heldFrameValid = true;
     if (weight <= 0) return;
+    // A fixed object needs a view-relative arm origin, including when looking
+    // up or to the side. Keeping the exploration shoulder behind the eye made
+    // that target physically unreachable and the hand waved at full extension.
+    const upper = this.firstPersonRightUpperArmBone;
+    if (upper?.parent) {
+      this.heldShoulder.set(.22, -.29, -.02).applyMatrix4(this.heldView);
+      upper.getWorldPosition(this.heldProbe).lerp(this.heldShoulder, weight);
+      if (this.environment.sweepSphere(this.heldOrigin, this.heldProbe, .085, this.heldCollision)) {
+        this.heldProbe.copy(this.heldCollision.center).addScaledVector(this.heldCollision.normal, .004);
+      }
+      upper.position.copy(upper.parent.worldToLocal(this.heldProbe));
+      upper.updateWorldMatrix(false, true);
+    }
     this.heldRight.setFromMatrixColumn(this.heldView, 0).normalize();
     this.heldUp.setFromMatrixColumn(this.heldView, 1).normalize();
-    this.heldGrip.curl = gripForItem(this.heldKind, this.heldFrame, this.heldRight, this.heldUp, this.heldGrip);
+    this.heldGrip.curl = gripForItem(this.heldKind, this.heldFrame, this.heldRight, this.heldUp, this.heldGrip, this.firstPersonHeldPose.getHandSpan(this.firstPersonRightHandBone));
     this.firstPersonHeldPose.apply([this.firstPersonRightUpperArmBone, this.firstPersonRightForearmBone, this.firstPersonRightHandBone], this.heldGrip);
+  }
+  private constrainFirstPersonHeldFrame(): void {
+    const lens = this.heldKind === 'torch' ? 0.19 : 0;
+    this.heldAxis.set(0, 1, 0).applyQuaternion(this.heldFrame.quaternion);
+    this.heldProbe.copy(this.heldFrame.position).addScaledVector(this.heldAxis, lens);
+    if (this.environment.sweepSphere(this.heldOrigin, this.heldProbe, this.heldKind === 'torch' ? .065 : .08, this.heldCollision)) {
+      this.heldFrame.position.copy(this.heldCollision.center).addScaledVector(this.heldCollision.normal, .004).addScaledVector(this.heldAxis, -lens);
+    }
   }
   getEquipmentHandPosition(output:THREE.Vector3):boolean {
     const hand=this.viewMode==='first-person'&&!this.computerPose?this.firstPersonRightHandBone:this.rightHandBone;
@@ -1241,7 +1285,10 @@ export class CharacterRuntime {
     const feet=position.clone();feet.y-=.865;
     const frame=this.sampleComputerPresentation({feet,yaw,seated:0,seat:feet,lean:0,time,walking:0,handWeight:0},firstPerson);
     if(this.headBone){this.headBone.rotateY(headYaw);this.headBone.updateWorldMatrix(false,true);}
-    frame.eye.copy(frame.head).add(new THREE.Vector3(0,.075,0)).add(new THREE.Vector3(Math.sin(yaw+headYaw),0,Math.cos(yaw+headYaw)).multiplyScalar(.095));return frame;
+    frame.eye.copy(frame.head).add(new THREE.Vector3(0,.075,0)).add(new THREE.Vector3(Math.sin(yaw+headYaw),0,Math.cos(yaw+headYaw)).multiplyScalar(.095));
+    this.heldAim.set(Math.sin(yaw+headYaw),-.035,Math.cos(yaw+headYaw)).multiplyScalar(12).add(frame.eye);
+    this.applyHeldItemPose(0, this.heldAim);
+    return frame;
   }
   setExternalCameraPresentation(active: boolean): void {
     if (active) { this.avatarAnchor.visible = false; this.firstPersonAvatarAnchor.visible = false; return; }
@@ -1287,15 +1334,45 @@ export class CharacterRuntime {
     if (this.ragdoll) return this.ragdoll.getVelocity(target);
     return this.recovery ? target.set(0, 0, 0) : target.copy(this.player!.getDebugState().velocity);
   }
-  /**
-   * Arriving face down after the fall into the Backrooms: a quiet, non-fatal
-   * ragdoll on the ground; the interact key gets up (the usual recovery).
-   * Returns false if the body could not go down yet (not ready, already down).
-   */
+  /** Prepare the grounded body behind the loading screen, before revealing the scene. */
   collapseOnArrival(): boolean {
-    if (!this.ready || this.ragdoll || this.recovery) return false;
-    this.startRagdoll({ fatal: false, quietStart: true, status: 'AU SOL · E POUR SE RELEVER' });
-    return !!this.ragdoll;
+    if (!this.ready || this.ragdoll || this.recovery || !this.character || !this.headBone || !this.hipsBone
+      || !this.physics || !this.player || this.recoveryCameraBlend >= 0) return false;
+    this.setViewMode('first-person');
+    const eyeFromHead = this.headBone.getWorldQuaternion(new THREE.Quaternion()).invert()
+      .multiply(this.firstPersonCamera.quaternion);
+    const groundY = this.physics.getStandingPosition(new THREE.Vector3()).y - .865;
+    // quietStart preserves its input pose exactly; give it the authored lying
+    // pose, rather than freezing a standing idle in mid-air.
+    this.mixer!.stopAllAction();
+    this.animations.get('stand-up-back')!.action.reset().setEffectiveWeight(1).play();
+    this.mixer!.update(0);
+    this.avatarAnchor.updateMatrixWorld(true);
+    const hips = this.hipsBone.getWorldPosition(new THREE.Vector3());
+    this.avatarAnchor.position.x += this.player.position.x - hips.x;
+    this.avatarAnchor.position.z += this.player.position.z - hips.z;
+    this.avatarAnchor.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(this.character, true);
+    this.avatarAnchor.position.y += groundY - bounds.min.y + .012;
+    this.avatarAnchor.updateMatrixWorld(true);
+    this.firstPersonCamera.quaternion.copy(this.headBone.getWorldQuaternion(new THREE.Quaternion())).multiply(eyeFromHead);
+    this.startRagdoll({ fatal: false, quietStart: true, status: 'AU SOL' });
+    if (!this.ragdoll) return false;
+    this.arrivalWakeElapsed = 0;
+    this.arrivalEyes.hidden = false;
+    this.arrivalEyes.style.setProperty('--eye-open', '0');
+    this.updateRecoveryPrompt();
+    this.presentCamera();
+    return true;
+  }
+
+  private updateArrivalWake(delta: number): void {
+    if (this.arrivalWakeElapsed >= 3.6) return;
+    this.arrivalWakeElapsed = Math.min(3.6, this.arrivalWakeElapsed + Math.max(0, delta));
+    // A short black hold, then two curved lids slowly reveal the world.
+    const open = THREE.MathUtils.smootherstep(this.arrivalWakeElapsed, .6, 3.6);
+    this.arrivalEyes.style.setProperty('--eye-open', open.toFixed(4));
+    if (this.arrivalWakeElapsed >= 3.6) { this.arrivalEyes.hidden = true; this.updateRecoveryPrompt(); }
   }
   /** The game owns spawn/streaming; this actor uses the same rig and interactions. */
   setInteractionPartner(position: THREE.Vector3 | null, combat = false): void {
@@ -1328,6 +1405,11 @@ export class CharacterRuntime {
     const output = this.host.renderCamera;
     output.position.copy(camera.position); output.quaternion.copy(camera.quaternion);
     if (output.fov !== camera.fov || output.near !== camera.near) { output.fov = camera.fov; output.near = camera.near; output.updateProjectionMatrix(); }
+    if (this.viewMode === 'first-person' && !this.isDown && !this.activeEmote && !this.pairCoordinator.session
+      && !this.computerPose && this.firstPersonCombatCameraOffset.lengthSq() > 1e-8) {
+      output.position.add(this.firstPersonCombatCameraOffset);
+      this.combatCameraGuard.constrain(output, camera.position, this.environment);
+    } else this.combatCameraGuard.reset();
   }
   private raycastEnvironment(raycaster: THREE.Raycaster) { return this.environment.raycast(raycaster); }
   private get nearbyColliders(): StaticCollider[] { return this.environment.nearbyBoxes(this.getWorldPosition()); }
@@ -1341,6 +1423,8 @@ export class CharacterRuntime {
   
   private readonly motionFx = document.createElement('div');
   private readonly damageFx = document.createElement('div');
+  private readonly arrivalEyes = document.createElement('div');
+  private arrivalWakeElapsed = Infinity;
   
   
   private settings: GameSettings;
@@ -1501,6 +1585,8 @@ export class CharacterRuntime {
   private combatTransition: AnimationId | null = null;
   private readonly firstPersonClipUniforms: Array<{ clipY: { value: number }; combatIsolation: { value: number }; groundKick: { value: number } }> = [];
   private readonly firstPersonCombatPresentation = new FirstPersonCombatPose();
+  private combatHandPose?: HandPose;
+  private firstPersonCombatHandPose?: HandPose;
   private readonly firstPersonObstaclePose = new FirstPersonObstaclePose();
   /** A small object read in the right palm (the compass), on both rigs. */
   private readonly heldPose = new HeldItemPose();
@@ -1572,7 +1658,9 @@ export class CharacterRuntime {
   private firstPersonPresentationInitialized = false;
   private readonly firstPersonPresentedHip = new THREE.Vector3();
   private readonly firstPersonPresentedAnchor = new THREE.Vector3();
-  private firstPersonArmSafetyForwardOffset = 0;
+  private firstPersonNeckBone?: THREE.Bone;
+  private readonly firstPersonCombatCameraOffset = new THREE.Vector3();
+  private readonly combatCameraGuard = new EnvironmentCameraGuard();
   private firstPersonFootLockGroup: 'standing' | 'crouch' | null = null;
   private firstPersonFootLockBone?: THREE.Bone;
   private leftUpperArmBone?: THREE.Bone;
@@ -1868,6 +1956,10 @@ export class CharacterRuntime {
     this.root.append(this.motionFx);
     this.damageFx.className = 'character-runtime__damage-fx';
     this.root.append(this.damageFx);
+    this.arrivalEyes.className = 'character-runtime__arrival-eyes';
+    this.arrivalEyes.hidden = true;
+    this.arrivalEyes.setAttribute('aria-hidden', 'true');
+    this.root.append(this.arrivalEyes);
     const recoveryPrompt = document.createElement('div');
     recoveryPrompt.className = 'interaction-prompt character-runtime__get-up-prompt';
     recoveryPrompt.setAttribute('role', 'status');
@@ -1927,6 +2019,10 @@ export class CharacterRuntime {
   async initialize(): Promise<void> {
     await this.loadCharacterAndAnimations();
     if (this.disposed) return;
+    this.combatHandPose!.setThumbReference(this.animations.get('idle')!.clip);
+    this.firstPersonCombatHandPose!.setThumbReference(this.firstPersonAnimations.get('idle')!.clip);
+    this.heldPose.useHandPose(this.combatHandPose!);
+    this.firstPersonHeldPose.useHandPose(this.firstPersonCombatHandPose!);
     this.ready = true;
     this.playAnimation('idle', true);
     this.emoteMenu.prepare(new Map(EMOTES.map(emote => [emote.id, this.animations.get(emote.id)!.clip])));
@@ -1958,6 +2054,8 @@ export class CharacterRuntime {
   private applyViewMode(snap: boolean): void {
     this.firstPersonObstaclePose.reset();
     const firstPerson = this.viewMode === 'first-person';
+    if (!firstPerson) this.player?.limitStrikeLook(0);
+    if (snap || !firstPerson) this.firstPersonCombatCameraOffset.set(0, 0, 0);
     for (const [mode, button] of this.viewButtons) button.classList.toggle('is-active', mode === this.viewMode);
 
     // The guard pitch limiter belongs exclusively to the live first-person combat POV.
@@ -2005,6 +2103,8 @@ export class CharacterRuntime {
     character.name = 'CharacterCharacter';
     firstPersonCharacter.name = 'CharacterFirstPersonCharacter';
     idleNpcCharacter.name = 'CharacterIdleNpcCharacter';
+    this.combatHandPose = new HandPose(character);
+    this.firstPersonCombatHandPose = new HandPose(firstPersonCharacter);
     this.fitCharacterToMeters(character);
     this.fitCharacterToMeters(firstPersonCharacter);
     this.fitCharacterToMeters(idleNpcCharacter);
@@ -2068,6 +2168,7 @@ export class CharacterRuntime {
       if (bone.isBone && normalizedName.endsWith('hips')) {
         this.firstPersonHipsBone = bone;
       }
+      if (bone.isBone && normalizedName.endsWith('neck')) this.firstPersonNeckBone = bone;
       if (bone.isBone && normalizedName.endsWith('spine') && !normalizedName.endsWith('spine1') && !normalizedName.endsWith('spine2')) this.firstPersonCombatSpineBone = bone;
       if (bone.isBone && normalizedName.endsWith('spine1')) this.firstPersonCombatSpine1Bone = bone;
       if (bone.isBone && normalizedName.endsWith('spine2')) this.firstPersonCombatSpine2Bone = bone;
@@ -2798,7 +2899,6 @@ export class CharacterRuntime {
       this.combatAttack !== null || this.combatPhase === 'enter' || this.combatPhase === 'guard'
       || this.combatPhase === 'exit' || this.firstPersonCombatReleaseSeconds > 0 || this.groundKick !== null
     ) ? 1 : 0;
-    // Placement and scale consume the same sample, without a second scale lag.
     this.firstPersonCombatPoseBlend = snapScale ? combatPoseTarget : THREE.MathUtils.lerp(
       this.firstPersonCombatPoseBlend, combatPoseTarget, expAlpha(delta, FIRST_PERSON_COMBAT_BODY_OFFSET_RESPONSE));
     const explorationScale = lowView ? FIRST_PERSON_VIEWMODEL_CROUCH_SCALE : FIRST_PERSON_VIEWMODEL_STAND_SCALE;
@@ -4268,6 +4368,7 @@ export class CharacterRuntime {
   }
 
   private resetCombatState(clearPointer = false): void {
+    this.player?.limitStrikeLook(0);
     this.combatGazeYaw = null;
     this.actionFacingReturnActive = false;
     this.actionFacingReturnSeconds = 0;
@@ -4593,6 +4694,7 @@ export class CharacterRuntime {
       impactApplied: false,
       sampledElapsed: 0,
     };
+    if (this.viewMode === 'first-person') this.player?.limitStrikeLook(Math.min(.28, Math.max(.16, duration * timing.contactEndFraction)));
     this.combatAttackAction = pair;
     this.combatHeldChainCount += 1;
     // Every strike owns a fresh physical-contact sweep. Never inherit the last
@@ -8940,38 +9042,43 @@ export class CharacterRuntime {
     bone.updateWorldMatrix(false, true);
   }
 
-  private applyFirstPersonArmCameraSafety(delta: number): void {
+  private updateFirstPersonCombatCamera(delta: number): void {
     if (!this.firstPersonCharacter || !this.player || this.viewMode !== 'first-person') return;
-    const visible = !this.player.isIncapacitated && this.firstPersonCombatPoseBlend > 0.001;
+    const visible = !this.player.isIncapacitated && !this.activeEmote && !this.pairCoordinator.session
+      && this.firstPersonCombatPoseBlend > 0.001;
     const eye = this.firstPersonCamera.getWorldPosition(new THREE.Vector3());
     const forward = new THREE.Vector3(Math.sin(this.bodyYaw), 0, Math.cos(this.bodyYaw));
     let required = 0;
+    let raised = 0;
     if (visible) {
+      const neck = this.firstPersonNeckBone?.getWorldPosition(new THREE.Vector3());
+      if (neck) {
+        required = Math.max(0, neck.clone().sub(eye).dot(forward) + .25 * this.firstPersonCombatPoseBlend);
+        raised = Math.max(0, neck.y + .14 - eye.y) * this.firstPersonCombatPoseBlend;
+      }
       const arms = [
         [this.firstPersonLeftUpperArmBone, this.firstPersonLeftForearmBone, this.firstPersonLeftHandBone],
         [this.firstPersonRightUpperArmBone, this.firstPersonRightForearmBone, this.firstPersonRightHandBone],
       ];
-      // Check the actual arm segments after guard IK. Camera pitch cannot change
-      // the eye's physical clearance, and cannot push the legs toward the sky.
+      // Advance the rendered eye beyond the neck/nearby arm, keeping the
+      // physical avatar and the gameplay aim at their original positions.
       for (const chain of arms) for (let i = 0; i < 2; i++) {
         const a = chain[i]?.getWorldPosition(new THREE.Vector3());
         const b = chain[i + 1]?.getWorldPosition(new THREE.Vector3());
         if (!a || !b) continue;
-        const nearest = new THREE.Line3(a, b).closestPointToPoint(eye, true, new THREE.Vector3());
-        const rel = nearest.sub(eye);
+        const candidate = eye.clone().addScaledVector(forward, required).add(new THREE.Vector3(0, raised, 0));
+        const nearest = new THREE.Line3(a, b).closestPointToPoint(candidate, true, new THREE.Vector3());
+        const rel = nearest.sub(candidate);
         const lateralSq = Math.max(0, rel.lengthSq() - rel.dot(forward) ** 2);
         const clearance = i === 0 ? 0.13 : 0.115;
         if (lateralSq < clearance ** 2 && rel.lengthSq() < clearance ** 2) {
-          required = Math.max(required, Math.sqrt(clearance ** 2 - lateralSq) - rel.dot(forward));
+          required += Math.sqrt(clearance ** 2 - lateralSq) + rel.dot(forward);
         }
       }
     }
-    required = THREE.MathUtils.clamp(required, 0, 0.24);
-    this.firstPersonArmSafetyForwardOffset = required > this.firstPersonArmSafetyForwardOffset
-      ? required
-      : THREE.MathUtils.lerp(this.firstPersonArmSafetyForwardOffset, required, expAlpha(delta, 15));
-    offsetFirstPersonUpperBody(this.firstPersonCombatSpineBone,
-      forward.multiplyScalar(this.firstPersonArmSafetyForwardOffset));
+    const target = forward.multiplyScalar(THREE.MathUtils.clamp(required, 0, .30));
+    target.y = Math.min(.12, raised);
+    this.firstPersonCombatCameraOffset.lerp(target, expAlpha(delta, 18));
   }
 
   private applyFirstPersonGuardPose(delta: number): void {
@@ -8980,8 +9087,8 @@ export class CharacterRuntime {
       || this.combatDodge || this.player?.isIncapacitated) return;
     // First-person guard is a presentation pose: each wrist sits below/to the
     // side of the sight line. Centering the pair left the rear fist at the eye.
-    // Keep actual limb lengths and authored wrist/finger rotations; contact
-    // poses still come from the authoritative world rig during a strike.
+    // Keep actual limb lengths and authored wrists. HandPose closes the fingers
+    // once; contact poses still come from the world rig during a strike.
     const chains = [
       [this.firstPersonLeftUpperArmBone, this.firstPersonLeftForearmBone, this.firstPersonLeftHandBone],
       [this.firstPersonRightUpperArmBone, this.firstPersonRightForearmBone, this.firstPersonRightHandBone],
@@ -9013,10 +9120,28 @@ export class CharacterRuntime {
     if (this.viewMode !== 'first-person' || !this.firstPersonCharacter || this.player?.isIncapacitated) {
       this.firstPersonObstaclePose.reset(); return;
     }
+    const hand = this.firstPersonRightHandBone;
+    const holding = this.heldFrameValid && this.heldItemAllowed() && hand && this.firstPersonHeldPose.getPalmPosition(hand, this.heldPalm);
     this.firstPersonObstaclePose.apply(this.firstPersonCamera, [
       [this.firstPersonLeftUpperArmBone, this.firstPersonLeftForearmBone, this.firstPersonLeftHandBone],
-      [this.firstPersonRightUpperArmBone, this.firstPersonRightForearmBone, this.firstPersonRightHandBone],
+      [this.firstPersonRightUpperArmBone, this.firstPersonRightForearmBone, hand],
     ], this.environment, delta);
+    // Contact may retract the hand or tuck the elbow; carry the object with
+    // that same correction instead of leaving it at an independent view target.
+    if (holding && hand && this.firstPersonHeldPose.getPalmPosition(hand, this.heldProbe)) {
+      this.heldFrame.position.add(this.heldProbe.sub(this.heldPalm));
+      this.heldPalm.copy(this.heldFrame.position);
+      this.constrainFirstPersonHeldFrame();
+      this.heldShoulder.subVectors(this.heldFrame.position, this.heldPalm);
+      const upper = this.firstPersonRightUpperArmBone;
+      if (upper?.parent && this.heldShoulder.lengthSq() > 1e-10) {
+        // The long torch can meet a surface before the fingers do. Retreat the
+        // entire presentation arm with it, retaining the solved hand and elbow.
+        upper.getWorldPosition(this.heldProbe).add(this.heldShoulder);
+        upper.position.copy(upper.parent.worldToLocal(this.heldProbe));
+        upper.updateWorldMatrix(false, true);
+      }
+    }
   }
 
   private applyFallMotion(delta: number): void {
@@ -9710,6 +9835,7 @@ export class CharacterRuntime {
   }
 
   private canStartRecovery(): boolean {
+    if (this.arrivalWakeElapsed < 3.6) return false;
     if (this.recovery?.isHolding) return this.ready && this.health > 0 && this.recoveryGroundAvailable;
     return canGetUp({
       alive: this.health > 0,
@@ -9723,12 +9849,12 @@ export class CharacterRuntime {
 
   private updateRecoveryPrompt(): void {
     if (!this.recoveryPrompt) return;
-    const visible = shouldShowGetUpPrompt({
+    const visible = this.arrivalWakeElapsed >= 3.6 && (shouldShowGetUpPrompt({
       alive: this.health > 0,
       ragdollMode: this.ragdollMode,
       recovering: this.recovery !== null,
       inputEnabled: this.ready,
-    }) || (this.recovery?.isHolding === true && this.health > 0);
+    }) || (this.recovery?.isHolding === true && this.health > 0));
     const key = this.recoveryPrompt.querySelector('kbd');
     if (key) key.textContent = formatKeyLabel(this.settings.controls.interact);
     this.recoveryPrompt.classList.toggle('visible', visible);
@@ -9875,6 +10001,13 @@ export class CharacterRuntime {
     this.physics.setPlayerColliderEnabled(true);
     this.player.teleport(safe);
     this.player.setIncapacitated(false);
+    if (this.viewMode === 'first-person') {
+      // The animated eyes now become the mouse authority. Returning to the
+      // pre-fall look here made the standing body/camera turn back by up to π.
+      const look = new THREE.Euler().setFromQuaternion(lastRecoveryCameraRotation, 'YXZ');
+      look.z = 0;
+      this.player.setLookQuaternion(new THREE.Quaternion().setFromEuler(look));
+    }
     this.player.setCameraMotionEnabled(this.viewMode === 'first-person');
     this.firstPersonCamera.near = 0.01;
     this.firstPersonCamera.updateProjectionMatrix();
@@ -10509,6 +10642,7 @@ export class CharacterRuntime {
     }
     if (matchesControlAction(event,this.settings.controls,'interact') && (this.recovery?.isHolding || (this.ragdollMode !== null && this.ragdollMode !== 'dead'))) {
       event.preventDefault();
+      if (this.arrivalWakeElapsed < 3.6) return;
       // E is a request, not a one-frame eligibility check. If the body still
       // needs a fraction of a second to settle or the nearby NPC temporarily
       // blocks the capsule, keep the request armed and start automatically as
@@ -10576,6 +10710,7 @@ export class CharacterRuntime {
     this.emoteMenu.update(measuredDelta);
     const rawDelta = Math.min(0.05, measuredDelta);
     this.previousTime = now;
+    this.updateArrivalWake(rawDelta);
     this.pairClock += measuredDelta;
     this.updatePairInvitations(rawDelta);
     if (this.pairCoordinator.session) {
@@ -10700,6 +10835,10 @@ export class CharacterRuntime {
       this.firstPersonCurrentAction?.setEffectiveTimeScale(this.playbackSpeed);
     }
     this.evaluateCombatMixers(rawDelta);
+    const fistWeight = this.combatAttack ? 1 : this.combatUpperLayer?.thirdPerson.isRunning()
+      ? this.combatUpperLayer.thirdPerson.getEffectiveWeight() : 0;
+    for (const hand of [this.leftHandBone, this.rightHandBone]) this.combatHandPose?.curl(hand, 1, fistWeight);
+    for (const hand of this.firstPersonHandBones) this.firstPersonCombatHandPose?.curl(hand, 1, fistWeight);
     this.applyLocomotionWeightShift(rawDelta);
     this.applyLocomotionFootPlants(rawDelta);
     this.applyCombatGuardTorsoAlignment();
@@ -10738,14 +10877,11 @@ export class CharacterRuntime {
     }
     if (this.viewMode === 'first-person') {
       this.updateFirstPersonBodyTransform(rawDelta);
-      // Eyes sit in front of the neck. Recess only the presentation chest a
-      // little; visible feet keep the physical gait and guard wrists use IK.
-      offsetFirstPersonUpperBody(this.firstPersonCombatSpineBone,
-        new THREE.Vector3(Math.sin(this.bodyYaw), 0, Math.cos(this.bodyYaw))
-          .multiplyScalar(-0.075 * this.firstPersonCombatPoseBlend));
       this.applyFirstPersonGuardPose(rawDelta);
+      this.updateFirstPersonCombatCamera(rawDelta);
+      // Gait and camera safety settle first; real contacts then move the hand
+      // and its object together.
       this.applyFirstPersonHeldItemPose(rawDelta);
-      this.applyFirstPersonArmCameraSafety(rawDelta);
       this.applyFirstPersonObstaclePose(rawDelta);
     }
     this.updateRecoveryCameraBlend(rawDelta);

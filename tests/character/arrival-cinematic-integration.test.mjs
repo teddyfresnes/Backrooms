@@ -40,9 +40,15 @@ test('the chosen wardrobe avatar enters, then the playable body and camera meet 
   const camera=target.clone();cinematic.start(target);
   for(const time of [1.9,2.2,2.5,2.75]){
     cinematic.sample(7.5+time,camera);
-    const hand=chosen.avatar.getObjectByName('mixamorigRightHandIndex2').getWorldPosition(new THREE.Vector3());
+    const point = suffix => chosen.avatar.getObjectByName(`mixamorigRightHand${suffix}`).getWorldPosition(new THREE.Vector3());
+    const wrist=point(''), middle=point('Middle1');
+    const fingers=middle.clone().sub(wrist).normalize();
+    const normal=new THREE.Vector3().crossVectors(point('Index1').sub(point('Pinky1')),fingers).normalize();
+    const hand=wrist.lerp(middle,.62);
     const grip=lab.scene.getObjectByName('entrance-door-hand-contact').getWorldPosition(new THREE.Vector3());
-    assert.ok(hand.distanceTo(grip)<.08,`The selected wardrobe hand must touch the moving handle at ${time}s`);
+    assert.ok(hand.distanceTo(grip)<.035,`The selected wardrobe palm must touch the moving handle at ${time}s`);
+    const facing=new THREE.Vector3(0,0,1).applyQuaternion(lab.scene.getObjectByName('entrance-right-leaf-hinge').getWorldQuaternion(new THREE.Quaternion()));
+    assert.ok(normal.dot(facing)>.95,'the back of the hand touches the door');
   }
   cinematic.sample(0,camera);
   for(let i=0;i<850;i++)cinematic.update(1/60,camera);

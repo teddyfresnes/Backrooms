@@ -352,8 +352,9 @@ export class Game {
       });
       await this.character.initialize();
       if (this.disposed) return;
-      if (!this.options.arrivedByFall) this.character.spawnNearbyPartner();
-      this.pendingArrivalCollapse = !!this.options.arrivedByFall;
+      if (this.options.arrivedByFall) {
+        if (!this.character.collapseOnArrival()) throw new Error('Impossible de préparer l’arrivée au sol.');
+      } else this.character.spawnNearbyPartner();
       this.character.setActive(false);
     } else this.camera.copy(this.playerCamera);
 
@@ -906,7 +907,6 @@ export class Game {
     );
   }
 
-  private pendingArrivalCollapse = false;
   private hitches?: FrameHitchMonitor;
   private readonly perf = { time: 0, frames: 0, worst: 0, calls: 0, triangles: 0 };
   /** A slow stretch of play names its cost: frame times, draws and GPU resources. */
@@ -943,8 +943,6 @@ export class Game {
       this.playableSeconds += rawDelta;
       this.autosaveElapsed += rawDelta;
       if (this.autosaveElapsed >= AUTOSAVE_INTERVAL_SECONDS) this.saveNow('autosave');
-      // The first played frame after the fall: down on the carpet.
-      if (this.pendingArrivalCollapse && this.character?.collapseOnArrival()) this.pendingArrivalCollapse = false;
       this.character?.update(rawDelta);
       const partner = this.character?.getInteractionPartnerPosition();
       if (partner && (partner.distanceTo(this.player.position) > 45 || Math.abs(partner.y - this.player.position.y) > 8)) {

@@ -137,6 +137,9 @@ export class FuseBox {
 
   get isBusy(): boolean { return this.stage === 'opening' || this.stage === 'arming'; }
 
+  /** The hands are free once every lever is up, even while the panel is about to trip. */
+  get locksMovement(): boolean { return this.stage === 'opening' || (this.stage === 'arming' && this.armed < this.levers.length); }
+
   /** All levers: 0 down (tripped), 1 up. */
   private setLevers(up: number): void { for (const pivot of this.levers) pivot.rotation.x = THREE.MathUtils.lerp(0.55, -0.55, up); }
 

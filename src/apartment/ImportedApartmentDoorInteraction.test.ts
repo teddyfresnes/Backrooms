@@ -46,6 +46,7 @@ const makeInteraction = (hinged = false) => {
   lockTarget.position.set(-2, 0, 0);
   const onLockChange = vi.fn();
   const onPush = vi.fn();
+  const onSound = vi.fn();
   const centerX = hinged ? 0.5 : 0;
   const collider: StaticCollider = {
     id: 'entrance-leaf',
@@ -69,12 +70,25 @@ const makeInteraction = (hinged = false) => {
       lockTarget,
       onLockChange,
       onPush,
+      onSound,
     },
   );
-  return { interaction, physics, pivot, ui, leaf, lockTarget, onLockChange, onPush };
+  return { interaction, physics, pivot, ui, leaf, lockTarget, onLockChange, onPush, onSound };
 };
 
 describe('ImportedApartmentDoorInteraction save state', () => {
+  it('closes the actual open leaf and collider silently for the outage', () => {
+    const { interaction, physics, pivot, onSound } = makeInteraction(true);
+    interaction.restoreState({ progress: 1, targetProgress: 1, locked: false });
+    interaction.closeSilently();
+    expect(interaction.getState()).toEqual({ progress: 0, targetProgress: 0, locked: false });
+    expect(pivot.rotation.y).toBe(0);
+    expect(physics.transforms.at(-1)!.rotation.angleTo(new THREE.Quaternion())).toBeCloseTo(0);
+    expect(onSound).not.toHaveBeenCalled();
+    interaction.restoreState({ progress: 0, targetProgress: 0, locked: true });
+    interaction.closeSilently(); expect(interaction.isLocked()).toBe(true);
+    interaction.dispose();
+  });
   it('never opens from proximity, and pauses an obstructed close without reversing it', () => {
     const { interaction } = makeInteraction(); const position = new THREE.Vector3(0, 0, .1), direction = new THREE.Vector3(0, 0, -1);
     for (let tick = 0; tick < 180; tick++) interaction.update(1 / 60, position, direction, true);

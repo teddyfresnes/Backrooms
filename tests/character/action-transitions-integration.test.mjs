@@ -133,24 +133,34 @@ for (const view of ['first-person', 'third-person']) for (const fps of [30, 60, 
 }
 
 for (const view of ['first-person', 'third-person']) {
-  test(`a real living get-up keeps its final orientation before following the saved view in ${view}`, () => {
+  test(`a real living get-up keeps its final orientation and the current view in ${view}`, () => {
     explore(view); lab.startRagdoll({ fatal: false, quietStart: true }); run(1.7);
     lab.refreshRecoveryAvailability(true); lab.startGetUp(); assert.ok(lab.recovery, 'could not start physical recovery');
     let handoff;
     const finish = lab.finishGetUp.bind(lab);
     lab.finishGetUp = () => {
       const yaw = lab.recovery.root.rotation.y;
+      const camera = lab.firstPersonCamera.quaternion.clone();
       lab.player.lookCamera.rotation.set(0, yaw - Math.PI + 1.8, 0); lab.player.continuousAimYaw = yaw - Math.PI + 1.8;
-      finish(); handoff = { yaw, bodyYaw: lab.bodyYaw };
+      finish(); handoff = { yaw, bodyYaw: lab.bodyYaw, camera };
     };
     try {
       for (let i = 0; i < 340 && lab.recovery; i++) stepLab(lab);
       assert.ok(handoff);
       assert.ok(Math.abs(angle(handoff.bodyYaw - handoff.yaw)) < 1e-7, 'finishGetUp discarded the authored facing');
+      if (view === 'first-person') {
+        const before = new THREE.Euler().setFromQuaternion(handoff.camera, 'YXZ').y;
+        assert.ok(Math.abs(angle(lab.player.getContinuousAimYawRadians() - before)) < .001, 'get-up restored the pre-fall mouse direction');
+      }
       const before = lab.bodyYaw; stepLab(lab);
       assert.ok(Math.abs(angle(lab.bodyYaw - before)) < 6.1 * Math.PI / 180, 'next frame snapped to the camera');
       assert.equal(lab.player.isIncapacitated, false);
     } finally { lab.finishGetUp = finish; }
     run(.4);
+    if (view === 'first-person') {
+      const end = new THREE.Euler().setFromQuaternion(lab.host.renderCamera.quaternion, 'YXZ').y;
+      const before = new THREE.Euler().setFromQuaternion(handoff.camera, 'YXZ').y;
+      assert.ok(Math.abs(angle(end - before)) < .08, 'standing turned the view away from the animated endpoint');
+    }
   });
 }

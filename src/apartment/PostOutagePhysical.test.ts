@@ -14,14 +14,20 @@ import {ApartmentObjectInteraction}from './ApartmentObjectInteraction';
 import type {MaterialSet}from '../render/MaterialLibrary';
 const cleanup:(()=>void)[]=[];afterEach(()=>cleanup.splice(0).reverse().forEach(f=>f()));
 async function fixture(){
-  const a=new (ImportedApartmentEnvironment as unknown as {new(model:THREE.Object3D):ImportedApartmentEnvironment})(await loadApartmentModel()),p=await PhysicsWorld.create(createStairwellPlan());cleanup.push(()=>p.dispose(),()=>a.dispose());
+  const a=new (ImportedApartmentEnvironment as unknown as {new(model:THREE.Object3D):ImportedApartmentEnvironment})(await loadApartmentModel());
+  const plan=createStairwellPlan(),surround=plan.colliders.filter(c=>c.id.startsWith('west-wall-top-'));
+  const p=await PhysicsWorld.create({...plan,colliders:plan.colliders.filter(c=>!surround.includes(c))});
+  p.addChunk('persistent-entry-surround',surround,{x:0,y:0,z:0});cleanup.push(()=>p.dispose(),()=>a.dispose());
+  const surroundBox=new THREE.Box3();
+  for(const c of surround)surroundBox.union(new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(c.center.x,c.center.y,c.center.z),new THREE.Vector3(c.halfExtents.x*2,c.halfExtents.y*2,c.halfExtents.z*2)));
   const scene=new THREE.Scene();scene.add(a.group);p.addTrimeshChunk('actual-shell',a.shellColliderMeshes);p.addChunk('actual-furniture',a.furnitureColliders,{x:0,y:0,z:0});
-  const mat=new THREE.MeshStandardMaterial(),materials=new Proxy({},{get:()=>mat})as MaterialSet,c=new LongCorridor(a.corridorDoorway,a.corridorFloorY,materials,p);cleanup.push(()=>mat.dispose(),()=>c.dispose());
+  const mat=new THREE.MeshStandardMaterial(),materials=new Proxy({},{get:()=>mat})as MaterialSet,c=new LongCorridor({...a.corridorDoorway,surroundBox},a.corridorFloorY,materials,p);cleanup.push(()=>mat.dispose(),()=>c.dispose());
   return{a,p,scene,c};
 }
 it('replaces the old staircase once, keeps the exact threshold and permits an actual capsule journey beyond 20 m to the far end',async()=>{
   const{a,p,scene,c}=await fixture();const x=a.doorCenter.x,z=a.doorCenter.z,y=c.floorY;
   p.removeChunk('origin');c.activate(scene);c.activate(scene);expect(p.hasChunk('post-outage-corridor')).toBe(true);expect(scene.children.filter(o=>o===c.group)).toHaveLength(1);
+  expect(p.hasChunk('persistent-entry-surround')).toBe(true);
   p.teleport({x:x-.65,y:y+.865,z});
   for(let i=0;i<400;i++){p.move({x:.06,y:-.04,z:0});p.stepDynamics(1/60);}
   const position=new THREE.Vector3();p.getPosition(position);expect(position.x-x).toBeGreaterThan(22);expect(position.y-y).toBeCloseTo(.865,1);
@@ -45,6 +51,9 @@ it('prepares disabled resident corridor colliders and activates the same bodies 
 it('keeps the imported switch/lock reachable, closes the frame perimeter from both sides and supports the complete threshold',async()=>{
   const{a,p,scene,c}=await fixture();p.removeChunk('origin');c.activate(scene);scene.updateMatrixWorld(true);
   const frame=a.corridorDoorway.frameBox,leaf=a.entryDoor.closedBox;
+  const carpet=c.group.getObjectByName('corridor-floor')!;
+  expect(new THREE.Box3().setFromObject(carpet).min.x).toBeGreaterThan(frame.max.x);
+  expect(a.group.getObjectByName('north-neighbor-door-0-leaf')).toBeUndefined();
   for(const name of ['corridor-entry-return-left','corridor-entry-return-right','corridor-entry-lintel']){
     const b=new THREE.Box3().setFromObject(c.group.getObjectByName(name)!);expect(b.min.x).toBeGreaterThanOrEqual(frame.max.x-.009);
   }
