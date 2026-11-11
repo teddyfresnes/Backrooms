@@ -36,8 +36,12 @@ Le pipeline ordinaire (plan version 18, topologie/spatial version 2) est :
    de 224 m (2×2 chunks), puis matérialise aux datums finaux les pièces historiques,
    murs épais, détails et plafonds ; les grandes familles restent minoritaires ;
 5. `SpatialRelief` ajoute les socles et terrasses pleins au sol porteur ;
-6. `BspConnectivity` ouvre les partitions ordinaires qui isolent une poche après
-   découpe ; le graphe distingue les portes à ouvrir (`requiresDoorId`), les vues
+6. `BspConnectivity` relie les composantes d'un même datum, même si chacune a
+   déjà sa propre sortie ; une réparation ouvre une porte par composante, pas
+   par rectangle de dallage. Les étranglements entre cloisons ordinaires sont
+   élargis si un chemin annoncé ne laisse pas passer la capsule ; les bandes
+   de dallage ouvertes sur une pièce restent intactes. Le graphe distingue les
+   portes à ouvrir (`requiresDoorId`), les vues
    et les chutes. Les petits rectangles de dallage ne sont pas des obstacles.
    `SpatialWallJunctions` nettoie les résidus ordinaires après les réservations et
    portes, avant la reconstruction des sols. `StructuralSupports` réconcilie les coques et linteaux avec leurs

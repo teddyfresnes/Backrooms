@@ -197,6 +197,19 @@ it('walks and runs a real nonzero regional ramp, stops on it and reverses withou
   } finally { physics.dispose(); }
 });
 
+it('walks through opposing BSP corners that used to leave a 52 cm slit in an advertised route', async () => {
+  const world=generateInfiniteChunk('REGIONAL-AUDIT-0',{x:0,z:-1,story:0});
+  const start={x:-47.1,y:-2.985,z:-40.5},target={x:-46.4,z:-34.75};
+  const physics=await PhysicsWorld.create({...world,spawn:start});
+  try{
+    expect(physics.canStandAt(start)).toBe(true);
+    const end=walkTo(physics,start,target,tuning.sprintSpeed);
+    expect(end.y).toBeCloseTo(start.y,1);
+    const returned=walkTo(physics,end,start,tuning.sprintSpeed);
+    expect(returned.y).toBeCloseTo(start.y,1);
+  }finally{physics.dispose();}
+});
+
 it('physically completes a multi-chunk loop through several regional datums in both directions', async () => {
   let sample: { seed: string; cells: { x: number; z: number }[]; coords: { x: number; z: number; story: number }[] } | undefined;
   // Choose a connected region of the sparse circulation network. An arbitrary
@@ -289,4 +302,5 @@ it('physically completes a multi-chunk loop through several regional datums in b
     expect(travelled).toBeGreaterThan(700);
     console.info('REGIONAL_BSP_TRAVERSED_METRES', travelled);
   } finally { physics.dispose(); }
-}, 90_000);
+// Joining formerly separated pockets can make this six-leg route exceed 3 km.
+}, 180_000);

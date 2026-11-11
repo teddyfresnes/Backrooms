@@ -129,7 +129,7 @@ function setup(options: { tvOn?: boolean; selfSwitchingTv?: boolean } = {}) {
     return elapsed;
   };
   return {
-    encounter, player, door, events, state, calls, hint, step, until, quest, actor, wardrobe,
+    encounter, player, door, events, state, calls, hint, step, until, quest, actor, wardrobe, camera: host.renderCamera,
     setLampLit: (value: boolean) => { lampLit = value; },
     setRevealReady: (value: boolean) => { revealReady = value; },
     setSprint: (value: boolean) => { sprint = value; },
@@ -382,7 +382,7 @@ describe('other hiding places', () => {
     late.until(() => late.events.some(event => event.startsWith('death')), 6);
   });
 
-  it('keeps right behind a running player down the stairs, and gets them once they stop', () => {
+  it.each([0, 3])('keeps up with a sprint but catches a player who slows to %s m/s', (slowerSpeed) => {
     const world = setup({ tvOn: true });
     playToHiding(world);
     world.until(() => world.events.includes('breach'), 20);
@@ -409,7 +409,19 @@ describe('other hiding places', () => {
     const late = gaps.slice(-120);
     expect(Math.max(...late)).toBeLessThan(6);
     expect(Math.min(...late)).toBeGreaterThan(1.6);
-    // Standing still on the stairs: it is on you within a few seconds.
-    world.until(() => world.events.some(event => event.startsWith('death')), 5);
+    world.until(() => world.events.some(event => event.startsWith('death')), 5, () => {
+      along += slowerSpeed * DT;path.sample(along, feet);
+      world.player.position.set(feet.x,feet.y+PLAYER_CENTER_HEIGHT,feet.z);
+    });
+  });
+
+  it('hits the ground promptly and keeps the scripted fall at real speed at 10 FPS', () => {
+    const world=setup();world.setRevealReady(false);world.encounter.resumeAftermath();
+    world.player.position.set(.1,.865,FACADE_OUTER_Z-15);world.step(DT);
+    const startY=world.camera.position.y;
+    for(let i=0;i<3;i++)world.encounter.update(.1);
+    world.encounter.applyCamera();expect(world.camera.position.y).toBeLessThan(startY-1.2);
+    for(let i=0;i<52&&!world.events.includes('escaped');i++)world.encounter.update(.1);
+    expect(world.events).toContain('escaped');
   });
 });

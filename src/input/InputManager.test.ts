@@ -36,3 +36,17 @@ it('keeps browser shortcuts available and releases the original physical letter 
   const saved={...defaultControlBindings(),crouch:'Digit0',interact:'KeyU'};
   expect(sanitizeControlBindings(saved)).toMatchObject({crouch:'ControlLeft',interact:'KeyU'});
 });
+
+it('resumes held movement after a scripted shot, including keys pressed or released during it, without replaying actions',()=>{
+  const input=fixture();key('KeyZ','keydown','z');key('ShiftLeft');key('KeyE','keydown','e');
+  input.setEnabled(false,true);expect(input.axes.forward).toBe(0);expect(input.axes.sprint).toBe(false);
+  key('KeyZ','keyup','z');key('ArrowUp');key('Space');key('KeyE','keyup','e');key('KeyE','keydown','e');
+  input.setEnabled(false); // A host may reaffirm the lock every frame.
+  input.setEnabled(true);
+  expect(input.axes.forward).toBe(1);expect(input.axes.sprint).toBe(true);
+  expect(input.consumeActionPress('jump')).toBe(false);expect(input.consumeActionPress('interact')).toBe(false);
+  key('ArrowUp','keyup');expect(input.axes.forward).toBe(0);
+  input.setEnabled(false,true);window.dispatchEvent(new Event('blur'));input.setEnabled(true);
+  expect(input.axes.sprint).toBe(false);
+  key('ArrowUp');input.setEnabled(false);input.setEnabled(true);expect(input.axes.forward).toBe(0);
+});

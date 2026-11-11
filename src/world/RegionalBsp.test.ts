@@ -5,6 +5,7 @@ import { rectArea, rectDepth, rectWidth } from './types';
 import { lightPanelOverlapsRect } from './generateWorld';
 import * as THREE from 'three';
 import { ceilingFixturePose } from '../render/CeilingFixture';
+import { findSurface, surfaceY } from './WalkableTopology';
 
 it('restores varied historical architecture in the actual ordinary entry point, with a majority of non-hall area', () => {
   let ordinaryArea = 0, hallArea = 0, thickLength = 0, wallLength = 0, crossCellRooms = 0, lights = 0;
@@ -50,7 +51,23 @@ it('restores varied historical architecture in the actual ordinary entry point, 
   expect(metrics.ordinaryShare).toBeGreaterThan(.65); expect(metrics.ordinaryShare).toBeLessThan(.95);
   expect(metrics.thickWallLengthShare).toBeGreaterThan(.6);
   expect(dimensions.size).toBeGreaterThan(200); expect(crossCellRooms).toBeGreaterThan(20); expect(lights).toBeGreaterThan(1000);
-}, 60000);
+  // The 48 complete worlds also repair body-width pinches before measuring diversity.
+}, 90000);
+
+it.each([2,5,6,10])('joins separately anchored pockets of the spawn plateau on seed %s', n => {
+  const w=generateInfiniteChunk(`BSP-CONNECTIVITY-${n}`,{x:0,z:0,story:0});
+  const start=findSurface(w,{x:w.spawn.x,z:w.spawn.z,referenceY:w.spawn.y-.865})!;
+  const graph=new Map<string,string[]>(),add=(a:string,b:string)=>graph.set(a,[...(graph.get(a)??[]),b]);
+  for(const c of w.topology!.connections)if(!c.toOwner&&!['view','drop','jump'].includes(c.kind??'')){
+    add(c.from,c.to);if(c.direction==='both')add(c.to,c.from);
+  }
+  const queue=[start.id],seen=new Set(queue);
+  for(let j=0;j<queue.length;j++)for(const to of graph.get(queue[j]!)??[])if(!seen.has(to)){seen.add(to);queue.push(to);}
+  const disconnected=w.topology!.surfaces.filter(s=>s.role==='floor'&&rectWidth(s.bounds)>1&&rectDepth(s.bounds)>1
+    &&Math.abs(surfaceY(s,(s.bounds.minX+s.bounds.maxX)/2,(s.bounds.minZ+s.bounds.maxZ)/2)-(w.spawn.y-.865))<.01&&!seen.has(s.id));
+  expect(disconnected.map(s=>s.id)).toEqual([]);
+  expect(w.spatial!.interfaces.filter(p=>p.side==='north'&&Math.abs(p.position.y-w.spawn.y+.865)<.01).every(p=>seen.has(p.surfaceId))).toBe(true);
+});
 
 it('keeps all usable ordinary BSP floor connected to a real circulation or boundary opening', () => {
   for (let i = 0; i < 32; i++) {

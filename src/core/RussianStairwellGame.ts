@@ -980,7 +980,10 @@ export class RussianStairwellGame {
     if (this.player.isLocked && !this.ui.isConsoleOpen && !this.objects?.isHolding && this.giftAvailable() && this.gift?.isTargeted(this.camera.position, this.viewDirection)) {
       this.gift.open(); this.deviceAudio?.fixtureClick(this.gift.group.position); return;
     }
-    if (this.player.isLocked && !this.ui.isConsoleOpen && !this.objects?.isHolding && this.fuseBox?.interact(this.camera.position, this.viewDirection, this.fuseAvailable())) return;
+    if (this.player.isLocked && !this.ui.isConsoleOpen && !this.objects?.isHolding && this.fuseBox?.interact(this.camera.position, this.viewDirection, this.fuseAvailable())) {
+      this.player.setLookCone(Math.PI * .3, Math.PI * .2);
+      return;
+    }
     if (this.arrivalStory?.interact(this.player.position, this.viewDirection, this.player.isLocked && !this.ui.isConsoleOpen)) {
       this.player.setInputEnabled(false); return;
     }
@@ -1229,7 +1232,7 @@ export class RussianStairwellGame {
     // Quest items have a stable frame (fixed in the view in first person); the right hand grips them.
     const free=!this.objects?.isHolding&&!this.pcUse?.isActive&&!this.closet?.isActive&&!this.peephole?.isActive&&!this.character?.isBusy&&!this.encounter?.isHidden&&!this.shotDeath;
     const reading=small?.id===COMPASS_ID&&free;
-    this.character?.setHeldItem(reading?'compass':equipped&&free?'torch':null);
+    this.character?.setHeldItem(reading?'compass':equipped&&free?'torch':null,!!this.objects?.isHolding||!!showSmall);
     const frame=(reading||equipped)&&this.character?.getHeldItemFrame(this.palm)?this.palm:undefined;
     this.flashlight?.update(this.camera,hand,owned,!!equipped,this.inventory.state.lampOn,delta,!this.settings.cameraMotion,equipped&&!reading?frame:undefined,this.corridorStory.modal);
     this.compass?.update(this.camera,reading?frame:undefined,!!reading&&(!!frame||!this.character),this.encounter?.creatureProximity??0,delta);
@@ -1677,7 +1680,7 @@ export class RussianStairwellGame {
       // Before the rig copies its camera: scripted looks must drive the body too.
       if (this.shotDeath) this.updateShotDeath(delta);
       else {
-        if (!this.ui.isConsoleOpen) this.encounter?.update(delta);
+        if (!this.ui.isConsoleOpen) this.encounter?.update(Math.min(.25, measuredDelta));
         this.character?.update(delta);
         this.encounter?.applyCamera();
       }
@@ -1712,6 +1715,7 @@ export class RussianStairwellGame {
       if(this.player.position.distanceTo(this.gift?.group.position??this.player.position)>2.5)this.giftReminderArmed=true;
       this.fuseBox?.updatePrompt(this.camera.position,this.viewDirection,freeInteraction&&!this.objects?.isHolding&&this.fuseAvailable());
       if(this.fuseBox?.update(delta)==='tripped')this.onFuseTripped();
+      this.player.setLookCone(this.fuseBox?.locksMovement ? Math.PI * .3 : undefined, Math.PI * .2);
       this.updatePostFuse(delta);
       this.escapeStreet?.update(this.elapsed);
       if(this.apartment&&this.player.position.distanceTo(this.apartment.doorCenter)>2)this.exitReminderArmed=true;

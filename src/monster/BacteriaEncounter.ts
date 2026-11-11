@@ -67,8 +67,8 @@ const ROLL_AXIS = new THREE.Vector3(0, 0, 1);
 /** Out in the dark street: the foot catches, the body hits the ground and
  * keeps going, through it: a long fall in the black, turning over to see the
  * yellow maze of the Backrooms far below, rushing up, then the cut. */
-const FALL_HIT = 0.4;
-const FALL_SINK = 0.5;
+const FALL_HIT = 0.22;
+const FALL_SINK = 0.25;
 const FALL_GRAVITY = 12;
 /** Looking back up at the hole, then turning over to face the drop. */
 const FALL_TURN_START = 1.25;
@@ -319,7 +319,8 @@ export class BacteriaEncounter {
   }
 
   update(delta: number): void {
-    const dt = Math.max(0, Math.min(0.05, delta));
+    // The scripted fall has no physics integration: keep real seconds even below 20 FPS.
+    const dt = Math.max(0, Math.min(this.phase === 'escaped' ? 0.25 : 0.05, delta));
     this.phaseTime += dt;
     const host = this.host;
     host.eyeCamera.getWorldPosition(this.eye);
@@ -391,11 +392,12 @@ export class BacteriaEncounter {
     }
     if (this.phase === 'escaped') {
       const t = this.phaseTime;
-      const trip = smooth(t / FALL_HIT);
+      const tripTime = THREE.MathUtils.clamp(t / FALL_HIT, 0, 1);
+      const trip = tripTime * tripTime;
       const sink = Math.max(0, t - FALL_SINK);
       // Pitched at the ground, then through it: looking back up at the hole
       // receding (and what stands over it), then turning over to face the drop.
-      camera.position.copy(this.fallFrom).addScaledVector(this.fallForward, 0.95 * trip + 0.7 * smooth(sink / 0.7));
+      camera.position.copy(this.fallFrom).addScaledVector(this.fallForward, 0.95 * tripTime + 0.7 * smooth(sink / 0.7));
       camera.position.y = this.fallFrom.y - 1.2 * trip - 0.5 * FALL_GRAVITY * sink * sink;
       const lookingUp = THREE.MathUtils.lerp(-0.12 - 0.95 * trip, 1.1, smooth(sink / 0.95));
       const pitch = THREE.MathUtils.lerp(lookingUp, -1.5, smooth((t - FALL_TURN_START) / (FALL_TURN_END - FALL_TURN_START)));
@@ -802,7 +804,7 @@ export class BacteriaEncounter {
     // flat; it has already turned. Then the head whips round to the flight
     // down, so control returns already facing the run.
     host.player.prepareScriptedStanding();
-    host.player.setInputEnabled(false);
+    host.player.setInputEnabled(false, false, true);
     host.player.setLookLocked(true);
     host.hud.hideHint();
     host.openEscape();
@@ -879,8 +881,7 @@ export class BacteriaEncounter {
       this.pursue(dt, CHASE_SPEEDS.landing);
       this.distanceAlong = this.escapePath.project(this.monsterPosition);
     } else {
-      // Always right behind, never quite on you: it closes fast from afar,
-      // then hangs a few metres back at your pace. Stop, and it is on you.
+      // Ease off behind a sprinter, but keep closing on anyone who only walks.
       const speed = this.followSpeed(gap);
       this.distanceAlong = THREE.MathUtils.clamp(this.distanceAlong + Math.sign(gap) * speed * dt, 0, this.escapePath.length);
       this.escapePath.sample(this.distanceAlong, this.monsterPosition);
@@ -894,14 +895,12 @@ export class BacteriaEncounter {
 
   /**
    * The elastic: far behind it runs much faster than any person, close it
-   * slows to just under the player's pace, a few metres back. Stopping for
-   * more than a second lets the gap close.
+   * follows a sprint a few metres back. Its minimum pace still overtakes a walk.
    */
   private followSpeed(gap: number): number {
     const desired = this.stallTime > ESCAPE_STALL_SECONDS ? 0 : ESCAPE_FOLLOW_GAP;
-    return gap >= desired
-      ? THREE.MathUtils.clamp(Math.max(0, this.playerRate) + (gap - desired) * 1.5, 3, 11.5)
-      : THREE.MathUtils.clamp(this.playerRate * 0.85, 0, 11.5);
+    return THREE.MathUtils.clamp(Math.max(CHASE_SPEEDS.stairs, this.playerRate * .98)
+      + (gap - desired) * 1.5, CHASE_SPEEDS.stairs, 11.5);
   }
 
   private startEscaped(): void {

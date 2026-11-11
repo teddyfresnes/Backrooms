@@ -38,11 +38,15 @@ export const prepareSpatialArchitecture = (plan: WorldPlan): SpatialArchitecture
   add('regional-carpet-floors', 'floor', createWalkableBatch(floors, 'top', style?.floorPatternScale ?? 1, style?.floorQuarterTurn ?? false, origin, true, exposure));
   add('regional-floor-undersides', 'ceiling', createWalkableBatch(floors, 'underside', ceilingScale, false, origin, true, exposure));
   add('regional-floor-chants', 'wall', createWalkableBatch(floors, 'sides', wallScale, false, origin, true, exposure));
-  for (const face of ['top', 'underside', 'sides'] as const)
+  for (const face of ['top', 'underside'] as const)
     add(`regional-ceilings-${face}`, 'ceiling', createWalkableBatch(ceilings, face, ceilingScale, false, origin, true, exposure));
+  add('regional-ceilings-sides', 'plaster', createWalkableBatch(ceilings, 'sides', wallScale, false, origin, true, exposure));
   for (const material of ['wall', 'plaster', 'ceiling', 'baseboard'] as const) {
     const prisms = spatial.prisms.filter(p => p.material === material);
-    if (prisms.length) add(`regional-${material}-structures`, material, createSpatialPrismBatch(prisms, material === 'ceiling' ? ceilingScale : wallScale, origin, exposure));
+    if (!prisms.length) continue;
+    add(`regional-${material}-structures`, material, createSpatialPrismBatch(prisms, material === 'ceiling' ? ceilingScale : wallScale, origin, exposure,
+      material === 'ceiling' ? 'horizontal' : 'all'));
+    if (material === 'ceiling') add('regional-ceiling-structure-sides', 'plaster', createSpatialPrismBatch(prisms, wallScale, origin, exposure, 'sides'));
   }
   return batches;
 };

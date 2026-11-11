@@ -13,6 +13,7 @@ export class InputManager {
   private readonly justReleased = new Set<string>();
   private readonly physical = new Map<string, string>();
   private enabled = true;
+  private preserveMovement = false;
   private bindings = defaultControlBindings();
   private actionCodes=Object.fromEntries(controlActions.map(action=>[action,actionKeyCodes(this.bindings,action)])) as Record<ControlAction,readonly string[]>;
   private gameCodes=new Set(Object.values(this.actionCodes).flat());
@@ -77,21 +78,34 @@ export class InputManager {
   isActionPressed(action: ControlAction): boolean {
     return this.enabled && this.has(...this.actionCodes[action]);
   }
-  setEnabled(enabled: boolean): void {
+  /** Scripted shots may retain held movement, without buffering one-shot actions. */
+  setEnabled(enabled: boolean, preserveMovement = false): void {
     if (this.enabled === enabled) return;
     this.enabled = enabled;
-    if (!enabled) this.clear();
+    this.preserveMovement = !enabled && preserveMovement;
+    if (!enabled) {
+      if (!preserveMovement) this.clear();
+      else {
+        this.justPressed.clear(); this.justReleased.clear();
+        for (const [physical, code] of this.physical) if (!this.isMovementCode(code)) this.physical.delete(physical);
+        for (const code of this.pressed) if (!this.isMovementCode(code)) this.pressed.delete(code);
+      }
+    }
+  }
+  private isMovementCode(code: string): boolean {
+    return (['forward', 'backward', 'left', 'right', 'sprint'] as const).some(action => this.actionCodes[action].includes(code));
   }
   private has(...codes: string[]): boolean { return codes.some((code) => this.pressed.has(code)); }
   private readonly onKeyDown = (event: KeyboardEvent): void => {
-    if (!this.enabled) return;
+    if (!this.enabled && !this.preserveMovement) return;
     if (isEditableKeyTarget(event) || event.isComposing || event.metaKey || event.altKey) { this.clear(); return; }
     const code = controlCodeFromKeyboardEvent(event);
+    if (!this.enabled && !this.isMovementCode(code)) return;
     const mapped = this.gameCodes.has(code);
     if (event.ctrlKey && !mapped) { this.clear(); return; }
     if (mapped) event.preventDefault();
     this.physical.set(event.code, code);
-    if (!this.pressed.has(code)) this.justPressed.add(code);
+    if (this.enabled && !this.pressed.has(code)) this.justPressed.add(code);
     this.pressed.add(code);
   };
   private readonly onKeyUp = (event: KeyboardEvent): void => {

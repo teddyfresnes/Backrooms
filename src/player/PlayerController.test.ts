@@ -551,6 +551,24 @@ describe('PlayerController running contact', () => {
 });
 
 describe('PlayerController look state', () => {
+  it('keeps interaction look inside a stable cone across the yaw seam and releases it without a queued turn', () => {
+    const { controller, pointerDocument } = createController(new FakePhysics({ x: 0, y: .865, z: 0 }));
+    vi.spyOn(controller, 'isPointerCaptured', 'get').mockReturnValue(true);
+    controller.setLookQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(.2, Math.PI - .05, 0, 'YXZ')));
+    const start = controller.getContinuousAimYawRadians();
+    const move = (x: number, y: number) => {
+      const event = new Event('mousemove'); Object.defineProperties(event, { movementX: { value: x }, movementY: { value: y } });
+      pointerDocument.dispatchEvent(event);
+    };
+    for (let i = 0; i < 50; i++) { controller.setLookCone(.9, .6); move(-140, 140); }
+    expect(controller.getContinuousAimYawRadians() - start).toBeCloseTo(.9);
+    expect(new THREE.Euler().setFromQuaternion(controller.getLookQuaternion(), 'YXZ').x).toBeCloseTo(-.4);
+    controller.setLookCone(undefined);const released=controller.getContinuousAimYawRadians();
+    controller.renderUpdate(1/60,1);expect(controller.getContinuousAimYawRadians()).toBeCloseTo(released);
+    move(-140,0);expect(controller.getContinuousAimYawRadians()-released).toBeGreaterThan(.25);
+    controller.dispose();
+  });
+
   it('briefly limits strike look across the yaw seam and discards rejected mouse motion', () => {
     const physics = new FakePhysics({ x: 0, y: .865, z: 0 });
     const { controller, pointerDocument } = createController(physics);

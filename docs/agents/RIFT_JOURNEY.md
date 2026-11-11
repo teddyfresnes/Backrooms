@@ -18,8 +18,9 @@ le −Z monde : la direction de la faille.
 ## Modules
 
 - `story/RiftProgress.ts` : progression sérialisable, sans import du monde
-  (chargée par le lanceur). Étapes `arrival` → `north` → `plank` → `done`,
-  planche posée (`lane` global, `story`, `bank`), résolution `dropped`/`fled`,
+  (chargée par le lanceur). Étapes `arrival` → `north` → `plank` → `crossed` → `done` ;
+  planche posée (`lane` global, `story`, `bank`),
+  délai avant la révélation (`crossedSeconds`), résolution `dropped`/`fled`,
   répliques déjà dites.
 - `story/RiftJourney.ts` : géométrie des voies (`riftLaneX(k) = 7 + 14k`),
   répliques (`RIFT_LINES`) et `BalanceModel` (pendule inversé amorti, rafales,
@@ -27,7 +28,9 @@ le −Z monde : la direction de la faille.
 - `core/RiftEncounter.ts` : toute la séquence ; `Game` appelle `update` avant le
   rig et `applyCamera` après. `ownsCharacter` suspend le rig (plan 3P, chute,
   capture) ; `locksInput` empêche pause/console de rendre les commandes ;
-  `blocksSaving` interdit toute sauvegarde au milieu. Tests : `RiftEncounter.test.ts`
+  `blocksSaving` interdit les actions en cours mais autorise les deux rives avant
+  la révélation. Une reprise `crossed` restaure la planche, la rive de départ et
+  le délai déjà écoulé. Tests : `RiftEncounter.test.ts`
   (hôte simulé : arrivée, planche hors champ, bord, chute, traversée, demi-tour,
   planche lâchée avant ou pendant sa traversée, fuite et capture, traque de
   l'autre rive dans un labyrinthe de rues). Le modèle de la créature est chargé
@@ -46,8 +49,8 @@ le −Z monde : la direction de la faille.
    planche en 1P) : il regarde d'un côté, de l'autre, et l'objectif glisse et
    zoome sur la planche. Retour en 1P tourné vers elle. Si la planche n'est pas
    à ±1 voie et reste hors champ, elle est reposée avant le plan.
-4. Sur la planche : vitesse normale sur les appuis, réduite (×0,62) et axée par
-   `setMovementConstraint` seulement au-dessus du vide ; regard forcé vers le bas,
+4. Sur la planche : marche normale sans sprint, axée par
+   `setMovementConstraint` ; regard forcé vers le bas,
    roulis selon l'inclinaison, Q/D (gauche/droite) contre le déséquilibre (calculé
    au-dessus du vide uniquement), jauge `BalanceMeter`, craquements et cœur.
 5. Chute dans le vide (quelle qu'en soit la cause) : caméra scriptée qui tombe en

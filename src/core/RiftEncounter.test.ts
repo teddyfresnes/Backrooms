@@ -9,8 +9,9 @@ const EYE = 0.865;
 const DT = 1 / 60;
 
 /** Just enough of the runtime for the rift's state machine: positions are driven by the test. */
-const createHarness = (saved?: RiftProgress, arrivedByFall = true) => {
+const createHarness = (saved?: RiftProgress, arrivedByFall = true, restoredPosition?: THREE.Vector3Like) => {
   const position = new THREE.Vector3(7, EYE, RIFT_CENTER_Z + 300);
+  if (restoredPosition) position.copy(restoredPosition);
   const look = new THREE.Quaternion();
   const intent = { forward: 0, right: 0 };
   const state = {
@@ -166,7 +167,7 @@ describe('rift encounter', () => {
     expect(harness.state.lines.some((line) => line.includes('planche'))).toBe(true);
   });
 
-  it('loses its balance without help, falls into the rift and resumes at the plank', () => {
+  it('falls when an uncorrected imbalance tips it off the plank and resumes at the near bank', () => {
     const harness = createHarness();
     walkOn(harness);
     harness.run(9);
@@ -176,6 +177,7 @@ describe('rift encounter', () => {
     harness.run(0.05);
     expect(harness.internals.phase).toBe('crossing');
     expect(harness.encounter.blocksSaving).toBe(true);
+    harness.internals.balance!.lean = .45;
     // Unattended: it tips, the body leaves the board and drops.
     harness.run(6, (dt) => {
       const phase = harness.internals.phase;
@@ -424,5 +426,38 @@ describe('rift encounter', () => {
     harness.run(1);
     expect(harness.internals.phase).toBe('plank');
     expect(harness.state.lines).toHaveLength(0);
+  });
+
+  it('saves the far bank before the reveal and restores the board, elapsed delay and next event', () => {
+    const saved: RiftProgress={version:1,stage:'plank',plank:{lane:3,story:0,bank:1},spoken:['steady']};
+    const h=createHarness(saved,false);
+    h.position.set(riftLaneX(3),PLANK_THICKNESS+EYE,RIFT_CENTER_Z+6.4);h.run(.05);
+    // Normal walking now covers the board in under six seconds, including the bearings.
+    h.intent.forward=1;
+    h.run(5,dt=>{
+      if(h.internals.balance)h.internals.balance.lean=0;
+      return h.internals.phase==='crossing'?new THREE.Vector3(0,0,-3*dt):undefined;
+    });
+    expect(h.internals.phase).toBe('crossed');expect(h.encounter.blocksSaving).toBe(false);
+    h.run(2);
+    const snapshot=h.encounter.snapshot,position=h.position.clone();
+    expect(snapshot.stage).toBe('crossed');expect(snapshot.crossedSeconds).toBeGreaterThan(2);
+    expect(h.state.saves.at(-1)?.stage).toBe('crossed');expect(h.state.blockedSaves).toBe(0);
+    h.encounter.dispose();
+    const restored=createHarness(snapshot,false,position);
+    expect(restored.position.toArray()).toEqual(position.toArray());
+    expect(restored.internals.phase).toBe('crossed');expect(restored.state.chunks.has('rift-plank')).toBe(true);
+    expect(restored.encounter.snapshot.crossedSeconds).toBeCloseTo(snapshot.crossedSeconds!);
+    restored.run(.1);expect(restored.state.lines).toHaveLength(0);
+    restored.position.z-=2;restored.run(.1);expect(restored.internals.phase).toBe('turn');
+    restored.run(5);expect(restored.creature.isVisible).toBe(true);
+    restored.encounter.dispose();
+  });
+
+  it('recovers the pending reveal from a legacy plank save already on the far bank', () => {
+    const h=createHarness({version:1,stage:'plank',plank:{lane:2,story:0,bank:1},spoken:[]},false,
+      new THREE.Vector3(riftLaneX(2),EYE,RIFT_CENTER_Z-7.5));
+    expect(h.internals.phase).toBe('crossed');expect(h.state.chunks.has('rift-plank')).toBe(true);
+    h.position.z-=2;h.run(.1);expect(h.internals.phase).toBe('turn');h.encounter.dispose();
   });
 });

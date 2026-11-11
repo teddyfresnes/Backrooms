@@ -1184,9 +1184,10 @@ export class CharacterRuntime {
     this.presentCamera();
   }
   /** The right hand holds a quest item (presentation only): the compass or the torch. */
-  setHeldItem(kind: HeldItemKind | null): void {
+  setHeldItem(kind: HeldItemKind | null, carryingObject = false): void {
     if (kind !== this.heldKind) this.firstPersonHeldPose.snap(!!kind);
     this.heldKind = kind;
+    this.carryingObject = carryingObject;
   }
   /**
    * The stable frame of the held item for the drawn view: fixed in the view in
@@ -1595,6 +1596,7 @@ export class CharacterRuntime {
   private readonly heldFrame: PalmFrame = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
   private readonly heldScratch: PalmFrame = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
   private heldFrameValid = false;
+  private carryingObject = false;
   private readonly heldOrigin = new THREE.Vector3();
   private readonly heldForward = new THREE.Vector3();
   private readonly heldUp = new THREE.Vector3();
@@ -2842,7 +2844,8 @@ export class CharacterRuntime {
     // The first-person rig keeps the authored pelvis motion. Only arm reach is
     // presentation-tuned, and only on this render-only skeleton. Sprint clips
     // shorten the arm chain a little more so fists cannot punch into the camera.
-    const sprintArms = this.currentAnimation === 'running';
+    // A held item's grip and hand must keep their relative size through sprint transitions.
+    const sprintArms = this.currentAnimation === 'running' && !this.heldItemAllowed() && !this.carryingObject;
     const combatArms = this.combatAttack !== null
       || this.combatPhase === 'enter'
       || this.combatPhase === 'guard'

@@ -11,6 +11,7 @@ import type { BiomeMaterialSets, MaterialSet } from '../render/MaterialLibrary';
 import type { ChunkCoord } from '../world/InfiniteWorld';
 import type { WorldPlan } from '../world/types';
 import { predictFallOwners } from './FallPrefetch';
+import { RIFT_CENTER_Z, riftLaneX } from '../story/RiftJourney';
 
 it('mounts prepared real fall owners one per frame before their landing is reached', async () => {
   const plan=generateInfiniteChunk('REGIONAL-AUDIT-2',{x:0,z:0,story:0});
@@ -72,6 +73,22 @@ it('keeps raised support in its owner story, restores both layers and releases a
     physics.addChunk('obstructed-save', [{ id: 'obstacle', kind: 'barrier', center: { x: 0, y: 3, z: 0 }, halfExtents: { x: 1, y: .5, z: 1 } }], { x: 0, y: 0, z: 0 });
     expect(stream.restoreSurfacePosition(above, highAnchor)).toEqual(plan.spawn);
   } finally { chunks.clear(); physics.dispose(); }
+});
+
+it('restores the exact saved far-bank position in the rift owner instead of a maze spawn', async () => {
+  const coord={x:0,z:-4,story:0},plan=generateInfiniteChunk('RIFT-FAR-BANK-SAVE',coord),offset=getChunkWorldOffset(coord);
+  const physics=await PhysicsWorld.create({...plan,colliders:[]});
+  physics.addChunk(createChunkKey(coord),plan.colliders,offset);
+  const stream=new WorldStream(plan.seed,plan,new THREE.Scene(),{} as never,physics);
+  const chunks=(stream as unknown as {chunks:Map<string,unknown>}).chunks;
+  chunks.set(createChunkKey(coord),{plan,coord,offset:new THREE.Vector3(offset.x,offset.y,offset.z)});
+  try{
+    const position={x:riftLaneX(1),y:.865,z:RIFT_CENTER_Z-7.5};
+    expect(stream.supportedCoordAt(position)).toEqual(coord);
+    const anchor=stream.surfaceAnchorAt(position);
+    expect(stream.restoreSurfacePosition(position,anchor,coord)).toEqual(position);
+    expect(physics.canStandAt(position)).toBe(true);
+  }finally{chunks.clear();stream.dispose();physics.dispose();}
 });
 
 it('prepares real visible owners, restores an irreversible landing and releases repeated mounted layers', async () => {

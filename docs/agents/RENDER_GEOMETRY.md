@@ -3,6 +3,8 @@
 `WorldView` dans `src/render/WorldBuilder.ts` consomme un plan local :
 
 - géométries statiques fusionnées par matériau ;
+- faces de plafond en dalles, chants verticaux exposés en plâtre, y compris
+  autour des cages et sur les solides de plafond bas ;
 - gaines profondes doublées de moquette à l’intérieur, mais enclos des étages
   traversés rendus avec le papier peint ordinaire pour rester architecturaux ;
 - volumes monumentaux dérivés de `EpicStructureFeature`; leurs rangées de

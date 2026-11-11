@@ -69,6 +69,10 @@ describe('rift progress', () => {
     expect(sanitizeRiftProgress({ ...plank, plank: undefined })).toBeNull();
     expect(sanitizeRiftProgress({ ...plank, plank: { lane: 1.5, story: 0, bank: 1 } })).toBeNull();
     expect(sanitizeRiftProgress({ ...plank, stage: 'flying' })).toBeNull();
+    expect(sanitizeRiftProgress({ ...plank, stage: 'crossed', crossedSeconds: 3.25 }))
+      .toEqual({ ...plank, stage: 'crossed', crossedSeconds: 3.25 });
+    for (const crossedSeconds of [-1, Infinity, 8]) expect(sanitizeRiftProgress({ ...plank, stage: 'crossed', crossedSeconds })).toBeNull();
+    expect(sanitizeRiftProgress({ ...plank, crossedSeconds: 2 })).toBeNull();
     expect(sanitizeRiftProgress({ ...plank, spoken: ['<script>'] })).toBeNull();
     expect(sanitizeRiftProgress({ version: 1, stage: 'done', resolution: 'dropped', spoken: [] }))
       .toEqual({ version: 1, stage: 'done', resolution: 'dropped', spoken: [] });

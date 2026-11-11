@@ -72,7 +72,9 @@ charge. E reste libre en cachette (`requestHiddenExit`, écouté directement car
 entrées du joueur sont coupées) : avant l'intrusion on ressort, monstre dans
 l'appartement avant l'invite on meurt. Repéré sur le
 palier, un bref plan regarde la créature puis l'escalier ; dans la cage elle
-suit en élastique (`followSpeed`, `ESCAPE_FOLLOW_GAP`), dehors en poursuite
+suit en élastique (`followSpeed`, `ESCAPE_FOLLOW_GAP`), avec une vitesse minimale
+supérieure à la marche ; les touches de déplacement maintenues pendant le plan
+vers l'escalier reprennent à sa fin. Dehors en poursuite
 directe ; la chute se déclenche à 14 m de la porte dans toute direction, bien
 avant les limites invisibles (±40 m). Arrivé dans les Backrooms par la chute
 (`arrivedByFall`), aucun PNJ n'apparaît (ni après un chargement). `collapseOnArrival` prépare une vraie

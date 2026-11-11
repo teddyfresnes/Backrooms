@@ -62,8 +62,6 @@ const HUNT_RIFT_CLEARANCE = 26;
 const CATCH_RADIUS = 1.15;
 const GIVE_UP_GAP = 30;
 const GIVE_UP_SECONDS = 20;
-/** Over the void the walk is slowed this much; on the board's bearings it is normal. */
-const CROSSING_SPEED_SCALE = 0.62;
 /** First person until here, then the exterior shot from the void. */
 const EDGE_EXTERIOR = 1.75;
 const EDGE_DURATION = 6.7;
@@ -192,19 +190,27 @@ export class RiftEncounter {
     this.creatureLight.castShadow = false;
     host.scene.add(this.creatureLight);
     this.progress = saved ?? freshRiftProgress(arrivedByFall ? 'arrival' : 'north');
-    this.phase = this.progress.stage === 'plank' ? 'plank' : this.progress.stage;
-    if (this.progress.plank && (this.progress.stage === 'plank' || this.progress.resolution === 'fled')) {
+    this.phase = this.progress.stage;
+    if (this.progress.plank && (this.progress.stage === 'plank' || this.progress.stage === 'crossed' || this.progress.resolution === 'fled')) {
       this.placePlank(this.progress.plank.lane, this.progress.plank.story, this.progress.plank.bank);
+      this.crossFrom = this.progress.plank.bank;
+      // Older saves only recorded "plank", even after reaching the far bank.
+      if (this.phase === 'plank' && riftBank(host.player.position.z) !== this.crossFrom
+        && riftEdgeDistance(host.player.position.z) > PLANK_BEARING) this.phase = 'crossed';
+      if (this.phase === 'crossed') this.phaseTime = this.progress.crossedSeconds ?? 0;
     }
   }
 
-  get snapshot(): RiftProgress { return { ...this.progress, spoken: [...this.progress.spoken] }; }
+  get snapshot(): RiftProgress {
+    return { ...this.progress, spoken: [...this.progress.spoken],
+      ...(this.phase === 'crossed' ? { stage: 'crossed', crossedSeconds: this.phaseTime } : {}) };
+  }
   /** The rig must not run: the shot or the fall owns camera and body. */
   get ownsCharacter(): boolean { return this.owns; }
   get blocksSaving(): boolean {
     // Never while it hunts or searches for him on the far bank.
     if (this.phase === 'done' && this.hunt?.blocksSaving) return true;
-    return !['arrival', 'north', 'plank', 'done'].includes(this.phase);
+    return !['arrival', 'north', 'plank', 'crossed', 'done'].includes(this.phase);
   }
   /** 0..1 dread for the heartbeat (balance, standoff, chase, hunt). */
   get heartFear(): number { return this.fear; }
@@ -341,7 +347,7 @@ export class RiftEncounter {
   }
 
   private setStage(stage: RiftProgress['stage'], extra: Partial<RiftProgress> = {}): void {
-    this.progress = { ...this.progress, ...extra, stage };
+    this.progress = { ...this.progress, crossedSeconds: undefined, ...extra, stage };
     this.host.onProgress(this.snapshot);
   }
 
@@ -633,10 +639,8 @@ export class RiftEncounter {
     }
     const toward = -this.crossFrom;
     const along = movement.z * toward;
-    // Only the part over the void is slow; the ends resting on the floor are walked normally.
-    const overVoid = riftEdgeDistance(position.z) < 0;
-    const scale = overVoid ? CROSSING_SPEED_SCALE : 1;
-    movement.z = toward * along * (along >= 0 ? scale : scale * 0.75);
+    // Keep a full walking pace across the void; balancing already prevents sprinting.
+    movement.z = toward * along * (along >= 0 ? 1 : 0.75);
     const target = riftLaneX(plank.lane) + THREE.MathUtils.clamp(balance.lean * 0.24, -0.15, 0.15);
     movement.x = (target - position.x) * 0.2;
   };
@@ -688,6 +692,7 @@ export class RiftEncounter {
       if (this.progress.stage === 'done') { this.enter('done'); return; }
       this.say('across');
       this.enter('crossed');
+      this.setStage('crossed');
     }
   }
 

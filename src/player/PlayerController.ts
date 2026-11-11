@@ -63,6 +63,7 @@ export class PlayerController {
   private canSprint = true;
   private canJump = true;
   private lookLocked = false;
+  private lookCone?: { yaw: number; pitch: number; halfYaw: number; halfPitch: number };
   private readonly externalMotion = new THREE.Vector3();
   readonly controls: PointerLockControls;
   readonly position = new THREE.Vector3();
@@ -447,9 +448,9 @@ export class PlayerController {
       this.renderLookQuaternion.copy(this.lookCamera.quaternion);
     }
   }
-  setInputEnabled(enabled: boolean, preserveMomentum = false): void {
+  setInputEnabled(enabled: boolean, preserveMomentum = false, preserveMovement = false): void {
     this.gameplayInputEnabled = enabled;
-    this.input.setEnabled(enabled);
+    this.input.setEnabled(enabled, preserveMovement);
     if (!enabled) this.callbacks.onMovementAudioState?.('idle');
     if (!enabled) {
       if (!preserveMomentum) {
@@ -474,6 +475,13 @@ export class PlayerController {
   setLookLocked(locked: boolean): void {
     this.lookLocked = locked;
     this.resetFallbackPoint();
+  }
+  /** Keep an interaction's view around its initial aim; repeated calls never recenter it. */
+  setLookCone(halfYaw?: number, halfPitch = halfYaw): void {
+    if (halfYaw === undefined || halfPitch === undefined) { this.lookCone = undefined; return; }
+    if (this.lookCone) return;
+    this.lookEuler.setFromQuaternion(this.lookCamera.quaternion, 'YXZ');
+    this.lookCone = { yaw: this.continuousAimYaw, pitch: this.lookEuler.x, halfYaw, halfPitch };
   }
   setSprintSuppressed(suppressed: boolean): void {
     this.sprintSuppressed = suppressed;
@@ -2112,10 +2120,11 @@ export class PlayerController {
       this.lookEuler.x - rawVertical * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed,
       Math.PI / 2 - this.controls.maxPolarAngle, Math.PI / 2 - this.controls.minPolarAngle,
     );
-    if (this.strikeLookSeconds > 0) {
+    if (this.strikeLookSeconds > 0 || this.lookCone) {
+      const cone = this.lookCone ?? { yaw: this.strikeLookYaw, pitch: this.strikeLookPitch, halfYaw: .22, halfPitch: .16 };
       const wantedYaw = this.continuousAimYaw - rawHorizontal * POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed;
-      const yaw = THREE.MathUtils.clamp(wantedYaw, this.strikeLookYaw - .22, this.strikeLookYaw + .22);
-      const pitch = THREE.MathUtils.clamp(this.lookEuler.x, this.strikeLookPitch - .16, this.strikeLookPitch + .16);
+      const yaw = THREE.MathUtils.clamp(wantedYaw, cone.yaw - cone.halfYaw, cone.yaw + cone.halfYaw);
+      const pitch = THREE.MathUtils.clamp(this.lookEuler.x, cone.pitch - cone.halfPitch, cone.pitch + cone.halfPitch);
       const scale = POINTER_LOCK_RADIANS_PER_PIXEL * this.controls.pointerSpeed;
       rawHorizontal = scale > 0 ? (previousYaw - yaw) / scale : 0;
       rawVertical = scale > 0 ? (previousPitch - pitch) / scale : 0;

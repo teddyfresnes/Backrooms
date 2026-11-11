@@ -131,6 +131,24 @@ test('equipping either item preserves the exploration pelvis and body scale', ()
   } finally { lab.mixer.timeScale = 1; lab.firstPersonMixer.timeScale = 1; }
 });
 
+for (const kind of ['compass', 'torch', 'prop']) test(`${kind} keeps the same hand size and grip when sprinting`, () => {
+  equip(kind==='prop'?null:kind);
+  if(kind==='prop')lab.setHeldItem(null,true);
+  const hand=lab.firstPersonRightHandBone;
+  const middle=hand.getObjectByName('mixamorigRightHandMiddle1');
+  const span=point(hand).distanceTo(point(middle));
+  lab.player.input.pressed.add(lab.player.input.bindings.forward);
+  lab.player.input.pressed.add(lab.player.input.bindings.sprint);
+  for(let i=0;i<90;i++)stepLab(lab);
+  assert.equal(lab.currentAnimation,'running');
+  assert.ok(Math.abs(point(hand).distanceTo(point(middle))/span-1)<.01,'sprinting shrank the holding hand');
+  if(kind!=='prop'){
+    assert.ok(lab.getHeldItemFrame(frame));
+    assert.ok(palm().distanceTo(desiredPalm(kind))<.012,'the held object left the palm during the sprint');
+  }
+  lab.player.input.clear();
+});
+
 test('combat keeps the rendered eye ahead of the neck without moving the gameplay eye', () => {
   equip(null); setupDuel(lab, 1.05, 'first-person');
   const eye = lab.firstPersonCamera.position.clone();

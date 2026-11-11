@@ -758,7 +758,8 @@ export class Game {
 
   private saveNow(kind: GameSaveKind): boolean {
     if (!this.storage || !this.player || !this.worldStream) return false;
-    // Never in the middle of the rift: the edge shot, the plank, the creature.
+    // Scripted shots, balancing and the creature cannot be saved mid-action.
+    // Both banks before the reveal are stable checkpoints.
     if (this.rift?.blocksSaving) return false;
     const chunk = this.worldStream.supportedCoordAt(this.lastSafePosition);
     const offset = getChunkWorldOffset(chunk);

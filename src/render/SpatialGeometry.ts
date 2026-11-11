@@ -10,11 +10,12 @@ export const createSpatialPrismGeometry = (prism: SpatialPrism, scale = 1, origi
   return createSpatialPrismBatch([prism], scale, origin);
 };
 
-export const createSpatialPrismBatch = (prisms: readonly SpatialPrism[], scale = 1, origin: TextureOrigin = LOCAL_TEXTURE_ORIGIN, exposure?: PrismExposure): THREE.BufferGeometry => {
+export const createSpatialPrismBatch = (prisms: readonly SpatialPrism[], scale = 1, origin: TextureOrigin = LOCAL_TEXTURE_ORIGIN, exposure?: PrismExposure,
+  faces: 'all' | 'horizontal' | 'sides' = 'all'): THREE.BufferGeometry => {
   const positions: number[] = [], uv: number[] = [], colors: number[] = [];
   for (const prism of prisms) {
     const v = prism.vertices;
-    for (let face = 0; face < 6; face++) {
+    for (let face = faces === 'sides' ? 2 : 0; face < (faces === 'horizontal' ? 2 : 6); face++) {
       if (prism.openFaces?.includes(face)) continue;
       const points = faceTriangles(v, face, exposure?.(prism, face));
       const projection = face < 2 ? 'y' : faceProjection(v, SLAB_INDICES.slice(face * 6, face * 6 + 3));

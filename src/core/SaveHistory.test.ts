@@ -413,7 +413,7 @@ it('restores PC transition recovery and accepts an already-consumed version-43 o
 it('carries the torch, the compass and the rift progress in Backrooms saves', () => {
   const storage = new MemoryStorage(), bag = new InventoryState();
   bag.acquireLamp(); bag.acquireCompass(); bag.toggleLamp();
-  const rift = { version: 1 as const, stage: 'plank' as const, plank: { lane: -2, story: 0, bank: 1 as const }, spoken: ['wake', 'edge'] };
+  const rift = { version: 1 as const, stage: 'crossed' as const, crossedSeconds: 2.35, plank: { lane: -2, story: 0, bank: 1 as const }, spoken: ['wake', 'edge', 'across'] };
   const base = backroomsInput();
   const result = writeGameSave(storage, { ...base, payload: { ...base.payload, inventory: bag.snapshot(), rift } });
   expect(result.ok).toBe(true);
