@@ -613,6 +613,26 @@ export class WorldStream {
     );
   }
 
+  /**
+   * 0 lit .. 1 pitch dark at a world point of the mounted world: inside an
+   * unlit zone, or with no working panel within a few metres (dead or missing).
+   */
+  darknessAt(x: number, y: number, z: number): number {
+    if (!this.initialized || this.disposed) return 0;
+    this.runtimeOffset.set(x, y, z);
+    const runtime = this.runtimeAt(this.runtimeOffset);
+    if (!runtime) return 0;
+    const plan = runtime.plan, lx = x - runtime.offset.x, ly = y - runtime.offset.y, lz = z - runtime.offset.z;
+    const zone = unlitZoneInfluence(plan.unlitZones ?? [], lx, lz, 1.35);
+    let nearest = Infinity;
+    for (const light of plan.lights) {
+      if (light.dead || Math.abs(light.ceilingY - ly) > 4.5) continue;
+      const distance = (light.x - lx) * (light.x - lx) + (light.z - lz) * (light.z - lz);
+      if (distance < nearest) nearest = distance;
+    }
+    return Math.max(zone, Math.min(1, Math.max(0, (Math.sqrt(nearest) - 2.5) / 5)));
+  }
+
   getLightingMode(): LightingMode {
     return this.lightingMode;
   }

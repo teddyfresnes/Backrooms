@@ -12,6 +12,8 @@ export class RiftAudio {
   private noise?: AudioBuffer;
   private readonly random = new SeededRandom('rift-audio');
   private heartTimer = 0;
+  private breathTimer = 0;
+  private inhale = true;
   private disposed = false;
 
   constructor(private readonly output: () => RiftAudioOutput | null) {}
@@ -64,6 +66,38 @@ export class RiftAudio {
     this.heartTimer = 60 / bpm;
     this.thump(0.32 + 0.5 * fear, 0);
     this.thump(0.22 + 0.35 * fear, 0.16);
+  }
+
+  /**
+   * The player's own breath, paced by effort (0 rested .. 1 panting); call
+   * every frame. Silent when rested, ragged and fast when spent.
+   */
+  breath(delta: number, effort: number): void {
+    const level = Math.min(1, Math.max(0, effort));
+    if (level <= 0.12) { this.breathTimer = Math.min(this.breathTimer, 0.4); return; }
+    this.breathTimer -= delta;
+    if (this.breathTimer > 0) return;
+    const cycle = 3.6 - 2.85 * level;
+    this.breathTimer = cycle * (this.inhale ? 0.42 : 0.58) * this.random.float(0.88, 1.12);
+    this.gasp(this.inhale, level, this.breathTimer);
+    this.inhale = !this.inhale;
+  }
+
+  private gasp(inhale: boolean, level: number, length: number): void {
+    const output = this.output(); if (!output || this.disposed) return;
+    const { context } = output, now = context.currentTime, duration = Math.max(0.18, length * 0.82);
+    const source = context.createBufferSource(), band = context.createBiquadFilter(), env = context.createGain();
+    source.buffer = this.noiseBuffer(context);
+    band.type = 'bandpass'; band.Q.value = inhale ? 1.6 : 1.1;
+    band.frequency.setValueAtTime(inhale ? 900 : 1250, now);
+    band.frequency.linearRampToValueAtTime(inhale ? 1500 : 620, now + duration);
+    const peak = Math.max(0.002, 0.2 * Math.pow(level, 1.3) * (inhale ? 0.8 : 1));
+    env.gain.setValueAtTime(0.0001, now);
+    env.gain.exponentialRampToValueAtTime(peak, now + duration * (inhale ? 0.55 : 0.18));
+    env.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    source.connect(band).connect(env).connect(output.destination);
+    source.start(now, this.random.float(0, 1)); source.stop(now + duration + 0.05);
+    this.release([band, env], source);
   }
 
   private thump(gain: number, delay: number): void {

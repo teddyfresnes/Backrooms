@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { MaterialSet } from './MaterialLibrary';
+import { applyFixtureDisturbance, LIGHT_DISTURBANCE, LIGHT_DISTURBANCE_GLSL, LIGHT_DISTURBANCE_KEY } from './LightDisturbance';
 import type { Rect, WorldPlan } from '../world/types';
 
 // The generator places its main partitions on a 0.5 m grid. Two texels per
@@ -459,10 +460,23 @@ const withLightMap = <T extends THREE.MeshStandardMaterial>(
   // so carpet, walls and ceiling share the same baked penumbra.
   material.onBeforeCompile = (shader) => {
     shader.uniforms.bakedShadowFloor = { value: shadowFloor };
+    shader.uniforms.lightDisturbCenter = LIGHT_DISTURBANCE.center;
+    shader.uniforms.lightDisturbState = LIGHT_DISTURBANCE.state;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBakedWorldPosition;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vBakedWorldPosition = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+        #else
+          vBakedWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;
+        #endif`);
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
-        '#include <common>\nuniform float bakedShadowFloor;',
+        `#include <common>
+        uniform float bakedShadowFloor;
+        varying vec3 vBakedWorldPosition;
+        ${LIGHT_DISTURBANCE_GLSL}`,
       )
       .replace(
         '#include <opaque_fragment>',
@@ -473,10 +487,11 @@ const withLightMap = <T extends THREE.MeshStandardMaterial>(
           float bakedSurfaceMask = mix( bakedShadowFloor, 1.0, smoothstep( 0.012, 0.29, bakedLightLevel ) );
           outgoingLight *= bakedSurfaceMask;
         #endif
+        outgoingLight *= lightDisturbSurface(vBakedWorldPosition);
         #include <opaque_fragment>`,
       );
   };
-  material.customProgramCacheKey = () => 'baked-light-surface-mask-v2';
+  material.customProgramCacheKey = () => `baked-light-surface-mask-v2|${LIGHT_DISTURBANCE_KEY}`;
   material.needsUpdate = true;
   return material;
 };
@@ -544,6 +559,8 @@ export const createBakedMaterialSet = (
   const fixtureGlow = source.fixtureGlow.clone();
   fixtureGlow.toneMapped = false;
   fixtureGlow.fog = false;
+  // Three does not copy shader hooks on clone.
+  applyFixtureDisturbance(fixtureGlow);
   if (source.fixtureGlow.name === 'fluorescent-diffuser') {
     fixtureGlow.color.setHex(0xfffee6);
   } else if (source.fixtureGlow.name === 'red-biome-fluorescent-diffuser') {

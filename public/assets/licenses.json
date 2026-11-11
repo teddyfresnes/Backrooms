@@ -371,6 +371,14 @@
         "audio/bacteria/voice-lines.mp3"
       ],
       "changes": "Re-encoded as MP3; the scream was trimmed of its leading/trailing silence, boosted by 7 dB and edge-faded to loop seamlessly."
+    },
+    {
+      "name": "Backrooms presence drone",
+      "author": "Provided by the project owner",
+      "source": "backrooms-presence.mp3 (supplied by the project owner)",
+      "license": "User-provided; no additional rights asserted",
+      "file": "audio/bacteria/backrooms-presence.mp3",
+      "changes": "Used as supplied (68.7 s stereo). Looped at runtime between 1.13 s and 67.78 s, downmixed to mono and spatialised."
     }
   ],
   "models": [

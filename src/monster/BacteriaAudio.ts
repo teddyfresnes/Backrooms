@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SeededRandom } from '../world/SeededRandom';
 
 const URLS = {
   tension: '/assets/audio/bacteria/tension.mp3',
@@ -7,6 +8,16 @@ const URLS = {
 } as const;
 
 type BufferId = keyof typeof URLS;
+
+/** The far-bank drone (owner-provided) and the knock: only the Backrooms runtime loads them. */
+const PRESENCE_URL = '/assets/audio/bacteria/backrooms-presence.mp3';
+const KNOCK_URL = '/assets/audio/interactions/knock-wood.ogg';
+/** The drone has ~1.1 s of silence at the start and a fade at the end: loop inside. */
+export const PRESENCE_LOOP_START = 1.13;
+export const PRESENCE_LOOP_END = 67.78;
+/** Onsets of the three blows in knock-wood.ogg (s). */
+const KNOCK_ONSETS = [0.067, 0.272, 0.508] as const;
+const KNOCK_RATE = 0.88;
 
 interface SpatialVoice {
   source: AudioBufferSourceNode;
@@ -211,10 +222,255 @@ export class BacteriaAudio {
     wind.source.addEventListener('ended', () => { wind.source.disconnect(); wind.filter.disconnect(); wind.gain.disconnect(); }, { once: true });
   }
 
+  // ------------------------------------------------ the far-bank presence
+
+  private presenceBuffer?: AudioBuffer;
+  private knockBuffer?: AudioBuffer;
+  private presence?: SpatialVoice;
+  private breath?: SpatialVoice & { lfo: OscillatorNode };
+  private buzz?: { oscillators: OscillatorNode[]; filter: BiquadFilterNode; panner: StereoPannerNode; gain: GainNode };
+  private noise?: AudioBuffer;
+  private readonly clickRandom = new SeededRandom('bacteria-audio-clicks');
+
+  /** Decodes the drone once, downmixed to mono at 32 kHz (it is panned anyway), and the knock. */
+  async loadPresence(): Promise<void> {
+    const output = this.output();
+    if (!output || this.presenceBuffer) return;
+    const fetchBuffer = async (url: string): Promise<ArrayBuffer | undefined> => {
+      try { const response = await fetch(url); return response.ok ? await response.arrayBuffer() : undefined; } catch { return undefined; }
+    };
+    const [drone, knock] = await Promise.all([fetchBuffer(PRESENCE_URL), fetchBuffer(KNOCK_URL)]);
+    if (this.disposed) return;
+    try {
+      if (knock) this.knockBuffer = await output.context.decodeAudioData(knock);
+    } catch { /* a missing knock never blocks the hunt */ }
+    if (!drone) return;
+    try {
+      const decoder = typeof OfflineAudioContext === 'function' ? new OfflineAudioContext(1, 1, 32000) : output.context;
+      const decoded = await decoder.decodeAudioData(drone);
+      if (this.disposed) return;
+      const mono = output.context.createBuffer(1, decoded.length, decoded.sampleRate);
+      const target = mono.getChannelData(0), share = 1 / decoded.numberOfChannels;
+      for (let channel = 0; channel < decoded.numberOfChannels; channel += 1) {
+        const source = decoded.getChannelData(channel);
+        for (let index = 0; index < source.length; index += 1) target[index] = target[index]! + source[index]! * share;
+      }
+      this.presenceBuffer = mono;
+    } catch { /* the hunt goes on in silence */ }
+  }
+
+  get hasPresence(): boolean { return !!this.presenceBuffer; }
+
+  /** The drone, looping between its silences, from `offset` seconds into the loop. */
+  startPresence(offset: number): void {
+    const output = this.output(), buffer = this.presenceBuffer;
+    if (this.presence || !output || !buffer || this.disposed) return;
+    const { context } = output;
+    const source = context.createBufferSource(), filter = context.createBiquadFilter(), panner = context.createStereoPanner(), gain = context.createGain();
+    source.buffer = buffer;
+    source.loop = true;
+    source.loopStart = PRESENCE_LOOP_START;
+    source.loopEnd = Math.min(PRESENCE_LOOP_END, buffer.duration);
+    filter.type = 'lowpass'; filter.frequency.value = 1200; filter.Q.value = 0.3;
+    gain.gain.value = 0.0001;
+    source.connect(filter).connect(panner).connect(gain).connect(output.destination);
+    source.addEventListener('ended', () => { source.disconnect(); filter.disconnect(); panner.disconnect(); gain.disconnect(); }, { once: true });
+    const span = source.loopEnd - PRESENCE_LOOP_START;
+    source.start(context.currentTime, PRESENCE_LOOP_START + ((offset % span) + span) % span);
+    this.presence = { source, filter, panner, gain };
+  }
+
+  /**
+   * @param level 0 (muted: a silent approach) .. 1 before distance
+   * @param occlusion 0 open .. 1 behind walls (muffled)
+   */
+  setPresence(level: number, distance: number, pan: number, occlusion: number): void {
+    const output = this.output(), voice = this.presence;
+    if (!output || !voice) return;
+    const now = output.context.currentTime;
+    const near = Math.pow(THREE.MathUtils.clamp(1 - distance / 48, 0, 1), 1.5);
+    const occluded = THREE.MathUtils.clamp(occlusion, 0, 1);
+    const gain = Math.max(0.0001, 0.55 * THREE.MathUtils.clamp(level, 0, 1) * (0.1 + 0.9 * near) * (1 - 0.45 * occluded));
+    const far = THREE.MathUtils.clamp(distance / 40, 0, 1);
+    voice.gain.gain.setTargetAtTime(gain, now, 0.4);
+    voice.filter.frequency.setTargetAtTime(THREE.MathUtils.lerp(9000, 650, Math.max(far, occluded * 0.8)), now, 0.25);
+    voice.panner.pan.setTargetAtTime(THREE.MathUtils.clamp(pan, -1, 1) * (0.85 - 0.35 * near), now, 0.1);
+  }
+
+  stopPresence(fadeSeconds = 1): void {
+    const output = this.output();
+    if (output) {
+      for (const voice of [this.presence, this.breath]) if (voice) this.fadeOut(voice, output.context.currentTime, fadeSeconds);
+      if (this.breath) { try { this.breath.lfo.stop(output.context.currentTime + Math.max(0.03, fadeSeconds + 0.02)); } catch { /* stopped */ } }
+    }
+    this.presence = undefined;
+    this.breath = undefined;
+    this.setBuzz(0, 0);
+  }
+
+  /** Three dry blows, like someone knocking on a door, from the side it comes from. */
+  knock(distance: number, pan: number, occlusion: number): void {
+    const output = this.output();
+    if (!output || this.disposed) return;
+    const { context } = output, now = context.currentTime;
+    const blocked = THREE.MathUtils.clamp(occlusion, 0, 1);
+    const level = 1.15 * (0.3 + 0.7 * THREE.MathUtils.clamp(1 - distance / 32, 0, 1)) * (1 - 0.35 * blocked);
+    const filter = context.createBiquadFilter(), panner = context.createStereoPanner(), gain = context.createGain();
+    filter.type = 'lowpass'; filter.frequency.value = THREE.MathUtils.lerp(6500, 1500, blocked);
+    panner.pan.value = THREE.MathUtils.clamp(pan, -1, 1) * 0.85;
+    gain.gain.value = level;
+    filter.connect(panner).connect(gain).connect(output.destination);
+    const nodes: AudioNode[] = [filter, panner, gain];
+    if (this.knockBuffer) {
+      const source = context.createBufferSource();
+      source.buffer = this.knockBuffer;
+      source.playbackRate.value = KNOCK_RATE;
+      source.connect(filter);
+      source.start(now);
+      nodes.push(source);
+    }
+    // A low thump under each blow: felt as much as heard.
+    let last: OscillatorNode | undefined;
+    for (const onset of KNOCK_ONSETS) {
+      const at = now + onset / KNOCK_RATE, osc = context.createOscillator(), env = context.createGain();
+      osc.type = 'sine'; osc.frequency.setValueAtTime(78, at); osc.frequency.exponentialRampToValueAtTime(42, at + 0.12);
+      env.gain.setValueAtTime(0.0001, at); env.gain.exponentialRampToValueAtTime(0.55, at + 0.008); env.gain.exponentialRampToValueAtTime(0.0001, at + 0.2);
+      osc.connect(env).connect(filter); osc.start(at); osc.stop(at + 0.22);
+      nodes.push(env);
+      last = osc;
+    }
+    last?.addEventListener('ended', () => { for (const node of nodes) node.disconnect(); }, { once: true });
+  }
+
+  /** A tube striking near it: starter click and ballast thunk, placed in the stereo field. */
+  ballast(distance: number, pan: number, occlusion: number): void {
+    const output = this.output();
+    if (!output || this.disposed) return;
+    const { context } = output, now = context.currentTime;
+    const level = 0.5 * Math.pow(THREE.MathUtils.clamp(1 - distance / 30, 0, 1), 1.3) * (1 - 0.5 * THREE.MathUtils.clamp(occlusion, 0, 1));
+    if (level < 0.01) return;
+    const panner = context.createStereoPanner(), gain = context.createGain();
+    panner.pan.value = THREE.MathUtils.clamp(pan, -1, 1) * 0.8; gain.gain.value = level;
+    panner.connect(gain).connect(output.destination);
+    const click = context.createBufferSource(), band = context.createBiquadFilter(), clickEnv = context.createGain();
+    click.buffer = this.noiseBuffer(context);
+    band.type = 'bandpass'; band.frequency.value = 2400 + this.clickRandom.float(0, 1400); band.Q.value = 2.2;
+    clickEnv.gain.setValueAtTime(0.0001, now); clickEnv.gain.exponentialRampToValueAtTime(0.9, now + 0.003); clickEnv.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
+    click.connect(band).connect(clickEnv).connect(panner);
+    click.start(now, this.clickRandom.float(0, 1)); click.stop(now + 0.05);
+    const thunk = context.createOscillator(), thunkEnv = context.createGain();
+    thunk.type = 'triangle'; thunk.frequency.setValueAtTime(122, now); thunk.frequency.exponentialRampToValueAtTime(64, now + 0.1);
+    thunkEnv.gain.setValueAtTime(0.0001, now); thunkEnv.gain.exponentialRampToValueAtTime(0.6, now + 0.006); thunkEnv.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    thunk.connect(thunkEnv).connect(panner); thunk.start(now); thunk.stop(now + 0.18);
+    thunk.addEventListener('ended', () => { for (const node of [click, band, clickEnv, thunk, thunkEnv, panner, gain]) node.disconnect(); }, { once: true });
+  }
+
+  /** The mains buzz of the misbehaving tubes around it (0 silent). */
+  setBuzz(level: number, pan: number): void {
+    const output = this.output();
+    if (!output) return;
+    const { context } = output, now = context.currentTime, value = this.disposed ? 0 : THREE.MathUtils.clamp(level, 0, 1);
+    if (!this.buzz) {
+      if (value <= 0.001) return;
+      const filter = context.createBiquadFilter(), panner = context.createStereoPanner(), gain = context.createGain();
+      filter.type = 'bandpass'; filter.frequency.value = 240; filter.Q.value = 1.4;
+      gain.gain.value = 0.0001;
+      const oscillators = [context.createOscillator(), context.createOscillator()];
+      oscillators[0]!.type = 'sawtooth'; oscillators[0]!.frequency.value = 120;
+      oscillators[1]!.type = 'square'; oscillators[1]!.frequency.value = 240.6;
+      for (const oscillator of oscillators) { oscillator.connect(filter); oscillator.start(); }
+      filter.connect(panner).connect(gain).connect(output.destination);
+      this.buzz = { oscillators, filter, panner, gain };
+    }
+    const buzz = this.buzz;
+    buzz.gain.gain.setTargetAtTime(0.0001 + value * 0.05, now, 0.05);
+    buzz.panner.pan.setTargetAtTime(THREE.MathUtils.clamp(pan, -1, 1) * 0.7, now, 0.1);
+    if (value > 0.001) return;
+    this.buzz = undefined;
+    for (const oscillator of buzz.oscillators) { try { oscillator.stop(now + 0.3); } catch { /* stopped */ } }
+    buzz.oscillators[0]!.addEventListener('ended', () => { for (const node of [...buzz.oscillators, buzz.filter, buzz.panner, buzz.gain]) node.disconnect(); }, { once: true });
+  }
+
+  /** Its raspy breathing while it lurks or searches (0 silent). */
+  setBreath(level: number, distance: number, pan: number, occlusion: number): void {
+    const output = this.output();
+    if (!output || this.disposed) return;
+    const { context } = output, now = context.currentTime;
+    const value = THREE.MathUtils.clamp(level, 0, 1) * Math.pow(THREE.MathUtils.clamp(1 - distance / 22, 0, 1), 1.4);
+    if (!this.breath) {
+      if (value <= 0.002) return;
+      const source = context.createBufferSource(), filter = context.createBiquadFilter(), panner = context.createStereoPanner(), gain = context.createGain();
+      const lfo = context.createOscillator(), depth = context.createGain(), body = context.createGain();
+      source.buffer = this.noiseBuffer(context); source.loop = true;
+      filter.type = 'bandpass'; filter.frequency.value = 520; filter.Q.value = 0.9;
+      lfo.frequency.value = 0.34; depth.gain.value = 0.5; body.gain.value = 0.5;
+      lfo.connect(depth).connect(body.gain);
+      gain.gain.value = 0.0001;
+      source.connect(filter).connect(body).connect(panner).connect(gain).connect(output.destination);
+      source.start(); lfo.start();
+      source.addEventListener('ended', () => { for (const node of [source, filter, body, depth, lfo, panner, gain]) node.disconnect(); }, { once: true });
+      this.breath = { source, filter, panner, gain, lfo };
+    }
+    this.breath.gain.gain.setTargetAtTime(Math.max(0.0001, value * 0.28), now, 0.3);
+    this.breath.filter.frequency.setTargetAtTime(THREE.MathUtils.lerp(700, 320, THREE.MathUtils.clamp(occlusion, 0, 1)), now, 0.2);
+    this.breath.panner.pan.setTargetAtTime(THREE.MathUtils.clamp(pan, -1, 1) * 0.8, now, 0.1);
+  }
+
+  /** A dry rattle of clicks from its throat. */
+  clicks(distance: number, pan: number, occlusion: number): void {
+    const output = this.output();
+    if (!output || this.disposed) return;
+    const { context } = output, now = context.currentTime;
+    const level = 0.45 * Math.pow(THREE.MathUtils.clamp(1 - distance / 24, 0, 1), 1.2) * (1 - 0.5 * THREE.MathUtils.clamp(occlusion, 0, 1));
+    if (level < 0.01) return;
+    const panner = context.createStereoPanner(), gain = context.createGain(), band = context.createBiquadFilter();
+    band.type = 'bandpass'; band.frequency.value = 2600; band.Q.value = 3;
+    panner.pan.value = THREE.MathUtils.clamp(pan, -1, 1) * 0.8; gain.gain.value = level;
+    band.connect(panner).connect(gain).connect(output.destination);
+    const count = this.clickRandom.int(5, 9);
+    const nodes: AudioNode[] = [band, panner, gain];
+    let at = now, last: AudioBufferSourceNode | undefined;
+    for (let index = 0; index < count; index += 1) {
+      const source = context.createBufferSource(), env = context.createGain();
+      source.buffer = this.noiseBuffer(context);
+      env.gain.setValueAtTime(0.0001, at); env.gain.exponentialRampToValueAtTime(1, at + 0.002); env.gain.exponentialRampToValueAtTime(0.0001, at + 0.012);
+      source.connect(env).connect(band); source.start(at, this.clickRandom.float(0, 1)); source.stop(at + 0.02);
+      nodes.push(source, env);
+      last = source;
+      at += this.clickRandom.float(0.035, 0.07);
+    }
+    last?.addEventListener('ended', () => { for (const node of nodes) node.disconnect(); }, { once: true });
+  }
+
+  private noiseBuffer(context: BaseAudioContext): AudioBuffer {
+    if (this.noise && this.noise.sampleRate === context.sampleRate) return this.noise;
+    const length = Math.floor(context.sampleRate * 1.5), buffer = context.createBuffer(1, length, context.sampleRate);
+    const data = buffer.getChannelData(0);
+    let state = 0x51f15e;
+    for (let index = 0; index < length; index += 1) {
+      state ^= state << 13; state ^= state >>> 17; state ^= state << 5;
+      data[index] = ((state >>> 0) / 4294967296) * 2 - 1;
+    }
+    this.noise = buffer;
+    return buffer;
+  }
+
+  private fadeOut(voice: SpatialVoice, now: number, fadeSeconds: number): void {
+    try {
+      voice.gain.gain.cancelScheduledValues(now);
+      voice.gain.gain.setValueAtTime(Math.max(0.0001, voice.gain.gain.value), now);
+      voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(0.02, fadeSeconds));
+      voice.source.stop(now + Math.max(0.03, fadeSeconds + 0.02));
+    } catch {
+      // Already stopped.
+    }
+  }
+
   /** Hard cut (death card) or fade (the creature walked away). */
   stopAll(fadeSeconds = 0): void {
     const output = this.output();
     const now = output?.context.currentTime ?? 0;
+    this.stopPresence(fadeSeconds);
     for (const voice of [this.scream, this.voice]) {
       if (!voice) continue;
       try {

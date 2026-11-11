@@ -97,6 +97,10 @@ export class PlayerController {
   private moving = false;
   private sprinting = false;
   private sprintSuppressed = false;
+  /** Out of breath (Stamina): sprint cut until it recovers, separate from scripted suppression. */
+  private sprintExhausted = false;
+  /** 0..1 effort: a heavier camera bob when spent. */
+  private exertion = 0;
   private movementSpeedScale = 1;
   private blockedMotionFraction = 0;
   /** Seconds spent pushing into an obstacle without real progress (running into a wall). */
@@ -475,6 +479,16 @@ export class PlayerController {
     this.sprintSuppressed = suppressed;
     if (suppressed) this.sprinting = false;
   }
+  setSprintExhausted(exhausted: boolean): void {
+    this.sprintExhausted = exhausted;
+    if (exhausted) this.sprinting = false;
+  }
+  setExertion(level: number): void { this.exertion = Number.isFinite(level) ? THREE.MathUtils.clamp(level, 0, 1) : 0; }
+  private get sprintBlocked(): boolean { return this.sprintSuppressed || this.sprintExhausted; }
+  get isSprinting(): boolean { return this.sprinting; }
+  get isMoving(): boolean { return this.moving; }
+  /** Horizontal speed (m/s), zero against a wall. */
+  get horizontalSpeed(): number { return this.isWallStalled ? 0 : Math.hypot(this.velocity.x, this.velocity.z); }
   setMovementSpeedScale(scale: number): void {
     this.movementSpeedScale = Number.isFinite(scale)
       ? THREE.MathUtils.clamp(scale, 0.55, 1.15)
@@ -515,7 +529,7 @@ export class PlayerController {
     const axes = this.input.axes;
     // Pressed into a wall: the body stands against it instead of running in place.
     if (this.isWallStalled) return { forward: 0, right: 0, sprint: false, crouch: axes.crouch };
-    return { forward: axes.forward, right: axes.right, sprint: this.canSprint && axes.sprint && !this.sprintSuppressed, crouch: axes.crouch };
+    return { forward: axes.forward, right: axes.right, sprint: this.canSprint && axes.sprint && !this.sprintBlocked, crouch: axes.crouch };
   }
   /** Raw held direction, even against a wall (scripted gates react to the push itself). */
   getInputIntent(): { forward: number; right: number } {
@@ -1085,7 +1099,7 @@ export class PlayerController {
     else this.lowPostureElapsed = 0;
 
     const axes = this.input.axes;
-    const sprintRequested = this.canSprint && !this.sprintSuppressed
+    const sprintRequested = this.canSprint && !this.sprintBlocked
       && axes.sprint
       && axes.forward >= MOVEMENT_TUNING.locomotion.sprintForwardMin;
     const diagonalAxes = forwardBiasedDiagonalAxes(
@@ -1431,7 +1445,7 @@ export class PlayerController {
       // for a few ticks first. Expand only through the usual clearance check;
       // a low ceiling still keeps the ordinary crouched exit and its lock.
       const axes = this.input.axes;
-      if (this.grounded && !this.sprintSuppressed && axes.sprint
+      if (this.grounded && !this.sprintBlocked && axes.sprint
         && axes.forward >= MOVEMENT_TUNING.posture.sprintRiseForwardThreshold
         && this.tryStandFromCrouch(true)) {
         this.lowPosture = false;
@@ -1890,7 +1904,7 @@ export class PlayerController {
 
     const mode = this.getMovementMode();
     this.cameraBobAmplitude = THREE.MathUtils.lerp(this.cameraBobAmplitude,
-      this.getBobAmplitude(mode), expSmoothing(frameDelta, 10));
+      this.getBobAmplitude(mode) * (1 + 0.6 * this.exertion), expSmoothing(frameDelta, 10));
     const bobAmplitude = this.cameraBobAmplitude * this.motionBlend * cameraMotion;
     const verticalBob = (0.48 - Math.abs(Math.cos(gait))) * bobAmplitude;
     const lateralBob = Math.sin(gait) * bobAmplitude * MOVEMENT_TUNING.camera.bobLateralScale;

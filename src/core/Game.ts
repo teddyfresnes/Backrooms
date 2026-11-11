@@ -58,6 +58,8 @@ import { RiftAudio } from '../audio/RiftAudio';
 import { BacteriaActor } from '../monster/BacteriaActor';
 import { BacteriaAudio } from '../monster/BacteriaAudio';
 import { RiftEncounter } from './RiftEncounter';
+import { Stamina } from '../player/Stamina';
+import { StaminaCue } from '../ui/StaminaCue';
 import type { RiftProgress } from '../story/RiftProgress';
 import { RIFT_LINES } from '../story/RiftJourney';
 
@@ -196,6 +198,12 @@ export class Game {
   private creature?: BacteriaActor;
   private rift?: RiftEncounter;
   private readonly savedRift?: RiftProgress;
+  /** The player's breath (never saved: rested after a load). */
+  private readonly stamina = new Stamina();
+  private staminaCue?: StaminaCue;
+  /** Bumped when the streamed centre chunk changes (the hunter re-probes its nav cells). */
+  private worldRevision = 0;
+  private readonly lastCenter = { x: Number.NaN, z: 0, story: 0 };
   private readonly palm: PalmFrame = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
   private readonly equipmentHand = new THREE.Vector3();
   private readonly riftDark = new THREE.Color(RIFT_DARK);
@@ -279,6 +287,7 @@ export class Game {
       this.caption = new NarrativeCaption(this.root);
       this.storyHud = new StoryHud(this.root);
       this.balanceMeter = new BalanceMeter(this.root);
+      this.staminaCue = new StaminaCue(this.root);
       this.equipmentInput = new EquipmentInput(() => this.settings.controls, () => this.canUseEquipment(), () => {
         if (this.inventory?.toggleLamp()) { this.inventoryHUD?.reveal(); this.audio.lightSwitch(this.inventory.state.lampOn); }
       }, () => undefined);
@@ -443,7 +452,8 @@ export class Game {
       this.rift = this.createRiftEncounter();
     }
 
-    this.postFX = new PostFX(this.renderer, this.scene, this.camera, this.settings.lighting);
+    // The walk after the fall gets the camcorder layer: the creature interferes with the picture.
+    this.postFX = new PostFX(this.renderer, this.scene, this.camera, this.settings.lighting, { vhs: this.journey });
     this.resize();
     await this.postFX.waitUntilReady();
     const characterWarmup = [
@@ -463,7 +473,7 @@ export class Game {
     setVisualProgress(0.98, 'Préparation du son');
     await audioReady.catch(error => console.warn('[audio] preparation incomplete', error));
     if (this.disposed) return;
-    if (this.creature) await this.creatureAudio.load();
+    if (this.creature) await Promise.all([this.creatureAudio.load(), this.creatureAudio.loadPresence()]);
     if (this.disposed) return;
     setVisualProgress(1, 'Prêt');
     this.updateDebugState(true);
@@ -681,6 +691,8 @@ export class Game {
       },
       captionBusy: () => !!this.caption?.isActive,
       onProgress: () => { this.saveNow('autosave'); },
+      darknessAt: (x, y, z) => this.worldStream?.darknessAt(x, y, z) ?? 0,
+      worldRevision: () => this.worldRevision,
     }, this.savedRift, !!this.options.arrivedByFall);
   }
 
@@ -1127,7 +1139,13 @@ export class Game {
       this.player.getViewDirection(this.lookDirection);
       this.worldStream.update(this.elapsed, rawDelta, this.character?.getWorldPosition() ?? this.player.position, this.lookDirection,
         this.character?.getWorldVelocity(this.streamingVelocity));
-      const nextStory = this.worldStream.getCenterCoord().story;
+      const center = this.worldStream.getCenterCoord();
+      if (center.x !== this.lastCenter.x || center.z !== this.lastCenter.z || center.story !== this.lastCenter.story) {
+        this.lastCenter.x = center.x; this.lastCenter.z = center.z; this.lastCenter.story = center.story;
+        this.worldRevision += 1;
+      }
+      this.updateBreath(rawDelta);
+      const nextStory = center.story;
       if (nextStory !== this.activeStory) {
         this.activeStory = nextStory;
         this.pendingAutosaveStory = nextStory;
@@ -1140,6 +1158,9 @@ export class Game {
     }
     this.updateAtmosphere(rawDelta);
     this.updateJourneyHud(rawDelta, playing);
+    // Interference: only the creature disturbs the Backrooms picture.
+    this.postFX.setVhs(this.rift?.cameraDisturbance ?? 0);
+    this.staminaCue?.update(playing && !this.rift?.ownsCharacter && this.stamina.critical, this.stamina.level, this.stamina.exhausted);
     this.player.getViewDirection(this.lookDirection);
     const interaction = !playing || this.character?.isBusy || this.player.isTraversing || this.player.isNoclipEnabled
       || this.rift?.ownsCharacter
@@ -1184,6 +1205,22 @@ export class Game {
       this.updateDebugState(true);
     }
   };
+
+  /**
+   * Cardio: sprinting drains the breath, fear brings adrenaline. Spent, the
+   * sprint is cut until it recovers; panting, the pounding heart, a heavier
+   * bob and a closing vignette say so without a gauge.
+   */
+  private updateBreath(delta: number): void {
+    if (!this.journey || !this.player) return;
+    const player = this.player;
+    this.stamina.update(delta, { sprinting: player.isSprinting, moving: player.isMoving, threat: this.rift?.threat ?? 0 });
+    player.setSprintExhausted(!this.stamina.canSprint);
+    player.setExertion(this.stamina.breath);
+    this.postFX?.setExertion(this.settings.cameraMotion ? this.stamina.breath : this.stamina.breath * 0.5);
+    this.riftAudio.breath(delta, this.stamina.breath);
+    this.riftAudio.heartbeat(delta, Math.max(this.rift?.heartFear ?? 0, this.stamina.heart > 0.35 ? this.stamina.heart : 0));
+  }
 
   private readonly resize = (): void => {
     if (this.transitionSuspended) return;
@@ -1397,6 +1434,7 @@ export class Game {
     this.questTracker?.dispose();
     this.storyHud?.dispose();
     this.balanceMeter?.dispose();
+    this.staminaCue?.dispose();
     this.character?.dispose();
     this.player?.dispose();
     this.worldStream?.dispose();

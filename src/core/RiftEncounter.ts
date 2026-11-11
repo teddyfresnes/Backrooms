@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { CharacterRuntime } from '../character/CharacterRuntime';
 import type { BacteriaActor } from '../monster/BacteriaActor';
 import type { BacteriaAudio } from '../monster/BacteriaAudio';
+import { BackroomsHunt } from '../monster/BackroomsHunt';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import type { PlayerController } from '../player/PlayerController';
 import type { RiftAudio } from '../audio/RiftAudio';
@@ -14,7 +15,6 @@ import {
   BalanceModel,
   freshRiftProgress,
   isInRiftGallery,
-  isOverRiftVoid,
   nearestRiftLane,
   northProgress,
   PLANK_BEARING,
@@ -57,19 +57,8 @@ const CREATURE_RUN_SPEED = 5.35;
 const CREATURE_APPROACH_DEPTH = 21;
 const CREATURE_CHARGE_SPEED = 6.4;
 const CREATURE_FLEE_SPEED = 7;
-// Past the rift: sudden appearances at the end of a corridor, then the hunt.
-const STALK_FIRST_DELAY = 25;
-const STALK_MIN_WALK = 35;
-const STALK_CHANCE = 0.22;
-const STALK_SIGHT_MIN = 13;
-const STALK_SIGHT_MAX = 44;
-const STALK_SCREAM_HOLD = 0.75;
-const STALK_START_SPEED = 5.2;
-const STALK_TOP_SPEED = 7.3;
-const STALK_ACCELERATION = 1.1;
-const STALK_CORNER_SPEED = 3;
-const STALK_LOSE_SECONDS = 2.4;
-const STALK_LINES = ['Non… pas encore !', 'Elle est là !', 'Merde, merde, merde…'] as const;
+/** The far-bank hunt (monster/BackroomsHunt) starts this far from the rift's centre. */
+const HUNT_RIFT_CLEARANCE = 26;
 const CATCH_RADIUS = 1.15;
 const GIVE_UP_GAP = 30;
 const GIVE_UP_SECONDS = 20;
@@ -103,6 +92,10 @@ export interface RiftEncounterHost {
   captionBusy(): boolean;
   /** Progress changed at a stable point: persist it. */
   onProgress(progress: RiftProgress): void;
+  /** 0 lit .. 1 pitch dark at a world point (dead lamps, unlit zones). */
+  darknessAt?(x: number, y: number, z: number): number;
+  /** Changes when the mounted world changes (the hunt re-probes its nav cells). */
+  worldRevision?(): number;
 }
 
 interface Plank {
@@ -177,8 +170,12 @@ export class RiftEncounter {
   private creatureYaw = 0;
   private creatureAlong = 0;
   private creatureMode:
-    | 'hidden' | 'distant' | 'charge' | 'wait' | 'plank' | 'run' | 'falling' | 'flee' | 'retreat'
-    | 'stalk-scream' | 'stalk-run' | 'stalk-lost' = 'hidden';
+    | 'hidden' | 'distant' | 'rear' | 'charge' | 'wait' | 'plank' | 'run' | 'falling' | 'flee' | 'retreat'
+    | 'hunt' = 'hidden';
+  /** The far-bank hunter (created when the creature first hunts). */
+  private hunt?: BackroomsHunt;
+  /** 0..1 dread this frame (the host paces the heartbeat with it). */
+  private fear = 0;
   private creatureTime = 0;
   private readonly creatureVelocity = new THREE.Vector3();
   private readonly creatureSpin = new THREE.Vector3();
@@ -205,7 +202,26 @@ export class RiftEncounter {
   /** The rig must not run: the shot or the fall owns camera and body. */
   get ownsCharacter(): boolean { return this.owns; }
   get blocksSaving(): boolean {
+    // Never while it hunts or searches for him on the far bank.
+    if (this.phase === 'done' && this.hunt?.blocksSaving) return true;
     return !['arrival', 'north', 'plank', 'done'].includes(this.phase);
+  }
+  /** 0..1 dread for the heartbeat (balance, standoff, chase, hunt). */
+  get heartFear(): number { return this.fear; }
+  /** 0..1 how hunted the player is right now (adrenaline). */
+  get threat(): number {
+    if (this.phase === 'standoff' || this.phase === 'chase' || this.phase === 'caught') return 1;
+    return this.hunt?.threat ?? 0;
+  }
+  /** VHS interference from the creature 0..1 (proximity, sight, chase, capture). */
+  get cameraDisturbance(): number {
+    if (this.phase === 'caught') return Math.min(1, 0.7 + this.phaseTime * 0.3);
+    if (this.phase === 'dead') return 0;
+    const hunt = this.creatureMode === 'hunt' ? this.hunt?.cameraDisturbance ?? 0 : 0;
+    const creature = this.host.creature();
+    if (this.creatureMode === 'hidden' || this.creatureMode === 'hunt' || !creature?.isVisible) return hunt;
+    const near = THREE.MathUtils.clamp(1 - this.creaturePosition.distanceTo(this.host.renderCamera.position) / 18, 0, 1);
+    return Math.min(0.6, near * near * 0.5 + (this.phase === 'chase' || this.phase === 'standoff' ? 0.08 : 0));
   }
   get blocksEquipment(): boolean { return this.owns || this.phase === 'edge'; }
   /** Scripted shots: a pause or the console must not hand the controls back. */
@@ -246,6 +262,7 @@ export class RiftEncounter {
     this.flushLines();
     this.trackWalkedFloor();
     this.cameraLean = 0; this.cameraRoll = 0; this.cameraSag = 0; this.fovOverride = null;
+    this.fear = 0;
     this.screamerKick = Math.max(0, this.screamerKick - dt * 2.4);
     if (this.phase !== 'falling' && this.phase !== 'dead' && this.phase !== 'caught' && this.detectFall()) return;
     switch (this.phase) {
@@ -253,8 +270,12 @@ export class RiftEncounter {
       case 'north': this.updateNorth(); break;
       case 'edge': this.updateEdge(dt); break;
       case 'plank': this.updatePlankIdle(); break;
-      case 'done': this.updatePlankIdle(); if (this.phase === 'done') this.updateStalkerSpawn(dt); break;
-      case 'stalk': this.updateStalk(dt); break;
+      case 'done':
+        // The board is still there (it fled): stepping on it starts the walk, never mid-hunt.
+        if (!this.hunt?.engaged) this.updatePlankIdle();
+        if (this.phase === 'done') this.updateHunt(dt);
+        break;
+      case 'stalk': this.updateHunt(dt); break;
       case 'crossing': this.updateCrossing(dt); break;
       case 'crossed': this.updateCrossed(); break;
       case 'turn': this.updateTurn(dt); break;
@@ -264,6 +285,11 @@ export class RiftEncounter {
       case 'falling': this.updateFalling(dt); break;
       case 'caught': this.updateCaught(dt); break;
       case 'dead': this.updateDead(); break;
+    }
+    // Any other scripted phase while it is still out there: it slinks off, never engages.
+    if (this.creatureMode === 'hunt' && this.phase !== 'done' && this.phase !== 'stalk' && this.phase !== 'caught' && this.phase !== 'dead') {
+      if (this.hunt?.update(dt, false, true) === null) this.creaturePosition.copy(this.hunt.position);
+      if (this.hunt && !this.hunt.visible) this.creatureMode = 'hidden';
     }
     this.updatePlankMotion(dt);
     this.updateCreature(dt);
@@ -646,7 +672,7 @@ export class RiftEncounter {
       this.lastCreak = travelled;
       this.host.sound.creak(0.3 + 0.7 * balance.danger, 0.35 + 0.3 * balance.danger);
     }
-    this.host.sound.heartbeat(dt, 0.3 + 0.7 * balance.danger);
+    this.fear = Math.max(this.fear, 0.3 + 0.7 * balance.danger);
     this.host.balanceMeter.update(this.fallOff === 0, balance.lean / BalanceModel.LIMIT, intent.right,
       this.host.keyLabel('left'), this.host.keyLabel('right'));
     if (this.fallOff > 0) return;
@@ -730,10 +756,11 @@ export class RiftEncounter {
     // Far off, standing in the corridor behind the other portal, then the charge.
     if (crossed(t, dt, 1.6)) { this.creatureMode = 'distant'; this.creatureTime = 0; this.host.creatureSound.startVoice(); }
     if (crossed(t, dt, 2.55)) {
+      // It rears and screams at the far end of its corridor; the charge waits for the end of the shot.
       this.host.creature()?.snapHead();
       this.host.creatureSound.roar();
       this.host.hud.pulseFlash(0.45);
-      this.creatureMode = 'charge';
+      this.creatureMode = 'rear';
       this.creatureTime = 0;
     }
     const facing = new THREE.Vector3(Math.sin(this.turn.yawFrom), 0, Math.cos(this.turn.yawFrom));
@@ -799,8 +826,9 @@ export class RiftEncounter {
   private updateStandoff(dt: number): void {
     this.recordTrail();
     if (this.nearPlankEnd()) this.host.hud.showHint(this.host.keyLabel('interact'), 'Pousser la planche dans le vide', 0.3, true);
-    this.host.sound.heartbeat(dt, 0.55 + 0.45 * this.creatureProximity);
-    if (this.creatureMode === 'hidden' || this.creatureMode === 'distant') { this.creatureMode = 'charge'; this.creatureTime = 0; }
+    this.fear = Math.max(this.fear, 0.55 + 0.45 * this.creatureProximity);
+    // Only now, the shot over, does it come up its corridor.
+    if (this.creatureMode === 'hidden' || this.creatureMode === 'distant' || this.creatureMode === 'rear') { this.creatureMode = 'charge'; this.creatureTime = 0; }
     if (this.creatureMode === 'charge') {
       const brink = this.creatureBrink(this.vectorB);
       if (Math.abs(this.creaturePosition.z - brink.z) < 0.05) {
@@ -929,13 +957,13 @@ export class RiftEncounter {
   private updateChase(dt: number): void {
     this.recordTrail();
     this.chaseTime += dt;
-    this.host.sound.heartbeat(dt, 0.85);
+    this.fear = Math.max(this.fear, 0.85);
     if (this.creatureMode === 'run') {
       const distance = this.creaturePosition.distanceTo(this.vector.copy(this.host.player.position).setY(this.host.player.position.y - EYE));
       if (distance < CATCH_RADIUS) { this.startCaught(); return; }
       if (this.trailGap() > GIVE_UP_GAP || this.chaseTime > GIVE_UP_SECONDS) this.loseTrack();
     }
-    if (this.creatureMode === 'hidden' || this.creatureMode === 'retreat') {
+    if (this.creatureMode === 'hidden' || this.creatureMode === 'retreat' || this.creatureMode === 'hunt') {
       // It gives up: back out of sight, its howl fading behind the walls.
       this.enter('done');
       this.setStage('done', { resolution: 'fled' });
@@ -944,12 +972,19 @@ export class RiftEncounter {
     }
   }
 
-  /** Lost the scent: gone at once if unseen, otherwise it turns back along its path, howling. */
+  /** Lost the scent: gone at once if unseen, otherwise it slinks away out of sight (never fades in view). */
   private loseTrack(): void {
     this.host.creatureSound.roar();
     this.creatureTime = 0;
     if (!this.creatureSeen(true)) {
       this.hideCreature(1.8);
+      return;
+    }
+    const hunt = this.ensureHunt();
+    if (hunt) {
+      this.host.creatureSound.setScreamActive(false);
+      hunt.adoptWithdraw(this.creaturePosition, this.creatureYaw);
+      this.creatureMode = 'hunt';
       return;
     }
     this.creatureMode = 'retreat';
@@ -1033,6 +1068,7 @@ export class RiftEncounter {
 
   private startCaught(stalked?: Checkpoint): void {
     const respawn = stalked ?? this.checkpoint();
+    if (this.creatureMode === 'hunt') this.host.creature()?.setPace(1);
     this.owns = true;
     this.host.player.setInputEnabled(false);
     this.host.player.setLookLocked(true);
@@ -1086,13 +1122,14 @@ export class RiftEncounter {
     } else {
       this.host.creature()?.setVisible(false);
       this.creatureMode = 'hidden';
+      // Whatever hunted him is gone; the director guarantees a quiet spell.
+      this.hunt?.reset();
     }
     this.enter(respawn.phase);
   }
 
   /** Where a death in the rift resumes, facing the void. */
   private checkpoint(): Checkpoint {
-    if (this.phase === 'stalk' && this.stalkRespawn) return this.stalkRespawn;
     const plank = this.plank;
     const afterCrossing = ['crossed', 'turn', 'standoff', 'chase', 'dropping', 'caught'].includes(this.phase) && plank;
     const lookAcross = (bank: 1 | -1): THREE.Quaternion =>
@@ -1129,17 +1166,23 @@ export class RiftEncounter {
     const plank = this.plank;
     const mode = this.creatureMode;
     if (mode === 'hidden') { if (creature.isVisible) creature.setVisible(false); this.creatureLight.intensity = 0; return; }
+    // The far-bank hunter drives the actor, its sound and its glow itself.
+    if (mode === 'hunt') return;
     if (!creature.isVisible) creature.setVisible(true);
     const eye = this.host.renderCamera.position;
     this.creatureLight.intensity = mode === 'falling' ? Math.max(0, 1.1 - this.creatureTime * 0.4) : 1.1;
     this.vector.copy(eye).sub(this.creaturePosition).setY(0);
     if (this.vector.lengthSq() > 1e-4) this.vector.normalize();
     this.creatureLight.position.copy(this.creaturePosition).addScaledVector(this.vector, 1.1).add({ x: 0, y: 1.9, z: 0 });
-    creature.setLookTarget(mode === 'falling' || mode === 'flee' || mode === 'retreat' || mode === 'stalk-lost' ? null : eye);
+    creature.setLookTarget(mode === 'falling' || mode === 'flee' || mode === 'retreat' ? null : eye);
     this.seenTimer -= dt;
     if (mode === 'distant') {
       // Far down the corridor, swaying, staring across at him.
       creature.setMotion('idle');
+      this.creatureYaw = bodyYaw(0, -this.crossFrom);
+    } else if (mode === 'rear') {
+      // Still at the far end of its corridor: it rears, mouth split, then hunches to spring.
+      creature.setMotion(this.creatureTime < 0.9 ? 'lunge' : 'crouch');
       this.creatureYaw = bodyYaw(0, -this.crossFrom);
     } else if (mode === 'charge' && plank) {
       // Straight up the clear lane corridor, through the doorway and the bay, to the edge.
@@ -1169,15 +1212,10 @@ export class RiftEncounter {
       if (Math.floor(this.creatureAlong / 0.8) !== Math.floor((this.creatureAlong - dt * CREATURE_PLANK_SPEED) / 0.8)) {
         this.host.sound.creak(0.75, 0.5);
       }
-    } else if (mode === 'run' || mode === 'stalk-run') {
+    } else if (mode === 'run') {
       creature.setMotion('run');
-      this.followTrail(dt, mode === 'stalk-run');
-    } else if (mode === 'stalk-scream') {
-      // The screamer: it is simply there at the end of the corridor, mouth split open.
-      creature.setMotion('lunge');
-      const player = this.host.player.position;
-      this.creatureYaw = bodyYaw(player.x - this.creaturePosition.x, player.z - this.creaturePosition.z);
-    } else if (mode === 'retreat' || mode === 'stalk-lost') {
+      this.followTrail(dt);
+    } else if (mode === 'retreat') {
       // Back the way it came along its own path, out of sight.
       creature.setMotion('run');
       this.followTrailBack(dt);
@@ -1218,15 +1256,13 @@ export class RiftEncounter {
     const right = this.vectorB.crossVectors(this.viewDirection, UP).normalize();
     const pan = distance > 0.01 ? right.dot(toward.normalize()) : 0;
     // In the maze its howl is muffled behind the walls once it loses sight of him.
-    const occluded = (this.phase === 'stalk' || this.creatureMode === 'retreat' || this.creatureMode === 'stalk-lost') && !this.lastSeen;
+    const occluded = this.creatureMode === 'retreat' && !this.lastSeen;
     this.host.creatureSound.updateSpatial(distance, pan, occluded ? 0.85 : 0);
   }
 
-  /** Along the player's own footsteps (always walkable). In the maze it is fast on
-   * straights but brakes hard into every corner: chained turns shake it off. */
-  private followTrail(dt: number, stalking: boolean): void {
-    if (stalking) this.stalkSpeed = Math.min(STALK_TOP_SPEED, this.stalkSpeed + dt * STALK_ACCELERATION);
-    let budget = dt * (stalking ? this.stalkSpeed : CREATURE_RUN_SPEED);
+  /** Across the plank and along the player's own footsteps (always walkable). */
+  private followTrail(dt: number): void {
+    let budget = dt * CREATURE_RUN_SPEED;
     while (budget > 0 && this.trailIndex < this.trail.length) {
       const target = this.trail[this.trailIndex]!;
       const dx = target.x - this.creaturePosition.x, dz = target.z - this.creaturePosition.z, distance = Math.hypot(dx, dz);
@@ -1240,14 +1276,6 @@ export class RiftEncounter {
       this.creaturePosition.copy(target);
       budget -= distance;
       this.trailIndex += 1;
-      const ahead = this.trail[Math.min(this.trail.length - 1, this.trailIndex + 3)];
-      if (stalking && ahead && distance > 0.05) {
-        const ax = ahead.x - target.x, az = ahead.z - target.z;
-        if (Math.hypot(ax, az) > 0.6 && Math.abs(wrap(Math.atan2(ax, az) - Math.atan2(dx, dz))) > 0.6) {
-          this.stalkSpeed = Math.min(this.stalkSpeed, STALK_CORNER_SPEED);
-          budget = Math.min(budget, dt * STALK_CORNER_SPEED);
-        }
-      }
     }
     if (this.trailIndex < this.trail.length || budget <= 0) return;
     const player = this.host.player.position;
@@ -1279,115 +1307,39 @@ export class RiftEncounter {
 
   // --------------------------------------------- the far bank: it hunts him
 
-  private stalkCooldown = STALK_FIRST_DELAY;
-  private stalkCheck = 0;
-  private stalkWalked = 0;
-  private stalkSpeed = STALK_START_SPEED;
-  private stalkUnseen = 0;
   private screamerKick = 0;
-  private stalkRespawn?: Checkpoint;
-  private readonly stalkLastPosition = new THREE.Vector3(Number.NaN, 0, 0);
-  private readonly stalkDirection = new THREE.Vector3();
-  private readonly down = new THREE.Vector3(0, -1, 0);
 
-  /** Past the rift, now and then, it is suddenly there at the end of a corridor. */
-  private updateStalkerSpawn(dt: number): void {
-    if (this.creatureMode !== 'hidden' || !this.host.creature()) return;
+  private ensureHunt(): BackroomsHunt | undefined {
+    if (this.hunt || !this.host.creature()) return this.hunt;
+    this.hunt = new BackroomsHunt(this.host, this.creatureLight);
+    return this.hunt;
+  }
+
+  /**
+   * Past the rift (monster/BackroomsHunt): lurking out of sight ahead, the
+   * notice, the chase down the nav field, the search, the shadowing. The
+   * phase is 'stalk' while it runs at him; a capture resumes where he stood
+   * when it noticed him.
+   */
+  private updateHunt(dt: number): void {
+    const hunt = this.ensureHunt();
+    if (!hunt) return;
+    if (this.creatureMode !== 'hidden' && this.creatureMode !== 'hunt') return;
     const position = this.host.player.position;
-    if (!Number.isNaN(this.stalkLastPosition.x)) {
-      this.stalkWalked += Math.hypot(position.x - this.stalkLastPosition.x, position.z - this.stalkLastPosition.z);
+    const armed = !this.owns && riftBank(position.z) === -this.crossFrom && Math.abs(position.z - RIFT_CENTER_Z) >= HUNT_RIFT_CLEARANCE;
+    if (hunt.update(dt, armed, this.owns) === 'caught') {
+      this.creaturePosition.copy(hunt.position);
+      this.creatureYaw = hunt.yaw;
+      const respawn = hunt.respawnPoint(new THREE.Vector3());
+      this.startCaught({ position: respawn, look: new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.05, viewYaw(0, -1), 0, 'YXZ')), phase: 'done' });
+      return;
     }
-    this.stalkLastPosition.copy(position);
-    this.stalkCooldown -= dt;
-    if (riftBank(position.z) !== -this.crossFrom || Math.abs(position.z - RIFT_CENTER_Z) < 26) return;
-    if (this.stalkCooldown > 0 || this.stalkWalked < STALK_MIN_WALK) return;
-    this.stalkCheck -= dt;
-    if (this.stalkCheck > 0) return;
-    this.stalkCheck = 1.2;
-    if (!this.random.chance(STALK_CHANCE)) return;
-    const spawn = this.findCorridorEnd();
-    if (spawn) this.startStalk(spawn);
-  }
-
-  /** The far end of the straight corridor he is looking down, on his floor, with floor all the way. */
-  private findCorridorEnd(): THREE.Vector3 | null {
-    const camera = this.host.renderCamera, physics = this.host.physics;
-    camera.getWorldDirection(this.stalkDirection);
-    if (Math.abs(this.stalkDirection.y) > 0.45) return null;
-    this.stalkDirection.setY(0).normalize();
-    const eye = camera.position;
-    const hit = physics.castEnvironmentRay(eye, this.stalkDirection, STALK_SIGHT_MAX);
-    if (!hit || hit.distance < STALK_SIGHT_MIN) return null;
-    const reach = hit.distance - 1.1, feetY = this.host.player.position.y - EYE;
-    let spawn: THREE.Vector3 | null = null;
-    for (const share of [0.35, 0.65, 1]) {
-      const probe = eye.clone().addScaledVector(this.stalkDirection, reach * share);
-      const floor = physics.castEnvironmentRay(probe, this.down, 3.2);
-      if (!floor) return null;
-      const floorY = probe.y - floor.distance;
-      if (Math.abs(floorY - feetY) > 0.5) return null;
-      if (share === 1) spawn = probe.setY(floorY);
-    }
-    return spawn && !isOverRiftVoid(spawn.z, -2) ? spawn : null;
-  }
-
-  private startStalk(spawn: THREE.Vector3): void {
-    const player = this.host.player.position;
-    this.creaturePosition.copy(spawn);
-    this.creatureYaw = bodyYaw(player.x - spawn.x, player.z - spawn.z);
-    this.creatureMode = 'stalk-scream';
-    this.creatureTime = 0;
-    this.trail.length = 0;
-    this.trailIndex = 0;
-    this.trail.push(new THREE.Vector3(player.x, player.y - EYE, player.z));
-    this.stalkSpeed = STALK_START_SPEED;
-    this.stalkUnseen = 0;
-    this.chaseTime = 0;
-    this.stalkCooldown = this.random.float(55, 95);
-    this.stalkWalked = 0;
-    this.lastSeen = true;
-    this.stalkRespawn = {
-      position: player.clone(),
-      look: new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.05, viewYaw(player.x - spawn.x, player.z - spawn.z), 0, 'YXZ')),
-      phase: 'done',
-    };
-    // The screamer.
-    this.host.creatureSound.startScream();
-    this.host.creatureSound.setScreamActive(true);
-    this.host.creatureSound.roar();
-    this.host.sound.stinger();
-    this.host.hud.pulseFlash(0.9);
-    this.host.creature()?.snapHead();
-    this.screamerKick = 1;
-    this.host.say(STALK_LINES[this.random.int(0, STALK_LINES.length - 1)]!);
-    this.enter('stalk');
-  }
-
-  private updateStalk(dt: number): void {
-    const position = this.host.player.position;
-    const tail = this.trail[this.trail.length - 1];
-    if (tail && Math.hypot(position.x - tail.x, position.z - tail.z) > 0.5) this.trail.push(new THREE.Vector3(position.x, position.y - EYE, position.z));
-    if (this.trail.length > 800) { this.trail.splice(0, 300); this.trailIndex = Math.max(0, this.trailIndex - 300); }
-    this.chaseTime += dt;
-    this.host.sound.heartbeat(dt, 0.9);
-    if (this.creatureMode === 'stalk-scream' && this.creatureTime > STALK_SCREAM_HOLD) {
-      this.creatureMode = 'stalk-run';
-      this.creatureTime = 0;
-    }
-    if (this.creatureMode === 'stalk-run') {
-      const feet = this.vectorB.copy(position).setY(position.y - EYE);
-      if (this.creaturePosition.distanceTo(feet) < CATCH_RADIUS) { this.startCaught(this.stalkRespawn); return; }
-      this.stalkUnseen = this.creatureSeen() ? 0 : this.stalkUnseen + dt;
-      const gap = this.trailGap();
-      if ((this.stalkUnseen > STALK_LOSE_SECONDS && gap > 9) || gap > 44 || this.chaseTime > 40) {
-        this.host.say('Je… je crois que je l’ai semée.');
-        this.host.creatureSound.roar();
-        this.creatureTime = 0;
-        if (this.lastSeen) this.creatureMode = 'stalk-lost';
-        else this.hideCreature(2);
-      }
-    }
-    if (this.creatureMode === 'hidden') this.enter('done');
+    this.creatureMode = hunt.visible ? 'hunt' : 'hidden';
+    if (hunt.visible) this.creaturePosition.copy(hunt.position);
+    this.screamerKick = Math.max(this.screamerKick, hunt.kick);
+    this.fear = Math.max(this.fear, hunt.fear);
+    if (hunt.engaged && this.phase === 'done') this.enter('stalk');
+    else if (!hunt.engaged && this.phase === 'stalk') this.enter('done');
   }
 
   private updateAmbience(dt: number): void {
@@ -1403,6 +1355,9 @@ export class RiftEncounter {
     if (this.phase === 'crossing') this.stopCrossing();
     if (this.phase === 'turn') this.host.character?.endComputerPresentation(true);
     this.host.player.setMovementConstraint(undefined);
+    // Lamps back to normal, drone stopped.
+    this.hunt?.dispose();
+    this.hunt = undefined;
     this.creatureLight.removeFromParent();
     this.creatureLight.dispose();
     const model = this.plankModel;

@@ -86,3 +86,40 @@
 @media (prefers-reduced-motion: reduce) {
   .rift-balance { transition: none; }
 }
+
+/* Breath: a faint line under the crosshair, only in the critical zone. */
+.stamina-cue {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  z-index: 8;
+  width: min(120px, 30vw);
+  height: 2px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: rgba(239, 238, 231, 0.08);
+  opacity: 0;
+  transition: opacity 600ms ease-out;
+}
+
+.stamina-cue.is-visible { opacity: 0.55; }
+
+.stamina-cue i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--breath, 1) * 100%);
+  background: rgba(239, 230, 200, 0.7);
+}
+
+.stamina-cue.is-exhausted i {
+  background: rgba(214, 120, 96, 0.8);
+  animation: stamina-cue-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes stamina-cue-pulse {
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stamina-cue.is-exhausted i { animation: none; }
+}

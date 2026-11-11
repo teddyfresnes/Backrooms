@@ -137,6 +137,29 @@ export class PhysicsWorld {
     return hit ? { distance: hit.timeOfImpact, normal: { x: hit.normal.x, y: hit.normal.y, z: hit.normal.z } } : null;
   }
 
+  private readonly navRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
+  private readonly navBody = new RAPIER.Cuboid(0.22, 0.7, 0.22);
+  private readonly navPoint = { x: 0, y: 0, z: 0 };
+  /**
+   * Floor height of a creature-sized cell centred on (x, z) near `floorY`, or
+   * NaN: its body (0.5..1.9 m above the floor) must be clear of the
+   * environment and a floor within `maxStep` of the datum must lie under it.
+   * Reuses its query objects (called many times per second by the hunter).
+   */
+  probeWalkableCell(x: number, z: number, floorY: number, maxStep = 0.42): number {
+    const point = this.navPoint;
+    point.x = x; point.y = floorY + 1.2; point.z = z;
+    if (this.world.intersectionWithShape(point, IDENTITY_ROTATION, this.navBody,
+      RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, undefined, undefined, this.isEnvironmentCollider)) return Number.NaN;
+    const ray = this.navRay;
+    ray.origin.x = x; ray.origin.y = floorY + 0.5; ray.origin.z = z;
+    const hit = this.world.castRayAndGetNormal(ray, 0.5 + maxStep + 0.05, true,
+      RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, undefined, undefined, this.isEnvironmentCollider);
+    if (!hit || hit.normal.y < 0.7) return Number.NaN;
+    const y = floorY + 0.5 - hit.timeOfImpact;
+    return Math.abs(y - floorY) <= maxStep ? y : Number.NaN;
+  }
+
   addChunk(key: string, colliders: readonly StaticCollider[], offset: Vec3Data): void {
     if (!key) throw new Error('Physics chunk keys cannot be empty.');
     if (this.chunkBodies.has(key)) throw new Error(`Physics chunk already exists: ${key}`);

@@ -34,6 +34,8 @@ export class PostFX {
   private grading?: HueSaturationEffect;
   private vhs?: VhsEffect;
   private vhsLevel = 0;
+  private darknessLevel = 0;
+  private exertionLevel = 0;
   private rainLevel = 0;
   private width = 1;
   private height = 1;
@@ -218,11 +220,20 @@ export class PostFX {
     if (this.vhs) this.vhs.rain = this.rainLevel;
   }
 
+  /** Out of breath, 0..1: the edges of the picture close in a little (modern pipeline). */
+  setExertion(value: number): void {
+    const level = THREE.MathUtils.clamp(Number.isFinite(value) ? value : 0, 0, 1);
+    if (Math.abs(level - this.exertionLevel) < 0.002) return;
+    this.exertionLevel = level;
+    this.setDarkness(this.darknessLevel);
+  }
+
   setDarkness(value: number): void {
+    this.darknessLevel = value;
     if (!this.vignette || !this.noise || !this.grading) return;
-    const darkness = THREE.MathUtils.clamp(value, 0, 1);
-    this.vignette.darkness = THREE.MathUtils.lerp(0.09, 0.24, darkness);
-    this.vignette.offset = THREE.MathUtils.lerp(0.47, 0.39, darkness);
+    const darkness = THREE.MathUtils.clamp(value, 0, 1), effort = this.exertionLevel;
+    this.vignette.darkness = THREE.MathUtils.lerp(0.09, 0.24, darkness) + 0.16 * effort * effort;
+    this.vignette.offset = THREE.MathUtils.lerp(0.47, 0.39, darkness) - 0.08 * effort;
     this.noise.blendMode.opacity.value = THREE.MathUtils.lerp(0.018, 0.04, darkness);
     this.grading.saturation = THREE.MathUtils.lerp(-0.025, -0.1, darkness);
   }

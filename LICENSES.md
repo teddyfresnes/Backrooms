@@ -70,6 +70,7 @@ Le détail des sources et des transformations appliquées (recompression, décou
 | Soft Dramatic Impact | NeoSpica | CC0 1.0 | [source](https://freesound.org/people/NeoSpica/sounds/504614/) | `audio/ui/intro-title.mp3` |
 | Musique du menu | Fournie par l’auteur du projet | — | — | `audio/music/menu.mp3` |
 | Tension, cri et répliques de Bacteria | Fournis par l’auteur du projet (créateurs non précisés) | — | — | `audio/bacteria/tension.mp3`, `audio/bacteria/scream-loop.mp3`, `audio/bacteria/voice-lines.mp3` |
+| Nappe de présence des Backrooms | Fournie par le propriétaire du projet | — | — | `audio/bacteria/backrooms-presence.mp3` |
 | Rain against a window | nicoproson | CC0 1.0 | [source](https://freesound.org/people/nicoproson/sounds/648529/) | `audio/apartment/rain-window.mp3` |
 | Wooden door open and close | Breviceps | CC0 1.0 | [source](https://freesound.org/people/Breviceps/sounds/457042/) | `audio/interactions/door-open.mp3`, `audio/interactions/door-close.mp3` |
 | Door lock mechanism | sgcardinal | CC0 1.0 | [source](https://freesound.org/people/sgcardinal/sounds/395753/) | `audio/interactions/lock.mp3`, `audio/interactions/unlock.mp3` |

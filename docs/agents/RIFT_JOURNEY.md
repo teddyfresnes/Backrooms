@@ -30,7 +30,9 @@ le −Z monde : la direction de la faille.
   `blocksSaving` interdit toute sauvegarde au milieu. Tests : `RiftEncounter.test.ts`
   (hôte simulé : arrivée, planche hors champ, bord, chute, traversée, demi-tour,
   planche lâchée avant ou pendant sa traversée, fuite et capture, traque de
-  l'autre rive). Le modèle de la créature est chargé pour toute partie jouable.
+  l'autre rive dans un labyrinthe de rues). Le modèle de la créature est chargé
+  pour toute partie jouable. Le cœur n'est plus joué ici : `heartFear` et
+  `threat` sont lus par `Game` (endurance, voir plus bas).
 
 ## Déroulé
 
@@ -52,17 +54,61 @@ le −Z monde : la direction de la faille.
    regardant la lumière s'éloigner, fondu, carte « Tu es tombé. », reprise au bord.
 6. 2,6 m après l'autre bord : plan 3P, il se retourne ; contrechamp dans l'axe de
    la voie, au long foyer, à travers les deux portails et la porte d'en face : la
-   créature attend au fond du couloir d'approche (21 m), hurle et charge.
-7. Retour en 1P pendant sa course : elle s'arrête au bord, hurle, puis traverse.
+   créature reste au fond du couloir d'approche (21 m), se cabre et hurle
+   (`rear`) ; elle ne charge qu'une fois le plan terminé.
+7. Retour en 1P : elle remonte son couloir, s'arrête au bord, hurle, puis traverse.
    E près du bout de la planche (sur le sol) la pousse : avant qu'elle monte, elle
    repart en courant et en hurlant dans son couloir jusqu'à disparaître au loin ;
    dessus, elle tombe avec la planche. Sans cela elle traverse et suit la trace du
-   joueur ; distancée de 30 m (ou 20 s) elle repart hors de vue, sinon capture.
-8. Sur l'autre rive (après résolution, à plus de 26 m de la faille), après un
-   délai et de la marche, il arrive qu'elle surgisse au fond du couloir regardé
-   (ligne de vue de 13 à 44 m, sol continu au même niveau) : cri, choc caméra,
-   puis poursuite sur la trace du joueur, rapide en ligne droite mais freinée à
-   chaque virage. Hors de vue 2,4 s, elle abandonne (« Je l'ai semée ») ; capture
-   = reprise à l'endroit de l'apparition. Pas de sauvegarde pendant la poursuite.
+   joueur ; distancée de 30 m (ou 20 s), elle disparaît si elle est hors de vue,
+   sinon la traque la reprend en retraite (jamais de fondu à l'écran) ; capture.
+8. Sur l'autre rive (après résolution, à plus de 26 m de la faille) : la traque.
 
 Le brouillard et le fond virent au sombre près de la faille (`atmosphereAt`).
+
+## Traque de l'autre rive
+
+`RiftEncounter.updateHunt` délègue à `monster/BackroomsHunt` (runtime : Rapier,
+acteur, sons, lampes, parasites), qui assemble des modules purs testés sans
+Three : `BackroomsNav`, `BackroomsHunter`, `BackroomsDirector`. La phase vaut
+`stalk` pendant `notice`/`chase` (consigne « Sème-la ! »), sinon `done` ;
+`blocksSaving` couvre aussi la fouille. Capture : `startCaught` puis reprise au
+point où elle l'a remarqué, créature retirée, répit garanti.
+
+- **Navigation** : grille de 128 × 128 cellules de 0,5 m sur l'étage du joueur,
+  recentrée quand il s'éloigne de 10 m, oubliée au changement de chunk
+  (`worldRevision`). Chaque cellule est sondée une fois par
+  `PhysicsWorld.probeWalkableCell` (boîte de corps libre, sol à ±0,42 m), sous
+  budget (48 par champ, ~40 par image) : pas de pic. Dijkstra depuis la cible
+  toutes les 0,25 s ; elle descend le champ et tire la ligne droite la plus
+  longue (marge 0,18 m), donc coupe les angles sans traverser un mur. Bloquée,
+  elle re-sonde autour d'elle et suit les pas du joueur en secours.
+- **États** : `dormant` → `lurk` (`still` immobile ou tapie sous une lampe
+  morte / tête dans un encadrement, `prowl` qui va et vient, `cross` qui traverse
+  au loin sans regarder, `ambush` annoncée par le toc toc) → `notice` → `chase`
+  → `search` (dernier point vu, pièces voisines en ralentissant, reniflements,
+  réagit au sprint à 13 m) → `shadow` (suit hors de vue à 15–30 m) →
+  `withdraw` → `dormant`. Elle ne disparaît que hors ligne de vue et à ≥ 25 m ;
+  une cinématique la fait toujours se retirer. Fixée de loin, elle se fige.
+- **Poursuite** : voir `HUNTER_TUNING` (croisière 6,1, pointe 7,25 après 2,4 s
+  de ligne droite, élastique au-delà de 12 m, collée elle suit le joueur +0,4,
+  virages freinés à 3,5–5,1 m/s, lunge à 2,7 m). En poursuite elle n'entend le
+  sprint qu'à 7 m : perdue après 2,5 s sans le voir ni l'entendre à ≥ 9,5 m.
+  Tests d'équité (`BackroomsHunter.test.ts`, trois labyrinthes) : sprint et
+  virages = semée en 8–16 s, marche = capturé, ligne droite = talonné.
+- **Directeur** : premier contact après 25 s et 35 m sur la rive, tension par
+  temps et pas, fausses alertes, répit de 55–85 s après chaque rencontre.
+  `chooseLurkSpot` note les cellules à 22–44 m, devant (nord, cap du joueur),
+  obscurité (`WorldStream.darknessAt`), couloirs longs, halls, encadrements,
+  angles ; jamais à l'écran, et derrière un mur sous 28 m. 35 % d'approches
+  silencieuses (nappe coupée jusqu'au cri).
+- **Présence** : `BacteriaAudio.loadPresence` (nappe fournie, mono 32 kHz,
+  boucle 1,13–67,78 s, départ seedé), passe-bas derrière les murs ; toc toc
+  (`knock-wood.ogg` + coups sourds) 2–5 s avant une embuscade ou pour rien ;
+  souffle et cliquetis en `lurk`/`search` ; cri réservé à la poursuite. Lampes :
+  `LightFlicker` → uniforms partagés (`render/LightDisturbance`), claquements de
+  ballast et bourdonnement. Parasites : `cameraDisturbance` → `PostFX.setVhs`.
+- **Endurance** (`player/Stamina`, jamais sauvegardée) : ~22 s de sprint au
+  calme, sprint coupé jusqu'à 35 %, adrénaline (`threat`) et contrecoup ;
+  `Game` pilote `setSprintExhausted`, `setExertion`, souffle, cœur, vignette et
+  `StaminaCue` (trait discret en zone critique).

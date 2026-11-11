@@ -1,13 +1,18 @@
 import * as THREE from 'three';
+import { applyFixtureDisturbance } from './LightDisturbance';
 
 /** Linear HDR radiance, separate from the yellow wallpaper/fluorescent tint.
  * AGX still processes the final scene; bloom is an optional halo, not the
  * mechanism that makes the panel read as a white emitter. */
 export const FLUORESCENT_PANEL_RADIANCE = 2;
 export const createFluorescentPanelGeometry=():THREE.PlaneGeometry=>new THREE.PlaneGeometry(2.24,1.16).rotateX(Math.PI*.5);
-export const createFluorescentDiffuser = (name = 'fluorescent-diffuser', tint = 0xffffff): THREE.MeshBasicMaterial =>
-  new THREE.MeshBasicMaterial({ name, color: new THREE.Color(tint).multiplyScalar(FLUORESCENT_PANEL_RADIANCE),
+export const createFluorescentDiffuser = (name = 'fluorescent-diffuser', tint = 0xffffff): THREE.MeshBasicMaterial => {
+  const material = new THREE.MeshBasicMaterial({ name, color: new THREE.Color(tint).multiplyScalar(FLUORESCENT_PANEL_RADIANCE),
     toneMapped: true, fog: true, depthTest: true, depthWrite: true, side: THREE.DoubleSide });
+  // The creature makes the tubes stutter through shared uniforms (no recompile).
+  applyFixtureDisturbance(material);
+  return material;
+};
 
 /** Preserve the established blackout rig; lift only normally lit scenes. */
 export const MODERN_BACKROOMS_RIG = {

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { resolveLightingBrightness } from './LightingBrightness';
 import { applyRegionalLighting, type RegionalLightField } from './RegionalLighting';
+import { LIGHT_DISTURBANCE, LIGHT_DISTURBANCE_GLSL, LIGHT_DISTURBANCE_KEY } from './LightDisturbance';
 import type { MaterialSet } from './MaterialLibrary';
 import type { Rect, VisualBiome, WorldPlan } from '../world/types';
 
@@ -83,6 +84,8 @@ interface ZonalShaderUniforms {
   readonly verticalRelief: THREE.IUniform<number>;
   readonly lightPoolMin: THREE.IUniform<number>;
   readonly lightPoolMax: THREE.IUniform<number>;
+  readonly lightDisturbCenter: THREE.IUniform<THREE.Vector4>;
+  readonly lightDisturbState: THREE.IUniform<THREE.Vector4>;
 }
 
 export interface ZonalLightingContext {
@@ -381,6 +384,9 @@ const makeUniforms = (
     verticalRelief: { value: profile.verticalRelief },
     lightPoolMin: context.poolUniforms.min,
     lightPoolMax: context.poolUniforms.max,
+    // Shared holders: the creature's flicker reaches every chunk without a recompile.
+    lightDisturbCenter: LIGHT_DISTURBANCE.center,
+    lightDisturbState: LIGHT_DISTURBANCE.state,
   };
 };
 
@@ -441,6 +447,7 @@ export const applyZonalLighting = (
         uniform float lightPoolMin;
         uniform float lightPoolMax;
         varying vec3 vZonalWorldPosition;
+        ${LIGHT_DISTURBANCE_GLSL}
 
         float blackoutInfluence( const in vec2 point ) {
           float influence = 0.0;
@@ -495,6 +502,7 @@ export const applyZonalLighting = (
         outgoingLight += diffuseColor.rgb * fluorescentTint
           * fluorescentLift * (1.0 - blackout);
 
+        outgoingLight *= lightDisturbSurface(vZonalWorldPosition);
         float viewDistance = distance(vZonalWorldPosition, cameraPosition);
         float darkDistance = smoothstep(darkNear, darkFar, viewDistance) * blackout;
         outgoingLight = mix(outgoingLight, darkColor, darkDistance * 0.94);
@@ -502,7 +510,7 @@ export const applyZonalLighting = (
       );
   };
   material.customProgramCacheKey = () =>
-    `zonal-fluorescent-lighting-v5-${supportsSurfaceNormal ? 'lit' : 'basic'}`;
+    `zonal-fluorescent-lighting-v5-${supportsSurfaceNormal ? 'lit' : 'basic'}|${LIGHT_DISTURBANCE_KEY}`;
   material.needsUpdate = true;
   if (context.regionalField) applyRegionalLighting(material, context.regionalField);
 };

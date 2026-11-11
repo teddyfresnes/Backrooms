@@ -69,6 +69,10 @@ SMAA avant son warmup.
 La cage ajoute une passe `VhsEffect` séparée (elle échantillonne ses voisins) :
 niveau permanent faible, accentué par `BacteriaEncounter.cameraDisturbance`
 (proximité, regard, mise à mort). Aucun flash teinté : il rosissait la créature.
+Les Backrooms jouables l'ont aussi, à 0 hors de `RiftEncounter.cameraDisturbance`.
+Les lampes autour de la créature vacillent par deux holders partagés
+(`LIGHT_DISTURBANCE`, `render/LightDisturbance.ts`) lus par les shaders zonaux,
+bakés et les diffuseurs : jamais de lumière Three ajoutée ou masquée pour cela.
 
 `SceneWarmup` envoie toutes les textures à la carte graphique, prépare les limites
 et textures d'os des trois vues du personnage. Il monte aussi les buffers hors

@@ -92,6 +92,7 @@ export class BacteriaActor {
   };
   private time = 0;
   private gait = 0;
+  private paceScale = 1;
   private stutterTimer = 1;
   private holdTimer = 0;
   private lurchTimer = 0;
@@ -213,6 +214,9 @@ export class BacteriaActor {
 
   get currentMotion(): BacteriaMotion { return this.motion; }
 
+  /** Gait cadence scale (1 = the motion's own): matches the steps to the real speed, no sliding. */
+  setPace(scale: number): void { this.paceScale = THREE.MathUtils.clamp(Number.isFinite(scale) ? scale : 1, 0, 2); }
+
   setMotion(motion: BacteriaMotion): void {
     if (motion === this.motion) return;
     this.motion = motion;
@@ -287,7 +291,7 @@ export class BacteriaActor {
       if (this.lurchTimer > 0) { this.lurchTimer -= dt; rate = 2.7; }
     }
     this.time += dt * (rate === 0 ? 0.08 : 1);
-    this.gait += dt * rate * this.blended.cadence * Math.PI * 2;
+    this.gait += dt * rate * this.blended.cadence * this.paceScale * Math.PI * 2;
     this.pose(dt, rate === 0);
   }
 
