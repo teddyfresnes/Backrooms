@@ -17,8 +17,6 @@ function worldRotation(bone:THREE.Bone,rotation:THREE.Quaternion):void {
   bone.quaternion.copy(parent.multiply(q)).normalize();bone.updateWorldMatrix(false,true);
 }
 /** Samples the actual dressed world avatar. No clone, replacement mesh or extra renderer. */
-/** How far ahead of the hips the feet rest once seated (metres). */
-const SEATED_FOOT_REACH = .4;
 export class SeatedCharacterPose {
   private readonly mixer:THREE.AnimationMixer;
   private readonly idle:THREE.AnimationAction;
@@ -84,8 +82,9 @@ export class SeatedCharacterPose {
       // Small lateral load precedes descent and disappears on seat contact.
       wanted.x+=.018*Math.sin(Math.PI*t);this.hips.position.copy(this.hips.parent!.worldToLocal(wanted));this.hips.updateWorldMatrix(false,true);
       for(const leg of this.legs){
-        // Seated, the feet rest ahead of the pelvis: thighs level, shins upright.
-        solveCombatTwoBone(leg.upper,leg.lower,leg.foot,new THREE.Vector3(leg.lateral,this.soleHeight+.006,SEATED_FOOT_REACH*easeCombat(Math.max(0,(t-.35)/.65))),1,new THREE.Vector3(0,0,1),.997,.22);
+        // The standing anchor is already in front of the pulled-out seat.
+        // Keep that floor contact while the pelvis moves back onto the chair.
+        solveCombatTwoBone(leg.upper,leg.lower,leg.foot,new THREE.Vector3(leg.lateral,this.soleHeight+.006,0),1,new THREE.Vector3(0,0,1),.997,.22);
         leg.foot.quaternion.copy(leg.foot.parent!.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(leg.rotation));leg.foot.updateWorldMatrix(false,true);
       }
       times.push(t*1.5);for(const track of tracks){track.positions.push(...track.bone.position.toArray());track.rotations.push(...track.bone.quaternion.toArray());}
@@ -107,7 +106,7 @@ export class SeatedCharacterPose {
     for(const spine of this.spines)worldRotation(spine,new THREE.Quaternion().setFromAxisAngle(right,s.lean*(seated>0?.28:1)/this.spines.length));
     // Planted ankles drive visible hip/knee flexion throughout sitting and rising.
     for(const leg of this.legs){
-      const point=s.feet.clone().addScaledVector(right,leg.lateral).addScaledVector(forward,SEATED_FOOT_REACH*easeCombat(Math.max(0,(seated-.35)/.65)));point.y=s.feet.y+this.soleHeight+.006;
+      const point=s.feet.clone().addScaledVector(right,leg.lateral);point.y=s.feet.y+this.soleHeight+.006;
       if(walk<.01){solveCombatTwoBone(leg.upper,leg.lower,leg.foot,point,1,forward,.997,.22);
         const rotation=q.clone().multiply(leg.rotation),parent=leg.foot.parent!.getWorldQuaternion(new THREE.Quaternion()).invert();leg.foot.quaternion.copy(parent.multiply(rotation));leg.foot.updateWorldMatrix(false,true);}
     }

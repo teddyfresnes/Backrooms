@@ -58,6 +58,7 @@ export class ComputerUseSequence {
   private finishPresentation=false;
   private lastSeated=0;
   private riseFrom=1;
+  private pullOffset=0;
   private exitOffset=.025;
   private shockElapsed=0;
   private yaw=Math.PI;
@@ -75,12 +76,10 @@ export class ComputerUseSequence {
     if(!this.physics.canStandAt(standing)){this.host.hint('Pas assez de place pour s’installer.');return true;}
     const approach=planComputerApproach(this.physics,this.host.position());if(!approach||!this.chair.canMoveTo(.35)){this.host.hint('Le passage près de la chaise est encombré.');return true;}
     this.side=approach.side;this.safePosition.copy(WAIT[this.side]!);this.savedCamera.copy(this.camera);this.cameraFrom.copy(this.camera);this.position.copy(approach.points[0]!);
-    this.clock=0;this.yaw=Math.PI;this.targetYaw=Math.PI;
+    this.clock=0;this.yaw=Math.PI;this.targetYaw=Math.PI;this.pullOffset=this.chair.offset;
     this.shock=false;this.standingShock=false;this.exitRequested=false;this.firstPerson=false;this.finishPresentation=false;
     this.host.modal(true);this.host.begin();
-    // Straight to the seat when nothing is in the way: no detour around the chair.
-    const here=this.host.position().clone();here.y=COMPUTER_STANDING.y;
-    this.setRoute(computerPathClear(this.physics,here,COMPUTER_STANDING)?[here,COMPUTER_STANDING.clone()]:approach.points);this.position.copy(this.route[0]!);
+    this.setRoute(approach.points);this.position.copy(this.route[0]!);
     this.change('approach');this.host.hint(null);return true;
   }
   close():void {
@@ -151,11 +150,10 @@ export class ComputerUseSequence {
     switch(this.phase){
       case 'approach':{
         const arrived=this.travel(delta,1.5);
-        const left=this.routeLength-this.routeDistance;this.chair.setOffset(.35*smooth(Math.min(1,this.clock/.45)));
-        // A short shuffle, never a full stride cycle.
-        this.pose(0,0,arrived?0:Math.min(.35,left/.6*.35));this.cameraView();
-        if(arrived){this.host.chairSound?.();this.targetYaw=Math.PI;this.change('sitting');}break;}
-      case 'pull-chair':this.chair.setOffset(.35*smooth(this.elapsed/.55));this.pose(0,.12,0,true);this.cameraView();if(this.elapsed>=.55){this.setRoute([this.position.clone(),new THREE.Vector3(WAIT[this.side]!.x,COMPUTER_STANDING.y,-4.72),COMPUTER_STANDING.clone()]);this.change('align');}break;
+        const left=this.routeLength-this.routeDistance;
+        this.pose(0,0,arrived?0:Math.min(1,left/.22));this.cameraView();
+        if(arrived){this.host.chairSound?.();this.change('pull-chair');}break;}
+      case 'pull-chair':this.chair.setOffset(THREE.MathUtils.lerp(this.pullOffset,.35,smooth(this.elapsed/.55)));this.pose(0,.12,0,true);this.cameraView();if(this.elapsed>=.55){this.setRoute([this.position.clone(),new THREE.Vector3(WAIT[this.side]!.x,COMPUTER_STANDING.y,-4.72),COMPUTER_STANDING.clone()]);this.change('align');}break;
       case 'align':{const done=this.travel(delta,.7);this.pose(0,.05,done?0:Math.min(1,(this.routeLength-this.routeDistance)/.22));this.cameraView();if(done&&Math.abs(Math.atan2(Math.sin(this.yaw-Math.PI),Math.cos(this.yaw-Math.PI)))<.035)this.change('sitting');break;}
       case 'sitting':{const t=Math.min(1,this.elapsed/1.2);this.pose(t,.10*Math.sin(Math.PI*t)+.08*t);this.cameraView();if(t===1)this.change('settling');break;}
       case 'settling':{const t=smooth(this.elapsed/.4);this.chair.setOffset(THREE.MathUtils.lerp(.35,.025,t));this.pose(1,.20,0,false,t);this.cameraView();if(t===1){this.cameraFrom.copy(this.camera);this.change('camera-in');}break;}
