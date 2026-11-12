@@ -482,6 +482,18 @@ export class PhysicsWorld {
         grounded ||= this.controller.computedGrounded();
       }
     }
+    // Climbing a riser, the capsule rolls over the nosing. The grounded downward
+    // push fights that lift: it costs a quarter of the walking speed on every
+    // flight and pins a slow walker (under about 1.5 m/s) at the first step.
+    // Retry the same sweep level and keep it when it advances further.
+    if (grounded && desiredDelta.y < 0 && requestedHorizontal > 0.005
+      && Math.hypot(allowed.x, allowed.z) < requestedHorizontal * 0.9) {
+      this.controller.computeColliderMovement(this.playerCollider,
+        { x: desiredDelta.x, y: 0, z: desiredDelta.z }, undefined, this.playerCollider.collisionGroups());
+      const level = this.controller.computedMovement();
+      if (this.controller.computedGrounded() && Math.hypot(level.x, level.z) > Math.hypot(allowed.x, allowed.z) + 1e-5)
+        allowed = { x: level.x, y: level.y, z: level.z };
+    }
     // Pressed against a wall or railing on stairs, the part of the request that
     // points into the wall makes Rapier's autostep fail on every riser. Retry
     // once with that component removed (pure tangent along the wall).

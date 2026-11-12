@@ -3,11 +3,17 @@ import { pointInRect, rectDepth, rectWidth } from './types';
 import type { SpatialAddress } from './SpatialTypes';
 
 export const TOPOLOGY_VERSION = 2;
+/** Version of saved surface anchors. It rises whenever generation moves floors:
+ * an older anchor is then resolved to the nearest real floor, not by its ID. */
+export const SURFACE_ANCHOR_VERSION = 3;
 export const SURFACE_EPSILON = .002;
 export const HEIGHT_QUANTUM = .05;
 export const MIN_CLEARANCE = 2.5;
 export const MIN_ROUTE_WIDTH = 1.6;
-export const MAX_RAMP_GRADE = .42;
+/** 1:8, with the tolerance of a quantized rise. The legacy pipeline (monuments,
+ * `RAW_LOCAL_`) keeps its historical ramps and budget. */
+export const MAX_RAMP_GRADE = .13;
+export const LEGACY_MAX_RAMP_GRADE = .42;
 export const SLAB_THICKNESS = .16;
 /** Suspended ceiling tiles are separate from the structural floor above. */
 export const CEILING_TILE_THICKNESS = .03;
@@ -128,7 +134,7 @@ export const validateTopology = (w: WorldPlan): string[] => {
     if (s.access === 'open' && clearance < (crawl ? 1.28 : MIN_CLEARANCE) - SURFACE_EPSILON) issue(s.id, 'insufficient clearance');
     if (s.profile.kind === 'linear') {
       const run = s.profile.axis === 'x' ? rectWidth(s.bounds) : rectDepth(s.bounds), width = s.profile.axis === 'x' ? rectDepth(s.bounds) : rectWidth(s.bounds);
-      if (!crawl && (hi - lo) / run > MAX_RAMP_GRADE + SURFACE_EPSILON) issue(s.id, 'slope exceeds budget');
+      if (!crawl && (hi - lo) / run > (w.spatial ? MAX_RAMP_GRADE : LEGACY_MAX_RAMP_GRADE) + SURFACE_EPSILON) issue(s.id, 'slope exceeds budget');
       if (width < (crawl ? .75 : MIN_ROUTE_WIDTH) - SURFACE_EPSILON) issue(s.id, 'route narrower than budget');
     }
   }

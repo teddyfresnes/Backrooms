@@ -115,8 +115,11 @@ it('walks the single fractional stair and retains the historical split bridge', 
   expect(stairs.length).toBeGreaterThan(1); const first = stairs[0]!, last = stairs.at(-1)!, a = rectCenter(first.bounds), b = rectCenter(last.bounds);
   const physics = await PhysicsWorld.create(w);
   try {
-    physics.teleport({ ...a, y: surfaceY(first, a.x, a.z) + .865 }); let actual = { x: a.x, y: 0, z: a.z };
-    for (let i = 0; i < Math.ceil((b.x - a.x + .2) / .04); i++) actual = { ...physics.move({ x: .04, z: 0, y: -.035 }).position };
+    // Goings are 30 cm: the capsule starts on the floor before the first riser, not overlapping the second one.
+    const riser = surfaceY(stairs[1]!, 0, 0) - surfaceY(first, a.x, a.z), startX = first.bounds.minX - .6;
+    expect(Math.abs(riser)).toBeLessThanOrEqual(.1751); expect(first.bounds.maxX - first.bounds.minX).toBeCloseTo(.3, 6);
+    physics.teleport({ x: startX, z: a.z, y: surfaceY(first, a.x, a.z) - riser + .865 }); let actual = { x: startX, y: 0, z: a.z };
+    for (let i = 0; i < Math.ceil((b.x - startX + .2) / .04 * 1.3) && actual.x <= b.x; i++) actual = { ...physics.move({ x: .04, z: 0, y: -.035 }).position };
     expect(actual.x).toBeGreaterThan(b.x - .15); expect(actual.y).toBeCloseTo(surfaceY(last, b.x, b.z) + .865, 1);
   } finally { physics.dispose(); }
   expect(generateInfiniteChunk('LIMINAL-ORDINARY-18', { x: -1, z: -1, story: 1 }).topology!.connections.some(c => c.kind === 'jump' && c.id.includes('/bridge-jump'))).toBe(true);

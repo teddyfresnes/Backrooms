@@ -20,7 +20,7 @@ rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/
 
 ## Ordre du pipeline
 
-Le pipeline ordinaire (plan version 18, topologie/spatial version 2) est :
+Le pipeline ordinaire (plan version 19, topologie/spatial version 2) est :
 
 1. `RegionalPlan` choisit les districts mondiaux et leurs datums signés ;
 2. il réserve les atria sur deux à quatre adresses verticales. Les galeries
@@ -28,10 +28,12 @@ Le pipeline ordinaire (plan version 18, topologie/spatial version 2) est :
    phase de six adresses pour accueillir trois ou quatre niveaux sans chevauchement ;
 3. `RegionalPlan.hasRegionalTransition` sélectionne les raccords isolés entre
    datums différents (au plus un par cellule, centres espacés d’au moins 49 m).
-   `SpatialConnectors` et `TransitionLayout` déduisent les parcours et paliers
-   stables. `SpatialTemplates` résout les plafonds BSP réels aux deux extrémités
-   et les parois canoniques : volée ouverte, adossée ou chambre justifiée ; `SpatialFeatures` réserve les anciens trous et
-   passages, avec leurs vrais propriétaires source/arrivée ;
+   Les datums sont des multiples de 0,9 m ; `TransitionLayout` fixe la pente
+   (`STAIR_TREAD`, `STAIR_MAX_RISER`, `RAMP_MAX_GRADE` dans `SpatialGeometry.ts`)
+   et en déduit l'emprise, l'enceinte et le toit, sans lire le BSP.
+   `SpatialConnectors` applique le même giron aux volées d'atrium ;
+   `SpatialFeatures` réserve les anciens trous et passages, avec leurs vrais
+   propriétaires source/arrivée ;
 4. `SpatialWorld` réutilise `generateBspArchitecture` sur des domaines canoniques
    de 224 m (2×2 chunks), puis matérialise aux datums finaux les pièces historiques,
    murs épais, détails et plafonds ; les grandes familles restent minoritaires ;

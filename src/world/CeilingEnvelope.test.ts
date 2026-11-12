@@ -14,19 +14,21 @@ import type { WorldPlan } from './types';
 it('closes the reproduced LATE-OFFICE niche into the high roof, with the same mesh and physical solid', async () => {
   const plan=generateInfiniteChunk('LATE-OFFICE-1950',{x:0,z:0,story:0}),x=-36.83,z=23.75;
   const roof=plan.spatial!.ceilings.find(s=>s.id.includes('/bsp-8/ceiling')&&x>s.bounds.minX&&x<s.bounds.maxX&&z>s.bounds.minZ&&z<s.bounds.maxZ)!;
-  expect(roof.roomId).toContain('room-WTBLBRBTL');expect(surfaceY(roof,x,z)-roof.thickness).toBeCloseTo(-2.11,6);
+  // District datums moved with the 0.9 m quanta: every height is relative to the real floor.
+  const floor=plan.spatial!.cells.find(c=>x>c.bounds.minX&&x<c.bounds.maxX&&z>c.bounds.minZ&&z<c.bounds.maxZ)!.floorY;
+  expect(roof.roomId).toContain('room-WTBLBRBTL');expect(surfaceY(roof,x,z)-roof.thickness).toBeCloseTo(floor+2.74,6);
   const returns=plan.spatial!.prisms.filter(p=>p.id.startsWith(`${roof.id}/ceiling-return-n`));expect(returns.length).toBeGreaterThan(0);
   const material=new THREE.MeshBasicMaterial(),meshes=prepareSpatialArchitecture(plan).map(b=>{const m=new THREE.Mesh(mountArchitectureBatch(b),material);m.name=b.name;m.updateMatrixWorld();return m;});
   const physics=await PhysicsWorld.create(plan);
   try {
-    for(const y of [-2.0,-1.3,-.55]) {
+    for(const y of [floor+2.85,floor+3.55,floor+4.3]) {
       const hit=new THREE.Raycaster(new THREE.Vector3(x,y,22),new THREE.Vector3(0,0,1),0,2).intersectObjects(meshes)[0];
       expect(hit?.object.name).toBe('regional-plaster-structures');expect(hit!.point.z).toBeCloseTo(23.5,5);
       const solid=physics.world.intersectionWithShape({x,y,z:23.5},{x:0,y:0,z:0,w:1},new RAPIER.Ball(.025),undefined,undefined,undefined,undefined,physics.isEnvironmentCollider);
       expect(solid).not.toBeNull();
     }
     // The new return stays above the low ceiling: the alcove remains usable.
-    expect(physics.canStandAt({x:-36.57,y:-4.85+.865,z:20.14})).toBe(true);
+    expect(physics.canStandAt({x:-36.57,y:floor+.865,z:20.14})).toBe(true);
   } finally {physics.dispose();meshes.forEach(m=>m.geometry.dispose());material.dispose();}
 });
 

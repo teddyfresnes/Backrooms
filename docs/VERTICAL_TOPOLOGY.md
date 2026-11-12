@@ -51,8 +51,8 @@ Les colonnes retirent leur emprise des sols de navigation ; leurs IDs n’altèr
 pas les autres surfaces. Le BSP est planifié sur 224 m, avant les découpes locales ; aucune façade n’est
 créée à une frontière de cellule à datum identique. Les pièces ordinaires gardent
 un plafond de base à 2,74 m, avec variations bornées à 4,35 m pour conserver le
-pas d’adresse actuel. Les chambres des transitions régionales réservent 3,8 ou
-4,05 m au-dessus du profil du parcours ; les autres volumes gardent leur gabarit.
+pas d’adresse actuel. Les transitions régionales gardent au moins 2,74 m
+au-dessus du profil du parcours ; les autres volumes gardent leur gabarit.
 Les murs, masses et pilastres sont exclus des sols de navigation. Une passe
 bornée répare les poches créées par les découpes, sans toucher aux façades
 régionales, aux supports d’escaliers ou aux portes. Les arcs de porte portent
@@ -63,14 +63,12 @@ régionales, aux supports d’escaliers ou aux portes. Les arcs de porte portent
 Les frontières entre datums différents possèdent des raccords rares et canoniques :
 au plus un par cellule, avec au moins 49 m entre leurs centres. Les autres
 frontières sont fermées sans fausse entrée. Les passages à datum identique restent
-inchangés. `TransitionLayout` réserve une chambre de largeur et longueur variables
-avec une approche de 2,2 m. Environ 80 % des compositions demandent une volée
-continue unique : la couture de cellules coupe ses données, pas sa pente. Les
-autres ont un vrai palier intermédiaire de 4,4 m au total, à l’altitude moyenne.
-Les grands dénivelés imposent la variante continue pour conserver la place utile.
-Une pente jusqu’à 0,40 peut utiliser une rampe ; sinon le nombre de marches est déduit
-du dénivelé avec une contremarche maximale de 17,5 cm. Les datums intermédiaires,
-bifurcations et directions se poursuivent sur plusieurs cellules.
+inchangés. Les datums valent des multiples de 0,9 m : `TransitionLayout` fixe la
+pente (giron 30 cm, contremarche 15 à 17,5 cm, rampe 1:8 au plus) puis en déduit
+l'emprise, ancrée sur la couture avec une approche de 2,2 m. Une partie des
+volées a un vrai palier intermédiaire de 3,2 m au total, à l’altitude moyenne.
+La couture de cellules coupe les données d'une liaison, pas sa pente. Les datums
+intermédiaires, bifurcations et directions se poursuivent sur plusieurs cellules.
 
 Une à quatre cellules intérieures de district peuvent devenir un atrium de
 28 à 56 m. Les galeries classiques gardent leur phase canonique de quatre
@@ -81,7 +79,8 @@ cloisons, lumières et continuations vers le labyrinthe voisin.
 
 Le haut possède une galerie de 2,7 à 4,8 m longeant les murs, et selon la variante
 une passerelle ou un retour. Les escaliers droits, en L ou en U font 2,4 à 3,8 m de large ;
-leurs volées et paliers partagent le même tracé avec les découpes du bas. Le
+leurs volées gardent le giron commun de 30 cm depuis le haut de leur couloir réservé,
+le reste du couloir devenant une coursive de niveau ; ce tracé est partagé avec les découpes du bas. Le
 passage inférieur sous un escalier n’existe que si son dégagement atteint 2,5 m.
 Les secteurs trop bas sont fermés par des solides visibles correspondants.
 Les poutres des lumières inférieures sont réellement ancrées aux cloisons.
@@ -103,9 +102,9 @@ dans les deux sens, la marche seule tombe, et le tour par la galerie reste possi
 Les parapets restent entièrement sur leur dalle et s’interrompent aux passages.
 
 Les limites d’amplitude régionales sont explicites. Les grands escaliers d’atrium
-franchissent 5,4 ou 10,8 m ; les transitions interdistricts et reliefs joignent
-des dénivelés partiels variables. Les monticules et terrasses ont des solides
-jusqu’au sol porteur. Voir [TRANSITION_INTEGRATION.md](TRANSITION_INTEGRATION.md)
+franchissent 5,4 ou 10,8 m ; les transitions interdistricts joignent 0,9 à 3,6 m.
+Les monticules et terrasses ont des solides jusqu’au sol porteur et des rampes
+à 1:8 au plus. Voir [TRANSITION_INTEGRATION.md](TRANSITION_INTEGRATION.md)
 pour les toits continus, UV et familles historiques réintégrées.
 Les anciens sockets acceptent aussi `rise` / `stepsPerFlight`, avec leurs valeurs
 historiques par défaut pour les monuments existants.

@@ -34,15 +34,14 @@ try {
         physics.batchChunkChanges(()=>plans.forEach((w,index)=>physics.addChunk(String(index),w.colliders,getChunkWorldOffset(w.spatial!.owner))));
         const links=new Map<string,number>();
         for(const sf of plan.topology!.surfaces){floorArea+=rectArea(sf.bounds);if(sf.roomId?.includes('/bsp/'))bspArea+=rectArea(sf.bounds);}
-        returns+=plan.spatial.prisms.filter(p=>p.id.includes('/open-slab-return-')).length;
+        returns+=plan.spatial.prisms.filter(p=>p.id.includes('/ceiling-return-')).length;
         if(new Set(plan.colliders.map(c=>c.id)).size!==plan.colliders.length)errors.push({seed,reason:'duplicate collider IDs'});
         for(const t of plan.spatial.transitions??[]){
           flights++;policies[t.roofPolicy]=(policies[t.roofPolicy]??0)+1;enclosures[t.enclosure]=(enclosures[t.enclosure]??0)+1;
           links.set(t.linkId,(links.get(t.linkId)??0)+1);
           const p=rectCenter(t.run);
           examples[t.roofPolicy]??={seed,coord,id:t.id,position:{x:p.x+offset.x,z:p.z+offset.z,y:surfaceY({bounds:t.run,profile:t.profile}as never,p.x,p.z)+offset.y+.865}};
-          if(plan.spatial.ceilings.some(s=>s.id===t.id+'/roof')!==(t.roofPolicy==='flight'))errors.push({seed,id:t.id,reason:'independent roof policy'});
-          if(t.roofPolicy==='upper-slab'&&!plan.spatial.dependencies.some(d=>d.owner.story===coord.story+1&&d.reason==='stairs'))errors.push({seed,id:t.id,reason:'missing physical ceiling owner'});
+          if(!plan.spatial.ceilings.some(s=>s.id===t.id+'/roof'))errors.push({seed,id:t.id,reason:'missing transition roof'});
           const route=plan.topology!.surfaces.filter(s=>s.id===t.id||s.id.startsWith(t.id+'/step-'));
           for(const sf of route.filter((_,j,a)=>j===0||j===a.length-1||j===Math.floor(a.length/2))){
             const p=rectCenter(sf.bounds),floor=surfaceY(sf,p.x,p.z),roof=surfaceY({...sf,profile:sf.ceilingProfile!},p.x,p.z);

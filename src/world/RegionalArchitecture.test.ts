@@ -13,11 +13,13 @@ it('plans ordinary regional plateaus across chunk boundaries without a privilege
   const cells = Array.from({ length: 40 }, (_, x) => Array.from({ length: 40 }, (_, z) => regionalDatum('REGIONAL-AUDIT-0', x - 20, z - 20))).flat();
   const counts = new Map<string, number>(); for (const c of cells) counts.set(c.id, (counts.get(c.id) ?? 0) + 1);
   expect(Math.max(...counts.values())).toBeGreaterThan(20);
-  expect(new Set(cells.map(c => c.y)).size).toBeGreaterThan(20);
+  // Five levels, 0.9 m apart: neighbours are flush or a real flight apart.
+  const levels = new Set(cells.map(c => c.y));
+  expect(levels.size).toBe(5); for (const y of levels) expect(Math.abs(y / .9 - Math.round(y / .9))).toBeLessThan(1e-9);
   // Monument interfaces (the rift row and its collar) keep their fixed datum on purpose.
   const plateaus = cells.filter(c => c.id !== 'monument-interface');
-  expect(plateaus.filter(c => c.y === 0).length / plateaus.length).toBeLessThan(.1);
-  expect(Math.max(...cells.map(c => c.y)) - Math.min(...cells.map(c => c.y))).toBeGreaterThan(12);
+  expect(plateaus.filter(c => c.y === 0).length / plateaus.length).toBeLessThan(.6);
+  expect(Math.max(...cells.map(c => c.y)) - Math.min(...cells.map(c => c.y))).toBeCloseTo(3.6, 9);
   const a = generateInfiniteChunk('REGIONAL-AUDIT-0', { x: -1, z: 1, story: 0 }), b = generateInfiniteChunk('REGIONAL-AUDIT-0', { x: 0, z: 1, story: 0 });
   expect(a.spatial?.version).toBe(2); expect(b.spatial?.version).toBe(2);
   const regionChunks = new Map<string, Set<string>>();

@@ -2,6 +2,7 @@ import { SeededRandom } from './SeededRandom';
 import { openRoomComposition, regionalAtrium, regionalStyle } from './RegionalPlan';
 import { cutRects, overlapRect, surfaceRange, type HeightProfile, type WalkableSurface } from './WalkableTopology';
 import { rectCenter, rectDepth, rectWidth, type Rect, type WorldPlan } from './types';
+import { RAMP_MAX_GRADE } from './SpatialGeometry';
 
 export interface SpatialReliefRecord {
   id: string; roomId: string; kind: 'mound' | 'terraces'; bounds: Rect; baseY: number; peakY: number; surfaceIds: string[]; access?: 'single' | 'opposed' | 'terraced';
@@ -33,8 +34,10 @@ export const applySpatialRelief = (w: WorldPlan, avoid: readonly Rect[]): void =
     floor.roomId = room.id;
     const length = (alongX ? rectWidth(b) : rectDepth(b)) - 5;
     const width = Math.min(rng.float(5, 9), (alongX ? rectDepth(b) : rectWidth(b)) - 6);
-    const peak = ordinary ? rng.float(.4, 1.2) : Math.min(rng.float(.7, 3.6), length * .12);
+    const drawnPeak = ordinary ? rng.float(.4, 1.2) : Math.min(rng.float(.7, 3.6), length * .12);
     const kind = atrium && !ordinary ? atrium.composition === 'terraces' ? 'terraces' : 'mound' : rng.pick(['mound', 'terraces'] as const);
+    // Mound ramps span 34% of the length and terrace ramps half of it: both stay at 1:8.
+    const peak = Math.max(.2, Math.floor(Math.min(drawnPeak, length * (kind === 'mound' ? .34 : .5) * RAMP_MAX_GRADE) * 20) / 20);
     const start = (alongX ? p.x : p.z) - length / 2;
     const rect = (from: number, to: number): Rect => alongX
       ? { minX: from, maxX: to, minZ: p.z - width / 2, maxZ: p.z + width / 2 }

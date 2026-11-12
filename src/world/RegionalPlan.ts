@@ -1,4 +1,4 @@
-import { planRegionalTransition } from './TransitionLayout';
+import { DATUM_QUANTUM, planRegionalTransition } from './TransitionLayout';
 import { SeededRandom } from './SeededRandom';
 import { epicStructureIndexForCoord } from './EpicStructures';
 import { pointInRect, type Rect } from './types';
@@ -11,6 +11,10 @@ export const ADDRESS_PITCH = 5.4;
 export const SPATIAL_CLEARANCE = 3.05;
 export const SPATIAL_ROUTE_WIDTH = 4;
 const REGION_CELLS = 6;
+/** District floors sit on five levels one quantum (0.9 m) apart. Neighbours
+ * are flush or a real flight apart: a connection never exists for a few
+ * centimetres, and no flight has to leave its own story band. */
+const DATUM_LEVELS = [{ value: -2, weight: 1 }, { value: -1, weight: 2.2 }, { value: 0, weight: 3 }, { value: 1, weight: 2.2 }, { value: 2, weight: 1 }];
 const q = (v: number) => Math.round(v * 20) / 20;
 const randomAt = (seed: string, key: string) => new SeededRandom(`${seed}::regional-space:v${SPATIAL_VERSION}:${key}`);
 const coordForCell = (x: number, z: number): SpatialAddress => ({ x: Math.floor(x / 4), z: Math.floor(z / 4), story: 0 });
@@ -21,7 +25,7 @@ export interface RegionalDatum { id: string; y: number }
 const datumCache = new Map<string, RegionalDatum>();
 /** A world-space Voronoi district, shared by all chunks and independent of stories.
  * The 168m sites make plateaus span tens of rooms and multiple source chunks.
- * Their datums are quantized continuous draws, never offsets from a default floor.
+ * Their datums are whole quanta, never offsets from a default floor.
  */
 export const regionalDatum = (seed: string, x: number, z: number): RegionalDatum => {
   const key = `${seed}:${x}:${z}`, cached = datumCache.get(key); if (cached) return cached;
@@ -40,7 +44,7 @@ export const regionalDatum = (seed: string, x: number, z: number): RegionalDatum
       const ax = rx + dx, az = rz + dz, rng = randomAt(seed, `district:${ax}:${az}`);
       const px = ax * REGION_CELLS + rng.float(.7, 5.3), pz = az * REGION_CELLS + rng.float(.7, 5.3);
       const distance = (x + .5 - px) ** 2 + (z + .5 - pz) ** 2;
-      if (distance < closest) { closest = distance; result = { id: `district/${ax}/${az}`, y: q(rng.float(-7.5, 7.5)) }; }
+      if (distance < closest) { closest = distance; result = { id: `district/${ax}/${az}`, y: q(rng.weighted(DATUM_LEVELS) * DATUM_QUANTUM) }; }
     }
   }
   datumCache.set(key, result); if (datumCache.size > 2048) datumCache.delete(datumCache.keys().next().value!);

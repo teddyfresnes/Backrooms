@@ -127,6 +127,13 @@ Ne pas déplacer la physique dans la mise à jour de rendu variable. Les rampes,
 marches, accroupissement et transitions verticales sont sensibles à cette
 séparation.
 
+Sur une marche, la capsule roule sur le nez au lieu d'utiliser l'autostep de
+Rapier. `PhysicsWorld.move` rejoue donc à plat tout balayage au sol freiné de
+plus de 10 % et garde le meilleur : sans cela l'appui vers le bas coûte un quart
+de la vitesse à la montée et bloque un marcheur lent (moins de 1,5 m/s environ)
+sous la première contremarche. Les volées générées et l'escalier de l'immeuble
+partagent ce comportement.
+
 Les commandes configurables sont stockées dans `GameSettings.controls` sous
 forme de codes normalisés : les lettres suivent `KeyboardEvent.key` afin que les
 presets AZERTY et QWERTY correspondent aux caractères imprimés, tandis que les

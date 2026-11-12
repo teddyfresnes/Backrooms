@@ -1,49 +1,42 @@
-# Transitions et volumes intégrés — version 18
+# Transitions et volumes intégrés — version 19
 
 Les salles ordinaires conservent le BSP historique, ses murs épais et ses
 matériaux. Les coordonnées de story restent des adresses, pas un sol par défaut.
 
 ## Enveloppe des transitions
 
-`TransitionLayout` réserve un tracé canonique avant le BSP : largeurs 4 / 4,8 /
-5,6 m, volée unique majoritaire ou vrai palier, dénivelés partiels. Les centres
-restent espacés d'au moins 49 m, avec au plus une transition sélectionnée par
-cellule. Les deux moitiés partagent leur `linkId`, dimensions et datum médian.
-Une grande salle ouverte partage une composition canonique sur tout son district :
-un seul relief proposé, au plus deux accès distants d'au moins 98 m. Ce budget
-précède les réservations, s'applique des deux côtés et ne modifie pas le BSP.
+Les datums de district valent des multiples de 0,9 m sur cinq niveaux
+(`DATUM_QUANTUM`, `RegionalPlan.regionalDatum`). Deux districts voisins sont de
+plain-pied ou séparés d'au moins 0,9 m : aucun raccord n'existe pour quelques
+centimètres, et aucune volée ne quitte la bande de son propre étage.
 
-`SpatialTemplates` interroge les mêmes domaines BSP de 224 m que la génération,
-y compris à travers un chunk. `TransitionLayout.roofPolicy` choisit avant
-matérialisation une des trois enveloppes, appliquée par `TransitionSurfaces` :
+`TransitionLayout` fixe d'abord la pente puis en déduit l'emprise : giron de
+30 cm, contremarches de 15 à 17,5 cm (30,3° au plus), rampe à 1:8 seulement
+pour une demi-montée d'au plus 0,9 m. L'emprise est ancrée sur la couture :
+palier facultatif de 1,6 m par moitié, volée, approche de 2,2 m. Largeurs
+4 / 4,8 / 5,6 m. Les centres restent espacés d'au moins 49 m, avec au plus une
+transition par cellule. Les deux moitiés partagent `linkId`, finition,
+enceinte, toit et datum médian, tirés d'un même flux par paire de cellules.
 
-- `room` conserve le vrai plafond plat, seulement si les pièces recoupées ont
-  un plafond uniforme et assez de dégagement sur les deux moitiés. Les chants
-  entre deux plafonds différents sont fermés au-dessus du passage.
-- `upper-slab` perce le plafond local. La sous-face du vrai sol du propriétaire
-  supérieur couvre la volée. Aucun toit indépendant n'est rendu ou simulé ici.
-  La dépendance physique supérieure est explicite ; `OpenTransitionEnvelope`
-  ferme le plénum de la dalle de pièce, sans remplir le vide de la circulation.
-- `flight` conserve un toit propre pour une transition réellement encloisonnée.
-  Il raccorde les vrais plafonds aux extrémités et leur moyenne canonique au joint.
+Marches, rampe et palier sont une seule masse pleine (`support: 'solid'`) qui
+porte sur le sol le plus bas de sa moitié : podium côté bas, fond de tranchée
+côté haut. Aucun giron ne flotte, aucun flanc ne montre le vide.
 
-Le dégagement minimum reste 2,74 m, plus de 2,50 m sur marches et luminaires.
-La sous-face réelle tient compte de l'épaisseur normale de chaque dalle.
-Les marches sous une dalle supérieure en marches gardent un profil de plafond
-par marche ; leur luminaire se place sous l'approche plate. Les rampes ouvertes
-gardent un panneau parallèle à la vraie sous-face supérieure. Métadonnées,
-éclairage, collisions et rendu ne doivent pas dépendre d'un toit supprimé.
+- Enceinte `chamber` / `wall` : murs pleins hors de l'emprise, sur toute la
+  bande d'étage de leur moitié. Côté ouvert d'une tranchée : parapet de 1,05 m
+  pris sur 20 cm d'emprise. Un dénivelé total de plus de 1,8 m est toujours
+  encloisonné.
+- Toit `room` : un seul plafond plat à la hauteur du district haut.
+- Toit `upper-slab` : un puits plat sous la dalle suivante du district bas
+  (5,21 m). La dalle n'est pas percée et aucun autre étage n'est requis.
+- Toit `flight` : toit parallèle à la volée, toujours encloisonné, extrémités
+  plates au-dessus de l'approche et du palier.
 
-La couverture des murs parallèles des deux extrémités décide si la volée est
-ouverte, adossée à un seul côté ou réellement encloisonnée. Elle vient du BSP
-canonique de story zéro, pour conserver la même colonne structurelle entre
-propriétaires verticaux. Aucun portique autonome ni jambage n'est ajouté à
-l'approche. Les murs requis conservent leurs appuis et leurs bandes disjointes.
-
-La coupe du plafond réserve la vraie épaisseur des murs seulement sur les
-côtés qui en ont besoin ; l'approche ouverte garde une coupe exacte. Les vues
-latérales préchargent le vrai niveau inférieur, sans inventer de plancher sous
-une ouverture verticale.
+`CeilingEnvelope` ferme les décrochements entre ces plafonds et ceux des pièces
+voisines. Le dégagement minimum reste 2,74 m. Le luminaire d'un toit incliné
+se place sous l'approche plate. Une transition ne publie plus de dépendance
+verticale : métadonnées, éclairage, collisions et rendu viennent du seul plan
+propriétaire.
 
 ## Décrochements et reliefs
 

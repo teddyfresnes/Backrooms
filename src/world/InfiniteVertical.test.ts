@@ -35,8 +35,11 @@ it('publishes identical nonzero interfaces on every orientation, including a neg
   for (const c of [{ x: -1, z: -1, story: -1 }, { x: 0, z: 0, story: 0 }]) {
     expect(getCanonicalEdgeGates('VERTICAL-SEAMS', c, 'east')).toEqual(getCanonicalEdgeGates('VERTICAL-SEAMS', { ...c, x: c.x + 1 }, 'west'));
     expect(getCanonicalEdgeGates('VERTICAL-SEAMS', c, 'south')).toEqual(getCanonicalEdgeGates('VERTICAL-SEAMS', { ...c, z: c.z + 1 }, 'north'));
-    expect(getCanonicalEdgeGates('VERTICAL-SEAMS', c, 'east').some(g => g.floorY !== 0)).toBe(true);
   }
+  // Datums sit on five levels: some seams of a small sample are off the zero level.
+  let raised = 0;
+  for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) if (getCanonicalEdgeGates('VERTICAL-SEAMS', { x, z, story: 0 }, 'east').some(g => g.floorY !== 0)) raised++;
+  expect(raised).toBeGreaterThan(5);
 });
 
 it('keeps sunken floor structures above the preceding story ceiling, including thin ceiling tiles', () => {

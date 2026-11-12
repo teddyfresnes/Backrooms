@@ -1,7 +1,7 @@
 import type { ArchitectureDebugMode } from '../render/ArchitectureDebug';
 import { selectSpatialVisibleOwners } from './SpatialVisibility';
 import { predictFallOwners } from './FallPrefetch';
-import { cutRects, findSurface, surfaceY, TOPOLOGY_VERSION } from '../world/WalkableTopology';
+import { cutRects, findSurface, surfaceY, SURFACE_ANCHOR_VERSION } from '../world/WalkableTopology';
 import { regionalOwnerAt } from '../world/RegionalPlan';
 import type { CharacterPit } from '../character/CharacterEnvironment';
 import * as THREE from 'three';
@@ -1579,15 +1579,15 @@ export class WorldStream {
     const plan = runtime?.plan ?? (this.recoveryChunk?.key === key ? this.recoveryChunk.prepared.plan : undefined); if (!plan) return;
     const offset = runtime?.offset ?? getChunkWorldOffset(coord);
     const s = findSurface(plan, { x: position.x - offset.x, z: position.z - offset.z, referenceY: position.y - offset.y - .865 });
-    return s ? { version: TOPOLOGY_VERSION, id: s.id, layer: s.layer } : undefined;
+    return s ? { version: SURFACE_ANCHOR_VERSION, id: s.id, layer: s.layer } : undefined;
   }
 
   restoreSurfacePosition(position: Vec3Data, anchor?: { version: number; id: string; layer: string }, savedOwner?: ChunkCoord): Vec3Data {
     const runtime = savedOwner ? this.chunks.get(createChunkKey(savedOwner)) : this.runtimeAt(new THREE.Vector3(position.x, position.y, position.z)); if (!runtime?.plan.topology) return position;
     const x = position.x - runtime.offset.x, z = position.z - runtime.offset.z;
-    const exact = anchor?.version === TOPOLOGY_VERSION ? runtime.plan.topology.surfaces.find(s => s.id === anchor.id && pointInRect(x, z, s.bounds)) : undefined;
+    const exact = anchor?.version === SURFACE_ANCHOR_VERSION ? runtime.plan.topology.surfaces.find(s => s.id === anchor.id && pointInRect(x, z, s.bounds)) : undefined;
     const s = exact ?? findSurface(runtime.plan, { x, z, referenceY: position.y - runtime.offset.y - .865,
-      layer: anchor?.version === TOPOLOGY_VERSION ? anchor.layer : undefined, maxAbove: runtime.plan.spatial && anchor?.version !== TOPOLOGY_VERSION ? 20 : 4, maxBelow: runtime.plan.spatial && anchor?.version !== TOPOLOGY_VERSION ? 20 : 4 });
+      layer: anchor?.version === SURFACE_ANCHOR_VERSION ? anchor.layer : undefined, maxAbove: runtime.plan.spatial && anchor?.version !== SURFACE_ANCHOR_VERSION ? 20 : 4, maxBelow: runtime.plan.spatial && anchor?.version !== SURFACE_ANCHOR_VERSION ? 20 : 4 });
     const candidate = s && (s.access !== 'open' || s.reachable !== false) ? { x: position.x, y: runtime.offset.y + surfaceY(s, x, z) + .865, z: position.z } : undefined;
     if (candidate) for (const lift of s?.role === 'stair' ? [0, .05, .1, .15, .2, .25, .3] : [0]) {
       const center = { ...candidate, y: candidate.y + lift }; if (this.physics.canStandAt(center)) return center;

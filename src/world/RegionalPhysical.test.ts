@@ -199,7 +199,9 @@ it('walks and runs a real nonzero regional ramp, stops on it and reverses withou
 
 it('walks through opposing BSP corners that used to leave a 52 cm slit in an advertised route', async () => {
   const world=generateInfiniteChunk('REGIONAL-AUDIT-0',{x:0,z:-1,story:0});
-  const start={x:-47.1,y:-2.985,z:-40.5},target={x:-46.4,z:-34.75};
+  // The BSP is independent of the district datum: only the height follows the real floor.
+  const floor=world.spatial!.cells.find(c=>-47.1>c.bounds.minX&&-47.1<c.bounds.maxX&&-40.5>c.bounds.minZ&&-40.5<c.bounds.maxZ)!.floorY;
+  const start={x:-47.1,y:floor+.865,z:-40.5},target={x:-46.4,z:-34.75};
   const physics=await PhysicsWorld.create({...world,spawn:start});
   try{
     expect(physics.canStandAt(start)).toBe(true);
@@ -229,7 +231,7 @@ it('physically completes a multi-chunk loop through several regional datums in b
       }
       const component = queue.map(k => { const [x, z] = k.split(':').map(Number) as [number, number]; return { x, z }; });
       const datums = component.map(c => regionalDatum(seed, c.x, c.z));
-      if (new Set(datums.map(d => d.id)).size < 3 || Math.max(...datums.map(d => d.y)) - Math.min(...datums.map(d => d.y)) < 8) continue;
+      if (new Set(datums.map(d => d.id)).size < 3 || Math.max(...datums.map(d => d.y)) - Math.min(...datums.map(d => d.y)) < 1.8 - .001) continue;
       const start = component[0]!, far = [...component].sort((a, b) => Math.hypot(b.x - start.x, b.z - start.z) - Math.hypot(a.x - start.x, a.z - start.z))[0]!;
       const third = [...component].filter(c => regionalDatum(seed, c.x, c.z).id !== regionalDatum(seed, start.x, start.z).id && regionalDatum(seed, c.x, c.z).id !== regionalDatum(seed, far.x, far.z).id)
         .sort((a, b) => Math.hypot(b.x - far.x, b.z - far.z) - Math.hypot(a.x - far.x, a.z - far.z))[0];

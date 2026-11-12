@@ -3,7 +3,7 @@ import { passageRow } from './LiminalArchitecture';
 import { insetAtrium } from './AtriumEnvelope';
 import { regionalCellId, type AtriumPlan } from './RegionalPlan';
 import { SeededRandom } from './SeededRandom';
-import { endpointStairRun } from './SpatialGeometry';
+import { endpointStairRun, stairRunLength } from './SpatialGeometry';
 import { cutRects, findSurface, overlapRect, type HeightProfile, type WalkableSurface } from './WalkableTopology';
 import { rectCenter, rectDepth, rectWidth, type Rect, type WorldPlan } from './types';
 
@@ -131,7 +131,7 @@ export const installLiminalAtrium = (w: WorldPlan, id: string, roomId: string, b
       const platform = add(`${id}/fractional-terrace`, base, flat(h + l.terrace), 'landing', roof);
       platform.support = 'solid'; platform.supportBottom = h - .16; terraceCuts.push(base); feature.floorLevels.push(h + l.terrace);
       if (l.terraceStairs) {
-        const run = Math.max(4, l.terrace * 4.5), z = (base.minZ + base.maxZ) / 2;
+        const run = stairRunLength(l.terrace), z = (base.minZ + base.maxZ) / 2;
         const options = [{ minX: base.minX - run, maxX: base.minX, minZ: z - .95, maxZ: z + .95 },
           { minX: base.maxX, maxX: base.maxX + run, minZ: z - .95, maxZ: z + .95 }];
         const stair = options.find(r => r.minX > inner.minX + .2 && r.maxX < inner.maxX - .2 && r.minZ > inner.minZ + .2 && r.maxZ < inner.maxZ - .2

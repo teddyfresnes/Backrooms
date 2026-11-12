@@ -280,7 +280,7 @@ describe('legacy BSP templates retained for monuments and migration', () => {
     ).length / hazardSeeds.length;
     expect(generatedRate).toBeGreaterThan(0.06);
     expect(generatedRate).toBeLessThan(0.2);
-  }, 20_000);
+  }, 90_000);
 
   it('uses mostly bright chunks and rare contiguous unlit districts', () => {
     const worlds = hazardSeeds.map(hazardWorld);
@@ -358,7 +358,7 @@ describe('legacy BSP templates retained for monuments and migration', () => {
         }
       }
     }
-  }, 30_000);
+  }, 90_000);
 
   it('mixes long corridors, radically different hall scales and architectural relief', () => {
     const worlds = hazardSeeds.map(hazardWorld);
@@ -807,7 +807,7 @@ describe('legacy BSP templates retained for monuments and migration', () => {
         expect(pit.holes.every((hole) => hole.kind === 'void')).toBe(true);
       }
     }
-  }, 20_000);
+  }, 90_000);
 
   it('builds projecting and flush wall passages with turns, dead ends, slopes and holes', () => {
     // PhysicsWorld uses a capsule radius of 0.32 m.

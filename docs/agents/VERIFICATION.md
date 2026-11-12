@@ -66,6 +66,15 @@ Pour un changement visuel ou d’interaction :
 4. vérifier la console, le HUD et la zone modifiée ;
 5. conserver le même seed pour comparer avant/après.
 
+En développement uniquement, `?dev=backrooms&seed=…` saute l'ouverture, le menu
+et l'appartement et entre directement dans une partie Backrooms jouable ;
+`window.__BACKROOMS_DEV__` expose alors l'instance `Game` (téléportation, visée,
+plans montés) à un pilote de captures CDP. Chrome headless rend le WebGL avec
+`--use-angle=d3d11 --ignore-gpu-blocklist`. Une géométrie n'est validée qu'une
+fois vue et parcourue ainsi : un test vert ne prouve pas l'apparence. Voler
+(`/noclip on`) jusqu'à une zone lointaine et attendre son montage avant de
+repasser à pied, sinon la capsule tombe dans le vide.
+
 Seulement si les sauvegardes ou le routage changent : partir sans stockage local
 et vérifier que **Continuer** ouvre un historique vide.
 Lancer une partie, déplacer/orienter le joueur, ouvrir la porte et utiliser
@@ -148,8 +157,11 @@ la volée unique, les vrais appuis, les bandes verticales sans recouvrement,
 le dégagement raycasté dans la géométrie finale et les coins des diffuseurs.
 `CeilingEnvelope.test.ts` reproduit le plafond de `LATE-OFFICE-1950` avec
 raycasts Three et contacts Rapier, vérifie les bandes et la portée des reliefs.
-`TransitionEnvelope.test.ts` protège les raccords aux plafonds BSP, l'enveloppe
-canonique et le dégagement sous les quatre coins des diffuseurs.
+`TransitionEnvelope.test.ts` protège la couture commune des deux moitiés, la
+bande d'étage, les trois toits et le dégagement sous les quatre coins des
+diffuseurs. `StairComfort.test.ts` borne pente, giron et contremarche de toutes
+les familles sur plusieurs seeds et fait gravir de vraies liaisons à la capsule
+Rapier, en marche et en course, dans les deux sens.
 `FluorescentFixture.test.ts` vérifie la neutralité HDR et le débit lumineux CPU,
 avec les valeurs blackout inchangées ; cela ne remplace pas une mesure WebGL.
 `LightingBrightness`, `WorldBrightness` et `settings.brightness` vérifient les

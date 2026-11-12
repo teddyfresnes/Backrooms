@@ -1,12 +1,15 @@
 import type { Rect } from './types';
 import { rectCenter, rectDepth, rectWidth } from './types';
 import type { AtriumPlan } from './RegionalPlan';
-import { endpointStairRun } from './SpatialGeometry';
+import { endpointStairRun, stairRunLength } from './SpatialGeometry';
 import { cutRects, overlapRect, type HeightProfile } from './WalkableTopology';
 import { atriumFloorBounds, atriumRimPoints, atriumSection } from './AtriumEnvelope';
 
 export interface SpatialStairLeg { name: string; bounds: Rect; axis: 'x' | 'z'; startY: number; endY: number; kind: 'ramp' | 'stairs' }
-export interface AtriumCirculation { legs: SpatialStairLeg[]; landing?: { bounds: Rect; y: number }; exit: { x: number; y: number; z: number }; bridge: Rect }
+/** `lanes` are the full reserved strips; a flight occupies only the run its
+ * pitch needs, and `extensions` continue the rest of a lane on the level. */
+export interface AtriumCirculation { legs: SpatialStairLeg[]; landing?: { bounds: Rect; y: number }; extensions: { bounds: Rect; y: number }[];
+  lanes: Rect[]; exit: { x: number; y: number; z: number }; bridge: Rect }
 export const atriumHole = (b: Rect, a: AtriumPlan): Rect => ({ minX: b.minX + a.ringWidth, maxX: b.maxX - a.ringWidth,
   minZ: b.minZ + a.ringWidth, maxZ: b.maxZ - a.ringWidth });
 export const legTreads = (leg: SpatialStairLeg): { bounds: Rect; profile: HeightProfile; index: number }[] => leg.kind === 'ramp'
@@ -17,32 +20,43 @@ export const legTreads = (leg: SpatialStairLeg): { bounds: Rect; profile: Height
 export const atriumCirculation = (b: Rect, upper: number, a: AtriumPlan): AtriumCirculation => {
   const h = atriumHole(b, a), p = rectCenter(b), lower = upper - (a.owner - a.lower) * 5.4;
   const w = a.routeWidth, mid = upper + (lower - upper) * a.midFraction;
-  const leg = (name: string, bounds: Rect, axis: 'x' | 'z', startY: number, endY: number): SpatialStairLeg => ({
-    name, bounds, axis, startY, endY, kind: a.routeKind === 'ramp' && Math.abs(endY - startY) / (axis === 'x' ? rectWidth(bounds) : rectDepth(bounds)) <= .4 ? 'ramp' : 'stairs' });
+  const extensions: { bounds: Rect; y: number }[] = [], lanes: Rect[] = [];
+  // Every flight keeps the shared pitch from the low-coordinate end of its
+  // lane. The remainder is a level walkway at the far end's height, unless
+  // that height is simply the lower floor.
+  const leg = (name: string, lane: Rect, axis: 'x' | 'z', startY: number, endY: number): SpatialStairLeg => {
+    const span = axis === 'x' ? rectWidth(lane) : rectDepth(lane), run = Math.min(span, stairRunLength(endY - startY));
+    const bounds = axis === 'x' ? { ...lane, maxX: lane.minX + run } : { ...lane, maxZ: lane.minZ + run };
+    lanes.push(lane);
+    if (span - run > .05 && Math.abs(endY - lower) > .01)
+      extensions.push({ bounds: axis === 'x' ? { ...lane, minX: bounds.maxX } : { ...lane, minZ: bounds.maxZ }, y: endY });
+    return { name, bounds, axis, startY, endY, kind: 'stairs' };
+  };
   const bridgeZ = a.variant === 'bridge' ? rectDepth(h) >= rectWidth(h) ? h.minZ + rectDepth(h) * .8 : p.z : h.maxZ - w * 1.7;
   const bridge = { minX: h.minX, maxX: h.maxX, minZ: bridgeZ - w / 2, maxZ: bridgeZ + w / 2 };
   if (a.variant === 'bridge') {
     const alongX = rectWidth(h) > rectDepth(h);
     const bounds = alongX ? { minX: h.minX, maxX: h.maxX, minZ: h.maxZ - w, maxZ: h.maxZ }
       : { minX: h.maxX - w, maxX: h.maxX, minZ: h.minZ, maxZ: h.maxZ };
-    return { legs: [leg('straight', bounds, alongX ? 'x' : 'z', upper, lower)],
-      exit: alongX ? { x: h.maxX + .5, y: lower, z: h.maxZ - w / 2 } : { x: h.maxX - w / 2, y: lower, z: h.maxZ + .5 }, bridge };
+    const straight = leg('straight', bounds, alongX ? 'x' : 'z', upper, lower);
+    return { legs: [straight], extensions, lanes,
+      exit: alongX ? { x: straight.bounds.maxX + .5, y: lower, z: h.maxZ - w / 2 } : { x: h.maxX - w / 2, y: lower, z: straight.bounds.maxZ + .5 }, bridge };
   }
   const first = { minX: h.maxX - w, maxX: h.maxX, minZ: h.minZ, maxZ: h.maxZ - w };
   if (a.variant === 'U') return { legs: [leg('outbound', first, 'z', upper, mid),
     leg('return', { minX: h.maxX - 2 * w - .4, maxX: h.maxX - w - .4, minZ: h.minZ, maxZ: h.maxZ - w }, 'z', lower, mid)],
-    landing: { bounds: { minX: h.maxX - 2 * w - .4, maxX: h.maxX, minZ: h.maxZ - w, maxZ: h.maxZ }, y: mid },
+    landing: { bounds: { minX: h.maxX - 2 * w - .4, maxX: h.maxX, minZ: h.maxZ - w, maxZ: h.maxZ }, y: mid }, extensions, lanes,
     exit: { x: h.maxX - 1.5 * w - .4, y: lower, z: h.minZ - .5 }, bridge };
   return { legs: [leg('outbound', first, 'z', upper, mid),
     leg('turn', { minX: h.minX, maxX: h.maxX - w, minZ: h.maxZ - w, maxZ: h.maxZ }, 'x', lower, mid)],
-    landing: { bounds: { minX: h.maxX - w, maxX: h.maxX, minZ: h.maxZ - w, maxZ: h.maxZ }, y: mid },
+    landing: { bounds: { minX: h.maxX - w, maxX: h.maxX, minZ: h.maxZ - w, maxZ: h.maxZ }, y: mid }, extensions, lanes,
     exit: { x: h.minX - .5, y: lower, z: h.maxZ - w / 2 }, bridge };
 };
 
 export const atriumTreads = (b: Rect, upper: number, a: AtriumPlan): { bounds: Rect; profile: HeightProfile }[] => {
   if (!a.stairs) return [];
   const route = atriumCirculation(b, upper, a);
-  return [...route.legs.flatMap(legTreads), ...(route.landing ? [{ bounds: route.landing.bounds, profile: { kind: 'flat' as const, y: route.landing.y } }] : [])];
+  return [...route.legs.flatMap(legTreads), ...[...(route.landing ? [route.landing] : []), ...route.extensions].map(l => ({ bounds: l.bounds, profile: { kind: 'flat' as const, y: l.y } }))];
 };
 /** Two filled ramp legs and the perimeter plinth enclose this corner entirely.
  * Its landing bears to the bottom instead of advertising an inaccessible cave. */

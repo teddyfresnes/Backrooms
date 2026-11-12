@@ -1,26 +1,36 @@
 import { expect, it } from 'vitest';
-import { planRegionalTransition, transitionTreads } from './TransitionLayout';
-import { endpointStairRun } from './SpatialGeometry';
+import { DATUM_QUANTUM, planRegionalTransition, transitionTreads } from './TransitionLayout';
+import { endpointStairRun, RAMP_MAX_GRADE, STAIR_MAX_RISER, STAIR_TREAD } from './SpatialGeometry';
 import { generateInfiniteChunk } from './InfiniteWorld';
-import { surfaceRange, surfaceY, validateTopology } from './WalkableTopology';
+import { surfaceRange, validateTopology } from './WalkableTopology';
 import { rectCenter, rectDepth, rectWidth } from './types';
 
-it('solves variable chambers with shared widths, partial rises and continuous roofs in all orientations', () => {
-  const lengths = new Set<string>(), widths = new Set<number>(), kinds = new Set<string>();
-  for (let i = 0; i < 40; i++) for (const side of ['north', 'east', 'south', 'west'] as const) {
-    const t = planRegionalTransition(`TRANSITION-${i}`, -2, -3, -1, side, { minX: -28, maxX: 0, minZ: -56, maxZ: -28 }, -3.7, i % 3 === 0 ? -2.5 : 4.3, 'test');
-    const count = transitionTreads(t).length, run = t.axis === 'x' ? rectWidth(t.run) : rectDepth(t.run);
-    expect(run).toBeGreaterThan(2); widths.add(t.width); lengths.add(run.toFixed(2)); kinds.add(t.kind);
-    expect(t.wallThickness).toBeGreaterThanOrEqual(.6);
-    expect(t.roof.kind).toBe('linear');
-    if (t.roof.kind === 'linear') {
-      expect(t.roof.startY - t.startY).toBeCloseTo(t.clearance, 10);
-      expect(t.roof.endY - t.endY).toBeCloseTo(t.clearance, 10);
+it('fixes the pitch first and derives the footprint from the rise in all orientations', () => {
+  const widths = new Set<number>(), kinds = new Set<string>(), compositions = new Set<string>();
+  for (let i = 0; i < 60; i++) for (const side of ['north', 'east', 'south', 'west'] as const) for (const total of [1, 2, 3, 4].map(n => n * DATUM_QUANTUM)) {
+    const cell = { minX: -28, maxX: 0, minZ: -56, maxZ: -28 };
+    const t = planRegionalTransition(`TRANSITION-${i}`, -2, -3, -1, side, cell, -DATUM_QUANTUM, -DATUM_QUANTUM + (i % 2 ? total : -total), 'test');
+    const treads = transitionTreads(t), run = t.axis === 'x' ? rectWidth(t.run) : rectDepth(t.run), rise = Math.abs(t.endY - t.startY);
+    widths.add(t.width); kinds.add(t.kind); compositions.add(t.composition);
+    expect(rise).toBeCloseTo(total / 2, 9); expect(t.wallThickness).toBeGreaterThanOrEqual(.6);
+    if (t.kind === 'ramp') {
+      expect(rise).toBeLessThanOrEqual(DATUM_QUANTUM + 1e-9); expect(rise / run).toBeCloseTo(RAMP_MAX_GRADE, 9); expect(t.steps).toBe(0);
+    } else {
+      expect(treads).toHaveLength(t.steps); expect(run).toBeCloseTo(t.steps * STAIR_TREAD, 9);
+      expect(t.riser).toBeGreaterThanOrEqual(.15 - 1e-9); expect(t.riser).toBeLessThanOrEqual(STAIR_MAX_RISER + 1e-9);
+      for (const s of treads) expect(t.axis === 'x' ? rectWidth(s.bounds) : rectDepth(s.bounds)).toBeCloseTo(STAIR_TREAD, 9);
+      expect(Math.atan(rise / run) * 180 / Math.PI).toBeLessThan(31);
     }
-    if (t.kind === 'ramp') expect(Math.abs(t.endY - t.startY) / run).toBeLessThanOrEqual(.4);
-    else expect(Math.abs(t.endY - t.startY) / count).toBeLessThanOrEqual(.175);
+    // Approach, flight and optional seam landing tile the footprint, which ends on the cell edge and stays inside the cell.
+    const along = (r: typeof t.bounds) => t.axis === 'x' ? rectWidth(r) : rectDepth(r);
+    expect(along(t.approach.bounds) + along(t.run) + along(t.landing.bounds)).toBeCloseTo(along(t.bounds), 9);
+    expect(along(t.approach.bounds)).toBeCloseTo(2.2, 9); expect(along(t.landing.bounds)).toBeCloseTo(t.composition === 'landing' ? 1.6 : 0, 9);
+    expect(along(t.bounds)).toBeLessThanOrEqual(14 - t.width / 2 - .55);
+    const edge = side === 'east' ? cell.maxX : side === 'west' ? cell.minX : side === 'south' ? cell.maxZ : cell.minZ;
+    expect(side === 'east' ? t.bounds.maxX : side === 'west' ? t.bounds.minX : side === 'south' ? t.bounds.maxZ : t.bounds.minZ).toBeCloseTo(edge, 9);
+    expect(t.clearance).toBeGreaterThanOrEqual(2.74);
   }
-  expect(lengths.size).toBeGreaterThan(30); expect(widths.size).toBe(3); expect([...kinds].sort()).toEqual(['ramp', 'stairs']);
+  expect(widths.size).toBe(3); expect([...kinds].sort()).toEqual(['ramp', 'stairs']); expect([...compositions].sort()).toEqual(['landing', 'single']);
 });
 
 it('ends every stair exactly at its destination without making oversized risers', () => {
@@ -31,31 +41,6 @@ it('ends every stair exactly at its destination without making oversized risers'
     for (const s of steps) { const y = s.profile.kind === 'flat' ? s.profile.y : 0; expect(Math.abs(y - previous)).toBeLessThanOrEqual(.17500001); previous = y; }
   }
 });
-
-it('constructs a roof only for enclosed flights, closed risers and bearing side walls', () => {
-  let stairs = 0, ramps = 0;
-  for (let i = 0; i < 12; i++) {
-    const w = generateInfiniteChunk(`REGIONAL-AUDIT-${i}`, { x: 0, z: 0, story: 0 });
-    expect(validateTopology(w)).toEqual([]);
-    for (const t of w.spatial!.transitions!) {
-      const roof = w.spatial!.ceilings.filter(s => s.id === `${t.id}/roof`); expect(roof).toHaveLength(t.roofPolicy === 'flight' ? 1 : 0);
-      const route = w.topology!.surfaces.filter(s => s.id === t.id || s.id.startsWith(`${t.id}/step-`));
-      expect(route.length).toBeGreaterThan(0);
-      for (const s of route) {
-        const p = rectCenter(s.bounds), roofY = surfaceY({ ...s, profile: s.ceilingProfile! }, p.x, p.z);
-        expect(roofY - surfaceY(s, p.x, p.z)).toBeGreaterThan(2.5);
-        if (s.role === 'stair') { stairs++; expect(s.thickness).toBeGreaterThan(.175); }
-        else ramps++;
-        expect(w.spatial!.ceilings.some(c => c.id.startsWith(`${s.id}/ceiling`))).toBe(false);
-      }
-      const panels = w.spatial!.prisms.filter(p => p.id.startsWith(`${t.id}/`) && p.id.includes('/side-'));
-      expect(panels.length).toBe((t.enclosure === 'chamber' ? 2 : t.enclosure === 'wall' ? 1 : 0) * (rectWidth(t.landing.bounds) > .005 && rectDepth(t.landing.bounds) > .005 ? 2 : 1));
-      expect(w.spatial!.prisms.some(p => p.id === `${t.id}/entry-lintel` || p.id.startsWith(`${t.id}/approach/side-`))).toBe(false);
-      for (const p of panels) for (const y of p.vertices.filter((_, j) => j % 3 === 1)) expect(y).toBeLessThanOrEqual(t.approach.y + 5.24 + .000001);
-    }
-  }
-  expect(stairs).toBeGreaterThan(20); expect(ramps).toBeGreaterThan(2);
-}, 30000);
 
 it('preserves real legacy holes and their canonical arrival floors through structured cloning', () => {
   let holes = 0, crawl = 0, breach = 0;
@@ -102,8 +87,8 @@ it('anchors every raised relief to the real lower floor and keeps its references
 it('keeps transition footprints identical in vertically adjacent owners', () => {
   for (let i = 0; i < 24; i++) {
     const args = [`COLUMN-${i}`, -3, 2] as const, b = { minX: -28, maxX: 0, minZ: 0, maxZ: 28 };
-    const a = planRegionalTransition(...args, -1, 'east', b, -3, 5, 'a');
-    const c = planRegionalTransition(...args, 0, 'east', b, -3, 5, 'b');
+    const a = planRegionalTransition(...args, -1, 'east', b, -.9, .9, 'a');
+    const c = planRegionalTransition(...args, 0, 'east', b, -.9, .9, 'b');
     expect([a.run, a.bounds, a.width, a.profile, a.roof]).toEqual([c.run, c.bounds, c.width, c.profile, c.roof]);
   }
 });

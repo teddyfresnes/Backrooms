@@ -82,7 +82,9 @@ export const stitchBspPartitions = (world: WorldPlan, rebuild: () => void, conne
     const roots = new Map<number, string>();
     const byId = new Map(surfaces.map(s => [s.id, s]));
     for (const id of anchors) {
-      const s = byId.get(id); if (!s) continue;
+      // A flight's seam tread is not a plateau: rooting there would reach its host
+      // floor through the steps and leave it cut off from its own datum.
+      const s = byId.get(id); if (!s || s.role !== 'floor') continue;
       const p = rectCenter(s.bounds), y = Math.round(surfaceY(s, p.x, p.z) * 1000);
       if (!roots.has(y)) roots.set(y, id);
     }

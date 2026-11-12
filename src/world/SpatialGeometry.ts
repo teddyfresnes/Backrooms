@@ -29,10 +29,20 @@ export const slabMeshCollider = (surface: WalkableSurface): StaticCollider => {
   return { ...c, vertices: points.map((v, i) => v - (i % 3 === 0 ? c.center.x : i % 3 === 1 ? c.center.y : c.center.z)), indices: [...SLAB_INDICES] };
 };
 
-/** Treads share their exact solids with Rapier; no invisible inclined proxy. */
+/** Comfortable pitch shared by every generated flight: 30 cm goings and
+ * risers of 15 to 17.5 cm (30.3 degrees at most). Ramps never exceed 1:8. */
+export const STAIR_TREAD = .3;
+export const STAIR_MAX_RISER = .175;
+export const RAMP_MAX_GRADE = .125;
+/** Risers needed for a rise, and the exact run they occupy at the shared going. */
+export const stairStepCount = (rise: number, maxRiser = STAIR_MAX_RISER): number => Math.max(1, Math.ceil(Math.abs(rise) / maxRiser - 1e-6));
+export const stairRunLength = (rise: number): number => stairStepCount(rise) * STAIR_TREAD;
+
+/** Treads share their exact solids with Rapier; no invisible inclined proxy.
+ * The caller sizes `bounds` with `stairRunLength` so every going is regular. */
 export const endpointStairRun = (bounds: Rect, axis: 'x' | 'z', startY: number, endY: number,
-  maxRiser = .175): { bounds: Rect; profile: HeightProfile; index: number; count: number }[] => {
-  const count = Math.max(1, Math.ceil(Math.abs(endY - startY) / maxRiser));
+  maxRiser = STAIR_MAX_RISER): { bounds: Rect; profile: HeightProfile; index: number; count: number }[] => {
+  const count = stairStepCount(endY - startY, maxRiser);
   const min = axis === 'x' ? bounds.minX : bounds.minZ, max = axis === 'x' ? bounds.maxX : bounds.maxZ;
   return Array.from({ length: count }, (_, index) => ({ index, count,
     bounds: axis === 'x' ? { ...bounds, minX: min + (max - min) * index / count, maxX: min + (max - min) * (index + 1) / count }
