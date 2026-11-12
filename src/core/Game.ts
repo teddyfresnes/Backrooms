@@ -481,6 +481,8 @@ export class Game {
     this.ui.setSessionStarted(true);
     this.ui.setReady();
     this.renderer.setAnimationLoop(this.frame);
+    // Development only: lets a capture driver teleport, aim and read mounted plans.
+    if (import.meta.env.DEV) (window as unknown as { __BACKROOMS_DEV__?: Game }).__BACKROOMS_DEV__ = this;
     if (this.options.autosaveOnReady) this.saveNow('autosave');
     if (this.options.autoEnterOnReady) this.enter(true);
   }
@@ -1449,5 +1451,6 @@ export class Game {
     this.renderer.domElement.remove();
     this.root.remove();
     if (window.__BACKROOMS__) delete window.__BACKROOMS__;
+    if (import.meta.env.DEV) delete (window as unknown as { __BACKROOMS_DEV__?: Game }).__BACKROOMS_DEV__;
   }
 }

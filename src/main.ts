@@ -325,9 +325,14 @@ async function startInitialExperience(): Promise<void> {
   await startBackrooms({ kind: 'new' }, false, true);
 }
 
-const menuReady = startInitialExperience();
+// Development only: `?dev=backrooms` skips the opening, the menu and the
+// apartment, and lands in a playable Backrooms session (with `?seed=`).
+const devDirectBackrooms = import.meta.env.DEV
+  && new URL(window.location.href).searchParams.get('dev') === 'backrooms';
+const menuReady = devDirectBackrooms ? startBackrooms({ kind: 'new' }) : startInitialExperience();
 const openingIntro = new OpeningIntro(menuReady);
-requestAnimationFrame(() => {
+if (devDirectBackrooms) openingIntro.dispose();
+else requestAnimationFrame(() => {
   void Promise.all([menuReady, openingIntro.minimumDuration])
     .then(async () => {
       await openingIntro.finish();
