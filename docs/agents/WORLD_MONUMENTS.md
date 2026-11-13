@@ -24,11 +24,15 @@ propriétaires monumentaux du monde régional.
   atterrir. `funnelStoryOffset` ancre le profil sur la story logique absolue :
   l'aperçu à ±5,4 m et le chunk monté après hand-off gardent donc exactement la
   même section. `getEpic1FunnelStoryBounds` réduit progressivement la façade,
-  la corniche et le vide des rangées inférieures. La corniche suivante dépasse
-  encore légèrement le mur de soutien de la rangée précédente ; la dernière
-  rangée ne reçoit aucun cap et conserve donc le trou. Sur l’étage inférieur
-  préchargé, corniche, façade, couloirs et premier mur de soutien publient des
-  colliders cohérents avec ce profil.
+  la corniche et le vide des rangées inférieures. Chaque rangée est une
+  galerie ouverte : corniche, façade percée de portails, sous-face de la
+  corniche du dessus. Aucun mur ne pend sous une corniche, ni au rendu ni
+  dans Rapier (l'ancien mur de soutien masquait le gouffre depuis la corniche
+  active et n'avait aucun collider). La dernière rangée ne reçoit aucun cap
+  et conserve donc le trou. Sur l’étage inférieur préchargé, corniche, façade
+  et couloirs publient des colliders cohérents avec ce profil. Une chute qui
+  ne rencontre aucune corniche est mortelle au-delà de 90 m
+  (`ragdollFallIsEndless`) : le joueur réapparaît à sa dernière position sûre.
 - Sur l’étage actif d’`epic1`, `getEpicAbyssThroughPassageLayout` prolonge chaque
   entrée jusqu’à une porte canonique identique dans le chunk voisin. Ces
   passages utilisent la hauteur de bureau partagée `EPIC1_PORTAL_HEIGHT`
@@ -64,9 +68,19 @@ propriétaires monumentaux du monde régional.
   supérieur de `getEpicStairwellLayout`; le rendu et Rapier consomment ce même
   tracé. `applyEpicStructure` conserve le labyrinthe ordinaire hors de la zone
   d’approche et garde un sol de chunk continu autour de cette tour compacte.
+- `epic2` aligne ses piliers sur huit files et sept rangées. Une poutre court
+  le long de chaque file à 8,4 m (`getEpicHypostyleBeams`) et porte un
+  luminaire au milieu de chaque travée ; au-dessus, les piliers continuent
+  jusqu'au plafond perdu. Poutres et luminaires dérivent du même tracé.
 - `epic5` construit ses longues cloisons et leurs linteaux avec
   `getEpicConcourseWalls`. Ces `WallSegment` standards alimentent directement le
   rendu zonal et les colliders ; ne pas recréer une seconde géométrie
-  décorative indépendante.
+  décorative indépendante. Une file de luminaires suit l'axe de chaque halle
+  tous les 14 m (une nappe porte à 12 m), dont trois sur l'axe des seuils.
+- Les sous-faces construites à partir d'un plan (soffites des portails
+  d'`epic1`, dessous des volées d'`epic4`) passent par `withWhiteVertexColors` :
+  les matériaux muraux multiplient par la couleur de sommet, et un plan sans
+  cet attribut sort noir. Les matériaux `lowerMaterials` ne sont éclairés que
+  sous l'étage courant : ne pas les employer dans un volume monumental actif.
 
 Retour au [guide de génération](WORLD_GENERATION.md).

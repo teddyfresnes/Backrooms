@@ -134,6 +134,14 @@ de la vitesse à la montée et bloque un marcheur lent (moins de 1,5 m/s environ
 sous la première contremarche. Les volées générées et l'escalier de l'immeuble
 partagent ce comportement.
 
+Chaque montage ou démontage de chunk rafraîchit les index de collision par un
+`world.step()` à pas nul. Ce pas résout quand même les articulations : les
+vitesses des corps dynamiques sont donc sauvegardées puis restaurées autour de
+lui, sinon un ragdoll qui tombe à travers des étages streamés est projeté à des
+kilomètres. Une position sûre n'est ancrée que s'il y a du sol sous le centre
+de la capsule (`hasFloorBelow`) : posée sur l'arête d'un vide, elle faisait
+réapparaître le joueur en train de retomber.
+
 Les commandes configurables sont stockées dans `GameSettings.controls` sous
 forme de codes normalisés : les lettres suivent `KeyboardEvent.key` afin que les
 presets AZERTY et QWERTY correspondent aux caractères imprimés, tandis que les

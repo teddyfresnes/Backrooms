@@ -105,6 +105,7 @@ import {
   damageVisualState,
   ragdollBodyImpactPart,
   ragdollDropIsFatal,
+  ragdollFallIsEndless,
   ragdollImpactDamage,
   ragdollImpactNeedsBlood,
   ragdollImpactGuaranteesBlood,
@@ -1694,6 +1695,8 @@ export class CharacterRuntime {
   private firstPersonCurrentAction?: THREE.AnimationAction;
   private ragdoll?: RagdollSystem;
   private ragdollMode: RagdollMode | null = null;
+  /** The body is still falling in a bottomless void: it is released, not kept as a corpse. */
+  private ragdollLostInVoid = false;
   private recovery: GetUpRecovery | null = null;
   private readonly getUpVariants = new Map<'back' | 'belly', GetUpMotionVariant[]>();
   private readonly playerGetUpVariation = new GetUpVariationSelector();
@@ -9722,6 +9725,14 @@ export class CharacterRuntime {
   private updateRagdollFallDamage(): void {
     if (!this.ragdoll || this.ragdollMode !== 'pit-fall') return;
     this.refreshRagdollFallDistance();
+    if (!this.ragdollDamageApplied && ragdollFallIsEndless(this.ragdollFallDistance)) {
+      // The bottomless abyss never returns a contact: without this the body
+      // fell forever and the game could only be reloaded.
+      this.ragdollDamageApplied = true;
+      this.ragdollLostInVoid = true;
+      this.markRagdollDead(`RAGDOLL · CHUTE SANS FIN · ${this.ragdollFallDistance.toFixed(0)} m`);
+      return;
+    }
     if (this.ragdollDamageApplied || !this.ragdoll.isSettled) return;
 
     // Safety fallback only. Normal gameplay commits fall damage on the actual
@@ -10309,11 +10320,17 @@ export class CharacterRuntime {
     // Keep the dead body and all its Rapier bodies/joints alive. Once it becomes
     // a persistent corpse, let the live character controller treat it as a low
     // dynamic obstacle eligible for autostep instead of a waist-high blocker.
-    this.ragdoll.setPlayerTraversalEnabled(true);
-    this.corpses.push({ root: this.activeCorpseRoot, ragdoll: this.ragdoll });
-    while (this.corpses.length > MAX_PERSISTENT_CORPSES) {
-      const retired = this.corpses.shift()!;
-      retired.ragdoll.dispose(); this.disposeTransientCorpse(retired.root);
+    if (this.ragdollLostInVoid) {
+      // Nobody will ever meet this body again, and it would fall for ever.
+      this.ragdoll.dispose(); this.disposeTransientCorpse(this.activeCorpseRoot);
+      this.ragdollLostInVoid = false;
+    } else {
+      this.ragdoll.setPlayerTraversalEnabled(true);
+      this.corpses.push({ root: this.activeCorpseRoot, ragdoll: this.ragdoll });
+      while (this.corpses.length > MAX_PERSISTENT_CORPSES) {
+        const retired = this.corpses.shift()!;
+        retired.ragdoll.dispose(); this.disposeTransientCorpse(retired.root);
+      }
     }
     if (this.activeCorpseHeadMask) this.activeCorpseHeadMask.value = 0;
     this.activeCorpseHeadMask = undefined;

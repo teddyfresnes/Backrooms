@@ -509,6 +509,46 @@ export const isInsideEpicStoryVolume = (
     insideHorizontalVolume;
 };
 
+/** Epic2 hypostyle: eight lines of pillars along a wide nave, seven rows deep. */
+const EPIC2_PILLAR_LINES = [-45, -33, -21, -9, 9, 21, 33, 45] as const;
+const EPIC2_PILLAR_ROWS = [-39, -26, -13, 0, 13, 26, 39] as const;
+const EPIC2_BEAM_BOTTOM = 8.4;
+const EPIC2_BEAM_DEPTH = 0.9;
+/** The two pillars facing the arrival are left out: the nave opens on entry. */
+const epic2BayIsOpen = (x: number, z: number): boolean => Math.abs(x) < 12 && z < -30;
+
+/**
+ * A beam runs along every pillar line at a readable height and carries the
+ * luminaires; above it the pillars keep rising to the lost ceiling. Rendering
+ * and the light slots both derive from this single layout.
+ */
+export const getEpicHypostyleBeams = (
+  feature: Pick<EpicStructureFeature, 'roomId'>,
+): WallSegment[] => EPIC2_PILLAR_LINES.map((x, index): WallSegment => {
+  const rows = EPIC2_PILLAR_ROWS.filter((z) => !epic2BayIsOpen(x, z));
+  const min = rows[0]! - 1.3, max = rows.at(-1)! + 1.3;
+  return {
+    id: `epic2-hypostyle-beam-${index}`,
+    roomId: feature.roomId,
+    x,
+    z: (min + max) * 0.5,
+    length: max - min,
+    orientation: 'z',
+    bottom: EPIC2_BEAM_BOTTOM,
+    height: EPIC2_BEAM_DEPTH,
+    thickness: 1.5,
+    tint: 0.9,
+    collision: false,
+    kind: 'wallpaper',
+  };
+});
+
+/** One luminaire under the beam in the middle of every bay between two pillars. */
+const getEpicHypostyleLightPoints = (): { x: number; z: number }[] => EPIC2_PILLAR_LINES.flatMap((x) => {
+  const rows = EPIC2_PILLAR_ROWS.filter((z) => !epic2BayIsOpen(x, z));
+  return rows.slice(1).map((z, index) => ({ x, z: (rows[index]! + z) * 0.5 }));
+});
+
 export interface EpicObstacle {
   readonly id: string;
   readonly bounds: Rect;
@@ -545,9 +585,9 @@ export const getEpicGroundObstacles = (
 ): EpicObstacle[] => {
   const obstacles: EpicObstacle[] = [];
   if (feature.variant === 'lost-ceiling') {
-    for (const x of [-45, -33, -21, -9, 9, 21, 33, 45]) {
-      for (const z of [-38, -25, -12, 1, 14, 27, 40]) {
-        if (Math.abs(x) < 12 && z < -30) continue;
+    for (const x of EPIC2_PILLAR_LINES) {
+      for (const z of EPIC2_PILLAR_ROWS) {
+        if (epic2BayIsOpen(x, z)) continue;
         obstacles.push(obstacle(
           `lost-ceiling-pillar-${x}-${z}`,
           x,
@@ -1651,16 +1691,36 @@ const createEpicLights = (
       level: Math.round(rowY / STORY_PITCH),
     }));
   }
+  if (feature.variant === 'lost-ceiling') {
+    return getEpicHypostyleLightPoints().map(({ x, z }, index): LightSlot => ({
+      id: `${definition.command}-beam-light-${index}`,
+      x,
+      ceilingY: EPIC2_BEAM_BOTTOM,
+      z,
+      rotation: Math.PI * 0.5,
+      width: 2.4,
+      intensity: 1.5,
+      color: visualBiome === 'red' ? 0xff241c : visualBiome === 'white' ? 0xe9f1f2 : 0xfff4c2,
+      dead: false,
+      unstable: false,
+      phase: (index + 1) * 0.73 + feature.index,
+      roomId: feature.roomId,
+      level: 0,
+    }));
+  }
   if (feature.variant === 'vanishing-concourse') {
+    // One file of luminaires down the axis of each hall, every 14 m: a pool
+    // reaches 12 m, so each nave is a continuous band of light, and three of
+    // the seven fixtures sit exactly on the axes of the aligned thresholds.
     const positions = [-44, -22, 0, 22, 44].flatMap((x) =>
-      [-38, -19, 0, 19, 38].map((z) => [x, z] as const)
+      [-42, -28, -14, 0, 14, 28, 42].map((z) => [x, z] as const)
     );
     return positions.map(([x, z], index): LightSlot => ({
       id: `${definition.command}-ceiling-light-${index}`,
       x,
       ceilingY: feature.height - 0.035,
       z,
-      rotation: index % 2 === 0 ? 0 : Math.PI * 0.5,
+      rotation: Math.PI * 0.5,
       width: 3.1,
       intensity: 1.34,
       color: visualBiome === 'red' ? 0xff241c : visualBiome === 'white' ? 0xe9f1f2 : 0xfff4c2,
@@ -1892,13 +1952,8 @@ export const applyEpicStructure = (
       STORY_PITCH,
       'epic1-lower-preview-shaft-wall',
     ));
-    colliders.push(...facadeWallColliders(
-      currentShell.voidBounds,
-      [],
-      -STORY_PITCH,
-      STORY_PITCH - 0.22,
-      'epic1-funnel-support-wall',
-    ));
+    // No wall hangs under a gallery edge: every row is an open gallery, drawn
+    // and collided the same way on the active story and on its previews.
   }
 
   if (feature.variant === 'ascending-passages') {
@@ -2025,8 +2080,10 @@ export const applyEpicStructure = (
 
   const architecturalWalls = feature.variant === 'vanishing-concourse'
     ? getEpicConcourseWalls(feature)
-    : [];
-  colliders.push(...architecturalWalls.map(epicWallCollider));
+    : feature.variant === 'lost-ceiling'
+      ? getEpicHypostyleBeams(feature)
+      : [];
+  colliders.push(...architecturalWalls.filter((wall) => wall.collision).map(epicWallCollider));
   const groundObstacles = getEpicGroundObstacles(feature);
   colliders.push(...groundObstacles.map(obstacleCollider));
   const epicRoom = {

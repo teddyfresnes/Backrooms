@@ -613,6 +613,31 @@ describe('PhysicsWorld chunk ownership', () => {
     expect(castDown(physics, 4, 2)).not.toBeNull();
   });
 
+  it('leaves the joints of an airborne ragdoll untouched by a stream synchronization', async () => {
+    const physics = await createPhysics();
+    const make = (x: number) => {
+      const body = physics.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x, 8, 0).setLinvel(0, -10, 0));
+      physics.world.createCollider(RAPIER.ColliderDesc.ball(.1), body);
+      return body;
+    };
+    // Limbs move relative to each other: the solver corrects that joint at every
+    // step, even a zero-time one. Each streamed mount used to kick the whole
+    // body, and a fall through several stories threw it kilometres away.
+    const a = make(0), b = make(.4);
+    b.setLinvel({ x: 4, y: -6, z: 2 }, true); b.setAngvel({ x: 2, y: 5, z: 1 }, true);
+    physics.world.createImpulseJoint(RAPIER.JointData.fixed({ x: .2, y: 0, z: 0 }, { x: 0, y: 0, z: 0, w: 1 },
+      { x: -.2, y: 0, z: 0 }, { x: 0, y: 0, z: 0, w: 1 }), a, b, true);
+    const before = [a, b].map(body => ({ linear: { ...body.linvel() }, angular: { ...body.angvel() }, position: { ...body.translation() } }));
+    for (let cycle = 0; cycle < 6; cycle++) {
+      physics.addChunk('arrival', [floorCollider('arrival-floor')], { x: 0, y: -2, z: 0 });
+      physics.removeChunk('arrival');
+    }
+    for (const [index, body] of [a, b].entries()) {
+      expect(body.linvel()).toEqual(before[index]!.linear); expect(body.angvel()).toEqual(before[index]!.angular);
+      expect(body.translation()).toEqual(before[index]!.position);
+    }
+  });
+
   it('refreshes streamed collision queries without advancing an airborne actor', async () => {
     const physics = await createPhysics();
     const body = physics.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 8, 0).setLinvel(2, -12, 1));

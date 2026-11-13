@@ -130,6 +130,13 @@ export class PhysicsWorld {
       this.playerCollider, this.playerBody, this.isEnvironmentCollider);
   }
   hasChunk(key: string): boolean { return this.chunkBodies.has(key); }
+  /** Real walkable ground under the centre of a standing capsule. A capsule
+   * resting by its rounded foot on a lip is grounded, but a body restored
+   * there slides straight back into the drop. */
+  hasFloorBelow(center: Vec3Data): boolean {
+    const hit = this.castEnvironmentRay(center, { x: 0, y: -1, z: 0 }, STANDING_HALF_HEIGHT + PLAYER_RADIUS + 0.3);
+    return !!hit && hit.normal.y > 0.7;
+  }
   /** First static environment surface along a ray (distance and surface normal), or null. */
   castEnvironmentRay(origin: Vec3Data, direction: Vec3Data, maxDistance: number): { distance: number; normal: Vec3Data } | null {
     const hit = this.world.castRayAndGetNormal(new RAPIER.Ray(origin, direction), maxDistance, true,
@@ -703,9 +710,20 @@ export class PhysicsWorld {
     // gameplay tick: advancing 1/60 here accelerated every active ragdoll once
     // more whenever a layer appeared. A zero-time synchronization only updates
     // the collision structures; the fixed-step driver owns elapsed time.
+    // Even at zero time the solver corrects every joint and contact: each mount
+    // kicked the bodies of an active ragdoll, and a body falling through
+    // streamed stories was eventually thrown kilometres away. The velocities
+    // of dynamic bodies therefore survive the synchronization untouched.
+    const dynamics: { body: RAPIER.RigidBody; linear: RAPIER.Vector; angular: RAPIER.Vector }[] = [];
+    this.world.bodies.forEach((body) => {
+      if (body.isDynamic()) dynamics.push({ body, linear: body.linvel(), angular: body.angvel() });
+    });
     const previousTimestep = this.world.timestep;
     try { this.world.timestep = 0; this.world.step(); }
-    finally { this.world.timestep = previousTimestep; }
+    finally {
+      this.world.timestep = previousTimestep;
+      for (const { body, linear, angular } of dynamics) { body.setLinvel(linear, false); body.setAngvel(angular, false); }
+    }
   }
   private requestChunkSynchronization(): void {
     if (this.chunkMutationDepth > 0) { this.chunkSynchronizationPending = true; return; }

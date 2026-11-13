@@ -1167,6 +1167,14 @@ const createEpicPassagePreviewPanel = (
   return geometry;
 };
 
+/** The wall materials multiply by vertex colours. A plain plane has none and
+ * is drawn black: soffits and undersides built from planes need this. */
+const withWhiteVertexColors = <T extends THREE.BufferGeometry>(geometry: T): T => {
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(
+    new Float32Array(geometry.getAttribute('position').count * 3).fill(1), 3));
+  return geometry;
+};
+
 const createEpicPortalSoffit = (
   passage: EpicPassagePreview,
   facade: Rect,
@@ -1197,7 +1205,9 @@ const createEpicPortalSoffit = (
       };
   // A real reveal sits below the tiled corridor ceiling. This is a separate
   // construction layer, not a coplanar offset used to hide z-fighting.
-  return createCeilingGeometry(rect, floorY + EPIC1_PORTAL_HEIGHT - 0.018, patternScale);
+  // The reveal is drawn with the wall material: without vertex colours every
+  // portal showed a black band under its lintel.
+  return withWhiteVertexColors(createCeilingGeometry(rect, floorY + EPIC1_PORTAL_HEIGHT - 0.018, patternScale));
 };
 
 const splitEpicFacadeIntervals = (
@@ -2376,7 +2386,7 @@ export class WorldView {
     const currentWalls: THREE.BufferGeometry[] = [];
     const lowerWalls: THREE.BufferGeometry[] = [];
     const lowerLedges: THREE.BufferGeometry[] = [];
-    const funnelSupportWalls: THREE.BufferGeometry[] = [];
+    const ledgeSoffits: THREE.BufferGeometry[] = [];
     const currentPortalSoffits: THREE.BufferGeometry[] = [];
     const lowerPortalSoffits: THREE.BufferGeometry[] = [];
     const currentCorridorWalls: THREE.BufferGeometry[] = [];
@@ -2428,15 +2438,6 @@ export class WorldView {
         true,
       );
       (level.y === 0 ? currentWalls : lowerWalls).push(...facade);
-      if (levelYs.has((level.y - INFINITE_STORY_PITCH).toFixed(3))) {
-        funnelSupportWalls.push(...createOpenShaftWallGeometries(
-          storyShell.voidBounds,
-          level.y - INFINITE_STORY_PITCH,
-          level.y - 0.22,
-          Math.min(0.92, tint + 0.08),
-          this.surfaceStyle.wallPatternScale,
-        ));
-      }
       if (Math.abs(level.y) > 0.01) {
         // The ledge stops at the facade. Only entrances with a detailed preview
         // receive floor beyond it, so distant sealed openings cannot expose a
@@ -2454,6 +2455,13 @@ export class WorldView {
             rectCenter(ledge).z,
             tint,
             this.surfaceStyle.floorPatternScale,
+          ));
+          // Each gallery stands under the slab of the one above: the carpet
+          // box alone would show an unlit black underside.
+          ledgeSoffits.push(createCeilingGeometry(
+            ledge,
+            level.y - 0.224,
+            this.surfaceStyle.ceilingPatternScale,
           ));
         }
       }
@@ -2589,9 +2597,9 @@ export class WorldView {
       group,
     );
     makeMesh(
-      mergeOrSingle(funnelSupportWalls),
-      this.previewMaterials.wall,
-      'epic-endless-abyss-funnel-support-walls',
+      mergeOrSingle(ledgeSoffits),
+      this.previewMaterials.ceiling,
+      'epic-endless-abyss-ledge-soffits',
       group,
     );
     makeMesh(
@@ -2935,7 +2943,7 @@ export class WorldView {
         -0.18,
       );
       underside.translate(0, flight.bottom, 0);
-      undersides.push(underside);
+      undersides.push(withWhiteVertexColors(underside));
       for (const side of [-1, 1] as const) {
         const skirt = createSlopedStairFasciaGeometry(
           flight.rise,
@@ -3122,13 +3130,13 @@ export class WorldView {
     );
     makeMesh(
       mergeOrSingle(undersides),
-      this.lowerMaterials.wall,
+      this.materials.wall,
       'epic4-stair-textured-undersides',
       group,
     );
     makeMesh(
       mergeOrSingle(skirts),
-      this.lowerMaterials.wall,
+      this.materials.wall,
       'epic4-stair-support-skirts',
       group,
     );
@@ -3140,13 +3148,13 @@ export class WorldView {
     );
     makeMesh(
       mergeOrSingle(landingUndersides),
-      this.lowerMaterials.ceiling,
+      this.materials.ceiling,
       'epic4-stair-landing-undersides',
       group,
     );
     makeMesh(
       mergeOrSingle(landingFascias),
-      this.lowerMaterials.wall,
+      this.materials.wall,
       'epic4-stair-landing-fascias',
       group,
     );
@@ -3158,7 +3166,7 @@ export class WorldView {
     );
     makeMesh(
       mergeOrSingle(balustrades),
-      this.lowerMaterials.wall,
+      this.materials.wall,
       'epic4-stair-textured-balustrades',
       group,
     );

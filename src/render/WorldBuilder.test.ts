@@ -23,6 +23,7 @@ import {
   EPIC3_LANES,
   getEpicConcourseWalls,
   getEpicGroundObstacles,
+  getEpicHypostyleBeams,
   getEpicStairRoomWalls,
   getEpicStairwellLayout,
 } from '../world/EpicStructures';
@@ -2121,8 +2122,8 @@ describe('epic structure rendering', () => {
     const topCeiling = root.getObjectByName(
       'epic-endless-abyss-top-ceiling',
     ) as THREE.Mesh;
-    const funnelSupports = root.getObjectByName(
-      'epic-endless-abyss-funnel-support-walls',
+    const ledgeSoffits = root.getObjectByName(
+      'epic-endless-abyss-ledge-soffits',
     ) as THREE.Mesh;
     const currentPortalSoffits = root.getObjectByName(
       'epic-endless-abyss-current-portal-soffits',
@@ -2142,7 +2143,10 @@ describe('epic structure rendering', () => {
     expect(distantEntryCaps).toBeDefined();
     expect(depthMist).toBeDefined();
     expect(topCeiling).toBeDefined();
-    expect(funnelSupports).toBeDefined();
+    // Every row is an open gallery: no wall hangs under a ledge (it hid the
+    // abyss from the active ledge and had no collider), each slab has a soffit.
+    expect(ledgeSoffits).toBeDefined();
+    expect(root.getObjectByName('epic-endless-abyss-funnel-support-walls')).toBeUndefined();
     expect(currentPortalSoffits).toBeDefined();
     expect(stackedPortalSoffits).toBeDefined();
     expect(root.getObjectByName('epic-endless-abyss-shaft')).toBeUndefined();
@@ -2155,7 +2159,7 @@ describe('epic structure rendering', () => {
     currentCorridorWalls.geometry.computeBoundingBox();
     depthMist.geometry.computeBoundingBox();
     topCeiling.geometry.computeBoundingBox();
-    funnelSupports.geometry.computeBoundingBox();
+    ledgeSoffits.geometry.computeBoundingBox();
     currentPortalSoffits.geometry.computeBoundingBox();
     expect(upperShell.geometry.boundingBox?.min.y).toBeCloseTo(plan.wallHeight - 0.04, 5);
     expect(upperShell.geometry.boundingBox?.max.y).toBeCloseTo(5.43, 5);
@@ -2179,7 +2183,8 @@ describe('epic structure rendering', () => {
     expect(horizontalTriangleHeights(stackedWalls.geometry)).toHaveLength(0);
     expect(horizontalTriangleHeights(currentCorridorWalls.geometry)).toHaveLength(0);
     expect(horizontalTriangleHeights(corridorPreviews.geometry)).toHaveLength(0);
-    expect(horizontalTriangleHeights(funnelSupports.geometry)).toHaveLength(0);
+    expect((ledgeSoffits.material as THREE.Material).name).toBe('preview-ceiling');
+    expect(currentPortalSoffits.geometry.getAttribute('color')).toBeDefined();
     expect(downwardTriangleHeights(currentPortalSoffits.geometry).length).toBeGreaterThan(0);
     expect((currentPortalSoffits.material as THREE.Material).name).toBe('test-wall-zonal');
     expect(currentPortalSoffits.geometry.boundingBox?.min.y)
@@ -2197,8 +2202,8 @@ describe('epic structure rendering', () => {
       .toBeLessThan(rectWidth(currentFunnel.voidBounds));
     expect(rectWidth(bottomFunnel.voidBounds))
       .toBeLessThan(rectWidth(firstLowerFunnel.voidBounds));
-    expect(funnelSupports.geometry.boundingBox?.min.y)
-      .toBeCloseTo(Math.min(...feature.passageLevels!.map((level) => level.y)), 5);
+    expect(ledgeSoffits.geometry.boundingBox?.min.y).toBeLessThan(-85);
+    expect(ledgeSoffits.geometry.boundingBox?.max.y).toBeGreaterThan(20);
     expect(depthMist.geometry.boundingBox?.min.y).toBeLessThan(-99);
     expect(depthMist.geometry.boundingBox?.max.y).toBeCloseTo(-17.28, 4);
     expect(depthMist.geometry.getAttribute('position').count).toBe(11 * 4);
@@ -2412,12 +2417,22 @@ describe('epic structure rendering', () => {
     expect(root.getObjectByName('epic-lost-ceiling-distant-lights')).toBeUndefined();
     expect(getEpicGroundObstacles(feature)).toHaveLength(54);
     expect(plan.columns).toHaveLength(54);
-    expect(architecturalColumns.geometry.getAttribute('position').count).toBe(54 * 24);
-    expect(plan.lights).toHaveLength(25);
-    expect(plan.lights.every((light) => Math.abs(light.ceilingY - 71.965) < 1e-6))
-      .toBe(true);
+    // 54 pillars plus one beam along each of the eight pillar lines.
+    const beams = getEpicHypostyleBeams(feature);
+    expect(beams).toHaveLength(8);
+    expect(plan.walls.filter((wall) => wall.id.includes('epic2-hypostyle-beam-'))).toHaveLength(8);
+    expect(architecturalColumns.geometry.getAttribute('position').count).toBe((54 + 8) * 24);
+    // One luminaire under the beam in every bay, at a readable height: at 72 m
+    // the old fixtures lit nothing and the hall was a flat grey.
+    expect(plan.lights).toHaveLength(46);
+    expect(plan.lights.every((light) => light.ceilingY === beams[0]!.bottom && !light.dead)).toBe(true);
     expect([...new Set(plan.lights.map((light) => light.x))].sort((left, right) => left - right))
-      .toEqual([-42, -18, 0, 18, 42]);
+      .toEqual([-45, -33, -21, -9, 9, 21, 33, 45]);
+    for (const light of plan.lights) {
+      const beam = beams.find((candidate) => candidate.x === light.x)!;
+      expect(Math.abs(light.z - beam.z)).toBeLessThan(beam.length / 2);
+      expect(plan.columns.some((column) => column.x === light.x && Math.abs(column.z - light.z) < 3)).toBe(false);
+    }
 
     const distantMaterial = distantCeiling.material as THREE.MeshStandardMaterial;
     expect(distantMaterial.name).toBe('distant-tiled-ceiling');
@@ -2671,7 +2686,9 @@ describe('epic structure rendering', () => {
     undersides.geometry.computeBoundingBox();
     expect(undersides.geometry.boundingBox!.min.y).toBeCloseTo(-0.18, 5);
     expect(undersides.geometry.boundingBox!.max.y).toBeCloseTo(layout.summitY - 0.18, 5);
-    expect((undersides.material as THREE.Material).name).toBe('lower-storey-wallpaper');
+    // The tower is the active story: the lower-storey material drew these black.
+    expect((undersides.material as THREE.Material).name).toBe('test-wall-zonal');
+    expect(undersides.geometry.getAttribute('color')).toBeDefined();
     const fasciaPositions = stairFascias.geometry.getAttribute('position');
     expect(fasciaPositions.count).toBe(layout.flights.length * 2 * 4);
     for (let offset = 0; offset < fasciaPositions.count; offset += 4) {
@@ -2680,13 +2697,13 @@ describe('epic structure rendering', () => {
       expect(fasciaPositions.getY(offset + 3) - fasciaPositions.getY(offset))
         .toBeCloseTo(0.188, 5);
     }
-    expect((stairFascias.material as THREE.Material).name).toBe('lower-storey-wallpaper');
+    expect((stairFascias.material as THREE.Material).name).toBe('test-wall-zonal');
     const landingNormals = landingUndersides.geometry.getAttribute('normal');
     expect(Array.from({ length: landingNormals.count }, (_, index) => landingNormals.getY(index))
       .every((normalY) => normalY < -0.9)).toBe(true);
-    expect((landingUndersides.material as THREE.Material).name).toBe('lower-storey-ceiling');
+    expect((landingUndersides.material as THREE.Material).name).toBe('test-ceiling-zonal');
     expect(downwardTriangleHeights(landingFascias.geometry)).toHaveLength(0);
-    expect((landingFascias.material as THREE.Material).name).toBe('lower-storey-wallpaper');
+    expect((landingFascias.material as THREE.Material).name).toBe('test-wall-zonal');
     expect(upperShell.geometry.boundingBox!.min.y).toBeCloseTo(0, 5);
     expect(upperShell.geometry.boundingBox!.max.y).toBeCloseTo(feature.height, 5);
 
@@ -2784,7 +2801,10 @@ describe('epic structure rendering', () => {
       }
     }
 
-    expect(plan.lights).toHaveLength(25);
+    expect(plan.lights).toHaveLength(35);
+    // A pool reaches 12 m: one fixture every 14 m makes each nave continuous,
+    // and three of them sit on the axes of the aligned thresholds.
+    for (const z of [-28, 0, 28]) expect(plan.lights.filter((light) => light.z === z)).toHaveLength(5);
     expect(plan.lights.every((light) =>
       light.ceilingY === feature.height - 0.035 &&
       !light.dead &&

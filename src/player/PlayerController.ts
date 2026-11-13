@@ -945,6 +945,12 @@ export class PlayerController {
 
   getSafePosition(target = new THREE.Vector3()): THREE.Vector3 { return target.copy(this.lastSafePosition); }
 
+  /** A fall watchdog or a respawn returns here: only ground that is really
+   * under the body counts, never the lip its rounded foot still touches. */
+  private anchorGroundedSafePosition(): void {
+    if (this.physics.hasFloorBelow?.(this.position) === false) return;
+    this.anchorSafePosition(this.position);
+  }
   private anchorSafePosition(position: Readonly<Vec3Data>): void {
     this.lastSafePosition.set(position.x, position.y, position.z);
     this.callbacks.onSafePosition(this.lastSafePosition);
@@ -1100,7 +1106,7 @@ export class PlayerController {
       this.targetLateralAccelerationLean = 0;
       this.targetBodyLagForward = 0;
       this.targetBodyLagLateral = 0;
-      if (this.grounded) this.anchorSafePosition(this.position);
+      if (this.grounded) this.anchorGroundedSafePosition();
       return;
     }
     if (this.lowPosture) this.lowPostureElapsed += delta;
@@ -1263,7 +1269,7 @@ export class PlayerController {
       // of making the player immune to edge mistakes for the rest of the 1.8 s.
       this.deliberateJumpGraceTimer = Math.min(this.deliberateJumpGraceTimer, 0.22);
       if (this.verticalVelocity < 0) this.verticalVelocity = -0.9;
-      this.anchorSafePosition(this.position);
+      this.anchorGroundedSafePosition();
     }
 
     this.moving = horizontalDistance > (this.isWallStalled ? 0.35 * delta : 0.00015) && this.grounded;

@@ -512,11 +512,8 @@ describe('legacy monument and migration chunk contracts', () => {
       const funnelSupports = plan.colliders.filter((collider) =>
         collider.id.includes('/epic1-funnel-support-wall-')
       );
-      expect(funnelSupports).toHaveLength(4);
-      expect(funnelSupports.every((collider) =>
-        Math.abs(collider.center.y - collider.halfExtents.y + INFINITE_STORY_PITCH) < 1e-5 &&
-        Math.abs(collider.center.y + collider.halfExtents.y + 0.22) < 1e-5
-      )).toBe(true);
+      // Open galleries: nothing hangs under a ledge, in the render or in Rapier.
+      expect(funnelSupports).toHaveLength(0);
       const previewCorridors = plan.colliders.filter((collider) =>
         collider.id.includes('/epic1-lower-preview-corridor-floor-')
       );

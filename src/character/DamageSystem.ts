@@ -133,6 +133,11 @@ export const ragdollImpactPrefersBurst = (
 /** A fall this deep is fatal regardless of remaining HP. */
 export const ragdollDropIsFatal = (dropMeters: number): boolean => dropMeters >= 8.25;
 
+/** No generated pit is deeper than twelve stories (64.8 m). A body still
+ * falling past this drop will never land: the bottomless monument swallowed
+ * it, and the player comes back at the last safe ground like after any fatal fall. */
+export const ragdollFallIsEndless = (dropMeters: number): boolean => dropMeters >= 90;
+
 export const bloodDecalSizeForImpact = (
   part: RagdollImpactPart,
   damage: number,
