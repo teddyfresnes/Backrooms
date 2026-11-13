@@ -1,7 +1,7 @@
 # Vocabulaire liminal ordinaire
 
 Les familles enrichissent `generateInfiniteChunk`. Le BSP de 224 m, ses tirages,
-datums et murs épais restent la base. Plan version 18 ; topologie et spatial
+datums et murs épais restent la base. Plan version 20 ; topologie et spatial
 version 2. Les sauvegardes gardent leur format de pose et d'ancrage de surface ;
 le repli de `restoreSurfacePosition` retrouve un sol si un ancien ID disparaît.
 
@@ -27,6 +27,8 @@ restent celles de `SpatialBaseboards` sur les solides finaux et la pièce canoni
 Il faut encore un plateau d'au moins 9 × 6,4 m, sans réservation ni transition
 incompatible. Budget de deux parois par propriétaire, classées par un fork
 indépendant. Les fenêtres hautes seules gardent un détour latéral de 2,2 m.
+Une paroi percée ne s'achève jamais dans un seuil : les ouvertures canoniques
+de bord de chunk et les vestibules des seuils de district restent libres.
 
 ## Galeries partielles
 

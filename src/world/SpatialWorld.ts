@@ -25,7 +25,7 @@ import { classifySurfaceAccess, cutRects, findSurface, overlapRect, surfaceColli
   type HeightProfile, type SurfaceConnection, type WalkableSurface } from './WalkableTopology';
 
 /** Version of ordinary regional plans, reported as the session's generator version. */
-export const SPATIAL_PLAN_VERSION = 19;
+export const SPATIAL_PLAN_VERSION = 20;
 const sides = ['north', 'east', 'south', 'west'] as const;
 type Side = typeof sides[number];
 const deltas: Record<Side, [number, number]> = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
@@ -50,9 +50,11 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
   const topology = world.topology!, spatial = world.spatial!;
   const featureSlices: SpatialFeatureSlice[] = [];
   const mx = Math.floor(owner.x / 2), mz = Math.floor(owner.z / 2);
-  const template = spatialTemplate(seed, owner.x, owner.z, owner.story);
-  // One canonical BSP spans 2x2 chunks. Cropping it never introduces a wall at
-  // a 28m planning-cell edge or at the source chunk edge.
+  // One canonical BSP per district grain spans 2x2 chunks. Cropping it never
+  // introduces a wall at a 28m planning-cell edge or at the source chunk edge;
+  // two grains only ever meet across a district facade.
+  const cellTemplates = new Map<string, WorldPlan>();
+  const gateVestibules: Rect[] = [];
   const shift = { x: mx * 224 + 56 - offset.x, z: mz * 224 + 56 - offset.z };
   const move = (r: Rect): Rect => ({ minX: r.minX + shift.x, maxX: r.maxX + shift.x, minZ: r.minZ + shift.z, maxZ: r.maxZ + shift.z });
 
@@ -104,7 +106,9 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
       b = local({ minX: first.minX, minZ: first.minZ, maxX: last.maxX, maxZ: last.maxZ });
     }
     const id = regionalCellId(gx, gz, owner.story), p = rectCenter(b);
-    const { family, wallHalf } = regionalStyle(seed, datum.id);
+    const { family, wallHalf, grain } = regionalStyle(seed, datum.id);
+    const template = spatialTemplate(seed, owner.x, owner.z, owner.story, grain);
+    cellTemplates.set(id, template);
     const mode = !atrium ? 'rooms' : owner.story === atrium.owner ? 'gallery' : owner.story === atrium.lower ? 'lower-maze' : atrium.perimeter === 'stepped' ? 'terrace' : 'void';
     const roofY = atrium ? h + (atrium.owner - owner.story) * ADDRESS_PITCH + SPATIAL_CLEARANCE : h + SPATIAL_CLEARANCE;
     const roomId = `${id}/room`;
@@ -114,6 +118,17 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     const heritage = !atrium ? planSpatialFeature(seed, gx, gz, owner.story, b) : undefined;
     if (heritage) featureSlices.push(heritage);
     const routeReservations: Rect[] = heritage ? [expand(heritage.reservation, .8)] : [];
+    // A flush district border is a facade with one gate in the middle of each
+    // cell side. The two districts partition their own way: a vestibule stays
+    // clear behind every gate, so a threshold never opens onto a partition.
+    if (!atrium) for (const side of sides) {
+      const [dx, dz] = deltas[side], other = regionalDatum(seed, gx + dx, gz + dz);
+      if (other.id === datum.id || Math.abs(other.y - h) > .001) continue;
+      const vestibule: Rect = dz !== 0
+        ? { minX: p.x - 2.6, maxX: p.x + 2.6, minZ: side === 'north' ? b.minZ : b.maxZ - 4, maxZ: side === 'north' ? b.minZ + 4 : b.maxZ }
+        : { minZ: p.z - 2.6, maxZ: p.z + 2.6, minX: side === 'west' ? b.minX : b.maxX - 4, maxX: side === 'west' ? b.minX + 4 : b.maxX };
+      routeReservations.push(vestibule); gateVestibules.push(vestibule);
+    }
     if (atrium?.liminal) {
       installLiminalAtrium(world, id, roomId, b, atrium, h, (name, bounds, profile, role, ceiling) => addSurface(name, roomId, bounds, profile, role, false, ceiling));
     } else if (atrium) {
@@ -454,13 +469,12 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
   reconcileStructuralSupports(world, (id, b, bottom, top, tint, detail) => wall(id, b, bottom, top, tint, detail, 'support'));
   completeCeilingEnvelope(world, addPrism);
   const wallCount = world.walls.length;
-  installOrdinaryArchitecture(world, featureSlices.map(s => s.reservation));
+  installOrdinaryArchitecture(world, featureSlices.map(s => s.reservation), gateVestibules);
   if (world.walls.length !== wallCount) rebuildFloors();
 
   world.unlitZones = [];
-  for (const zone of template.unlitZones ?? []) {
-    const moved = move(zone);
-    for (const cell of spatial.cells.filter(c => c.mode === 'rooms')) { const bounds = intersect(moved, cell.bounds); if (bounds) world.unlitZones.push(bounds); }
+  for (const cell of spatial.cells.filter(c => c.mode === 'rooms')) for (const zone of cellTemplates.get(cell.id)?.unlitZones ?? []) {
+    const bounds = intersect(move(zone), cell.bounds); if (bounds) world.unlitZones.push(bounds);
   }
   for (const light of world.lights) if (world.unlitZones.some(r => pointInRect(light.x, light.z, r))) light.dead = true;
 

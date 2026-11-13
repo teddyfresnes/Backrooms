@@ -1,4 +1,4 @@
-# Transitions et volumes intégrés — version 19
+# Transitions et volumes intégrés — version 20
 
 Les salles ordinaires conservent le BSP historique, ses murs épais et ses
 matériaux. Les coordonnées de story restent des adresses, pas un sol par défaut.

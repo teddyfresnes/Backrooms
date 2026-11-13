@@ -11,24 +11,31 @@ import { regionalStyle, openRoomComposition } from './RegionalPlan';
 import { surfaceY, type WalkableSurface } from './WalkableTopology';
 import type { WorldPlan } from './types';
 
-it('closes the reproduced LATE-OFFICE niche into the high roof, with the same mesh and physical solid', async () => {
-  const plan=generateInfiniteChunk('LATE-OFFICE-1950',{x:0,z:0,story:0}),x=-36.83,z=23.75;
-  const roof=plan.spatial!.ceilings.find(s=>s.id.includes('/bsp-8/ceiling')&&x>s.bounds.minX&&x<s.bounds.maxX&&z>s.bounds.minZ&&z<s.bounds.maxZ)!;
-  // District datums moved with the 0.9 m quanta: every height is relative to the real floor.
-  const floor=plan.spatial!.cells.find(c=>x>c.bounds.minX&&x<c.bounds.maxX&&z>c.bounds.minZ&&z<c.bounds.maxZ)!.floorY;
-  expect(roof.roomId).toContain('room-WTBLBRBTL');expect(surfaceY(roof,x,z)-roof.thickness).toBeCloseTo(floor+2.74,6);
-  const returns=plan.spatial!.prisms.filter(p=>p.id.startsWith(`${roof.id}/ceiling-return-n`));expect(returns.length).toBeGreaterThan(0);
+it('closes low ceiling edges into the adjacent high roof, with the same mesh and physical solid', async () => {
+  // The historical LATE-OFFICE niche belonged to one room of the former single
+  // BSP. The contract is the same for every return of the real plan.
+  const plan=generateInfiniteChunk('LATE-OFFICE-1950',{x:0,z:0,story:0});
+  const returns=plan.spatial!.prisms.filter(p=>p.id.includes('/ceiling-return-'));expect(returns.length).toBeGreaterThan(3);
   const material=new THREE.MeshBasicMaterial(),meshes=prepareSpatialArchitecture(plan).map(b=>{const m=new THREE.Mesh(mountArchitectureBatch(b),material);m.name=b.name;m.updateMatrixWorld();return m;});
-  const physics=await PhysicsWorld.create(plan);
+  const physics=await PhysicsWorld.create(plan);let visible=0;
   try {
-    for(const y of [floor+2.85,floor+3.55,floor+4.3]) {
-      const hit=new THREE.Raycaster(new THREE.Vector3(x,y,22),new THREE.Vector3(0,0,1),0,2).intersectObjects(meshes)[0];
-      expect(hit?.object.name).toBe('regional-plaster-structures');expect(hit!.point.z).toBeCloseTo(23.5,5);
-      const solid=physics.world.intersectionWithShape({x,y,z:23.5},{x:0,y:0,z:0,w:1},new RAPIER.Ball(.025),undefined,undefined,undefined,undefined,physics.isEnvironmentCollider);
-      expect(solid).not.toBeNull();
+    for(const prism of returns) {
+      const axis=(i:number)=>prism.vertices.filter((_,j)=>j%3===i),xs=axis(0),ys=axis(1),zs=axis(2);
+      const lo={x:Math.min(...xs),y:Math.min(...ys),z:Math.min(...zs)},hi={x:Math.max(...xs),y:Math.max(...ys),z:Math.max(...zs)};
+      expect(prism.material).toBe('plaster');expect(hi.y-lo.y).toBeGreaterThan(.001);
+      const center={x:(lo.x+hi.x)/2,y:(lo.y+hi.y)/2,z:(lo.z+hi.z)/2},thinX=hi.x-lo.x<hi.z-lo.z;
+      // Rapier owns the same solid: its hull is met on the face of the return.
+      const face={...center,...(thinX?{x:lo.x}:{z:lo.z})};
+      expect(physics.world.intersectionWithShape(face,{x:0,y:0,z:0,w:1},new RAPIER.Ball(.025),undefined,undefined,undefined,undefined,physics.isEnvironmentCollider),prism.id).not.toBeNull();
+      // And a horizontal ray through its 12 cm meets a plaster face on at least one side.
+      for(const sign of [-1,1]) {
+        const origin=new THREE.Vector3(center.x-(thinX?sign:0),center.y,center.z-(thinX?0:sign)),direction=new THREE.Vector3(thinX?sign:0,0,thinX?0:sign);
+        const hit=new THREE.Raycaster(origin,direction,0,2).intersectObjects(meshes).find(h=>h.object.name==='regional-plaster-structures'
+          &&h.point.x>=lo.x-.002&&h.point.x<=hi.x+.002&&h.point.z>=lo.z-.002&&h.point.z<=hi.z+.002);
+        if(hit){visible++;break;}
+      }
     }
-    // The new return stays above the low ceiling: the alcove remains usable.
-    expect(physics.canStandAt({x:-36.57,y:floor+.865,z:20.14})).toBe(true);
+    expect(visible).toBeGreaterThan(returns.length/2);
   } finally {physics.dispose();meshes.forEach(m=>m.geometry.dispose());material.dispose();}
 });
 

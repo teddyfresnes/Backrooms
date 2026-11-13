@@ -20,7 +20,7 @@ rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/
 
 ## Ordre du pipeline
 
-Le pipeline ordinaire (plan version 19, topologie/spatial version 2) est :
+Le pipeline ordinaire (plan version 20, topologie/spatial version 2) est :
 
 1. `RegionalPlan` choisit les districts mondiaux et leurs datums signés ;
 2. il réserve les atria sur deux à quatre adresses verticales. Les galeries
@@ -35,8 +35,16 @@ Le pipeline ordinaire (plan version 19, topologie/spatial version 2) est :
    `SpatialFeatures` réserve les anciens trous et passages, avec leurs vrais
    propriétaires source/arrivée ;
 4. `SpatialWorld` réutilise `generateBspArchitecture` sur des domaines canoniques
-   de 224 m (2×2 chunks), puis matérialise aux datums finaux les pièces historiques,
-   murs épais, détails et plafonds ; les grandes familles restent minoritaires ;
+   de 224 m (2×2 chunks), puis matérialise aux datums finaux les pièces, murs
+   épais et plafonds. Chaque district a un grain (`regionalStyle().grain`) :
+   `cells` (cloisonnement dense historique, détails), `rooms` (pièces d'au moins
+   12 m, plafond à 3,05 m) ou `halls` (au moins 19 m, 3,7 m). Un gabarit BSP
+   par domaine, étage et grain (`spatialTemplate`) ; deux grains ne se
+   rencontrent qu'à travers une façade de district, avec un vestibule dégagé
+   derrière chaque seuil. Les luminaires suivent une trame régulière par
+   gabarit (4,8 / 7,2 / 9,6 m), alignée d'une pièce à l'autre. Les cloisons
+   restent à 2 m au moins des lignes de cellules de 28 m : plus de fragment
+   de pièce en écharde. Le chemin legacy ne voit jamais ces réglages ;
 5. `SpatialRelief` ajoute les socles et terrasses pleins au sol porteur ;
 6. `BspConnectivity` relie les composantes d'un même datum, même si chacune a
    déjà sa propre sortie ; une réparation ouvre une porte par composante, pas
@@ -74,7 +82,9 @@ contrôle cette dernière, y compris les épaisseurs, les continuations de pièc
 et la connexion des sols aux vraies circulations. Le cache de 32 domaines BSP
 est vidé avec `clearInfiniteWorldCaches`.
 
-Les biomes visuels occupent des macro-zones 2×2 stables sur tous les étages.
+Les biomes visuels occupent des macro-zones 2×2 stables sur tous les étages
+(`getInfiniteVisualBiome`, partagé avec la faille : changer ses poids change
+les plans d'`epic3`).
 Le jaune ordinaire couvre 70 % des macro-zones ; rouge, blanc et jaune sombre
 en couvrent chacun 10 %. Le jaune sombre conserve les textures et l’ambiance chaude, avec les mêmes
 diffuseurs blancs neutres ; son profil d’éclairage moderne reste plus faible.

@@ -40,6 +40,41 @@ const WALL_HEIGHT = 2.74;
 const WALL_THICKNESS = 0.22;
 const MAX_STRUCTURAL_WALL_THICKNESS = 2.8;
 const MIN_ROOM_SPAN = 7;
+/**
+ * A district's grain: how finely its plateau is partitioned, how high its
+ * ceilings are and how its luminaires are spaced. `cells` keeps the historical
+ * dense offices; `rooms` and `halls` have fewer, larger and emptier spaces.
+ */
+export type BspGrain = 'cells' | 'rooms' | 'halls';
+interface BspGrainProfile {
+  /** Smallest side a partition may leave. */
+  minRoomSpan: number;
+  /** Rooms are raised to at least this ceiling (still under the address pitch). */
+  minCeiling: number;
+  /** Partial walls, pilasters, recesses and solid masses. */
+  details: boolean;
+  /** Pitch of the regular luminaire lattice, a multiple of the 2.4 m tile. */
+  lightSpacing: number;
+}
+const BSP_GRAINS: Record<BspGrain, BspGrainProfile> = {
+  cells: { minRoomSpan: 8, minCeiling: 2.74, details: true, lightSpacing: 4.8 },
+  rooms: { minRoomSpan: 12, minCeiling: 3.05, details: false, lightSpacing: 7.2 },
+  halls: { minRoomSpan: 19, minCeiling: 3.7, details: false, lightSpacing: 9.6 },
+};
+/** Set only while `generateBspArchitecture` runs; the legacy pipeline (monuments,
+ * the rift, `RAW_LOCAL_`) never sees it and keeps its historical constants. */
+let activeGrain: BspGrainProfile | null = null;
+const minRoomSpan = (): number => activeGrain?.minRoomSpan ?? MIN_ROOM_SPAN;
+/** Plateaus are cut into 28 m planning cells. A partition closer than 2 m to a
+ * cell line left a sliver of room on the other side of it: district templates
+ * keep their splits clear of those lines. */
+const clearOfCellLines = (split: number, min: number, max: number): number => {
+  if (!activeGrain) return split;
+  const line = Math.round(split / 28) * 28, offset = split - line;
+  if (Math.abs(offset) >= 2) return split;
+  const moved = line + (offset >= 0 ? 2 : -2);
+  return moved >= min && moved <= max ? moved : line - (offset >= 0 ? 2 : -2);
+};
 const PARTITION_ENDPOINT_PORTAL_CLEARANCE = 1.45;
 const CORNER_PORTAL_JUNCTION_RATE = 0.025;
 const PIT_STORY_PITCH = 5.4;
@@ -495,8 +530,8 @@ const splitPartitions = (
   const rng = rootRng.fork(`partition:${path}`);
   const width = rectWidth(bounds);
   const roomDepth = rectDepth(bounds);
-  const canSplitX = width >= MIN_ROOM_SPAN * 2 + 1;
-  const canSplitZ = roomDepth >= MIN_ROOM_SPAN * 2 + 1;
+  const canSplitX = width >= minRoomSpan() * 2 + 1;
+  const canSplitZ = roomDepth >= minRoomSpan() * 2 + 1;
   const shortSpan = Math.min(width, roomDepth);
   const longSpan = Math.max(width, roomDepth);
   const corridorLeaf = depth >= 2 && shortSpan <= 10.5 && longSpan >= 17 && longSpan <= 64;
@@ -531,8 +566,8 @@ const splitPartitions = (
   else splitX = rng.chance(0.5);
 
   if (splitX) {
-    const splitMin = bounds.minX + MIN_ROOM_SPAN;
-    const splitMax = bounds.maxX - MIN_ROOM_SPAN;
+    const splitMin = bounds.minX + minRoomSpan();
+    const splitMax = bounds.maxX - minRoomSpan();
     const tentativeSplit = quantize(
       clamp(
         bounds.minX + width * rng.float(0.3, 0.7),
@@ -541,7 +576,7 @@ const splitPartitions = (
       ),
       0.5,
     );
-    const split = moveSplitAwayFromPortalCorners(
+    const split = clearOfCellLines(moveSplitAwayFromPortalCorners(
       plan,
       'z',
       tentativeSplit,
@@ -549,7 +584,7 @@ const splitPartitions = (
       splitMin,
       splitMax,
       rng.fork('split-clearance'),
-    );
+    ), splitMin, splitMax);
     const span = roomDepth;
     const gaps = partitionGaps(rng.fork('gaps'), bounds.minZ, bounds.maxZ);
     wallAroundGaps(
@@ -566,8 +601,8 @@ const splitPartitions = (
     splitPartitions({ ...bounds, maxX: split }, depth + 1, `${path}L`, rootRng, plan);
     splitPartitions({ ...bounds, minX: split }, depth + 1, `${path}R`, rootRng, plan);
   } else {
-    const splitMin = bounds.minZ + MIN_ROOM_SPAN;
-    const splitMax = bounds.maxZ - MIN_ROOM_SPAN;
+    const splitMin = bounds.minZ + minRoomSpan();
+    const splitMax = bounds.maxZ - minRoomSpan();
     const tentativeSplit = quantize(
       clamp(
         bounds.minZ + roomDepth * rng.float(0.3, 0.7),
@@ -576,7 +611,7 @@ const splitPartitions = (
       ),
       0.5,
     );
-    const split = moveSplitAwayFromPortalCorners(
+    const split = clearOfCellLines(moveSplitAwayFromPortalCorners(
       plan,
       'x',
       tentativeSplit,
@@ -584,7 +619,7 @@ const splitPartitions = (
       splitMin,
       splitMax,
       rng.fork('split-clearance'),
-    );
+    ), splitMin, splitMax);
     const span = width;
     const gaps = partitionGaps(rng.fork('gaps'), bounds.minX, bounds.maxX);
     wallAroundGaps(
@@ -4944,7 +4979,30 @@ const addLight = (world: WorldPlan, room: RoomRecord, rng: SeededRandom, x: numb
   }, room.bounds);
 };
 
+/**
+ * One lattice for a whole district template: fixtures line up from room to
+ * room on the same rows, and a room narrower than the pitch gets one file on
+ * its own axis. The rhythm is read across thresholds, not room by room.
+ */
+const populateLightLattice = (world: WorldPlan, rootRng: SeededRandom, spacing: number): void => {
+  const margin = 1.3;
+  const nodes = (min: number, max: number): number[] => {
+    if (max - min < spacing + margin * 2) return [(min + max) / 2];
+    const result: number[] = [];
+    for (let v = Math.ceil((min + margin) / spacing) * spacing; v <= max - margin; v += spacing) result.push(v);
+    return result.length ? result : [(min + max) / 2];
+  };
+  for (const room of world.rooms) {
+    if (room.access === 'sealed') continue;
+    const rng = rootRng.fork(`lattice:${room.id}`);
+    const rotation = rectWidth(room.bounds) >= rectDepth(room.bounds) ? 0 : Math.PI * 0.5;
+    for (const x of nodes(room.bounds.minX, room.bounds.maxX)) for (const z of nodes(room.bounds.minZ, room.bounds.maxZ))
+      addLight(world, room, rng.fork(`node-${x}-${z}`), x, z, rotation);
+  }
+};
+
 const populateLightsAndDetails = (world: WorldPlan, rootRng: SeededRandom): void => {
+  if (activeGrain) { populateLightLattice(world, rootRng, activeGrain.lightSpacing); return; }
   for (const room of world.rooms) {
     if (room.access === 'sealed') continue;
     const rng = rootRng.fork(`lighting:${room.id}`);
@@ -5203,7 +5261,12 @@ export const proposeSpatialCrawl = (room: RoomRecord, seed: string, breach = fal
   return feature ? { feature, walls: mutable.walls } : undefined;
 };
 
-export const generateBspArchitecture = (seed: string): WorldPlan => {
+export const generateBspArchitecture = (seed: string, grain: BspGrain = 'cells'): WorldPlan => {
+  activeGrain = BSP_GRAINS[grain];
+  try { return buildBspArchitecture(seed, activeGrain); } finally { activeGrain = null; }
+};
+
+const buildBspArchitecture = (seed: string, grain: BspGrainProfile): WorldPlan => {
   const rng = new SeededRandom(seed).fork('historical-bsp');
   const mutable: MutablePlan = { walls: [], rooms: [], colliders: [], portals: [], wallIndex: 0 };
   const bounds = { minX: -112, maxX: 112, minZ: -112, maxZ: 112 };
@@ -5216,12 +5279,12 @@ export const generateBspArchitecture = (seed: string): WorldPlan => {
   addCeilingVariations(mutable, world, new Set(), rng);
   // Address ownership still repeats at 5.4m. Keep ordinary roofs below the
   // next owner's slab instead of importing the legacy nine-metre shells.
-  for (const room of world.rooms) room.ceilingHeight = Math.min(room.ceilingHeight, 4.35);
-  addColumnsAndPartialWalls(mutable, world, new Set(), rng);
+  for (const room of world.rooms) room.ceilingHeight = Math.min(Math.max(room.ceilingHeight, grain.minCeiling), 4.35);
+  if (grain.details) addColumnsAndPartialWalls(mutable, world, new Set(), rng);
   enforcePortalClearances(mutable);
   addInteractiveDoors(mutable, world, rng);
   world.walls = mutable.walls; world.colliders = mutable.colliders;
-  addSolidMasses(world, new Set(), rng);
+  if (grain.details) addSolidMasses(world, new Set(), rng);
   cleanWallJunctions(world);
   populateLightsAndDetails(world, rng);
   applyLightingZones(world, rng);

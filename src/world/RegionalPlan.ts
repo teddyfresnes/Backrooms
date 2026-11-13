@@ -53,7 +53,9 @@ export const regionalDatum = (seed: string, x: number, z: number): RegionalDatum
 export const regionalStyle = (seed: string, regionId: string) => {
   const rng = new SeededRandom(`${seed}:spatial-style:v2:${regionId}`);
   return { family: rng.weighted([{ value: 'maze' as const, weight: .88 }, { value: 'hall' as const, weight: .08 }, { value: 'pillars' as const, weight: .04 }]),
-    wallHalf: rng.weighted([{ value: .12, weight: .12 }, { value: .6, weight: .58 }, { value: 1.2, weight: .3 }]) };
+    wallHalf: rng.weighted([{ value: .12, weight: .12 }, { value: .6, weight: .58 }, { value: 1.2, weight: .3 }]),
+    // A district is one kind of place: dense cells, plain rooms or broad halls.
+    grain: rng.fork('grain').weighted([{ value: 'cells' as const, weight: .3 }, { value: 'rooms' as const, weight: .4 }, { value: 'halls' as const, weight: .3 }]) };
 };
 const transitionCache = new Map<string, boolean>();
 interface TransitionCandidate { x: number; z: number; rank: number; id: string }

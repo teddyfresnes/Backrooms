@@ -29,7 +29,16 @@ export const passageRow = (rng: SeededRandom, min: number, max: number, floor: n
 };
 
 /** Independent district vocabulary and a two-per-owner budget preserve quiet ordinary stretches. */
-export const installOrdinaryArchitecture = (w: WorldPlan, avoid: readonly Rect[]): void => {
+export const installOrdinaryArchitecture = (w: WorldPlan, avoid: readonly Rect[], keepClear: readonly Rect[] = []): void => {
+  // A pierced wall never ends inside a threshold: the canonical chunk gates
+  // and the vestibules behind district gates stay free on their full width.
+  const thresholds: Rect[] = [...keepClear];
+  for (const side of ['north', 'south', 'east', 'west'] as const) for (const gate of w.edgeGates?.[side] ?? []) {
+    const lo = gate.offset - gate.width / 2, hi = gate.offset + gate.width / 2, half = w.size / 2;
+    thresholds.push(side === 'north' || side === 'south'
+      ? { minX: lo, maxX: hi, minZ: side === 'north' ? -half : half - 5, maxZ: side === 'north' ? -half + 5 : half }
+      : { minZ: lo, maxZ: hi, minX: side === 'west' ? -half : half - 5, maxX: side === 'west' ? -half + 5 : half });
+  }
   const candidates: { surface: WalkableSurface; id: string; rng: SeededRandom; rank: number }[] = [];
   for (const cell of w.spatial!.cells.filter(c => c.mode === 'rooms')) {
     const district = new SeededRandom(`${w.seed}:liminal-vocabulary:v1:${cell.regionId}`), rng = new SeededRandom(`${w.seed}:liminal-room:v1:${cell.id}`);
@@ -50,6 +59,7 @@ export const installOrdinaryArchitecture = (w: WorldPlan, avoid: readonly Rect[]
     const bounds = alongX ? { minX: min, maxX: max, minZ: fixed - thick / 2, maxZ: fixed + thick / 2 }
       : { minZ: min, maxZ: max, minX: fixed - thick / 2, maxX: fixed + thick / 2 };
     if (w.features.some(f => f.kind !== 'impossible-vista' && overlapRect(f.bounds, bounds, .8))) continue;
+    if (thresholds.some(t => overlapRect(t, bounds, .4))) continue;
     const wall: OpeningWall = { id: `${id}/wall`, bounds, axis, bottom: h - .16, top: s.ceilingY,
       openings: passageRow(rng.fork('profile'), min + .4, max - .4, h, s.ceilingY, pattern) };
     if (!wall.openings.length) continue;

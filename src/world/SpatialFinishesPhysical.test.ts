@@ -9,8 +9,9 @@ import { rectCenter } from './types';
 import { surfaceY } from './WalkableTopology';
 
 it.each([
-  ['WALL-FINISH-HOLDOUT-0', { x: -1, z: -1, story: -2 }],
-  ['WALL-FINISH-HOLDOUT-2', { x: 1, z: -1, story: 0 }],
+  // A chunk whose district grain still leaves sub-5 mm floor contacts to repair
+  // in the open (a patch buried under a wall face has no visible top).
+  ['WALL-FINISH-HOLDOUT-11', { x: 0, z: 0, story: 0 }],
 ] as const)('shares repaired floor contacts between worker buffers and actual Rapier: %s', async (seed, owner) => {
   const plan = generateInfiniteChunk(seed, owner);
   const restored = JSON.parse(JSON.stringify(plan)) as typeof plan;
