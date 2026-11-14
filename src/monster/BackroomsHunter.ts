@@ -14,8 +14,8 @@ import type { NavGrid, NavSteer } from './BackroomsNav';
  * It never vanishes while it can be seen: it only goes dormant out of the
  * line of sight, more than `vanishDistance` away. Speeds are tuned against
  * the player (walk 3.0 m/s, sprint 6.65 m/s): a walker is caught, a sprinter
- * who chains corners loses it, a sprinter on a long straight keeps it on his
- * heels until his breath gives out.
+ * who chains corners loses it; a long straight lets it build up speed and
+ * close the gap without braking to match the runner.
  */
 
 export type HunterState = 'dormant' | 'lurk' | 'notice' | 'chase' | 'search' | 'shadow' | 'withdraw';
@@ -42,14 +42,11 @@ export const HUNTER_TUNING = {
   rubberFar: 12,
   rubberGain: 0.14,
   rubberMax: 1.7,
-  /** Glued to a runner (< `closeGap` m) it matches his pace plus `closeMargin`. */
-  closeGap: 3.4,
-  closeMargin: 0.4,
   lungeRange: 2.7,
   lungeSpeed: 9.4,
   lungeTime: 0.38,
-  lungeRecover: 0.5,
-  lungeRecoverSpeed: 3.4,
+  lungeRecover: 0.28,
+  lungeRecoverSpeed: 5.8,
   lungeCooldown: 2.4,
   catchRadius: 1.15,
   /** Contact lost: unseen and unheard this long, at least `loseGap` m of path behind. */
@@ -74,9 +71,11 @@ export const HUNTER_TUNING = {
   vanishDistance: 25,
   /** A still lurker wakes when he comes this close (path), or stares from this close. */
   lurkWake: 9,
-  lurkStareWake: 13,
-  /** Stared at from farther than this, it freezes mid-gesture. */
+  visionRange: 46,
+  stareNotice: 1.4,
+  /** A brief hesitation, followed by a turn and pursuit if the gaze continues. */
   stareFreeze: 14,
+  stillWait: [3.5, 7] as const,
   lurkPatience: 45,
   prowlSpeed: 1.35,
   crossSpeed: 2.1,
@@ -165,9 +164,12 @@ export class BackroomsHunter {
   private pointsLeft = 0;
   private searchLeft = 0;
   private searchSpeed: number = HUNTER_TUNING.searchSpeed;
+  private searchEntrySpeed = 0;
   private heardCooldown = 0;
   private shadowLeft = 0;
   private ambushWait = 0;
+  private stillWait = 0;
+  private searchLead = false;
   private progressTimer = 0;
   private readonly progressFrom = { x: 0, z: 0 };
   private fallback = 0;
@@ -224,6 +226,9 @@ export class BackroomsHunter {
     else if (spot.style === 'prowl') this.pickProwlGoal();
     this.speed = 0;
     this.awareness = 0;
+    this.seenTime = 0; this.staredTime = 0;
+    this.lastFeet.x = Number.NaN;
+    this.stillWait = this.random.float(...HUNTER_TUNING.stillWait);
     this.ambushWait = this.random.float(HUNTER_TUNING.ambushDelay[0], HUNTER_TUNING.ambushDelay[1]);
     this.enter('lurk');
     this.events.push('appear');
@@ -245,6 +250,8 @@ export class BackroomsHunter {
     this.awareness = 0;
     this.trailLength = 0;
     this.trailCursor = 0;
+    this.seenTime = 0; this.staredTime = 0;
+    this.lastFeet.x = Number.NaN;
   }
 
   update(delta: number, senses: HunterSenses): void {
@@ -268,9 +275,9 @@ export class BackroomsHunter {
     if (senses.sees) {
       this.lastKnown.x = feet.x; this.lastKnown.y = feet.y; this.lastKnown.z = feet.z;
     }
-    if (!Number.isNaN(this.lastFeet.x)) {
+    if ((senses.sees || heard) && !Number.isNaN(this.lastFeet.x)) {
       const mx = feet.x - this.lastFeet.x, mz = feet.z - this.lastFeet.z, moved = Math.hypot(mx, mz);
-      if (moved > 0.05) { this.lastHeading.x = mx / moved; this.lastHeading.z = mz / moved; }
+      if (moved > 0.005) { this.lastHeading.x = mx / moved; this.lastHeading.z = mz / moved; }
     }
     this.lastFeet.x = feet.x; this.lastFeet.z = feet.z;
 
@@ -295,23 +302,31 @@ export class BackroomsHunter {
   private updateLurk(dt: number, senses: HunterSenses, heard: boolean): void {
     const tuning = HUNTER_TUNING;
     this.accrueAwareness(dt, senses, heard);
+    if (this.staredTime >= tuning.stareNotice && senses.seen && this.gap <= tuning.visionRange) {
+      this.beginNotice(this.style); return;
+    }
     if (this.style === 'still') {
       this.motion = this.crouched ? 'crouch' : 'idle';
       this.speed = 0;
       this.headTwist = this.awareness > 0.25 ? 0 : this.peek;
       this.lookAtPlayer = this.awareness > 0.25 || this.seenTime > 1.2;
-      this.frozen = senses.stared && this.gap > tuning.stareFreeze;
-      if (this.gap <= tuning.lurkWake || (this.staredTime > 0.8 && this.gap <= tuning.lurkStareWake) || this.awareness >= 1) {
+      this.frozen = senses.stared && this.gap > tuning.stareFreeze && this.staredTime < 0.45;
+      if (((senses.sees || heard) && this.gap <= tuning.lurkWake) || this.awareness >= 1) {
         this.beginNotice('still');
         return;
+      }
+      if (this.stateTime >= this.stillWait && !this.frozen) {
+        this.style = 'prowl'; this.crouched = false; this.peek = 0;
+        this.pickProwlGoal(); this.fieldTimer = 0;
       }
     } else if (this.style === 'prowl') {
       this.headTwist = 0;
       this.lookAtPlayer = this.awareness > 0.3;
       if (senses.stared && this.gap > tuning.stareFreeze) {
         // Stares back, motionless.
-        this.frozen = this.staredTime < 2.5;
-        this.speed = 0;
+        this.frozen = this.staredTime < 0.45;
+        this.lookAtPlayer = true;
+        this.speed = Math.max(0, this.speed - dt * 6);
         this.motion = 'idle';
       } else if (this.pause > 0) {
         this.pause -= dt;
@@ -321,21 +336,21 @@ export class BackroomsHunter {
         this.motion = 'stalk';
         const arrived = this.walkTo(dt, this.goal.x, this.goal.z, tuning.prowlSpeed, 0.6);
         if (arrived) {
-          this.pause = this.random.float(1.2, 2.6);
-          const x = this.goal.x, z = this.goal.z;
-          this.goal.x = this.anchor.x; this.goal.z = this.anchor.z;
-          this.anchor.x = x; this.anchor.z = z;
+          this.pause = this.random.float(0.4, 1.2);
+          this.anchor.x = this.position.x; this.anchor.z = this.position.z;
+          this.pickProwlGoal();
         }
+        if (this.watchProgress(dt)) this.pickProwlGoal();
       }
-      if (this.awareness >= 1 || this.gap <= tuning.lurkWake * 0.7) { this.beginNotice('prowl'); return; }
+      if (this.awareness >= 1 || ((senses.sees || heard) && this.gap <= tuning.lurkWake * 0.7)) { this.beginNotice('prowl'); return; }
     } else if (this.style === 'cross') {
-      // Crossing far down a corridor, not looking: only a close or loud player is noticed.
+      // Passing through: it can still notice somebody standing in its way.
       this.motion = 'stalk';
       this.lookAtPlayer = false;
       this.headTwist = 0;
-      if (this.gap > 10 && !(heard && senses.noise > 0.8)) this.awareness = Math.min(this.awareness, 0.5);
-      if (this.awareness >= 1 || this.gap <= 7) { this.beginNotice('cross'); return; }
+      if (this.awareness >= 1 || ((senses.sees || heard) && this.gap <= 7)) { this.beginNotice('cross'); return; }
       if (this.walkTo(dt, this.goal.x, this.goal.z, tuning.crossSpeed, 0.5)) { this.enter('withdraw'); return; }
+      if (this.watchProgress(dt)) { this.style = 'prowl'; this.pickProwlGoal(); }
     } else {
       // Ambush: the knock, a few seconds of nothing, then it comes for him.
       this.lookAtPlayer = false;
@@ -392,7 +407,8 @@ export class BackroomsHunter {
     this.unheard = heard || senses.sees ? 0 : this.unheard + dt;
     if (heard) { this.lastKnown.x = senses.feet.x; this.lastKnown.y = senses.feet.y; this.lastKnown.z = senses.feet.z; }
     this.recordTrail(senses.feet);
-    if (straight < tuning.catchRadius && Math.abs(senses.feet.y - this.position.y) < 1.3) {
+    if (straight < tuning.catchRadius && Math.abs(senses.feet.y - this.position.y) < 1.3
+      && (senses.sees || this.nav.clearLine(this.position.x, this.position.z, senses.feet.x, senses.feet.z))) {
       this.events.push('caught');
       this.enter('dormant');
       return;
@@ -431,7 +447,6 @@ export class BackroomsHunter {
     desired += clamp01(this.straightTime / tuning.straightRamp) * (tuning.chaseTop - tuning.chaseCruise);
     const contact = this.unseen < 1.5 || this.unheard < 1;
     if (contact && this.gap > tuning.rubberFar) desired += Math.min(tuning.rubberMax, (this.gap - tuning.rubberFar) * tuning.rubberGain);
-    if (this.gap < tuning.closeGap) desired = Math.min(desired, senses.speed + tuning.closeMargin);
     if (steer && !steer.direct && steer.reach < tuning.cornerReach && steer.turn > tuning.cornerAngle) {
       const sharp = clamp01((steer.turn - tuning.cornerAngle) / (tuning.cornerSharp - tuning.cornerAngle));
       desired = Math.min(desired, tuning.cornerFast + (tuning.cornerSlow - tuning.cornerFast) * sharp);
@@ -455,17 +470,23 @@ export class BackroomsHunter {
     this.pointsLeft = this.random.int(tuning.searchPoints[0], tuning.searchPoints[1]);
     this.searchLeft = this.random.float(tuning.searchTime[0], tuning.searchTime[1]);
     this.searchSpeed = tuning.searchSpeed;
+    this.searchEntrySpeed = this.speed;
+    this.searchLead = true;
     this.pause = 0;
     this.awareness = 0;
     this.lunge = 0; this.recover = 0;
     this.fieldTimer = 0;
+    if ((this.position.x - this.lastKnown.x) * this.lastHeading.x + (this.position.z - this.lastKnown.z) * this.lastHeading.z > 0.5) {
+      this.searchLead = false;
+      this.pickSearchGoal();
+    }
   }
 
   private updateSearch(dt: number, senses: HunterSenses, heard: boolean): void {
     const tuning = HUNTER_TUNING;
     this.searchLeft -= dt;
     this.lookAtPlayer = senses.sees && this.awareness > 0.2;
-    if (senses.sees && this.gap < 26) {
+    if (senses.sees || this.staredTime >= tuning.stareNotice) {
       this.awareness += dt * this.awarenessRate();
       if (this.awareness >= 0.6) { this.beginNotice('search'); return; }
     } else this.awareness = Math.max(0, this.awareness - dt * tuning.awarenessDecay);
@@ -493,12 +514,21 @@ export class BackroomsHunter {
       return;
     }
     this.headTwist = 0;
-    this.motion = this.searchSpeed > 4 ? 'run' : 'stalk';
-    if (this.walkTo(dt, this.goal.x, this.goal.z, this.searchSpeed, 0.7)) {
-      this.pointsLeft -= 1;
-      this.pause = this.random.float(tuning.searchPause[0], tuning.searchPause[1]);
-      this.events.push('sniff');
+    const continuing = Math.max(this.searchSpeed, this.searchEntrySpeed - this.stateTime * 0.55);
+    this.motion = continuing > 4 ? 'run' : 'stalk';
+    if (this.walkTo(dt, this.goal.x, this.goal.z, continuing, 0.7)) {
+      if (this.searchLead) {
+        // Carry the chase through the last sighting and on into the next room.
+        this.searchLead = false;
+        this.pickSearchGoal();
+        this.walkTo(dt, this.goal.x, this.goal.z, continuing, 0.5);
+      } else {
+        this.pointsLeft -= 1;
+        this.pause = this.random.float(tuning.searchPause[0], tuning.searchPause[1]);
+        this.events.push('sniff');
+      }
     }
+    if (this.watchProgress(dt)) { this.pickSearchGoal(); this.pause = 0; }
     if (this.searchLeft <= -8) { this.events.push('gave-up'); this.beginShadow(); }
   }
 
@@ -513,16 +543,16 @@ export class BackroomsHunter {
     this.shadowLeft -= dt;
     this.headTwist = 0;
     this.lookAtPlayer = senses.sees;
-    if (senses.sees && this.gap < 11) this.awareness += dt * this.awarenessRate() * 1.5;
+    if (senses.sees) this.awareness += dt * this.awarenessRate();
     else this.awareness = Math.max(0, this.awareness - dt * tuning.awarenessDecay);
-    if (this.awareness >= 0.7) { this.beginNotice('search'); return; }
+    if (this.awareness >= 0.7 || this.staredTime >= tuning.stareNotice) { this.beginNotice('search'); return; }
     if (senses.seen) {
       // Caught looking: it holds still; close, it comes; far, it slips away.
       this.speed = 0;
       this.motion = 'idle';
-      this.frozen = this.gap > tuning.stareFreeze;
+      this.frozen = this.gap > tuning.stareFreeze && this.seenTime < 0.45;
       if (this.seenTime > 1.5 && this.gap < 20) { this.beginNotice('search'); return; }
-      if (this.seenTime > 0.6 && this.gap >= 20) { this.enter('withdraw'); return; }
+      if (this.seenTime > 2.2 && this.gap >= 20 && !senses.stared) { this.enter('withdraw'); return; }
       return;
     }
     const near = heard ? tuning.shadowNear * 0.6 : tuning.shadowNear;
@@ -543,7 +573,7 @@ export class BackroomsHunter {
   private updateWithdraw(dt: number, senses: HunterSenses, straight: number): void {
     this.lookAtPlayer = false;
     this.headTwist = 0;
-    if (!senses.cinematic && this.gap < 7 && senses.sees) { this.beginNotice('search'); return; }
+    if (!senses.cinematic && ((this.gap < 10 && senses.sees) || this.staredTime >= HUNTER_TUNING.stareNotice)) { this.beginNotice('search'); return; }
     if (this.canVanish(senses, straight)) { this.vanish(); return; }
     this.motion = 'stalk';
     this.retreat(dt, senses.feet, HUNTER_TUNING.withdrawSpeed);
@@ -567,6 +597,7 @@ export class BackroomsHunter {
     this.pause = 0;
     this.straightTime = 0;
     this.progressTimer = 0;
+    this.progressFrom.x = this.position.x; this.progressFrom.z = this.position.z;
     this.fallback = 0;
     if (state !== 'chase') { this.lunge = 0; this.recover = 0; }
   }
@@ -578,7 +609,7 @@ export class BackroomsHunter {
 
   private accrueAwareness(dt: number, senses: HunterSenses, heard: boolean): void {
     let rate = 0;
-    if (senses.sees && this.gap < 18) rate += this.awarenessRate();
+    if (senses.sees) rate += this.awarenessRate();
     if (heard) rate += senses.noise * 0.9;
     this.awareness = rate > 0 ? this.awareness + rate * dt : Math.max(0, this.awareness - dt * HUNTER_TUNING.awarenessDecay);
   }
@@ -603,17 +634,19 @@ export class BackroomsHunter {
     return this.nav.steer(this.position.x, this.position.z, 24);
   }
 
-  /** Down the goal field; true once within `radius` of the goal (or when there is no route). */
+  /** Down the goal field; true once within `radius` of the goal. */
   private walkTo(dt: number, x: number, z: number, speed: number, radius: number): boolean {
     const distance = Math.hypot(x - this.position.x, z - this.position.z);
-    if (distance <= radius) { this.speed = 0; return true; }
+    if (distance <= radius) return true;
     if (this.fieldTargetsPlayer || !this.nav.fieldValid || Math.abs(this.nav.targetX - x) > 0.01 || Math.abs(this.nav.targetZ - z) > 0.01) {
       this.nav.computeField(x, z, 48);
       this.fieldTargetsPlayer = false;
       this.fieldTimer = 0.25;
     }
     const steer = this.nav.steer(this.position.x, this.position.z, 16);
-    if (!steer) { this.speed = 0; return true; }
+    // An incomplete field is not an arrival. Keep exploring it instead of
+    // idling forever at the spawn or pretending to have reached a search room.
+    if (!steer) { this.speed *= Math.exp(-dt * 4); return false; }
     this.speed += (speed - this.speed) * (1 - Math.exp(-dt * 4));
     const moved = this.advance(dt, steer.x, steer.z, this.speed, 8);
     return moved < 1e-4 && this.stateTime > 0.5 && distance < 2.5;
@@ -642,10 +675,10 @@ export class BackroomsHunter {
   }
 
   /** Never stuck: no progress for a while re-probes the cells around and falls back on his footsteps. */
-  private watchProgress(dt: number): void {
+  private watchProgress(dt: number): boolean {
     this.progressTimer += dt;
     if (this.fallback > 0) this.fallback -= dt;
-    if (this.progressTimer < 1.2) return;
+    if (this.progressTimer < 1.2) return false;
     const moved = Math.hypot(this.position.x - this.progressFrom.x, this.position.z - this.progressFrom.z);
     this.progressFrom.x = this.position.x; this.progressFrom.z = this.position.z;
     this.progressTimer = 0;
@@ -653,7 +686,9 @@ export class BackroomsHunter {
       this.nav.invalidateAround(this.position.x, this.position.z, 2);
       this.fallback = 2;
       this.fieldTimer = 0;
+      return true;
     }
+    return false;
   }
 
   private recordTrail(feet: Readonly<Vec3Data>): void {
@@ -685,23 +720,32 @@ export class BackroomsHunter {
   }
 
   private pickProwlGoal(): void {
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      const angle = this.random.float(0, Math.PI * 2), length = this.random.float(5, 9);
+    for (let attempt = 0; attempt < 24; attempt += 1) {
+      const angle = this.yaw + this.random.float(-2.4, 2.4), length = this.random.float(3, 10);
       const x = this.anchor.x + Math.sin(angle) * length, z = this.anchor.z + Math.cos(angle) * length;
-      if (this.nav.isFreeAt(x, z) && this.nav.clearLine(this.anchor.x, this.anchor.z, x, z, Infinity, 0)) { this.goal.x = x; this.goal.z = z; return; }
+      if (this.nav.isFreeAt(x, z) && this.nav.clearLine(this.position.x, this.position.z, x, z)) { this.goal.x = x; this.goal.z = z; return; }
     }
-    this.goal.x = this.anchor.x; this.goal.z = this.anchor.z;
+    let best = -Infinity;
+    this.nav.forEachFree(2, (index, x, z) => {
+      const distance = Math.hypot(x - this.position.x, z - this.position.z);
+      if (distance < 2 || distance > 10 || !Number.isFinite(this.nav.field[index]!)) return;
+      const score = this.random.float(0, 1) - Math.abs(distance - 6) * 0.1;
+      if (score > best) { best = score; this.goal.x = x; this.goal.z = z; }
+    });
   }
 
   /** The rooms around where he was last: biased the way he was heading, reachable from here. */
   private pickSearchGoal(): void {
-    let bestScore = -Infinity, bestX = this.lastKnown.x, bestZ = this.lastKnown.z;
+    const ahead = this.stateTime < 4 ? Math.max(0, (this.position.x - this.lastKnown.x) * this.lastHeading.x + (this.position.z - this.lastKnown.z) * this.lastHeading.z) : 0;
+    const baseX = this.lastKnown.x + this.lastHeading.x * ahead, baseZ = this.lastKnown.z + this.lastHeading.z * ahead;
+    let bestScore = -Infinity, bestX = baseX, bestZ = baseZ;
     for (let attempt = 0; attempt < 14; attempt += 1) {
       const angle = this.random.float(0, Math.PI * 2), length = this.random.float(3, 12);
       const ux = Math.sin(angle), uz = Math.cos(angle);
-      const x = this.lastKnown.x + ux * length, z = this.lastKnown.z + uz * length;
+      const x = baseX + ux * length, z = baseZ + uz * length;
       if (!this.nav.isFreeAt(x, z)) continue;
       const along = ux * this.lastHeading.x + uz * this.lastHeading.z;
+      if (this.stateTime < 4 && along < 0.3) continue;
       const score = along * 0.8 + this.random.float(0, 0.6) - Math.abs(length - 7) * 0.03;
       if (score > bestScore) { bestScore = score; bestX = x; bestZ = z; }
     }

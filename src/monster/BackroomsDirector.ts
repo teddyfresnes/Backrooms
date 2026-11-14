@@ -29,7 +29,7 @@ export const DIRECTOR_TUNING = {
   reliefWalk: 20,
   /** False alarms while the tension builds. */
   buildCycle: [9, 18] as const,
-  falseKnockChance: 0.3,
+  falseKnockChance: 0.22,
   /** Encounters whose presence drone stays off until the chase. */
   silentChance: 0.35,
   /** Straight metres from the player. */
@@ -43,7 +43,9 @@ export const DIRECTOR_TUNING = {
 export type DirectorPhase = 'quiet' | 'build' | 'encounter' | 'relief';
 export type DirectorCue =
   | { kind: 'spawn'; style: LurkStyle; silent: boolean }
-  | { kind: 'false-knock' };
+  | { kind: 'false-knock' }
+  | { kind: 'false-noise' }
+  | { kind: 'flicker'; radius: number; single: boolean; audible: boolean };
 
 export interface DirectorInput {
   /** The hunt may happen (far bank, away from the rift). */
@@ -57,9 +59,9 @@ export interface DirectorInput {
 }
 
 const STYLE_WEIGHTS: readonly (readonly { value: LurkStyle; weight: number }[])[] = [
-  [{ value: 'still', weight: 0.4 }, { value: 'cross', weight: 0.3 }, { value: 'prowl', weight: 0.2 }, { value: 'ambush', weight: 0.1 }],
-  [{ value: 'still', weight: 0.25 }, { value: 'cross', weight: 0.2 }, { value: 'prowl', weight: 0.25 }, { value: 'ambush', weight: 0.3 }],
-  [{ value: 'still', weight: 0.2 }, { value: 'cross', weight: 0.15 }, { value: 'prowl', weight: 0.25 }, { value: 'ambush', weight: 0.4 }],
+  [{ value: 'still', weight: 0.1 }, { value: 'cross', weight: 0.45 }, { value: 'prowl', weight: 0.4 }, { value: 'ambush', weight: 0.05 }],
+  [{ value: 'still', weight: 0.1 }, { value: 'cross', weight: 0.35 }, { value: 'prowl', weight: 0.4 }, { value: 'ambush', weight: 0.15 }],
+  [{ value: 'still', weight: 0.1 }, { value: 'cross', weight: 0.3 }, { value: 'prowl', weight: 0.4 }, { value: 'ambush', weight: 0.2 }],
 ];
 
 export class TensionDirector {
@@ -117,7 +119,13 @@ export class TensionDirector {
     this.cycle -= dt;
     if (this.cycle <= 0) {
       this.cycle = this.random.float(tuning.buildCycle[0], tuning.buildCycle[1]);
-      if (this.random.chance(tuning.falseKnockChance)) return { kind: 'false-knock' };
+      const event = this.random.float();
+      if (event < tuning.falseKnockChance) return { kind: 'false-knock' };
+      if (event < 0.42) return { kind: 'false-noise' };
+      if (event < 0.7) {
+        const single = event < 0.56;
+        return { kind: 'flicker', radius: single ? 3.2 : this.random.float(24, 46), single, audible: this.random.chance(0.45) };
+      }
     }
     if (this.tension < this.peak || !input.hunterDormant) return null;
     this.retry -= dt;
@@ -160,11 +168,17 @@ interface Candidate { index: number; x: number; z: number; y: number; score: num
 
 const HEAD = 1.95;
 const CHEST = 1.2;
+const BODY_SAMPLES = [[0, 0, HEAD], [0, 0, CHEST], [-1, 0, .8], [1, 0, .8], [0, -1, .8], [0, 1, .8]] as const;
 
 /** Visible = on his screen and unoccluded (head or chest). */
-export const spotVisible = (context: PlacementContext, x: number, y: number, z: number): boolean =>
-  (context.inView(x, y + HEAD, z) && context.lineOfSight(x, y + HEAD, z))
-  || (context.inView(x, y + CHEST, z) && context.lineOfSight(x, y + CHEST, z));
+export const spotVisible = (context: PlacementContext, x: number, y: number, z: number): boolean => {
+  // Its arms reach well past the pelvis. A hidden centre alone can leave a
+  // hand visibly materialising around a corner.
+  for (const [dx, dz, height] of BODY_SAMPLES) {
+    if (context.inView(x + dx, y + height, z + dz) && context.lineOfSight(x + dx, y + height, z + dz)) return true;
+  }
+  return false;
+};
 
 /** Behind at least one wall from his eyes. */
 export const spotOccluded = (context: PlacementContext, x: number, y: number, z: number): boolean =>
@@ -187,6 +201,7 @@ export const chooseLurkSpot = (
   nav.forEachFree(2, (index, x, z) => {
     const dx = x - player.x, dz = z - player.z, straight = Math.hypot(dx, dz);
     if (straight < tuning.minDistance || straight > tuning.maxDistance) return;
+    if (!nav.hasClearanceAt(x, z, 0.35)) return;
     const path = nav.field[index]!;
     if (!Number.isFinite(path) || path > 70) return;
     const ux = dx / straight, uz = dz / straight;
@@ -217,8 +232,12 @@ export const chooseLurkSpot = (
       crossX = x + lx * sign * reach; crossZ = z + lz * sign * reach;
       score += 0.2;
     } else if (doorway) score += 0.1;
-    score += random.float(0, 0.12);
-    candidates.push({ index, x, z, y, score, yaw: Math.atan2(-dx, -dz), dark: 0, doorway, crossX, crossZ });
+    score += random.float(0, 0.42);
+    // A passer-by follows the corridor, rather than being posed facing the
+    // player's exact position at every encounter.
+    const yaw = east + west > south + northLength
+      ? (random.chance(0.5) ? Math.PI / 2 : -Math.PI / 2) : (random.chance(0.5) ? 0 : Math.PI);
+    candidates.push({ index, x, z, y, score, yaw, dark: 0, doorway, crossX, crossZ });
   });
   candidates.sort((a, b) => b.score - a.score || a.index - b.index);
   const shortlist = candidates.slice(0, 40);

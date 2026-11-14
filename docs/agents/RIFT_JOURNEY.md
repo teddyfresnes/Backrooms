@@ -57,9 +57,11 @@ le −Z monde : la direction de la faille.
    regardant la lumière s'éloigner, fondu, carte « Tu es tombé. », reprise au bord.
 6. 2,6 m après l'autre bord : plan 3P, il se retourne ; contrechamp dans l'axe de
    la voie, au long foyer, à travers les deux portails et la porte d'en face : la
-   créature reste au fond du couloir d'approche (21 m), se cabre et hurle
+   créature, déjà placée pendant le regard forcé sur la planche, reste au fond
+   du couloir d'approche (21 m), se cabre et hurle
    (`rear`) ; elle ne charge qu'une fois le plan terminé.
-7. Retour en 1P : elle remonte son couloir, s'arrête au bord, hurle, puis traverse.
+7. Retour en 1P : elle remonte son couloir puis court sur la planche à la même
+   vitesse (6,4 m/s), sans pause au bord.
    E près du bout de la planche (sur le sol) la pousse : avant qu'elle monte, elle
    repart en courant et en hurlant dans son couloir jusqu'à disparaître au loin ;
    dessus, elle tombe avec la planche. Sans cela elle traverse et suit la trace du
@@ -85,32 +87,42 @@ point où elle l'a remarqué, créature retirée, répit garanti.
   budget (48 par champ, ~40 par image) : pas de pic. Dijkstra depuis la cible
   toutes les 0,25 s ; elle descend le champ et tire la ligne droite la plus
   longue (marge 0,18 m), donc coupe les angles sans traverser un mur. Bloquée,
-  elle re-sonde autour d'elle et suit les pas du joueur en secours.
-- **États** : `dormant` → `lurk` (`still` immobile ou tapie sous une lampe
-  morte / tête dans un encadrement, `prowl` qui va et vient, `cross` qui traverse
-  au loin sans regarder, `ambush` annoncée par le toc toc) → `notice` → `chase`
-  → `search` (dernier point vu, pièces voisines en ralentissant, reniflements,
+  elle re-sonde autour d'elle et suit les pas du joueur en secours. Les charges
+  sont sous-échantillonnées contre les murs fins ; le torse utilise une boîte
+  de 0,96 m de large et les bras se replient par `FirstPersonObstaclePose` avec
+  les balayages sphériques de `CharacterEnvironment` après chaque pose.
+- **États** : `dormant` → `lurk` (`still` attend 3,5–7 s avant de repartir,
+  `prowl` explore de nouveaux points, `cross` passe au loin,
+  `ambush` annoncée par le toc toc) → `notice` → `chase`
+  → `search` (élan conservé dans la dernière direction observée, puis pièces
+  voisines en ralentissant, reniflements,
   réagit au sprint à 13 m) → `shadow` (suit hors de vue à 15–30 m) →
   `withdraw` → `dormant`. Elle ne disparaît que hors ligne de vue et à ≥ 25 m ;
-  une cinématique la fait toujours se retirer. Fixée de loin, elle se fige.
+  une cinématique la fait toujours se retirer. Vision jusqu'à 46 m, cône large
+  et plusieurs rayons autour du torse ; un regard prolongé de 1,4 s provoque
+  son retournement puis une poursuite, même si elle présentait son dos.
 - **Poursuite** : voir `HUNTER_TUNING` (croisière 6,1, pointe 7,25 après 2,4 s
-  de ligne droite, élastique au-delà de 12 m, collée elle suit le joueur +0,4,
+  de ligne droite, élastique au-delà de 12 m, aucun freinage au contact,
   virages freinés à 3,5–5,1 m/s, lunge à 2,7 m). En poursuite elle n'entend le
   sprint qu'à 7 m : perdue après 2,5 s sans le voir ni l'entendre à ≥ 9,5 m.
   Tests d'équité (`BackroomsHunter.test.ts`, trois labyrinthes) : sprint et
-  virages = semée en 8–16 s, marche = capturé, ligne droite = talonné.
+  virages = semée, marche = capturé, longue ligne droite = rattrapé.
 - **Directeur** : premier contact après 25 s et 35 m sur la rive, tension par
   temps et pas, fausses alertes, répit de 55–85 s après chaque rencontre.
   `chooseLurkSpot` note les cellules à 22–44 m, devant (nord, cap du joueur),
   obscurité (`WorldStream.darknessAt`), couloirs longs, halls, encadrements,
   angles ; jamais à l'écran, et derrière un mur sous 28 m. 35 % d'approches
-  silencieuses (nappe coupée jusqu'au cri).
+  silencieuses (nappe coupée jusqu'au cri). Les passages en mouvement dominent ;
+  le cap suit le couloir et chaque tentative possède son fork de placement.
 - **Présence** : `BacteriaAudio.loadPresence` (nappe fournie, mono 32 kHz,
   boucle 1,13–67,78 s, départ seedé), passe-bas derrière les murs ; toc toc
   (`knock-wood.ogg` + coups sourds) 2–5 s avant une embuscade ou pour rien ;
   souffle et cliquetis en `lurk`/`search` ; cri réservé à la poursuite. Lampes :
-  `LightFlicker` → uniforms partagés (`render/LightDisturbance`), claquements de
-  ballast et bourdonnement. Parasites : `cameraDisturbance` → `PostFX.setVhs`.
+  `LightFlicker` → uniforms partagés (`render/LightDisturbance`), événements
+  intermittents, parfois silencieux : un tube réel (`WorldStream.nearestWorkingLight`)
+  ou une zone de 12–46 m, parfois aucune perturbation. Le directeur varie aussi
+  les faux bruits et clignotements sans créature. Parasites :
+  `cameraDisturbance` → `PostFX.setVhs`.
 - **Endurance** (`player/Stamina`, jamais sauvegardée) : ~22 s de sprint au
   calme, sprint coupé jusqu'à 35 %, adrénaline (`threat`) et contrecoup ;
   `Game` pilote `setSprintExhausted`, `setExertion`, souffle, cœur, vignette et

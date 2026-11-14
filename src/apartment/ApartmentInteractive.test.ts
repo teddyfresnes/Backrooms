@@ -41,6 +41,17 @@ it('allows an untouched physical chess piece to be knocked by another loose piec
   a.setTranslation({x:p.x-.12,y:p.y+.004,z:p.z},true);a.setLinvel({x:3,y:0,z:0},true);f.step(45);
   expect(new THREE.Vector3().copy(b.translation()).distanceTo(before)).toBeGreaterThan(.015);
 });
+it('lights the desk and its bulb independently of the ceiling switch, then restores the lamp after power returns',async()=>{
+  const f=await fixture(),fixtures=f.appliances({deskLampOn:true});
+  f.environment.setInteriorLightsEnabled(false);fixtures.update(.016,true,false);f.scene.updateMatrixWorld(true);
+  const light=f.environment.group.getObjectByName('apartment-desk-lamp-light') as THREE.SpotLight;
+  const bulb=f.environment.deskLamp!.getObjectByName('Object_24') as THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>;
+  expect(light.intensity).toBeGreaterThan(10);expect(bulb.material.emissiveIntensity).toBeGreaterThan(1);
+  expect(bulb.material.metalness).toBe(0);expect(bulb.material.toneMapped).toBe(false);
+  const target=light.target.getWorldPosition(new THREE.Vector3());expect(target.y).toBeLessThan(light.position.y-.5);
+  f.power.on=false;fixtures.update(.016,true,false);expect(light.intensity).toBe(0);expect(bulb.material.emissiveIntensity).toBe(0);
+  f.power.on=true;fixtures.update(.016,true,false);expect(light.intensity).toBeGreaterThan(10);expect(fixtures.getProgress().deskLampOn).toBe(true);
+});
 it('fills the actual sink below the rim and advances only with the shared fixed step',async()=>{
   const f=await fixture(),fixtures=f.appliances({tapOn:true,waterLevel:.95});f.step(240);fixtures.update(.01,true,false);
   expect(fixtures.debugState.waterLevel).toBe(1);expect(fixtures.debugState.surface).toBeLessThan(9.664);expect(fixtures.debugState.stream).toBe(true);

@@ -73,6 +73,18 @@ const createPhysics = async (colliders: StaticCollider[] = []): Promise<PhysicsW
   return physics;
 };
 
+it('probes clearance for the hunter torso, including low ceilings and nearby walls', async () => {
+  const physics=await createPhysics([
+    floorCollider('floor'),
+    {id:'wall',kind:'wall',center:{x:0,y:1.3,z:0},halfExtents:{x:.1,y:1.3,z:2}},
+    {id:'low-ceiling',kind:'barrier',center:{x:2,y:2.2,z:0},halfExtents:{x:.4,y:.1,z:1}},
+  ]);
+  expect(Number.isNaN(physics.probeWalkableCell(.3,0,0))).toBe(true);
+  expect(physics.probeWalkableCell(.8,0,0)).toBeCloseTo(0,3);
+  expect(Number.isNaN(physics.probeWalkableCell(2,0,0))).toBe(true);
+  expect(Number.isNaN(physics.probeWalkableCell(4.5,0,0))).toBe(true);
+});
+
 it('mounts the real transformed shell in cooperative tasks without advancing dynamics', async () => {
   const physics = await createPhysics(), geometry = new THREE.PlaneGeometry(8, 8, 140, 140);
   const material = new THREE.MeshBasicMaterial(), mesh = new THREE.Mesh(geometry, material);

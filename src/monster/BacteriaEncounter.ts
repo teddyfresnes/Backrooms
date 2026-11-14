@@ -539,6 +539,7 @@ export class BacteriaEncounter {
   // ------------------------------------------------------------------ door
 
   private startBang(): void {
+    if (this.hidden) { this.enterApartment(true); return; }
     this.setPhase('bang');
     this.bangTimer = DOOR_BANG_SECONDS;
     this.nextBang = 0.1;
@@ -553,6 +554,7 @@ export class BacteriaEncounter {
     this.bangTimer -= dt;
     this.nextBang -= dt;
     if (!host.door.isSecured()) { this.enterApartment(false); return; }
+    if (this.hidden) { this.enterApartment(true); return; }
     if (this.nextBang <= 0) {
       // Blows come faster and harder as the frame gives.
       const strain = 1 - Math.max(0, this.bangTimer) / DOOR_BANG_SECONDS;

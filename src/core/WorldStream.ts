@@ -637,6 +637,21 @@ export class WorldStream {
     return this.lightingMode;
   }
 
+  /** Real working fixture nearest a disturbance, including across a chunk edge. */
+  nearestWorkingLight(x: number, y: number, z: number): { x: number; y: number; z: number } | null {
+    let nearest = 18 * 18, result: { x: number; y: number; z: number } | null = null;
+    for (const runtime of this.chunks.values()) {
+      for (const light of runtime.plan.lights) {
+        const ly = light.ceilingY + runtime.offset.y;
+        if (light.dead || Math.abs(ly - y) > 4.5) continue;
+        const lx = light.x + runtime.offset.x, lz = light.z + runtime.offset.z;
+        const distance = (lx - x) ** 2 + (lz - z) ** 2;
+        if (distance < nearest) { nearest = distance; result = { x: lx, y: ly, z: lz }; }
+      }
+    }
+    return result;
+  }
+
   setBrightness(value: number): void {
     this.brightness = normalizeBrightness(value);
     for (const runtime of this.chunks.values()) runtime.view.setBrightness(this.brightness);

@@ -145,17 +145,17 @@ export class PhysicsWorld {
   }
 
   private readonly navRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
-  private readonly navBody = new RAPIER.Cuboid(0.22, 0.7, 0.22);
+  private readonly navBody = new RAPIER.Cuboid(0.48, 0.95, 0.48);
   private readonly navPoint = { x: 0, y: 0, z: 0 };
   /**
    * Floor height of a creature-sized cell centred on (x, z) near `floorY`, or
-   * NaN: its body (0.5..1.9 m above the floor) must be clear of the
+   * NaN: its torso (0.3..2.2 m above the floor) must be clear of the
    * environment and a floor within `maxStep` of the datum must lie under it.
    * Reuses its query objects (called many times per second by the hunter).
    */
   probeWalkableCell(x: number, z: number, floorY: number, maxStep = 0.42): number {
     const point = this.navPoint;
-    point.x = x; point.y = floorY + 1.2; point.z = z;
+    point.x = x; point.y = floorY + 1.25; point.z = z;
     if (this.world.intersectionWithShape(point, IDENTITY_ROTATION, this.navBody,
       RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, undefined, undefined, this.isEnvironmentCollider)) return Number.NaN;
     const ray = this.navRay;

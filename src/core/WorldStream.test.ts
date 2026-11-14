@@ -23,7 +23,17 @@ import {
   streamChunkCoordAt,
   streamedCoordsAround,
   streamedCoordsAroundLongitudinalEpic,
+  WorldStream,
 } from './WorldStream';
+
+it('targets a working light across a chunk edge using world coordinates and the matching floor', () => {
+  const stream={chunks:new Map([['a',{offset:{x:112,y:10.8,z:-112},plan:{lights:[
+    {x:-54,z:4,ceilingY:2.7,dead:false},{x:-55,z:4,ceilingY:2.7,dead:true},
+    {x:-56,z:4,ceilingY:13.5,dead:false},
+  ]}}]])} as unknown as WorldStream;
+  expect(WorldStream.prototype.nearestWorkingLight.call(stream,56,13.5,-108)).toEqual({x:58,y:13.5,z:-108});
+  expect(WorldStream.prototype.nearestWorkingLight.call(stream,0,13.5,0)).toBeNull();
+});
 
 describe('multi-storey world streaming coordinates', () => {
   it('tracks horizontal chunks without a finite edge', () => {

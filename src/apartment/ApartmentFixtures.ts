@@ -16,7 +16,7 @@ export class ApartmentFixtures {
   private readonly water:THREE.Mesh;
   private readonly stream:THREE.Mesh;
   private readonly ripple:THREE.Mesh;
-  private readonly spotlight=new THREE.SpotLight(0xffd0a1,0,4.2,.88,.65,1.7);
+  private readonly spotlight=new THREE.SpotLight(0xffd0a1,0,4.2,.88,.5,1.7);
   private readonly lightTarget=new THREE.Object3D();
   private readonly blades?:THREE.Object3D;
   private readonly bladeRotation:THREE.Quaternion;
@@ -47,8 +47,11 @@ export class ApartmentFixtures {
     if(apartment.deskLamp)this.targets.set('lamp',new THREE.Box3().setFromCenterAndSize(LAMP_BUTTON,new THREE.Vector3(.18,.12,.16)));
     this.blades=apartment.fan?.getObjectByName('Bone003_03');this.bladeRotation=this.blades?.quaternion.clone()??new THREE.Quaternion();if(this.blades)this.blades.matrixAutoUpdate=true;
     const bulb=apartment.deskLamp?.getObjectByName('Object_24') as THREE.Mesh|undefined;
-    if(bulb?.isMesh){this.bulb=bulb;this.originalBulb=bulb.material;const source=Array.isArray(bulb.material)?bulb.material[0]!:bulb.material;this.bulbMaterial=(source as THREE.MeshStandardMaterial).clone();bulb.material=this.bulbMaterial;this.materials.add(this.bulbMaterial);}
-    this.spotlight.position.set(-6.116108,9.815836,-5.747627);this.lightTarget.position.copy(this.spotlight.position).add(new THREE.Vector3(-.603778,-.713479,.355527));this.spotlight.target=this.lightTarget;this.spotlight.castShadow=false;
+    if(bulb?.isMesh){this.bulb=bulb;this.originalBulb=bulb.material;const source=Array.isArray(bulb.material)?bulb.material[0]!:bulb.material;this.bulbMaterial=(source as THREE.MeshStandardMaterial).clone();this.bulbMaterial.metalness=0;this.bulbMaterial.emissiveMap=null;this.bulbMaterial.toneMapped=false;bulb.material=this.bulbMaterial;this.materials.add(this.bulbMaterial);}
+    const beam=new THREE.Vector3(-.603778,-.713479,.355527);
+    this.spotlight.name='apartment-desk-lamp-light';
+    // Put the source at the mouth of the shade, aimed at the actual desktop.
+    this.spotlight.position.set(-6.116108,9.815836,-5.747627).addScaledVector(beam,.045);this.lightTarget.position.copy(this.spotlight.position).add(beam);this.spotlight.target=this.lightTarget;this.spotlight.castShadow=false;
     this.add(this.spotlight);this.add(this.lightTarget);
     this.unsubscribe=physics.onBeforeStep(dt=>this.step(dt));this.update(0,false,false);
   }
@@ -74,8 +77,8 @@ export class ApartmentFixtures {
     const surface=this.surface;this.water.visible=this.state.waterLevel>.003;this.water.position.y=surface;
     this.stream.visible=this.state.tapOn;const bottom=Math.max(9.44,surface+.004),height=NOZZLE.y-bottom;this.stream.position.set(NOZZLE.x,bottom+height/2,NOZZLE.z);this.stream.scale.set(1,height,1);
     this.ripple.visible=this.state.tapOn;this.ripple.position.set(NOZZLE.x,bottom+.002,NOZZLE.z);this.ripple.scale.setScalar(1+Math.sin(this.elapsed*7)*.35);
-    const lit=this.state.deskLampOn&&this.powered();this.spotlight.intensity=lit?4.5*this.brightness:0;
-    if(this.bulbMaterial){this.bulbMaterial.emissive.setHex(lit?0xffd1a0:0);this.bulbMaterial.emissiveIntensity=lit?.7*this.brightness:0;}
+    const lit=this.state.deskLampOn&&this.powered();this.spotlight.intensity=lit?18*this.brightness:0;
+    if(this.bulbMaterial){this.bulbMaterial.emissive.setHex(lit?0xffd1a0:0);this.bulbMaterial.emissiveIntensity=lit?2.2*this.brightness:0;}
     this.audio.fixture('water',NOZZLE,active&&this.state.tapOn?1:0);this.audio.fixture('fan',FAN_BUTTON,active?this.fanSpeed/27:0);
     if(!canInteract){if(this.prompted)this.ui.setInteraction(null);this.prompted=false;return;}const hit=this.hit();
     if(hit){this.ui.setInteraction(hit==='tap'?`${this.state.tapOn?'Fermer':'Ouvrir'} le robinet`:hit==='fan'?`${this.state.fanOn?'Arrêter':'Allumer'} le ventilateur`:`${this.state.deskLampOn?'Éteindre':'Allumer'} la lampe`);this.prompted=true;}else if(this.prompted){this.ui.setInteraction(null);this.prompted=false;}

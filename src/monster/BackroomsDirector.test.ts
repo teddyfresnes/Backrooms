@@ -140,4 +140,19 @@ describe('backrooms tension director', () => {
     }
     expect(falseAlarms).toBeGreaterThan(3);
   });
+
+  it('varies quiet build cycles, distant noises, single tubes and wide disturbances', () => {
+    const events=new Set<string>();let quiet=0;
+    for(let seed=0;seed<8;seed++){
+      const director=new TensionDirector(new SeededRandom(`ambient-${seed}`));
+      step(director,40);
+      for(let t=0;t<180;t+=.1){
+        const cue=director.update(.1,{armed:true,cinematic:false,walked:.3,hunterDormant:false});
+        if(!cue){quiet++;continue;}
+        events.add(cue.kind==='flicker'?cue.single?'single':'wide':cue.kind);
+        if(cue.kind==='flicker'&&!cue.single)expect(cue.radius).toBeGreaterThanOrEqual(24);
+      }
+    }
+    expect(events).toEqual(new Set(['false-knock','false-noise','single','wide']));expect(quiet).toBeGreaterThan(1000);
+  });
 });

@@ -19,6 +19,7 @@ const createHarness = (saved?: RiftProgress, arrivedByFall = true, restoredPosit
     constraint: undefined as undefined | ((p: THREE.Vector3, m: THREE.Vector3) => void),
     chunks: new Set<string>(), teleports: [] as THREE.Vector3[], saves: [] as RiftProgress[],
     lines: [] as string[], hints: 0, deaths: [] as string[], presentation: 0, external: false, blockedSaves: 0,
+    appearances: 0, creatureMotion: 'idle',
   };
   const player = {
     position,
@@ -42,8 +43,8 @@ const createHarness = (saved?: RiftProgress, arrivedByFall = true, restoredPosit
   const creature = {
     root: creatureRoot,
     get isVisible() { return creatureVisible; },
-    setVisible: (visible: boolean) => { creatureVisible = visible; },
-    setLookTarget: () => undefined, setMotion: () => undefined, snapHead: () => undefined, update: () => undefined,
+    setVisible: (visible: boolean) => { if(visible&&!creatureVisible)state.appearances++;creatureVisible = visible; },
+    setLookTarget: () => undefined, setMotion: (motion:string) => {state.creatureMotion=motion;}, snapHead: () => undefined, update: () => undefined,
     setPace: () => undefined, setHeadTwist: () => undefined,
     setPlacement: (p: THREE.Vector3Like, yaw: number) => { creatureRoot.position.set(p.x, p.y, p.z); creatureRoot.rotation.y = yaw; },
     getFacePosition: (out: THREE.Vector3) => out.copy(creatureRoot.position).add({ x: 0, y: 2, z: 0 }),
@@ -215,11 +216,14 @@ describe('rift encounter', () => {
     });
     harness.intent.right = 0;
     expect(harness.internals.phase).toBe('crossed');
+    expect(harness.creature.isVisible).toBe(true);
+    const appearances=harness.state.appearances;
     harness.position.set(riftLaneX(lane) + 0.5, EYE, RIFT_CENTER_Z - 9.5);
     harness.run(0.05);
     expect(harness.internals.phase).toBe('turn');
     expect(harness.encounter.ownsCharacter).toBe(true);
     harness.run(5.3);
+    expect(harness.state.appearances).toBe(appearances);
     expect(harness.internals.phase).toBe('standoff');
     expect(harness.state.presentation).toBe(0);
     expect(harness.encounter.ownsCharacter).toBe(false);
@@ -270,9 +274,20 @@ describe('rift encounter', () => {
     expect(harness.internals.phase).toBe('done');
   });
 
+  it('runs straight onto the plank at its ground speed, without stopping at the brink', () => {
+    const h=createHarness();const lane=crossOver(h);
+    h.position.set(riftLaneX(lane),EYE,RIFT_CENTER_Z-35);
+    const mode=()=>(h.encounter as unknown as {creatureMode:string}).creatureMode;
+    for(let t=0;t<8&&mode()!=='plank';t+=DT){expect(mode()).not.toBe('wait');h.run(DT);}
+    expect(mode()).toBe('plank');const start=h.creature.root.position.z;
+    for(let i=0;i<12;i++)h.run(DT);expect(h.state.creatureMotion).toBe('run');
+    expect(start-h.creature.root.position.z).toBeCloseTo(1.28,2);
+  });
+
   it('lets a runner outpace the creature once it is across, and catches one who stays', () => {
     const runner = createHarness();
     const lane = crossOver(runner);
+    runner.look.identity();
     runner.position.set(riftLaneX(lane), EYE, RIFT_CENTER_Z - 7.5);
     runner.run(14, (dt) => (runner.internals.phase === 'standoff' || runner.internals.phase === 'chase'
       ? new THREE.Vector3(0, 0, -6.6 * dt) : undefined));

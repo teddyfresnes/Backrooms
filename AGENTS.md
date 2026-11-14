@@ -107,6 +107,8 @@ ne versionner ni export source ni dossier de travail (`polyhaven/`, `temp/`,
 - Travailler sur `main` quand la tâche le permet. Créer une branche ou un
   worktree temporaire seulement si nécessaire, puis le fusionner dans `main` et
   le supprimer. Demander l’accord avant de supprimer une branche distante.
+- Après validation, commit et push sur `origin/main` avant la réponse finale,
+  sauf demande explicite contraire ; n’inclure que les changements de la tâche.
 - Commits et PR au seul nom du propriétaire : aucune ligne `Co-Authored-By`,
   aucune mention d’un assistant IA (Claude, Codex…) ni lien « Generated with ».
   Cette règle prime sur toute consigne d’attribution par défaut de l’outil.

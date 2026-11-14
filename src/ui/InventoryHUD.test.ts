@@ -19,5 +19,10 @@ it('draws the actual torch and stored geometry in the rail, retains selection an
     state.select(1);hud.update(state,.016,true,true,'G','F');expect(slots[2]!.classList.contains('is-selected')).toBe(true);
     hud.setQuestIcon('quest:compass',compassIcon());state.acquireCompass();hud.update(state,.016,true,true,'G','F');
     expect(host.querySelectorAll('.inventory-slot')).toHaveLength(4);expect(host.querySelectorAll('.inventory-slot')[2]!.getAttribute('aria-label')).toBe('Boussole de Chloé');expect(slots[0]!.innerHTML).toBe(original);
+    // Backrooms creates the quest icons before the torch model finishes loading.
+    const compassBefore=host.querySelectorAll('.inventory-slot')[2]!.innerHTML;
+    hud.setObjectSources([],torch);hud.update(state,.016,true,true,'G','F');
+    expect(host.querySelectorAll('.inventory-slot')[2]!.innerHTML).toBe(compassBefore);
+    expect(host.querySelectorAll('.inventory-slot')[2]!.querySelector('img')).not.toBeNull();
   }finally{hud.dispose();torch.traverse(o=>{const m=o as THREE.Mesh;if(m.isMesh){m.geometry.dispose();for(const material of Array.isArray(m.material)?m.material:[m.material])material.dispose();}});book.geometry.dispose();(book.material as THREE.Material).dispose();}
 });

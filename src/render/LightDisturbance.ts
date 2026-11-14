@@ -10,7 +10,7 @@ import type { Vec3Data } from '../world/types';
  * two ballasts (A/B), and a few die outright while it is close.
  */
 export const LIGHT_DISTURBANCE = {
-  /** xyz world centre, w radius (m). */
+  /** xyz world centre, |w| radius (m); negative w selects just the nearest tube. */
   center: { value: new THREE.Vector4(0, -1e5, 0, 1) },
   /** x amplitude 0..1, y ballast A level, z ballast B level, w seconds. */
   state: { value: new THREE.Vector4(0, 1, 1, 0) },
@@ -30,7 +30,7 @@ float lightDisturbNoise(vec2 p) {
 float lightDisturbReach(vec3 p) {
   vec3 d = p - lightDisturbCenter.xyz;
   return lightDisturbState.x
-    * (1.0 - smoothstep(lightDisturbCenter.w * 0.4, lightDisturbCenter.w, length(d.xz)))
+    * (1.0 - smoothstep(abs(lightDisturbCenter.w) * 0.4, abs(lightDisturbCenter.w), length(d.xz)))
     * (1.0 - smoothstep(3.0, 5.0, abs(d.y)));
 }
 float lightDisturbLevel(vec2 p) {
@@ -43,6 +43,7 @@ float lightDisturbSurface(vec3 p) {
 }
 float lightDisturbTube(vec3 p, vec3 tube) {
   if (lightDisturbState.x <= 0.0005) return 1.0;
+  if (lightDisturbCenter.w < 0.0 && distance(tube.xz, lightDisturbCenter.xz) > 1.1) return 1.0;
   float reach = lightDisturbReach(p);
   float dead = step(lightDisturbHash(floor(tube.xz * 0.5) + 0.37), 0.2 * reach);
   return mix(1.0, lightDisturbLevel(tube.xz) * (1.0 - dead), reach);
@@ -50,7 +51,7 @@ float lightDisturbTube(vec3 p, vec3 tube) {
 `;
 
 /** Program cache key suffix: materials decorated with the disturbance. */
-export const LIGHT_DISTURBANCE_KEY = 'light-disturbance-v1';
+export const LIGHT_DISTURBANCE_KEY = 'light-disturbance-v2';
 
 /** Fluorescent diffusers (instanced panels and merged previews): their own tube flickers. */
 export const applyFixtureDisturbance = (material: THREE.MeshBasicMaterial): void => {
@@ -136,9 +137,8 @@ export class LightFlicker {
   }
 
   /** Writes the shared uniforms around `center` (radius grows with the amplitude). */
-  apply(center: Readonly<Vec3Data>): void {
-    const radius = 9 + 5 * this.amplitude;
-    LIGHT_DISTURBANCE.center.value.set(center.x, center.y, center.z, radius);
+  apply(center: Readonly<Vec3Data>, radius = 9 + 5 * this.amplitude, single = false): void {
+    LIGHT_DISTURBANCE.center.value.set(center.x, center.y, center.z, single ? -radius : radius);
     LIGHT_DISTURBANCE.state.value.set(this.amplitude, this.levelA, this.levelB, this.time);
   }
 

@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import type { RiftAudio } from '../audio/RiftAudio';
+import type { CharacterEnvironment } from '../character/CharacterEnvironment';
 import { LightFlicker } from '../render/LightDisturbance';
 import { SeededRandom } from '../world/SeededRandom';
 import type { Vec3Data } from '../world/types';
 import type { BacteriaActor } from './BacteriaActor';
 import { PRESENCE_LOOP_END, PRESENCE_LOOP_START, type BacteriaAudio } from './BacteriaAudio';
 import { chooseLurkSpot, TensionDirector, type PlacementContext } from './BackroomsDirector';
-import { BackroomsHunter, type HunterSenses, type HunterState } from './BackroomsHunter';
+import { BackroomsHunter, HUNTER_TUNING, type HunterSenses, type HunterState } from './BackroomsHunter';
 import { NavGrid } from './BackroomsNav';
 
 /** Eye height above the player's feet in the rift runtime (capsule centre offset). */
@@ -44,6 +45,8 @@ export interface BackroomsHuntHost {
   darknessAt?(x: number, y: number, z: number): number;
   /** Changes when the mounted world changes (chunk hand-off): the nav cells are probed again. */
   worldRevision?(): number;
+  readonly creatureEnvironment?: Pick<CharacterEnvironment, 'sweepSphere'>;
+  lightNear?(x: number, y: number, z: number): Vec3Data | null;
 }
 
 /**
@@ -87,12 +90,20 @@ export class BackroomsHunt {
   private time = 0;
   private presenceStarted = false;
   private caught = false;
+  private spawnSequence = 0;
+  private lightTimer = 0;
+  private lightEventTime = 0;
+  private lightStrength = 0;
+  private lightRadius = 14;
+  private singleLight = false;
+  private lightAudible = true;
   /** Screen kick when it screams (RiftEncounter applies it to the lens). */
   kick = 0;
 
   constructor(private readonly host: BackroomsHuntHost, private readonly glow: THREE.PointLight) {
     this.random = new SeededRandom(`${host.seed}::backrooms-hunt`);
     this.flicker = new LightFlicker(this.random.fork('flicker'));
+    this.lightTimer = this.random.float(2, 8);
     const physics = host.physics;
     // Without a cell probe (tests of other sequences) the floor is open everywhere.
     this.nav = new NavGrid(physics.probeWalkableCell
@@ -146,6 +157,7 @@ export class BackroomsHunt {
     this.disturbance = 0;
     this.glitch = 0;
     this.presenceStarted = false;
+    this.lightEventTime = 0; this.lightStrength = 0;
     if (this.director.phase !== 'relief' && (wasActive || this.director.phase === 'encounter')) this.director.startRelief();
   }
 
@@ -185,6 +197,8 @@ export class BackroomsHunt {
     const cue = this.director.update(dt, { armed, cinematic, walked: Math.min(walked, 1), hunterDormant: !active });
     if (cue?.kind === 'spawn') this.trySpawn(cue.style, cue.silent);
     else if (cue?.kind === 'false-knock') this.falseKnock();
+    else if (cue?.kind === 'false-noise') this.falseNoise();
+    else if (cue?.kind === 'flicker') this.startLightEvent(this.feet, cue.radius, cue.single, cue.audible);
 
     hunter.update(dt, this.senses);
     const caught = this.handleEvents(creature);
@@ -250,11 +264,15 @@ export class BackroomsHunt {
     const position = this.hunter.position;
     const head = this.lineOfSight(position.x, position.y + HEAD, position.z);
     const chest = head || this.lineOfSight(position.x, position.y + CHEST, position.z);
-    this.senses.sees = head || chest;
-    this.senses.seen = this.senses.sees && (this.inView(position.x, position.y + HEAD, position.z) || this.inView(position.x, position.y + CHEST, position.z));
+    const shoulder = chest || this.lineOfSight(position.x + Math.cos(this.hunter.yaw) * .35, position.y + CHEST, position.z - Math.sin(this.hunter.yaw) * .35)
+      || this.lineOfSight(position.x - Math.cos(this.hunter.yaw) * .35, position.y + CHEST, position.z + Math.sin(this.hunter.yaw) * .35);
+    const dx = this.feet.x - position.x, dz = this.feet.z - position.z, range = Math.hypot(dx, dz);
+    const facing = range < 3 || (dx * Math.sin(this.hunter.yaw) + dz * Math.cos(this.hunter.yaw)) / Math.max(.01, range) > -0.35;
+    this.senses.sees = shoulder && facing && range < HUNTER_TUNING.visionRange;
+    this.senses.seen = shoulder && (this.inView(position.x, position.y + HEAD, position.z) || this.inView(position.x, position.y + CHEST, position.z));
     this.point.set(position.x, position.y + 1.5, position.z).sub(this.eye);
     const distance = this.point.length();
-    this.senses.stared = this.senses.seen && distance > 0.1 && this.point.dot(this.view) / distance > 0.985;
+    this.senses.stared = this.senses.seen && distance > 0.1 && this.point.dot(this.view) / distance > 0.975;
   }
 
   // ----------------------------------------------------------- director
@@ -273,7 +291,7 @@ export class BackroomsHunt {
 
   private trySpawn(style: Parameters<typeof chooseLurkSpot>[3], silent: boolean): void {
     if (!this.nav.fieldValid) return;
-    const spot = chooseLurkSpot(this.nav, this.placementContext(this.senses.cinematic), this.random, style);
+    const spot = chooseLurkSpot(this.nav, this.placementContext(this.senses.cinematic), this.random.fork(`placement-${this.spawnSequence++}`), style);
     if (!spot) return;
     this.hunter.place(spot);
     this.director.encounterStarted();
@@ -284,6 +302,7 @@ export class BackroomsHunt {
     this.wasSeen = false;
     this.occlusion = 1;
     this.presenceStarted = false;
+    this.lightTimer = this.random.float(1.5, 9);
     // The ambush is announced: three knocks from where it will come, a few seconds before.
     if (style === 'ambush') this.knockFrom(spot.x, spot.y, spot.z);
   }
@@ -293,6 +312,14 @@ export class BackroomsHunt {
     const angle = Math.atan2(this.heading.x, this.heading.z) + this.random.float(-1.6, 1.6);
     const distance = this.random.float(14, 26);
     this.knockFrom(this.feet.x + Math.sin(angle) * distance, this.feet.y, this.feet.z + Math.cos(angle) * distance);
+  }
+
+  private falseNoise(): void {
+    const angle = Math.atan2(this.heading.x, this.heading.z) + this.random.float(-2.4, 2.4);
+    const distance = this.random.float(16, 38);
+    const x = this.feet.x + Math.sin(angle) * distance, z = this.feet.z + Math.cos(angle) * distance;
+    if (this.random.chance(.5)) this.host.creatureSound.clicks(distance, this.pan(x, this.feet.y + 1.4, z), .85);
+    else this.host.creatureSound.ballast(distance, this.pan(x, this.feet.y + 2.6, z), .6);
   }
 
   private knockFrom(x: number, y: number, z: number): void {
@@ -380,8 +407,9 @@ export class BackroomsHunt {
     creature.root.rotation.x = 0;
     creature.root.rotation.z = 0;
     creature.setPlacement(hunter.position, hunter.yaw);
-    // Stared at from afar it holds still, mid-gesture.
+    // A distant stare briefly interrupts the gait before it turns.
     if (!hunter.frozen) creature.update(dt);
+    if (this.host.creatureEnvironment) creature.constrainToEnvironment(this.host.creatureEnvironment, dt);
     // A faint sickly glow in front of its face, brighter when it runs.
     this.direction.set(this.eye.x - hunter.position.x, 0, this.eye.z - hunter.position.z);
     if (this.direction.lengthSq() > 1e-4) this.direction.normalize();
@@ -426,21 +454,42 @@ export class BackroomsHunt {
 
   private updateLights(dt: number): void {
     const hunter = this.hunter, position = hunter.position;
-    this.flicker.update(dt, hunter.visible ? hunter.flicker : 0);
-    this.lightCentre.x = position.x; this.lightCentre.y = position.y + 2.6; this.lightCentre.z = position.z;
+    this.lightEventTime = Math.max(0, this.lightEventTime - dt);
+    if (hunter.visible && this.lightEventTime === 0) {
+      this.lightTimer -= dt;
+      if (this.lightTimer <= 0) {
+        this.lightTimer = this.random.float(4, 13);
+        // Some passages leave the lights alone, including during a chase.
+        if (this.random.chance(.65)) {
+          const single = this.random.chance(.4);
+          this.startLightEvent(position, single ? 3.2 : this.random.float(12, 46), single, this.random.chance(.6));
+        }
+      }
+    }
+    this.flicker.update(dt, this.lightEventTime > 0 ? this.lightStrength * (hunter.visible ? hunter.flicker : 1) : 0);
     if (this.flicker.amplitude < 0.003) { LightFlicker.clear(); this.flicker.takeClacks(); this.host.creatureSound.setBuzz(0, 0); return; }
-    this.flicker.apply(this.lightCentre);
-    const distance = Math.hypot(position.x - this.eye.x, position.z - this.eye.z);
-    const pan = this.pan(position.x, position.y + 2.6, position.z);
+    this.flicker.apply(this.lightCentre, this.lightRadius, this.singleLight);
+    const distance = Math.hypot(this.lightCentre.x - this.eye.x, this.lightCentre.z - this.eye.z);
+    const pan = this.pan(this.lightCentre.x, this.lightCentre.y, this.lightCentre.z);
     const clacks = this.flicker.takeClacks();
-    if (clacks > 0 && this.time - this.lastBallast > 0.09) {
+    if (this.lightAudible && clacks > 0 && this.time - this.lastBallast > 0.09) {
       this.lastBallast = this.time;
       // Somewhere among the tubes around it, not exactly on it.
       this.host.creatureSound.ballast(distance + this.random.float(-3, 3), THREE.MathUtils.clamp(pan + this.random.float(-0.3, 0.3), -1, 1), this.occlusion * 0.6);
     }
     const near = THREE.MathUtils.clamp(1 - (distance - 4) / 18, 0, 1);
     const level = (this.flicker.levelA + this.flicker.levelB) * 0.5;
-    this.host.creatureSound.setBuzz(this.flicker.amplitude * near * (0.35 + 0.65 * level), pan);
+    this.host.creatureSound.setBuzz(this.lightAudible ? this.flicker.amplitude * near * (0.35 + 0.65 * level) : 0, pan);
+  }
+
+  private startLightEvent(origin: Readonly<Vec3Data>, radius: number, single: boolean, audible: boolean): void {
+    const x = origin.x + this.random.float(-6, 6), z = origin.z + this.random.float(-6, 6);
+    const fixture = this.host.lightNear?.(x, origin.y + 2.6, z);
+    if (single && this.host.lightNear && !fixture) return;
+    this.lightCentre.x = fixture?.x ?? x; this.lightCentre.y = fixture?.y ?? origin.y + 2.6; this.lightCentre.z = fixture?.z ?? z;
+    this.lightRadius = radius; this.singleLight = single; this.lightAudible = audible;
+    this.lightEventTime = this.random.float(1.2, 5.5);
+    this.lightStrength = this.random.float(.65, 1);
   }
 
   // --------------------------------------------------------- interference
@@ -469,9 +518,6 @@ export class BackroomsHunt {
     this.glitch = Math.max(0, this.glitch - dt * 2.2);
     this.kick = Math.max(0, this.kick - dt * 2.4);
     this.disturbance = this.glitch;
-    if (this.flicker.amplitude > 0.003) {
-      this.flicker.update(dt, 0);
-      if (this.flicker.amplitude < 0.003) LightFlicker.clear(); else this.flicker.apply(this.lightCentre);
-    }
+    this.updateLights(dt);
   }
 }

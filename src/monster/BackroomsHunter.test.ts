@@ -74,10 +74,10 @@ describe('backrooms hunter fairness', () => {
     });
   }
 
-  it('hangs on a sprinter down a long straight without catching him', () => {
+  it('keeps charging on a long straight and eventually catches a sprinter', () => {
     const corridor: Maze = { rows: carve(360, 12, [[1, 1, 179, 5]]), route: [{ x: 2, z: 3 }, { x: 178, z: 3 }] };
     const run = chase(corridor, 'sprint', 16, 8);
-    expect(run.caught).toBe(false);
+    expect(run.caught).toBe(true);
     expect(run.lost).toBe(false);
     expect(run.meanGap).toBeLessThan(7);
     expect(run.events).toContain('lunge');
@@ -98,24 +98,21 @@ describe('backrooms hunter behaviour', () => {
     feet: { x, y: 0, z }, speed: 0, noise: 0, sees: false, seen: false, stared: false, cinematic: false, ...overrides,
   });
 
-  it('waits still until he comes close, then notices, screams and runs', () => {
+  it('hesitates under a distant stare, then turns, notices and runs', () => {
     const nav = new NavGrid(mazeProbe(room), 128, CELL);
     nav.follow(30, 30, 0);
     const hunter = new BackroomsHunter(nav, new SeededRandom('still'));
     hunter.place({ x: 30, y: 0, z: 10, yaw: 0, style: 'still' });
     const events: HunterEvent[] = [];
     // Far off and unseen: nothing happens.
-    for (let t = 0; t < 5; t += DT) { hunter.update(DT, senseAt(30, 40)); events.push(...hunter.events); }
+    for (let t = 0; t < 1; t += DT) { hunter.update(DT, senseAt(30, 40)); events.push(...hunter.events); }
     expect(hunter.state).toBe('lurk');
     expect(hunter.position).toMatchObject({ x: 30, z: 10 });
     // Stared at from afar it freezes.
     hunter.update(DT, senseAt(30, 40, { sees: true, seen: true, stared: true }));
     expect(hunter.frozen).toBe(true);
-    // He walks up to it.
-    let z = 40;
-    for (let t = 0; t < 15 && hunter.state !== 'chase'; t += DT) {
-      z = Math.max(16, z - WALK * DT);
-      hunter.update(DT, senseAt(30, z, { sees: true, seen: true, noise: 0.42, speed: WALK }));
+    for (let t = 0; t < 3 && hunter.state !== 'chase'; t += DT) {
+      hunter.update(DT, senseAt(30, 40, { sees: false, seen: true, stared: true }));
       events.push(...hunter.events);
     }
     expect(events).toContain('notice');
@@ -124,12 +121,51 @@ describe('backrooms hunter behaviour', () => {
     expect(Math.abs(hunter.position.z - 10)).toBeLessThan(0.5);
   });
 
+  it.each(['still', 'prowl', 'cross'] as const)('notices a quiet player in clear view at 30 m (%s)', style => {
+    const nav = new NavGrid(mazeProbe(room), 128, CELL); nav.follow(30, 30, 0);
+    const hunter = new BackroomsHunter(nav, new SeededRandom(`vision-${style}`));
+    hunter.place({ x:30,y:0,z:10,yaw:0,style,crossTo:{x:40,z:10} });
+    for(let t=0;t<3&&hunter.state!=='chase';t+=DT) hunter.update(DT,senseAt(30,40,{sees:true}));
+    expect(hunter.state).toBe('chase');
+  });
+
+  it('leaves an unseen hiding place and keeps walking through the rooms', () => {
+    const nav=new NavGrid(mazeProbe(room),128,CELL);nav.follow(30,30,0);nav.computeField(30,30,1e6);
+    const hunter=new BackroomsHunter(nav,new SeededRandom('roaming'));
+    hunter.place({x:30,y:0,z:10,yaw:0,style:'still'});
+    for(let t=0;t<12;t+=DT)hunter.update(DT,senseAt(30,40));
+    expect(hunter.state).toBe('lurk');expect(hunter.style).toBe('prowl');
+    expect(Math.hypot(hunter.position.x-30,hunter.position.z-10)).toBeGreaterThan(2);
+  });
+
+  it('keeps running when close to a stationary target, without pace matching', () => {
+    const nav=new NavGrid(mazeProbe(room),128,CELL);nav.follow(30,30,0);nav.computeField(30,30,1e6);
+    const hunter=new BackroomsHunter(nav,new SeededRandom('close'));
+    hunter.adopt({x:30,y:0,z:27},0,'chase');
+    hunter.update(DT,senseAt(30,30,{sees:true}));
+    expect(hunter.speed).toBeGreaterThanOrEqual(HUNTER_TUNING.chaseCruise);
+    expect(hunter.position.z).toBeGreaterThan(27.15);
+  });
+
+  it('continues past the last sighting in the observed direction after losing contact', () => {
+    const nav=new NavGrid(mazeProbe(room),128,CELL);nav.follow(30,30,0);nav.computeField(30,30,1e6);
+    const hunter=new BackroomsHunter(nav,new SeededRandom('momentum'));
+    hunter.adopt({x:30,y:0,z:10},0,'chase');
+    for(let t=0;t<.5;t+=DT)hunter.update(DT,senseAt(30,22+t*3,{sees:true,speed:3}));
+    for(let t=0;t<4&&hunter.state==='chase';t+=DT)hunter.update(DT,senseAt(30,55));
+    expect(hunter.state).toBe('search');const before={...hunter.position};
+    // Movement after this point is hidden: it must keep the previously seen heading.
+    for(let t=0;t<.5;t+=DT)hunter.update(DT,senseAt(5,5));
+    expect(hunter.position.z).toBeGreaterThan(before.z+1);
+    expect(hunter.speed).toBeGreaterThan(4);
+  });
+
   it('searches the last place it saw him, reacts to a sprint, never vanishes in sight', () => {
     const nav = new NavGrid(mazeProbe(room), 128, CELL);
     nav.follow(30, 30, 0);
     const hunter = new BackroomsHunter(nav, new SeededRandom('search'));
-    hunter.adopt({ x: 10, y: 0, z: 10 }, 0, 'search');
     hunter.lastKnown.x = 20; hunter.lastKnown.z = 20;
+    hunter.adopt({ x: 10, y: 0, z: 10 }, 0, 'search');
     const events: HunterEvent[] = [];
     // Seen the whole time from 40 m: it may slink off, but never goes dormant while in sight.
     for (let t = 0; t < 60; t += DT) {

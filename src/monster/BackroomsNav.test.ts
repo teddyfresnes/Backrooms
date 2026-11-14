@@ -20,6 +20,13 @@ const walk = (nav: NavGrid, from: { x: number; z: number }, to: { x: number; z: 
 };
 
 describe('backrooms nav grid', () => {
+  it('does not tunnel through a thin wall during a fast lunge', () => {
+    const nav=new NavGrid((x,_z,y)=>x>=0&&x<.5?Number.NaN:y,32);
+    nav.follow(0,0,0);nav.computeField(-1,0,1e6);
+    const position={x:-.1,z:.25};
+    nav.move(position,1.2,0);
+    expect(position.x).toBeLessThan(0);
+  });
   // A room split by a wall (x 10..10.5 m) with a single gap at the far end (z > 17 m).
   const walled = carve(40, 40, [[1, 1, 19, 19]]).map((row, j) => (j < 34 ? `${row.slice(0, 20)}#${row.slice(21)}` : row));
 

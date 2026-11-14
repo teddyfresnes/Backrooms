@@ -59,13 +59,14 @@ export class RiftAudio {
 
   /** Heartbeat paced by fear (0 calm .. 1 panic); call every frame while it matters. */
   heartbeat(delta: number, fear: number): void {
-    if (fear <= 0.02) { this.heartTimer = 0; return; }
+    const level = Math.min(1, Math.max(0, fear));
+    if (level <= 0.25) { this.heartTimer = 0; return; }
     this.heartTimer -= delta;
     if (this.heartTimer > 0) return;
-    const bpm = 78 + 82 * Math.min(1, fear);
+    const bpm = 72 + 70 * level;
     this.heartTimer = 60 / bpm;
-    this.thump(0.32 + 0.5 * fear, 0);
-    this.thump(0.22 + 0.35 * fear, 0.16);
+    this.thump(0.022 + 0.065 * level * level, 0);
+    this.thump(0.014 + 0.04 * level * level, 0.17);
   }
 
   /**
@@ -105,7 +106,7 @@ export class RiftAudio {
     const { context } = output, at = context.currentTime + delay;
     const osc = context.createOscillator(), env = context.createGain();
     osc.type = 'sine'; osc.frequency.setValueAtTime(62, at); osc.frequency.exponentialRampToValueAtTime(38, at + 0.14);
-    env.gain.setValueAtTime(0.0001, at); env.gain.exponentialRampToValueAtTime(gain, at + 0.012); env.gain.exponentialRampToValueAtTime(0.0001, at + 0.2);
+    env.gain.setValueAtTime(0.0001, at); env.gain.exponentialRampToValueAtTime(gain, at + 0.028); env.gain.exponentialRampToValueAtTime(0.0001, at + 0.23);
     osc.connect(env).connect(output.destination); osc.start(at); osc.stop(at + 0.24);
     this.release([env], osc);
   }

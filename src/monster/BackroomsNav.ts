@@ -144,6 +144,16 @@ export class NavGrid {
 
   isFreeAt(x: number, z: number): boolean { return this.isFree(this.indexAt(x, z)); }
 
+  /** Clearance in the cached body-sized cells, without extra physics probes. */
+  hasClearanceAt(x: number, z: number, radius: number): boolean {
+    if (!this.isKnownFree(this.indexAt(x, z))) return false;
+    for (let i = 0; i < 8; i += 1) {
+      const angle = i * Math.PI / 4;
+      if (!this.isKnownFree(this.indexAt(x + Math.cos(angle) * radius, z + Math.sin(angle) * radius))) return false;
+    }
+    return true;
+  }
+
   /** Floor height under (x, z), or NaN outside the walkable cells. */
   floorAt(x: number, z: number): number {
     const index = this.indexAt(x, z);
@@ -313,11 +323,19 @@ export class NavGrid {
    * squeezes. Returns the distance actually travelled.
    */
   move(position: NavPoint, dx: number, dz: number): number {
-    const from = this.indexAt(position.x, position.z);
-    if (this.tryMove(position, from, dx, dz)) return Math.hypot(dx, dz);
-    if (Math.abs(dx) > 1e-5 && this.tryMove(position, from, dx, 0)) return Math.abs(dx);
-    if (Math.abs(dz) > 1e-5 && this.tryMove(position, from, 0, dz)) return Math.abs(dz);
-    return 0;
+    // A lunge can cross several cells in one frame. Check the entire path,
+    // including thin walls between the start and the destination.
+    const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / (this.cell * 0.4)));
+    const mx = dx / steps, mz = dz / steps;
+    let travelled = 0;
+    for (let i = 0; i < steps; i += 1) {
+      const from = this.indexAt(position.x, position.z);
+      if (this.tryMove(position, from, mx, mz)) travelled += Math.hypot(mx, mz);
+      else if (Math.abs(mx) > 1e-5 && this.tryMove(position, from, mx, 0)) travelled += Math.abs(mx);
+      else if (Math.abs(mz) > 1e-5 && this.tryMove(position, from, 0, mz)) travelled += Math.abs(mz);
+      else break;
+    }
+    return travelled;
   }
 
   private tryMove(position: NavPoint, from: number, mx: number, mz: number): boolean {

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { CharacterRuntime } from '../character/CharacterRuntime';
+import type { CharacterEnvironment } from '../character/CharacterEnvironment';
 import type { BacteriaActor } from '../monster/BacteriaActor';
 import type { BacteriaAudio } from '../monster/BacteriaAudio';
 import { BackroomsHunt } from '../monster/BackroomsHunt';
@@ -49,13 +50,10 @@ type Phase =
   | 'arrival' | 'north' | 'edge' | 'plank' | 'crossing' | 'crossed' | 'turn'
   | 'standoff' | 'dropping' | 'chase' | 'falling' | 'caught' | 'dead' | 'done' | 'stalk';
 
-/** At the edge, how long it rears and screams before stepping onto the board. */
-const STANDOFF_WAIT = 0.9;
-const CREATURE_PLANK_SPEED = 1.8;
-const CREATURE_RUN_SPEED = 5.35;
+const CREATURE_RUN_SPEED = 6.4;
 /** It first appears this far down the lane corridor behind the far portal. */
 const CREATURE_APPROACH_DEPTH = 21;
-const CREATURE_CHARGE_SPEED = 6.4;
+const CREATURE_CHARGE_SPEED = CREATURE_RUN_SPEED;
 const CREATURE_FLEE_SPEED = 7;
 /** The far-bank hunt (monster/BackroomsHunt) starts this far from the rift's centre. */
 const HUNT_RIFT_CLEARANCE = 26;
@@ -94,6 +92,8 @@ export interface RiftEncounterHost {
   darknessAt?(x: number, y: number, z: number): number;
   /** Changes when the mounted world changes (the hunt re-probes its nav cells). */
   worldRevision?(): number;
+  readonly creatureEnvironment?: Pick<CharacterEnvironment, 'sweepSphere'>;
+  lightNear?(x: number, y: number, z: number): { x: number; y: number; z: number } | null;
 }
 
 interface Plank {
@@ -197,7 +197,7 @@ export class RiftEncounter {
       // Older saves only recorded "plank", even after reaching the far bank.
       if (this.phase === 'plank' && riftBank(host.player.position.z) !== this.crossFrom
         && riftEdgeDistance(host.player.position.z) > PLANK_BEARING) this.phase = 'crossed';
-      if (this.phase === 'crossed') this.phaseTime = this.progress.crossedSeconds ?? 0;
+      if (this.phase === 'crossed') { this.phaseTime = this.progress.crossedSeconds ?? 0; this.resetCreature(true); }
     }
   }
 
@@ -688,6 +688,9 @@ export class RiftEncounter {
     }
     // Off the far end of the board (past its bearing on the gallery floor).
     if (local < -(EPIC3_FACADE_HALF_DEPTH + PLANK_BEARING + 0.05)) {
+      // The gaze is still held down the board: place it behind the player now,
+      // before either the free look or the reverse shot can reveal the corridor.
+      if (this.progress.stage !== 'done') this.resetCreature(true);
       this.stopCrossing();
       if (this.progress.stage === 'done') { this.enter('done'); return; }
       this.say('across');
@@ -726,7 +729,7 @@ export class RiftEncounter {
     this.turn.fromPosition.copy(this.host.renderCamera.position);
     if (character) { character.setActive(false, true); character.beginComputerPresentation(); }
     this.host.sound.stinger();
-    this.resetCreature();
+    if (this.creatureMode === 'hidden') this.resetCreature(true);
     this.enter('turn');
   }
 
@@ -737,17 +740,22 @@ export class RiftEncounter {
   }
 
   /** Far down the straight corridor behind the portal the player came through. */
-  private resetCreature(): void {
+  private resetCreature(present = false): void {
     const plank = this.plank!;
     this.creaturePosition.set(riftLaneX(plank.lane), riftFloorY(plank.story), RIFT_CENTER_Z + this.crossFrom * (EPIC3_OUTER_HALF_DEPTH + CREATURE_APPROACH_DEPTH));
     this.creatureYaw = bodyYaw(0, -this.crossFrom);
-    this.creatureMode = 'hidden';
+    this.creatureMode = present ? 'distant' : 'hidden';
     this.creatureTime = 0;
     this.creatureAlong = 0;
     this.trail.length = 0;
     this.trailIndex = 0;
     this.chaseTime = 0;
-    this.host.creature()?.setVisible(false);
+    const creature = this.host.creature();
+    creature?.setPace(1);
+    creature?.setPlacement(this.creaturePosition, this.creatureYaw);
+    creature?.setMotion('idle');
+    creature?.update(0);
+    creature?.setVisible(present);
   }
 
   private updateTurn(dt: number): void {
@@ -759,7 +767,7 @@ export class RiftEncounter {
     const frame = character?.sampleCorridorPresentation(feet, yaw, THREE.MathUtils.clamp(headLead, -0.9, 0.9), t, false);
     const head = frame ? this.vectorB.copy(frame.head) : this.vectorB.copy(feet).add({ x: 0, y: 0.78, z: 0 });
     // Far off, standing in the corridor behind the other portal, then the charge.
-    if (crossed(t, dt, 1.6)) { this.creatureMode = 'distant'; this.creatureTime = 0; this.host.creatureSound.startVoice(); }
+    if (crossed(t, dt, 1.6)) this.host.creatureSound.startVoice();
     if (crossed(t, dt, 2.55)) {
       // It rears and screams at the far end of its corridor; the charge waits for the end of the shot.
       this.host.creature()?.snapHead();
@@ -837,14 +845,12 @@ export class RiftEncounter {
     if (this.creatureMode === 'charge') {
       const brink = this.creatureBrink(this.vectorB);
       if (Math.abs(this.creaturePosition.z - brink.z) < 0.05) {
-        // At the edge: it rears and screams across the void before stepping on.
-        this.creatureMode = 'wait';
+        // Keep charging straight onto the board, without braking at the void.
+        this.creatureMode = 'plank';
         this.creatureTime = 0;
-        this.host.creatureSound.roar();
-        this.host.creature()?.snapHead();
+        this.creatureAlong = 0;
       }
     }
-    if (this.creatureMode === 'wait' && this.creatureTime > STANDOFF_WAIT) { this.creatureMode = 'plank'; this.creatureTime = 0; this.creatureAlong = 0; }
     // Walking back out onto the board to meet it.
     const feet = this.vector.copy(this.host.player.position).setY(this.host.player.position.y - EYE);
     if (this.creatureMode === 'plank' && this.creaturePosition.distanceTo(feet) < CATCH_RADIUS) { this.startCaught(); return; }
@@ -1206,15 +1212,14 @@ export class RiftEncounter {
         this.creatureYaw = bodyYaw(-this.vector.x, -this.vector.z);
       }
     } else if (mode === 'plank' && plank) {
-      // Long limbs splayed for balance, frozen, then lurching on.
-      creature.setMotion('stalk');
-      this.creatureAlong += dt * CREATURE_PLANK_SPEED;
+      creature.setMotion('run');
+      this.creatureAlong += dt * CREATURE_RUN_SPEED;
       const start = this.creatureBrink(this.vectorB);
       const z = start.z - this.crossFrom * this.creatureAlong;
       this.creaturePosition.set(riftLaneX(plank.lane) + Math.sin(this.creatureTime * 2.1) * 0.05,
         riftFloorY(plank.story) + PLANK_THICKNESS - this.sagAt(z, 1.5), z);
       this.creatureYaw = bodyYaw(0, -this.crossFrom);
-      if (Math.floor(this.creatureAlong / 0.8) !== Math.floor((this.creatureAlong - dt * CREATURE_PLANK_SPEED) / 0.8)) {
+      if (Math.floor(this.creatureAlong / 1.5) !== Math.floor((this.creatureAlong - dt * CREATURE_RUN_SPEED) / 1.5)) {
         this.host.sound.creak(0.75, 0.5);
       }
     } else if (mode === 'run') {
@@ -1250,6 +1255,7 @@ export class RiftEncounter {
     creature.setPlacement(this.creaturePosition, this.creatureYaw);
     creature.root.rotation.x = rotationX; creature.root.rotation.z = rotationZ;
     creature.update(dt);
+    if (this.host.creatureEnvironment && mode !== 'falling') creature.constrainToEnvironment(this.host.creatureEnvironment, dt);
     this.updateCreatureSound();
   }
 

@@ -6,6 +6,7 @@ export class InventoryHUD {
   readonly element=document.createElement('aside');
   private readonly slots:HTMLElement[]=[];
   private readonly icons = new Map<string,string>();
+  private readonly questIcons = new Map<string,string>();
   private readonly sources = new Map<string,readonly THREE.Object3D[]>();
   private peek=0;private accent=0;private last='';private selected=-1;
   private readonly rail=document.createElement('div');
@@ -25,7 +26,7 @@ export class InventoryHUD {
     this.icons.set(FLASHLIGHT_ID,inventoryObjectIcon([torch],true));this.last='';
   }
   /** A quest item's icon from its own model (local frame, like the torch). */
-  setQuestIcon(id:string,svg:string):void{this.icons.set(id,svg);this.last='';}
+  setQuestIcon(id:string,svg:string):void{this.questIcons.set(id,svg);this.last='';}
   reveal():void{this.peek=1.7;this.accent=.3;}
   update(inventory:InventoryState,delta:number,visible:boolean,playing:boolean,_storeKey:string,_torchKey:string,reduced=false):void{
     this.element.hidden=!visible;if(playing){this.peek=Math.max(0,this.peek-delta);this.accent=Math.max(0,this.accent-delta);}
@@ -34,7 +35,7 @@ export class InventoryHUD {
       this.last=signature;this.ensureCells(items.length+1);this.selected=-1;
       this.slots.forEach((slot,i)=>{
         const item=items[i];slot.replaceChildren();slot.classList.toggle('is-empty-hand',!item);slot.classList.toggle('is-lamp',item?.id===FLASHLIGHT_ID);
-        if(item){let icon=this.icons.get(item.id);if(!icon){const parts=this.sources.get(item.id);if(parts){icon=inventoryObjectIcon(parts);this.icons.set(item.id,icon);}}if(icon){const image=document.createElement('img');image.alt='';image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(icon);slot.append(image);}}
+        if(item){let icon=this.questIcons.get(item.id)??this.icons.get(item.id);if(!icon){const parts=this.sources.get(item.id);if(parts){icon=inventoryObjectIcon(parts);this.icons.set(item.id,icon);}}if(icon){const image=document.createElement('img');image.alt='';image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(icon);slot.append(image);}}
         slot.setAttribute('aria-label',item?.label??'Mains vides');
       });
     }

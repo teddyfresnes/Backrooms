@@ -58,6 +58,7 @@ import { RiftAudio } from '../audio/RiftAudio';
 import { BacteriaActor } from '../monster/BacteriaActor';
 import { BacteriaAudio } from '../monster/BacteriaAudio';
 import { RiftEncounter } from './RiftEncounter';
+import { CharacterEnvironment } from '../character/CharacterEnvironment';
 import { Stamina } from '../player/Stamina';
 import { StaminaCue } from '../ui/StaminaCue';
 import type { RiftProgress } from '../story/RiftProgress';
@@ -695,6 +696,8 @@ export class Game {
       onProgress: () => { this.saveNow('autosave'); },
       darknessAt: (x, y, z) => this.worldStream?.darknessAt(x, y, z) ?? 0,
       worldRevision: () => this.worldRevision,
+      creatureEnvironment: new CharacterEnvironment(this.physics),
+      lightNear: (x, y, z) => this.worldStream?.nearestWorkingLight(x, y, z) ?? null,
     }, this.savedRift, !!this.options.arrivedByFall);
   }
 

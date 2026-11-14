@@ -170,8 +170,9 @@ describe('BacteriaEncounter', () => {
   it('plays the whole night: reveal from behind, charge, siege, television lure, silent exit, stairs and the Backrooms', () => {
     const world = setup({ tvOn: true });
     playToHiding(world);
-    const siege = world.until(() => world.events.includes('breach'), 20);
-    expect(siege).toBeGreaterThan(DOOR_BANG_SECONDS);
+    world.until(() => world.events.includes('breach'), 20);
+    expect(world.events).not.toContain('impact:door-bang');
+    expect(world.events).toContain('impact:door-burst');
     expect(world.door.breached).toBe(true);
     world.until(() => world.state.motion === 'carry', 20);
     expect(world.events).toContain('stairwell');
@@ -355,6 +356,15 @@ describe('BacteriaEncounter', () => {
 });
 
 describe('other hiding places', () => {
+  it('keeps the full door delay while the player is looking, but breaches as soon as he hides', () => {
+    const world=setup({tvOn:true});playToHiding(world);world.encounter.requestHiddenExit();
+    world.until(()=>world.state.motion==='bang',15);
+    world.step(DOOR_BANG_SECONDS*.5);
+    expect(world.door.breached).toBe(false);
+    expect(world.encounter.interact(new THREE.Vector3(-2.3,threshold.y+PLAYER_CENTER_HEIGHT,-1.8),new THREE.Vector3(-1,0,0))).toBe(true);
+    world.step(DT*2);
+    expect(world.door.breached).toBe(true);
+  });
   it('sniffs in front of the bathroom when the player hid there', () => {
     const world = setup({ tvOn: true });
     world.wardrobe.spot = 'bathroom';

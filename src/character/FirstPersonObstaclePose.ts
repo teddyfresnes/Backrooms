@@ -13,10 +13,11 @@ class ArmContact {
   readonly offset = new THREE.Vector3();
   readonly previous = new THREE.Vector3();
   ready = false;
-  bind(hand: THREE.Bone): void {
+  bind(hand: THREE.Bone, contacts?: readonly THREE.Bone[]): void {
     if (this.hand === hand) return;
     this.hand = hand; this.fingers.length = 0;
-    hand.traverse(object => { if ((object as THREE.Bone).isBone) this.fingers.push(object as THREE.Bone); });
+    if (contacts) this.fingers.push(...contacts);
+    else hand.traverse(object => { if ((object as THREE.Bone).isBone) this.fingers.push(object as THREE.Bone); });
     this.reset();
   }
   reset(): void { this.ready = false; this.offset.set(0, 0, 0); }
@@ -24,9 +25,11 @@ class ArmContact {
 
 /** Final presentation-only correction. The world rig, eye, pelvis and feet are
  * untouched; the two arms fold against real collision volumes instead of being
- * drawn through them. All probes use the same mounted world as the player.
+ * drawn through them. Also used by Bacteria with its wider finger envelope.
+ * All probes use the same mounted world as the player.
  */
 export class FirstPersonObstaclePose {
+  constructor(private readonly handPadding = .026, private readonly minimumHandRadius = .065) {}
   private readonly arms = [new ArmContact(), new ArmContact()];
   private readonly eye = new THREE.Vector3();
   private readonly previousEye = new THREE.Vector3();
@@ -60,10 +63,10 @@ export class FirstPersonObstaclePose {
       radiusSq = Math.max(radiusSq, this.point.setFromMatrixPosition(bone.matrixWorld).distanceToSquared(this.center));
     // Finger joints follow both an open palm and a closed fist; include the skin
     // beyond the last phalanx rather than checking the wrist as a single point.
-    return Math.max(.065, Math.sqrt(radiusSq) + .026);
+    return Math.max(this.minimumHandRadius, Math.sqrt(radiusSq) + this.handPadding);
   }
 
-  private constrain(environment: CharacterEnvironment, from: THREE.Vector3, target: THREE.Vector3, radius: number): boolean {
+  private constrain(environment: Pick<CharacterEnvironment, 'sweepSphere'>, from: THREE.Vector3, target: THREE.Vector3, radius: number): boolean {
     if (!environment.sweepSphere(from, target, radius + SKIN, this.hit)) return false;
     target.copy(this.hit.center).addScaledVector(this.hit.normal, .004);
     return true;
@@ -98,14 +101,15 @@ export class FirstPersonObstaclePose {
       .addScaledVector(this.tangent, Math.sqrt(Math.max(0, 1 - component * component)));
   }
 
-  apply(camera: THREE.Camera, chains: readonly CombatLimb[], environment: CharacterEnvironment, delta: number): void {
+  apply(camera: THREE.Camera, chains: readonly CombatLimb[], environment: Pick<CharacterEnvironment, 'sweepSphere'>, delta: number,
+    contacts?: readonly (readonly THREE.Bone[])[]): void {
     camera.getWorldPosition(this.eye);
     if (this.eye.distanceToSquared(this.previousEye) > .64) this.reset();
     this.previousEye.copy(this.eye);
     for (let i = 0; i < Math.min(chains.length, this.arms.length); i++) {
       const [upper, lower, hand] = chains[i]!, arm = this.arms[i]!;
       if (!upper?.parent || !lower || !hand?.parent) { arm.reset(); continue; }
-      arm.bind(hand);
+      arm.bind(hand, contacts?.[i]);
       upper.updateWorldMatrix(true, true);
       this.shoulder.setFromMatrixPosition(upper.matrixWorld);
       this.origin.copy(this.eye); this.origin.y = this.shoulder.y;

@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FirstPersonObstaclePose } from '../character/FirstPersonObstaclePose';
+import type { CharacterEnvironment } from '../character/CharacterEnvironment';
+import type { CombatLimb } from '../character/CombatPushMotion';
 
 export type BacteriaMotion = 'idle' | 'stalk' | 'run' | 'bang' | 'lunge' | 'crouch' | 'feed' | 'carry';
 
@@ -114,6 +117,11 @@ export class BacteriaActor {
   private readonly local = new THREE.Vector3();
   private readonly inverse = new THREE.Matrix4();
   private disposed = false;
+  private readonly wallPose = new FirstPersonObstaclePose(.12, .18);
+  private readonly wallOrigin = new THREE.PerspectiveCamera();
+  private readonly armPositions = new Map<THREE.Bone, THREE.Vector3>();
+  private readonly armChains: readonly CombatLimb[];
+  private readonly armContacts: readonly (readonly THREE.Bone[])[];
 
   private constructor(model: THREE.Object3D) {
     this.root.name = 'bacteria-entity';
@@ -142,7 +150,8 @@ export class BacteriaActor {
     };
     const side = (s: 'L' | 'R'): Side => ({
       shoulder: bone(`Shoulder_${s}`), arm: bone(`Arm_${s}`), foreArm: bone(`ForeArm_${s}`),
-      fingers: ['Thumb', 'Middle', 'Pinky', 'Thumb_2'].map(n => bones.get(`${n}_${s}`)).filter((b): b is THREE.Bone => !!b),
+      fingers: ['Thumb', 'Middle', 'Pinky', 'Thumb_2'].map(n => bones.get(`${n}_${s}`)
+        ?? (n === 'Thumb_2' ? bones.get(`Thumb_${s}_2`) : undefined)).filter((b): b is THREE.Bone => !!b),
       // The export names the thigh "Leg" and the long shin "Thigh".
       pelvis: bone(`Pelvis_${s}`), thigh: bones.get(`Leg_${s}_`) ?? bone(`Leg_${s}`), shin: bone(`Thigh_${s}`),
     });
@@ -154,6 +163,9 @@ export class BacteriaActor {
       strings: ['StringLoop_L', 'StringLoop_R'].map(n => bones.get(n)).filter((b): b is THREE.Bone => !!b),
       left: side('L'), right: side('R'),
     };
+    this.armChains = [this.rig.left, this.rig.right].map(side => [side.arm, side.foreArm, side.fingers[1] ?? side.fingers[0]] as const);
+    this.armContacts = [this.rig.left.fingers, this.rig.right.fingers];
+    for (const side of [this.rig.left, this.rig.right]) this.armPositions.set(side.arm, side.arm.position.clone());
     for (const each of bones.values()) this.rest.set(each, each.quaternion.clone());
 
     // Orient the mouth along +Z, stand the feet on y = 0, pelvis on the axis.
@@ -298,6 +310,7 @@ export class BacteriaActor {
   private pose(dt: number, frozen: boolean): void {
     const { rig, blended: b } = this;
     for (const [bone, rest] of this.rest) bone.quaternion.copy(rest);
+    for (const [bone, position] of this.armPositions) bone.position.copy(position);
     this.root.updateMatrixWorld(true);
     this.root.getWorldQuaternion(this.rootQuaternion);
     const t = this.time;
@@ -419,6 +432,12 @@ export class BacteriaActor {
     }
   }
 
+  /** Fold the long arms against real walls after the authored pose is sampled. */
+  constrainToEnvironment(environment: Pick<CharacterEnvironment, 'sweepSphere'>, delta: number): void {
+    this.wallOrigin.position.copy(this.root.position).addScaledVector(UP, 1.3);
+    this.wallPose.apply(this.wallOrigin, this.armChains, environment, delta, this.armContacts);
+  }
+
   /** Rotates a bone about one of the creature's own axes, whatever its bone frame. */
   private turn(bone: THREE.Bone, rootAxis: THREE.Vector3, angle: number): void {
     if (!angle) return;
@@ -432,7 +451,7 @@ export class BacteriaActor {
 
   private range(min: number, max: number): number { return min + (max - min) * this.random(); }
 
-  setVisible(visible: boolean): void { this.root.visible = visible; }
+  setVisible(visible: boolean): void { if (!visible) this.wallPose.reset(); this.root.visible = visible; }
   get isVisible(): boolean { return this.root.visible; }
 
   /** 0 = its usual near-black hide, 1 = blown out by a strobe (the jumpscare). */
