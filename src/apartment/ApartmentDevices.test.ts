@@ -34,6 +34,14 @@ it('keeps each screen/dial and its local light independent of the apartment circ
   devices.update(0, false, false); expect(light('apartment-pc-light')).toBeGreaterThan(1);
   quest.setTelevision(false); devices.update(0, true, false); expect(light('apartment-tv-light')).toBe(0);
 });
+it('marks the radio and television with small dots attached to their real objects',async()=>{
+  const {environment}=await fixture();
+  for(const [name,root]of [['radio',environment.radio],['tv',environment.television]] as const){
+    const marker=root!.getObjectByName(`apartment-${name}-interaction-marker`) as THREE.Mesh;
+    expect(marker).toBeDefined();expect(marker.parent).toBe(root);expect((marker.material as THREE.MeshBasicMaterial).depthTest).toBe(true);
+    const size=new THREE.Box3().setFromObject(marker,true).getSize(new THREE.Vector3());expect(size.length()).toBeLessThan(.05);
+  }
+});
 it('uses the actual TV target and makes radio clicks produce only static after the unique outage', async () => {
   const { environment, quest, devices, sound, camera } = await fixture();
   // The evening order: gas first, then the TV may be switched on.

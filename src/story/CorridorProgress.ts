@@ -24,7 +24,7 @@ export interface CorridorProgress {
   reactionPosition?: Vec3Data; reactionYaw?: number;
   entryConsumed?: boolean; waveStart?: number;
   bacteriaSurvived?: boolean;
-  /** The breakers were thrown back on, in vain (after the lamp). */
+  /** The breakers were thrown back on, in vain; the TV-table torch can now be taken. */
   fuseTried?: boolean;
   /** The knocks at the closed entrance are over. */
   knockDone?: boolean;
@@ -56,7 +56,8 @@ export class CorridorStory {
   /** First failed re-arm: returns true once. */
   tryFuse():boolean{if(this.fuseDone)return false;this.state.fuseTried=true;return true;}
   finishKnock():void{if(this.state.fuseTried)this.state.knockDone=true;}
-  /** Lamp taken but the breaker scene (and the knocks) not over: the door stays a hesitation. */
+  get canTakeLamp():boolean{return this.state.active&&this.fuseDone;}
+  /** The breaker scene and the knocks are not over: the door stays a hesitation. */
   get beforeExploring():boolean{return this.state.active&&!this.state.triggered&&!(this.fuseDone&&this.knockDone);}
   activate(): boolean {if(this.state.active)return false;this.state.active=true;return true;}
   observe(position:Vec3Data,door:Vec3Data,hasLamp:boolean,yaw:number):boolean {
@@ -100,10 +101,10 @@ export class CorridorStory {
   get finished():boolean{return this.litCount===CORRIDOR_LAMPS;}
   objective(hasLamp:boolean):string|null {
     if(!this.state.active)return null;
-    if(!hasLamp)return 'Récupérer la lampe torche sur le bureau';
     if(this.state.bacteriaSurvived)return 'Descendre jusqu’à la porte du hall.';
     if(!this.state.triggered){
-      if(!this.fuseDone)return 'Trouver le tableau électrique et réarmer les disjoncteurs.';
+      if(!this.fuseDone)return 'Réarmer le tableau électrique à côté de la porte.';
+      if(!hasLamp)return 'Prendre la lampe torche sur le meuble de la TV.';
       return this.knockDone?'Sortir chercher les voisins.':null;
     }
     return this.finished?null:this.state.returned?'Observer les lumières au fond du couloir':'… D’où vient cette lumière ?';

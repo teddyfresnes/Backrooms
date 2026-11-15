@@ -28,3 +28,19 @@ it('accepts the published legacy saves without replaying the interrupted phrase 
   old.apartment!.outageTriggered=true;old.apartment!.outageLeadSeconds=1.12;
   const after=new ApartmentQuest(sanitizeComputerProgress(old)!);expect(after.isComputerBlocked).toBe(true);expect(after.nextThought()).toBeNull();
 });
+it('still cuts the power after a real detour around furniture on the way to the hob',()=>{
+  const q=make();q.nextThought();q.advanceNarration(4,true);q.requestQuickRise();
+  const route=[at(0),{...at(0),x:gasOrigin.x+3},{...at(.9),x:gasOrigin.x+3},at(1)];let cuts=0;
+  q.advanceOutage(route[0]!,gasTarget,true);
+  for(let leg=1;leg<route.length;leg++){
+    const a=route[leg-1]!,b=route[leg]!,steps=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z)/.1);
+    for(let i=1;i<=steps;i++)cuts+=Number(q.advanceOutage({x:a.x+(b.x-a.x)*i/steps,y:a.y,z:a.z+(b.z-a.z)*i/steps},gasTarget,true));
+  }
+  expect(cuts).toBe(1);expect(q.devices.outageTriggered).toBe(true);
+});
+it('recovers when the thought finishes after a manual PC exit already beside the gas',()=>{
+  const q=make();q.nextThought();q.advanceNarration(4,true);q.requestQuickRise();
+  expect(q.advanceOutage(at(.95),gasTarget,true)).toBe(false);
+  let cut=false;for(let t=.96;t<=1.01;t+=.01)cut=q.advanceOutage(at(t),gasTarget,true)||cut;
+  expect(cut).toBe(true);
+});

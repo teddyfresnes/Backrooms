@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import type { ComputerPoseSample, ComputerPoseFrame } from '../character/SeatedCharacterPose';
-import { ComputerChair, COMPUTER_FLOOR, COMPUTER_SEAT, COMPUTER_STANDING } from './ComputerChair';
+import { ComputerChair, COMPUTER_FLOOR, COMPUTER_STANDING } from './ComputerChair';
 import type { ComputerUsePhase, ComputerUseProgress } from './ComputerUseState';
 const IDENTITY={x:0,y:0,z:0,w:1};
 const smooth=(v:number)=>{const t=THREE.MathUtils.clamp(v,0,1);return t*t*(3-2*t);};
@@ -44,6 +44,11 @@ export class ComputerUseSequence {
   private route:THREE.Vector3[]=[];
   private routeDistance=0;
   private routeLength=0;
+  private travelSpeed=0;
+  private gaitDistance=0;
+  private walkBlend=0;
+  private moveYaw=Math.PI;
+  private frameDelta=0;
   private readonly position=new THREE.Vector3();
   private readonly safePosition=new THREE.Vector3();
   private readonly savedCamera=new THREE.PerspectiveCamera();
@@ -76,7 +81,8 @@ export class ComputerUseSequence {
     if(!this.physics.canStandAt(standing)){this.host.hint('Pas assez de place pour s’installer.');return true;}
     const approach=planComputerApproach(this.physics,this.host.position());if(!approach||!this.chair.canMoveTo(.35)){this.host.hint('Le passage près de la chaise est encombré.');return true;}
     this.side=approach.side;this.safePosition.copy(WAIT[this.side]!);this.savedCamera.copy(this.camera);this.cameraFrom.copy(this.camera);this.position.copy(approach.points[0]!);
-    this.clock=0;this.yaw=Math.PI;this.targetYaw=Math.PI;this.pullOffset=this.chair.offset;
+    const view=this.savedCamera.getWorldDirection(new THREE.Vector3());
+    this.clock=0;this.yaw=Math.atan2(view.x,view.z);this.targetYaw=this.yaw;this.moveYaw=this.yaw;this.gaitDistance=0;this.walkBlend=0;this.pullOffset=this.chair.offset;
     this.shock=false;this.standingShock=false;this.exitRequested=false;this.firstPerson=false;this.finishPresentation=false;
     this.host.modal(true);this.host.begin();
     this.setRoute(approach.points);this.position.copy(this.route[0]!);
@@ -94,13 +100,21 @@ export class ComputerUseSequence {
   }
   /** Same urgent rise, while the room and computer still have electricity. */
   riseQuickly():void{if(this.isActive)this.powerCut();}
-  private setRoute(points:THREE.Vector3[]):void{this.route=points;this.routeDistance=0;this.routeLength=points.slice(1).reduce((sum,p,i)=>sum+p.distanceTo(points[i]!),0);}
+  private setRoute(points:THREE.Vector3[]):void{this.route=points;this.routeDistance=0;this.travelSpeed=0;this.routeLength=points.slice(1).reduce((sum,p,i)=>sum+p.distanceTo(points[i]!),0);}
   private travel(dt:number,speed:number):boolean {
-    this.routeDistance=Math.min(this.routeLength,this.routeDistance+dt*speed);let remaining=this.routeDistance;
-    for(let i=1;i<this.route.length;i++){const a=this.route[i-1]!,b=this.route[i]!,length=a.distanceTo(b);if(remaining<=length||i===this.route.length-1){this.position.lerpVectors(a,b,length>.001?remaining/length:1);this.targetYaw=this.phase==='align'&&this.routeLength-this.routeDistance<.32?Math.PI:Math.atan2(b.x-a.x,b.z-a.z);return this.routeDistance>=this.routeLength;}remaining-=length;}
+    const left=this.routeLength-this.routeDistance,desired=Math.min(speed,Math.sqrt(Math.max(0,2*1.8*left)));
+    this.travelSpeed+=THREE.MathUtils.clamp(desired-this.travelSpeed,-dt*2.5,dt*1.8);
+    const step=Math.min(left,dt*this.travelSpeed);this.routeDistance+=step;
+    this.gaitDistance+=step/Math.max(.35,this.walkBlend);let remaining=this.routeDistance;
+    for(let i=1;i<this.route.length;i++){const a=this.route[i-1]!,b=this.route[i]!,length=a.distanceTo(b);if(remaining<=length||i===this.route.length-1){
+      this.position.lerpVectors(a,b,length>.001?remaining/length:1);const heading=Math.atan2(b.x-a.x,b.z-a.z);
+      this.moveYaw+=Math.atan2(Math.sin(heading-this.moveYaw),Math.cos(heading-this.moveYaw))*(1-Math.exp(-dt*14));
+      this.targetYaw=this.phase==='align'?Math.PI:heading;return this.routeDistance>=this.routeLength;
+    }remaining-=length;}
     this.position.copy(this.route.at(-1)??this.position);return true;
   }
   private pose(seated:number,lean:number,walking=0,chairHand=false,hands=0):void {
+    this.walkBlend+=(Math.min(.8,walking)-this.walkBlend)*(1-Math.exp(-this.frameDelta*14));
     // The head (hair, eyes) is hidden only while the camera is really at the
     // eye: a camera still travelling out of or into the head must see a head.
     if(this.phase==='approach'||this.phase==='camera-in')this.firstPerson=!!this.frame&&this.camera.position.distanceTo(this.frame.eye)<.2;
@@ -108,7 +122,7 @@ export class ComputerUseSequence {
     const yaw=this.yaw;this.lastSeated=seated;
     const left=new THREE.Vector3(-7.16,9.53,-5.09),right=new THREE.Vector3(-6.79,9.53,-5.09);
     if(chairHand){const hand=this.side===0?left:right;hand.set(this.side===0?-7.15:-6.79,9.69,-4.24+this.chair.offset);}
-    this.frame=this.host.sample({feet,yaw,seated,seat:this.chair.seat,lean,time:this.clock,walking,
+    this.frame=this.host.sample({feet,yaw,seated,seat:this.chair.seat,lean,time:this.clock,walking:this.walkBlend,gaitDistance:this.gaitDistance,moveYaw:this.moveYaw,
       leftHand:chairHand&&this.side!==0?undefined:left,rightHand:chairHand&&this.side!==1?undefined:right,handWeight:chairHand?1:hands},this.firstPerson);
     const physical=this.position.clone(),shapeBlend=smooth(Math.min(1,seated*3));
     if(seated>0){physical.y=THREE.MathUtils.lerp(COMPUTER_STANDING.y,this.frame.hips.y+.32,shapeBlend);physical.z=THREE.MathUtils.lerp(physical.z,this.frame.hips.z,seated);}
@@ -144,24 +158,23 @@ export class ComputerUseSequence {
     if(hit&&hit.time_of_impact<length)this.camera.position.copy(head).addScaledVector(direction,Math.max(.035,hit.time_of_impact-.01));
   }
   update(dt:number,playing:boolean,covered=false):void {
-    if(!this.isActive||!playing||this.disposed)return;const delta=Math.min(.05,Math.max(0,dt));this.elapsed+=delta;this.clock+=delta;if(this.phase==='using'&&covered)return;if(this.shock)this.shockElapsed+=delta;
-    if(!['approach','align','step-away'].includes(this.phase))this.targetYaw=['pull-chair','return-chair'].includes(this.phase)?Math.atan2(COMPUTER_SEAT.x-this.position.x,-4.24-this.position.z):Math.PI;
+    if(!this.isActive||!playing||this.disposed)return;const delta=Math.min(.05,Math.max(0,dt));this.frameDelta=delta;this.elapsed+=delta;this.clock+=delta;if(this.phase==='using'&&covered)return;if(this.shock)this.shockElapsed+=delta;
+    if(!['approach','align','step-away'].includes(this.phase))this.targetYaw=Math.PI;
     const difference=Math.atan2(Math.sin(this.targetYaw-this.yaw),Math.cos(this.targetYaw-this.yaw));this.yaw+=THREE.MathUtils.clamp(difference,-delta*4.5,delta*4.5);
     switch(this.phase){
       case 'approach':{
-        const arrived=this.travel(delta,1.5);
-        const left=this.routeLength-this.routeDistance;
-        this.pose(0,0,arrived?0:Math.min(1,left/.22));this.cameraView();
+        const arrived=this.travel(delta,1.15);
+        this.pose(0,0,arrived?0:this.travelSpeed/1.5);this.cameraView();
         if(arrived){this.host.chairSound?.();this.change('pull-chair');}break;}
       case 'pull-chair':this.chair.setOffset(THREE.MathUtils.lerp(this.pullOffset,.35,smooth(this.elapsed/.55)));this.pose(0,.12,0,true);this.cameraView();if(this.elapsed>=.55){this.setRoute([this.position.clone(),new THREE.Vector3(WAIT[this.side]!.x,COMPUTER_STANDING.y,-4.72),COMPUTER_STANDING.clone()]);this.change('align');}break;
-      case 'align':{const done=this.travel(delta,.7);this.pose(0,.05,done?0:Math.min(1,(this.routeLength-this.routeDistance)/.22));this.cameraView();if(done&&Math.abs(Math.atan2(Math.sin(this.yaw-Math.PI),Math.cos(this.yaw-Math.PI)))<.035)this.change('sitting');break;}
+      case 'align':{const done=this.travel(delta,.65);this.pose(0,.05,done?0:this.travelSpeed/1.5);this.cameraView();if(done&&this.walkBlend<.01&&Math.abs(Math.atan2(Math.sin(this.yaw-Math.PI),Math.cos(this.yaw-Math.PI)))<.035)this.change('sitting');break;}
       case 'sitting':{const t=Math.min(1,this.elapsed/1.2);this.pose(t,.10*Math.sin(Math.PI*t)+.08*t);this.cameraView();if(t===1)this.change('settling');break;}
       case 'settling':{const t=smooth(this.elapsed/.4);this.chair.setOffset(THREE.MathUtils.lerp(.35,.025,t));this.pose(1,.20,0,false,t);this.cameraView();if(t===1){this.cameraFrom.copy(this.camera);this.change('camera-in');}break;}
       case 'camera-in':{const t=smooth(this.elapsed/.3);this.pose(1,.20,0,false,1);this.cameraView(t);if(t===1){this.firstPerson=true;this.change('using');this.host.openDesktop();if(this.exitRequested)this.close();}break;}
       case 'using':this.pose(1,.20+Math.sin(this.clock*1.3)*.004,0,false,1);this.cameraView(1);break;
       case 'exit-chair':{const t=smooth(this.elapsed/(this.shock?.22:.3));this.chair.setOffset(THREE.MathUtils.lerp(this.exitOffset,.35,t));this.firstPerson=true;this.pose(this.riseFrom,.20,0,false,1-t);this.eyeView();if(t===1)this.change('rising');break;}
       case 'rising':{const t=smooth(this.elapsed/(this.shock?.5:.55));this.pose(this.standingShock?0:this.riseFrom*(1-t),this.standingShock?Math.sin(t*Math.PI)*-.10:.20*(1-t)+Math.sin(t*Math.PI)*.28,0,false,0);this.eyeView();if(t===1){if(!this.standingShock)this.position.y=COMPUTER_STANDING.y;const side=WAIT[this.side]!.clone();const route=this.standingShock?[this.position.clone()]:[this.position.clone(),new THREE.Vector3(side.x,side.y,-4.72),side];if(route.slice(1).every((p,i)=>computerPathClear(this.physics,route[i]!,p)))this.setRoute(route);else this.setRoute([this.position.clone()]);this.change('step-away');}break;}
-      case 'step-away':{const done=this.travel(delta,this.shock?.95:1.55);this.pose(0,0,done?0:1);this.eyeView();if(done){
+      case 'step-away':{const done=this.travel(delta,this.shock?.95:1.15);this.pose(0,0,done?0:this.travelSpeed/1.5);this.eyeView();if(done){
         this.safePosition.copy(this.position);
         this.prepareHandoff();
       }break;}

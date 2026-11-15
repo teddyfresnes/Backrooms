@@ -42,12 +42,15 @@ parlée et l'indication de course, respectant le remappage et Maj droite. Le tem
 sont des extensions optionnelles de l’historique v2. L’événement historique de
 panne reste l’autorité du PC et de la radio, même après le rallumage des lampes.
 
-Après la lampe, `FuseBox` (mur du fond du séjour, face à la porte à 8 m ; le
-joueur reste figé jusqu'au dernier levier relevé, `locksMovement`) s'ouvre et se
-réarme en vain ; `CorridorStory.fuseTried/knockDone` (optionnels, déduits pour
-les anciennes sauvegardes) bloquent la sortie jusqu'à la remarque puis aux trois
-coups et au coup grave. La coupure ferme silencieusement la vraie porte ; les
-coups ne sont plus sautés lorsqu'elle avait été laissée ouverte. Boussole et lampe en main :
+Après la coupure, `FuseBox` est près de l'interrupteur d'entrée ; le joueur reste
+figé jusqu'au dernier levier relevé (`locksMovement`). Le réarmement échoue et
+rend disponible la lampe sur le meuble TV, près de l'écran et des échecs.
+`CorridorStory.fuseTried/knockDone` (optionnels, déduits pour les anciennes
+sauvegardes) bloquent la sortie jusqu'à sa prise puis à trois coups secs sur la
+porte, sans quatrième coup ni effet de caméra. La coupure ferme silencieusement
+la vraie porte. Une ancienne sauvegarde ayant déjà la lampe lance les coups
+après le réarmement, ou les reprend s'ils restaient à jouer.
+Boussole et lampe en main :
 `heldItemFrame` fixe d'abord l'objet (dans la vue en 1P, sans balancement de
 marche ; devant le torse en 3P), puis `HeldItemPose` amène la main droite par IK
 (paume sous la boussole, doigts refermés sur la lampe), après les autres corrections
@@ -146,6 +149,8 @@ La capsule normale est rétablie à l’extérieur. Aucun voile ne masque la coq
 la caméra est réellement à l’intérieur. Les sauvegardes gardent l’ancrage sûr
 extérieur, pour ne jamais recharger une capsule normale enfermée dans le meuble.
 
+La TV et la radio portent les mêmes petits points pâles que le cadeau ; ces
+repères sont attachés à leurs objets et suivent donc leurs déplacements.
 La TV garde son CanvasTexture à 12 Hz. L’image originale locale est prête avant
 l’entrée en jeu et apparaît avec Pressure. Le son reste sur la TV ; son enveloppe
 de distance est continue, sans test de seuil de porte. La radio conserve sa

@@ -161,6 +161,16 @@ export class ApartmentDevices {
       // hidden light changes Three's light count, recompiling every lit shader.
       this.radioLight.position.applyMatrix4(apartment.group.matrixWorld.clone().invert()); apartment.group.add(this.radioLight);
     }
+    // Match the small, depth-tested dots used by the mailbox and Chloé's gift.
+    for(const [name,root,point] of [
+      ['tv',apartment.television,new THREE.Vector3(boundsOf(apartment.television).max.x+.012,positions.tv.y-.13,positions.tv.z-.18)],
+      ['radio',apartment.radio,new THREE.Vector3(positions.radio.x,positions.radio.y,radioBounds.max.z+.012)],
+    ] as const){
+      if(!root)continue;
+      const material=new THREE.MeshBasicMaterial({color:0xc5d2b8});this.materials.add(material);
+      const marker=this.mesh(new THREE.SphereGeometry(.01,8,6),material);marker.name=`apartment-${name}-interaction-marker`;marker.position.copy(point);
+      this.apartment.group.updateWorldMatrix(true,true);root.attach(marker);
+    }
     this.gasControls = gasControlBounds(apartment.stove).map(box => box.expandByScalar(.008));
     if (apartment.stove) this.targets.set('gas', apartment.stove);
     const pan = boundsOf(apartment.pan), center = pan.getCenter(new THREE.Vector3());

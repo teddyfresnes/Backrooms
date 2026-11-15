@@ -24,6 +24,11 @@ corps, passe sur le côté et replace la chaise avec un mouvement visible. À la
 lever urgent après la phrase sur le gaz, le bureau HTML est retiré sans callback de sortie normale ; la réaction
 reste en première personne et laisse la chaise reculée. Le masque de tête du
 rig monde est activé seulement en POV ; le rig de présentation 1P reste caché.
+L'approche conserve le cap d'entrée puis accélère et freine doucement. Près de
+la chaise, le corps reste tourné vers le bureau et les clips latéraux assurent
+l'alignement. La longueur des pas suit la vitesse ; leur phase suit la distance
+réellement parcourue, avec la référence de marche à 2,05 m/s, jamais l'horloge
+globale pendant un arrêt.
 
 `SeatedCharacterPose` évalue les clips déjà chargés sur le personnage courant,
 sans clone. Le FBX `standing-to-crouched` fournit le mouvement principal, adapté
@@ -47,7 +52,9 @@ l’icône de reprise et une caméra immobile jusqu’au clic et à la capture e
 La phrase sur le gaz est entière, parlée si une voix française système est
 présente, puis le personnage se relève rapidement avec l'électricité encore
 active. Le trajet spatial vers la poêle, après restitution du contrôle, déclenche
-la panne à mi-distance. `outageLeadSeconds` conserve seulement l'avancement de
+la panne à mi-distance. Les détours réels autour des meubles comptent dans la
+distance marchée ; une fin de phrase après une sortie manuelle déjà près du
+gaz garde un déclenchement possible sur les derniers pas. `outageLeadSeconds` conserve seulement l'avancement de
 lecture, jamais une échéance de panne. `journey` garde narration/lever consommés,
 origine et distance marchée. Au chargement, la phrase consommée ne repart pas.
 Le flag `outageTriggered` reste l'autorité unique du PC et de la radio ; les

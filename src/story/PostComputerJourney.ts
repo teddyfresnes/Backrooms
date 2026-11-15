@@ -29,11 +29,16 @@ export class GasJourneyTrigger {
     const step=Math.hypot(position.x-before.x,position.z-before.z);
     if(step<.001||step>.7||Math.abs(position.y-s.origin.y)>.45)return false;
     const dx=gas.x-s.origin.x,dz=gas.z-s.origin.z,length=Math.hypot(dx,dz);
-    if(length<.8)return false;
+    // A manual exit can finish the spoken thought only once the player has
+    // already reached the hob. Do not leave that short final trip unarmed.
+    if(length<.8){s.walked+=step;return s.walked>=.12;}
     const px=position.x-s.origin.x,pz=position.z-s.origin.z;
     const along=(px*dx+pz*dz)/length,lateral=Math.abs(px*dz-pz*dx)/length;
-    if(lateral>Math.max(1.1,length*.35))return false;
     s.walked+=step;
+    // Count a real detour around furniture as walking too. Previously only
+    // steps inside the narrow PC→hob corridor counted, so reaching the gas by
+    // another route could leave the required distance permanently unmet.
+    if(lateral>Math.max(1.1,length*.35))return false;
     return along>=length*.5&&s.walked>=length*.4;
   }
 }

@@ -1157,7 +1157,7 @@ export class CharacterRuntime {
   beginComputerPresentation(): void {
     if (!this.character || this.computerPose) return;
     this.computerViewMode=this.viewMode;this.firstPersonObstaclePose.reset();this.resetCombatState(true);
-    this.computerPose=new SeatedCharacterPose(this.character,this.avatarAnchor,this.animations.get('idle')!.clip,this.animations.get('walking')!.clip,this.firstPersonFootToSole,this.animations.get('standing-to-crouched')!.clip);
+    this.computerPose=new SeatedCharacterPose(this.character,this.avatarAnchor,this.animations.get('idle')!.clip,this.animations.get('walking')!.clip,this.firstPersonFootToSole,this.animations.get('standing-to-crouched')!.clip,this.animations.get('left-strafe-walking')!.clip,this.animations.get('right-strafe-walking')!.clip);
     this.avatarAnchor.visible=true;this.firstPersonAvatarAnchor.visible=false;
   }
   sampleComputerPresentation(sample: ComputerPoseSample, firstPerson: boolean): ComputerPoseFrame {

@@ -18,13 +18,13 @@ const lab=await createLab({useWardrobe:true});lab.setInteractionPartner(null);
 const apartment=new ImportedApartmentEnvironment(await loadApartmentModel(new URL('../../public/assets/imported-apartment/',import.meta.url)));lab.scene.add(apartment.group);
 lab.physics.addTrimeshChunk('pc-real-shell',apartment.shellColliderMeshes);lab.physics.addChunk('pc-real-furniture',apartment.furnitureColliders,{x:0,y:0,z:0});
 const audited=new Set();
-let sequence,desktop=false,opens=0,ends=0,blocked=false;const frames=[],overlaps=[];let reduced=false;
+let sequence,desktop=false,opens=0,ends=0,blocked=false;const frames=[],overlaps=[],samples=[];let reduced=false;
 const camera=lab.host.renderCamera;const framing=[];
 function begin(start,progress,consumed=false){
-  sequence?.dispose();lab.player.teleport(start);lab.player.setLookQuaternion(new THREE.Quaternion());lab.getArrivalPOV(camera);lab.setActive(false);desktop=false;opens=0;ends=0;blocked=consumed;frames.length=0;overlaps.length=0;framing.length=0;
+  sequence?.dispose();lab.player.teleport(start);lab.player.setLookQuaternion(new THREE.Quaternion());lab.getArrivalPOV(camera);lab.setActive(false);desktop=false;opens=0;ends=0;blocked=consumed;frames.length=0;overlaps.length=0;framing.length=0;samples.length=0;
   sequence=new ComputerUseSequence(new ComputerChair(apartment.computerChair,apartment.group,lab.physics),lab.physics,camera,{
     position:()=>lab.player.position,pose:(p,narrow,shape)=>{lab.player.setScriptedPose(p,narrow,shape);const hit=lab.physics.world.intersectionWithShape(p,{x:0,y:0,z:0,w:1},new RAPIER.Capsule(shape?.halfHeight??(narrow?.42:.52),shape?.radius??(narrow?.23:.32)),undefined,undefined,undefined,undefined,lab.physics.isEnvironmentCollider);if(hit)overlaps.push({phase:sequence.state,body:hit.parent()?.handle,point:{...p}});},
-    begin:()=>lab.beginComputerPresentation(),sample:(s,fp)=>lab.sampleComputerPresentation(s,fp),end:fp=>{ends++;lab.player.setLookQuaternion(camera.quaternion);lab.endComputerPresentation(fp);return camera.clone();},modal:()=>{},openDesktop:()=>{desktop=true;opens++;},closeDesktop:()=>{desktop=false;},resume:()=>{},blocked:()=>blocked,hint:()=>{},reducedMotion:()=>reduced,
+    begin:()=>lab.beginComputerPresentation(),sample:(s,fp)=>{samples.push({...s,feet:s.feet.clone(),phase:sequence.state});return lab.sampleComputerPresentation(s,fp);},end:fp=>{ends++;lab.player.setLookQuaternion(camera.quaternion);lab.endComputerPresentation(fp);return camera.clone();},modal:()=>{},openDesktop:()=>{desktop=true;opens++;},closeDesktop:()=>{desktop=false;},resume:()=>{},blocked:()=>blocked,hint:()=>{},reducedMotion:()=>reduced,
   },progress);
 }
 function step(count){for(let i=0;i<count;i++){sequence.update(1/60,true);lab.physics.stepDynamics(1/60);const d=sequence.debugState;if(d.frame&&['pull-chair','align','sitting','settling'].includes(d.phase)){camera.updateMatrixWorld(true);for(const point of [d.frame.head,...d.frame.feet]){const ndc=point.clone().project(camera);framing.push({phase:d.phase,x:ndc.x,y:ndc.y});}}
@@ -48,6 +48,23 @@ test('uses the selected dressed rig, enters from either free side and opens the 
     sequence.close();assert.equal(desktop,false);step(400);assert.equal(sequence.state,'standing');assert.equal(ends,1);assert.ok(lab.physics.canStandAt(lab.player.position));
   }
 });
+test('takes short distance-paced steps and side-steps into the chair without a quarter turn',()=>{
+  begin(new THREE.Vector3(-6.1,9.5363203,-3.6));
+  camera.lookAt(new THREE.Vector3(-7.0259,9.745,-5.455));const view=camera.getWorldDirection(new THREE.Vector3()),initialYaw=Math.atan2(view.x,view.z);
+  sequence.start();step(650);assert.equal(sequence.state,'using');
+  const wrap=a=>Math.atan2(Math.sin(a),Math.cos(a));
+  assert.ok(Math.abs(wrap(samples[0].yaw-initialYaw))<.08,'The first pose must keep the incoming heading');
+  const align=samples.filter(s=>s.phase==='align');assert.ok(align.length>30);
+  assert.ok(align.every(s=>Math.abs(wrap(s.yaw-Math.PI))<.08),'Keep facing the desk while moving sideways');
+  assert.ok(align.every(s=>s.walking<.5),'Chair alignment needs short steps');
+  for(let i=1;i<samples.length;i++){
+    const a=samples[i-1],b=samples[i];assert.ok(Math.abs(wrap(b.yaw-a.yaw))<=4.5/60+.0001,'No body-heading snap');
+    if(b.phase==='approach'||b.phase==='align')assert.ok(a.feet.distanceTo(b.feet)<.021,'Ease into a walking pace');
+    if(a.phase==='align'&&b.phase==='align')assert.ok(Math.abs(wrap(b.moveYaw-a.moveYaw))<.4,'Blend between forward and sideways steps');
+    if(a.phase==='pull-chair'&&b.phase==='pull-chair')assert.equal(b.gaitDistance,a.gaitDistance,'The gait cannot run while standing still');
+  }
+});
+
 test('uses the computer again without snapping an already pulled-out chair back under the desk',()=>{
   begin(new THREE.Vector3(-6.1,9.5363203,-3.6));sequence.start();step(650);sequence.close();step(400);
   assert.equal(sequence.state,'standing');const offset=sequence.chair.offset;assert.ok(offset>.34);

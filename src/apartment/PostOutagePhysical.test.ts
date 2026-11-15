@@ -9,6 +9,7 @@ import {ImportedApartmentDoorInteraction}from './ImportedApartmentDoorInteractio
 import {loadApartmentModel}from '../../tests/support/load-apartment-model';
 import {LongCorridor}from './LongCorridor';
 import {Flashlight}from './Flashlight';
+import {FuseBox,FUSE_BOX_MOUNT}from './FuseBox';
 import {InventoryState}from './InventoryState';
 import {ApartmentObjectInteraction}from './ApartmentObjectInteraction';
 import type {MaterialSet}from '../render/MaterialLibrary';
@@ -82,15 +83,28 @@ it('keeps an already-open real door open when the missing-lamp hesitation denies
   expect(door.interact(position,direction,true)).toBe(true);expect(reminder).toHaveBeenCalledOnce();expect(door.getState().targetProgress).toBe(0);
   hasLamp=true;expect(door.interact(position,direction,true)).toBe(true);expect(door.getState().targetProgress).toBe(1);
 });
-it('places the detailed, reachable flashlight on the actual desk and removes its world instance when acquired with a full bag',async()=>{
-  const{a,p,scene}=await fixture();const torch=new Flashlight(scene,p,a.group.getObjectByName('Desk'));cleanup.push(()=>torch.dispose());torch.model.updateMatrixWorld(true);
+it('places the detailed, reachable flashlight on the TV table and gates pickup until the breakers have been tried',async()=>{
+  const{a,p,scene}=await fixture();const torch=new Flashlight(scene,p);cleanup.push(()=>torch.dispose());torch.model.updateMatrixWorld(true);
   const bounds=new THREE.Box3().setFromObject(torch.model),center=bounds.getCenter(new THREE.Vector3());
   const hit=p.world.castRay(new RAPIER.Ray({x:center.x,y:bounds.min.y+.005,z:center.z},{x:0,y:-1,z:0}),.4,true,undefined,undefined,undefined,undefined,p.isEnvironmentCollider);
-  expect(hit,'flashlight must rest on the real desk').not.toBeNull();expect(hit!.timeOfImpact).toBeLessThan(.08);
-  const camera=new THREE.PerspectiveCamera();camera.position.set(center.x,a.floorY+1.59,center.z+.9);camera.lookAt(center);camera.updateMatrixWorld(true);expect(torch.isTargeted(camera)).toBe(true);
+  expect(hit,'flashlight must rest on the real TV table').not.toBeNull();expect(hit!.timeOfImpact).toBeLessThan(.08);
+  expect(center.distanceTo(new THREE.Box3().setFromObject(a.television!,true).getCenter(new THREE.Vector3()))).toBeLessThan(1);
+  const camera=new THREE.PerspectiveCamera();camera.position.set(center.x+1,a.floorY+1.59,center.z);camera.lookAt(center);camera.updateMatrixWorld(true);
+  expect(torch.isTargeted(camera)).toBe(false);torch.setPickupAvailable(true);expect(torch.isTargeted(camera)).toBe(true);
   const bag=new InventoryState();for(let i=0;i<4;i++)bag.store({id:`prop:${i}`,label:'Disquette'});expect(bag.acquireLamp()).toBe(true);
   torch.update(camera,undefined,true,false,false,.016,false);expect(torch.model.visible).toBe(false);bag.toggleLamp();torch.update(camera,undefined,true,true,bag.state.lampOn,.016,false);expect(torch.light.intensity).toBeGreaterThan(0);expect(torch.light.distance).toBe(28);expect(torch.model.visible).toBe(true);
   expect(new THREE.Box3().setFromObject(torch.model).getCenter(new THREE.Vector3()).distanceTo(center)).toBeGreaterThan(.3);
+});
+it('mounts the fuse box against the real entry wall beside the door and leaves the entrance walkable',async()=>{
+  const{a,p,scene}=await fixture();const box=new FuseBox(a.floorY,{ui:{setInteraction(){}},click(){},flip(){},trip(){}});scene.add(box.group);cleanup.push(()=>box.dispose());
+  const center=new THREE.Vector3().copy(box.collider.center);
+  expect(Math.hypot(center.x-a.doorCenter.x,center.z-a.doorCenter.z)).toBeLessThan(1.5);
+  const eye=center.clone().add(new THREE.Vector3(-.8,0,0)),wall=p.castEnvironmentRay(eye,{x:1,y:0,z:0},2);
+  expect(wall).not.toBeNull();expect(eye.x+wall!.distance).toBeCloseTo(FUSE_BOX_MOUNT.wallX,1);
+  const standing={x:a.doorCenter.x-.55,y:a.floorY+.031+.865,z:a.doorCenter.z};
+  expect(p.canStandAt(standing),'entrance before mounting the panel').toBe(true);
+  p.addChunk('entry-fuses',[box.collider],{x:0,y:0,z:0});expect(p.canStandAt(standing)).toBe(true);
+  box.updatePrompt(eye,new THREE.Vector3(1,0,0),true);expect(box.group.getObjectByName('fuse-box-interaction-marker')?.visible).toBe(true);
 });
 it('stows and retrieves exact real small props without a visible double, collider ghost or duplicated inventory identity',async()=>{
   const{a,p,scene}=await fixture(),camera=new THREE.PerspectiveCamera(),objects=new ApartmentObjectInteraction(p,scene,a.pickables,camera,{setInteraction(){}});cleanup.push(()=>objects.dispose());

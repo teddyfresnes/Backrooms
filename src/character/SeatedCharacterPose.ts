@@ -3,7 +3,7 @@ import { solveCombatTwoBone, easeCombat, CombatProceduralPose } from './CombatRi
 
 export interface ComputerPoseSample {
   feet: THREE.Vector3; yaw: number; seated: number; seat: THREE.Vector3;
-  lean: number; time: number; walking?: number;
+  lean: number; time: number; walking?: number; gaitDistance?: number; moveYaw?: number;
   leftHand?: THREE.Vector3; rightHand?: THREE.Vector3; handWeight?: number;
 }
 export interface ComputerPoseFrame {
@@ -21,6 +21,8 @@ export class SeatedCharacterPose {
   private readonly mixer:THREE.AnimationMixer;
   private readonly idle:THREE.AnimationAction;
   private readonly walk:THREE.AnimationAction;
+  private readonly leftWalk:THREE.AnimationAction;
+  private readonly rightWalk:THREE.AnimationAction;
   private readonly sit:THREE.AnimationAction;
   private readonly referenceSeat=new THREE.Vector3(0,.5676605,-.576);
   private readonly originals:{bone:THREE.Bone;position:THREE.Vector3;rotation:THREE.Quaternion}[]=[];
@@ -32,7 +34,7 @@ export class SeatedCharacterPose {
   private readonly fingerRest=new Map<THREE.Bone,THREE.Quaternion>();
   private disposed=false;
   private readonly procedural=new CombatProceduralPose();
-  constructor(readonly root:THREE.Object3D,private readonly anchor:THREE.Group,idle:THREE.AnimationClip,walk:THREE.AnimationClip,private readonly soleHeight:number,sourceSit:THREE.AnimationClip){
+  constructor(readonly root:THREE.Object3D,private readonly anchor:THREE.Group,idle:THREE.AnimationClip,walk:THREE.AnimationClip,private readonly soleHeight:number,sourceSit:THREE.AnimationClip,leftWalk:THREE.AnimationClip,rightWalk:THREE.AnimationClip){
     root.traverse(o=>{if((o as THREE.Bone).isBone)this.originals.push({bone:o as THREE.Bone,position:o.position.clone(),rotation:o.quaternion.clone()});});
     this.hips=find(root,'hips')!;this.head=find(root,'head')!;if(!this.hips||!this.head)throw Error('Le rig du personnage ne contient pas le bassin et la tête.');
     root.traverse(o=>{const mesh=o as THREE.SkinnedMesh;if(!mesh.isSkinnedMesh)return;
@@ -41,7 +43,8 @@ export class SeatedCharacterPose {
       });
     });
     this.spines=['spine','spine1','spine2'].map(s=>find(root,s)).filter((b):b is THREE.Bone=>!!b);
-    this.mixer=new THREE.AnimationMixer(root);this.idle=this.mixer.clipAction(idle).play();this.walk=this.mixer.clipAction(walk).play();this.walk.setEffectiveWeight(0);this.mixer.update(0);anchor.updateMatrixWorld(true);
+    this.mixer=new THREE.AnimationMixer(root);this.idle=this.mixer.clipAction(idle).play();this.walk=this.mixer.clipAction(walk).play();this.walk.setEffectiveWeight(0);
+    this.leftWalk=this.mixer.clipAction(leftWalk).play().setEffectiveWeight(0);this.rightWalk=this.mixer.clipAction(rightWalk).play().setEffectiveWeight(0);this.mixer.update(0);anchor.updateMatrixWorld(true);
     const inverse=anchor.getWorldQuaternion(new THREE.Quaternion()).invert();
     for(const side of ['left','right']){
       const upper=find(root,side+'upleg'),lower=find(root,side+'leg'),foot=find(root,side+'foot');
@@ -97,8 +100,18 @@ export class SeatedCharacterPose {
   sample(s:ComputerPoseSample):ComputerPoseFrame {
     this.procedural.restore();
     const walk=THREE.MathUtils.clamp(s.walking??0,0,1),seated=THREE.MathUtils.clamp(s.seated,0,1);
-    this.idle.setEffectiveWeight(seated>0?0:1-walk);this.walk.setEffectiveWeight(seated>0?0:walk);this.sit.setEffectiveWeight(seated>0?1:0);this.sit.time=Math.min(this.sit.getClip().duration-1e-6,seated*this.sit.getClip().duration);
-    this.idle.time=s.time%this.idle.getClip().duration;this.walk.time=s.time%this.walk.getClip().duration;this.mixer.update(0);this.procedural.capture(this.root);
+    const relative=(s.moveYaw??s.yaw)-s.yaw,ahead=Math.cos(relative),side=Math.sin(relative),total=Math.abs(ahead)+Math.abs(side)||1;
+    const moving=seated>0?0:walk;
+    this.idle.setEffectiveWeight(seated>0?0:1-walk);this.walk.setEffectiveWeight(moving*Math.abs(ahead)/total);
+    this.leftWalk.setEffectiveWeight(moving*Math.max(0,-side)/total);this.rightWalk.setEffectiveWeight(moving*Math.max(0,side)/total);
+    this.sit.setEffectiveWeight(seated>0?1:0);this.sit.time=Math.min(this.sit.getClip().duration-1e-6,seated*this.sit.getClip().duration);
+    // Same 2.05 m/s reference as the ordinary authored walking gait. The
+    // sequence scales travelled distance by stride weight for short steps.
+    const cycle=s.gaitDistance===undefined?s.time/this.walk.getClip().duration:s.gaitDistance/(2.05*this.walk.getClip().duration);
+    const phase=(cycle%1+1)%1;
+    this.idle.time=s.time%this.idle.getClip().duration;this.walk.time=(ahead<0?1-phase:phase)*this.walk.getClip().duration;
+    this.leftWalk.time=phase*this.leftWalk.getClip().duration;this.rightWalk.time=phase*this.rightWalk.getClip().duration;
+    this.mixer.update(0);this.procedural.capture(this.root);
     this.anchor.position.copy(s.feet);this.anchor.rotation.set(0,s.yaw,0);this.anchor.updateMatrixWorld(true);
     const q=this.anchor.quaternion,forward=new THREE.Vector3(0,0,1).applyQuaternion(q),right=new THREE.Vector3(1,0,0).applyQuaternion(q);
     const correction=s.seat.clone().add(new THREE.Vector3(0,.1,0)).sub(this.referenceSeat.clone().applyQuaternion(q).add(s.feet));

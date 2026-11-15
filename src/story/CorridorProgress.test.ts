@@ -18,10 +18,11 @@ it('freezes the complete reaction and light wave in pause, restores without repl
   const end=restored.snapshot();expect(new CorridorStory(end).snapshot()).toEqual(end);
 });
 it('rejects inconsistent checkpoints and selects the correct pre- and post-pickup objectives',()=>{
-  const s=new CorridorStory();expect(s.objective(false)).toBeNull();s.activate();expect(s.objective(false)).toMatch(/Récupérer/);expect(s.objective(true)).toMatch(/tableau électrique/);expect(s.beforeExploring).toBe(true);
-  expect(s.tryFuse()).toBe(true);expect(s.tryFuse()).toBe(false);expect(s.objective(true)).toBeNull();s.finishKnock();expect(s.objective(true)).toMatch(/voisins/);expect(s.beforeExploring).toBe(false);
+  const s=new CorridorStory();expect(s.objective(false)).toBeNull();s.activate();expect(s.objective(false)).toMatch(/tableau électrique/);expect(s.canTakeLamp).toBe(false);expect(s.objective(true)).toMatch(/tableau électrique/);expect(s.beforeExploring).toBe(true);
+  expect(s.tryFuse()).toBe(true);expect(s.tryFuse()).toBe(false);expect(s.canTakeLamp).toBe(true);expect(s.objective(false)).toMatch(/meuble de la TV/);expect(s.objective(true)).toBeNull();s.finishKnock();expect(s.objective(true)).toMatch(/voisins/);expect(s.beforeExploring).toBe(false);
   expect(sanitizeCorridor({...s.snapshot(),fuseTried:false,knockDone:true})).toBeNull();expect(sanitizeCorridor(s.snapshot())).toEqual(s.snapshot());
   expect(sanitizeCorridor({...s.snapshot(),triggered:true})).toBeNull();expect(sanitizeCorridor({...s.snapshot(),elapsed:NaN})).toBeNull();
+  const legacy=new CorridorStory({...s.snapshot(),fuseTried:undefined,knockDone:undefined,entryConsumed:true});expect(legacy.canTakeLamp).toBe(true);
 });
 it('consumes the spoken entry and sprint hint only after actual forward steps, including reloads',()=>{
   const s=new CorridorStory();s.activate();

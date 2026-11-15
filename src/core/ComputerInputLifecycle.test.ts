@@ -86,19 +86,36 @@ it('hesitates only for a real exit attempt after the PC recovery, keeps an alrea
   const inventory=new InventoryState();const corridorStory=new CorridorStory();Object.assign(probe,{quest:{devices:{outageTriggered:false}},inventory,corridorStory,apartment:{doorCenter:new THREE.Vector3(-2,9.8,-2.7),floorY:8.67},exitReminderArmed:true,storyCaption:{say},door});
   const p=new THREE.Vector3(-2.45,9.535,-2.7),m=new THREE.Vector3(.2,-.04,0);
   probe.constrainExit(p,m);expect(m.x).toBe(.2);expect(say).not.toHaveBeenCalled();
-  probe.quest.devices.outageTriggered=true;probe.pcUse={isActive:true};probe.constrainExit(p,m);expect(m.x).toBe(.2);
+  probe.quest.devices.outageTriggered=true;corridorStory.activate();probe.pcUse={isActive:true};probe.constrainExit(p,m);expect(m.x).toBe(.2);
   probe.pcUse.isActive=false;probe.constrainExit(p,m);expect(m.x).toBeCloseTo(.07);expect(say).toHaveBeenCalledOnce();
   for(let i=0;i<80;i++)probe.constrainExit(p,new THREE.Vector3(.2,0,0));expect(say).toHaveBeenCalledOnce();expect(door.restoreState).not.toHaveBeenCalled();expect(door.getState().progress).toBe(1);
   const entering=new THREE.Vector3(-.2,0,0);probe.constrainExit(p,entering);expect(entering.x).toBe(-.2);
-  inventory.acquireLamp();const allowed=new THREE.Vector3(.2,0,0);probe.constrainExit(p,allowed);expect(allowed.x).toBe(.2);
-  // With the corridor story running, the lamp alone is not enough: the breakers and the knocks come first.
+  inventory.acquireLamp();const allowed=new THREE.Vector3(.2,0,0);probe.constrainExit(p,allowed);expect(allowed.x).toBeCloseTo(.07);
+  // A torch from an older save does not skip the breakers and knocks.
   corridorStory.activate();probe.exitReminderArmed=true;const early=new THREE.Vector3(.2,0,0);probe.constrainExit(p,early);expect(early.x).toBeCloseTo(.07);
   expect(say).toHaveBeenLastCalledWith(expect.stringContaining('tableau électrique'));
   corridorStory.tryFuse();corridorStory.finishKnock();const free=new THREE.Vector3(.2,0,0);probe.constrainExit(p,free);expect(free.x).toBe(.2);
 });
 it('allows an older post-outage save outside the apartment to reopen the door and retrieve the lamp',()=>{
-  const probe=Object.create(RussianStairwellGame.prototype);Object.assign(probe,{quest:{devices:{outageTriggered:true}},inventory:new InventoryState(),player:{position:new THREE.Vector3(-1,9.535,-2.7)},apartment:{doorCenter:new THREE.Vector3(-2,9.8,-2.7)},exitReminderArmed:true,storyCaption:{say:vi.fn()}});
+  const probe=Object.create(RussianStairwellGame.prototype),corridorStory=new CorridorStory();corridorStory.activate();Object.assign(probe,{quest:{devices:{outageTriggered:true}},corridorStory,inventory:new InventoryState(),player:{position:new THREE.Vector3(-1,9.535,-2.7)},apartment:{doorCenter:new THREE.Vector3(-2,9.8,-2.7)},exitReminderArmed:true,storyCaption:{say:vi.fn()}});
   expect(probe.allowEntranceOpening()).toBe(true);probe.player.position.x=-2.8;expect(probe.allowEntranceOpening()).toBe(false);expect(probe.storyCaption.say).toHaveBeenCalledOnce();
+});
+it('unlocks the TV-table torch only after the fuse attempt, then plays exactly three immediate dry knocks',()=>{
+  const game=Object.create(RussianStairwellGame.prototype),corridorStory=new CorridorStory(),inventory=new InventoryState();corridorStory.activate();
+  const knock=vi.fn(),deep=vi.fn(),jolt=vi.fn(),save=vi.fn();
+  Object.assign(game,{quest:{devices:{outageTriggered:true}},corridorStory,inventory,player:{position:new THREE.Vector3(-3,9.5,-2.7)},
+    apartment:{doorCenter:new THREE.Vector3(-2,9.8,-2.7),floorY:8.67},door:{closeSilently:vi.fn(),jolt},
+    flashlight:{isTargeted:()=>true},camera:new THREE.PerspectiveCamera(),inventoryHUD:{reveal:vi.fn()},ui:{setInteraction:vi.fn()},
+    deviceAudio:{fixtureClick:vi.fn(),deepKnock:deep},doorAudio:{playScripted:knock},storyCaption:{say:vi.fn()},saveNow:save});
+  expect(game.fuseAvailable()).toBe(true);expect(game.pickupFlashlight()).toBe(false);expect(inventory.hasLamp).toBe(false);
+  game.onFuseTripped();expect(game.fuseAvailable()).toBe(false);expect(game.flashlightAvailable()).toBe(true);
+  for(let t=0;t<5;t+=.05)game.updateDoorKnocks(.05);expect(knock).not.toHaveBeenCalled();
+  expect(game.pickupFlashlight()).toBe(true);expect(inventory.hasLamp).toBe(true);
+  game.updateDoorKnocks(.05);expect(knock).toHaveBeenCalledOnce();
+  for(let t=0;t<1.2;t+=.05)game.updateDoorKnocks(.05);
+  expect(knock).toHaveBeenCalledTimes(3);expect(deep).not.toHaveBeenCalled();expect(jolt).not.toHaveBeenCalled();
+  expect(corridorStory.knockDone).toBe(true);expect(game.needsFuseScene()).toBe(false);expect(game.allowEntranceOpening()).toBe(true);
+  game.startDoorKnocks();game.updateDoorKnocks(2);expect(knock).toHaveBeenCalledTimes(3);
 });
 it('mounts the replacement only once and preserves the outage history when restoring apartment lights',()=>{
   const probe=Object.create(RussianStairwellGame.prototype),activate=vi.fn(),removeChunk=vi.fn(),setPower=vi.fn(),setOldPower=vi.fn();

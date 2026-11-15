@@ -4,6 +4,8 @@ import type { PhysicsWorld } from '../physics/PhysicsWorld';
 
 import {createFlashlightModel} from './FlashlightModel';
 export {createFlashlightModel} from './FlashlightModel';
+/** Clear patch of the real TV table, between the television and the chess set. */
+export const FLASHLIGHT_REST = {x:-9.234,y:9.6156,z:-.35} as const;
 
 export class Flashlight {
   readonly model=createFlashlightModel();
@@ -13,17 +15,17 @@ export class Flashlight {
   private readonly direction=new THREE.Vector3(0,0,-1);
   private readonly smoothed=new THREE.Quaternion();
   private initialized=false;
-  private readonly deskPosition=new THREE.Vector3(-7.47,9.54,-5.10);
-  constructor(private readonly scene:THREE.Scene,private readonly physics:PhysicsWorld,desk?:THREE.Object3D){
-    if(desk){
-      desk.updateWorldMatrix(true,true);const box=new THREE.Box3().setFromObject(desk,true),point=new THREE.Vector3(box.max.x-.28,box.max.y+.3,box.max.z-.16);
-      const hit=physics.world.castRay(new RAPIER.Ray(point,{x:0,y:-1,z:0}),.7,true,undefined,undefined,undefined,undefined,physics.isEnvironmentCollider);
-      if(hit)this.deskPosition.set(point.x-.134,point.y-hit.timeOfImpact+.038,point.z);
-    }
-    this.model.position.copy(this.deskPosition);this.model.rotation.z=-Math.PI/2;scene.add(this.model,this.light,this.target);
+  private readonly marker=new THREE.Mesh(new THREE.SphereGeometry(.01,8,6),new THREE.MeshBasicMaterial({color:0xc5d2b8}));
+  private pickupAvailable=false;
+  private readonly restPosition=new THREE.Vector3(FLASHLIGHT_REST.x,FLASHLIGHT_REST.y,FLASHLIGHT_REST.z);
+  constructor(private readonly scene:THREE.Scene,private readonly physics:PhysicsWorld){
+    this.marker.name='torch-interaction-marker';this.marker.position.set(-.043,.12,0);this.marker.visible=false;this.model.add(this.marker);
+    this.model.position.copy(this.restPosition);this.model.rotation.z=-Math.PI/2;scene.add(this.model,this.light,this.target);
     this.light.target=this.target;this.light.castShadow=false;
   }
+  setPickupAvailable(available:boolean):void{this.pickupAvailable=available;this.marker.visible=available;}
   isTargeted(camera:THREE.Camera):boolean{
+    if(!this.pickupAvailable)return false;
     camera.getWorldDirection(this.direction);this.ray.set(camera.position,this.direction);this.ray.far=2.15;
     const hit=this.ray.intersectObject(this.model,true)[0];if(!hit)return false;
     const wall=this.physics.world.castRay(new RAPIER.Ray(camera.position,this.direction),hit.distance,true,undefined,undefined,undefined,undefined,this.physics.isEnvironmentCollider);
@@ -31,8 +33,9 @@ export class Flashlight {
   }
   /** `grip`, when the rig holds it, is the stable frame of the rubber grip (+Y toward the lens). */
   update(camera:THREE.Camera,hand:THREE.Vector3|undefined,owned:boolean,equipped:boolean,on:boolean,delta:number,reduced:boolean,grip?:{position:THREE.Vector3;quaternion:THREE.Quaternion},aimFromGrip=false):void {
+    this.marker.visible=this.pickupAvailable&&!owned;
     this.model.visible=!owned||equipped;this.light.intensity=owned&&equipped&&on?32:0;
-    if(!owned){this.model.position.copy(this.deskPosition);return;}
+    if(!owned){this.model.position.copy(this.restPosition);return;}
     if(!equipped)return;
     const desired=new THREE.Quaternion();camera.getWorldDirection(this.direction);desired.setFromUnitVectors(new THREE.Vector3(0,1,0),this.direction);
     if(grip){this.smoothed.copy(grip.quaternion);this.initialized=true;}

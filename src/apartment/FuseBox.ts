@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import type { StaticCollider, Vec3Data } from '../world/types';
 import { disposeObjectTree } from './CompassModel';
 
-/** Far wall of the living space, facing the front door 8 m away (measured on the imported model). */
-export const FUSE_BOX_MOUNT = { wallX: -10.04, z: -0.55, height: 1.62, facing: 1 } as const;
+/** Entry wall beside the light switch, facing into the apartment. */
+export const FUSE_BOX_MOUNT = { wallX: -2.16, z: -1.65, height: 1.62, facing: -1 } as const;
 const SIZE = { width: 0.36, height: 0.46, depth: 0.085 } as const;
 const MODULE = 0.0178;
 const ROWS = [
@@ -52,6 +52,7 @@ export class FuseBox {
   private prompted = false;
   private readonly spark: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private readonly center = new THREE.Vector3();
+  private readonly marker: THREE.Mesh;
 
   constructor(floorY: number, private readonly hooks: {
     ui: { setInteraction(label: string | null): void };
@@ -128,6 +129,8 @@ export class FuseBox {
     add(new THREE.BoxGeometry(W - 0.036, H - 0.036, 0.003), smoke, (W - 0.036) / 2, 0, 0, this.door);
     add(new THREE.BoxGeometry(0.012, 0.06, 0.008), plastic, W - 0.05, 0, 0.004, this.door);
     this.group.add(this.door);
+    this.marker=add(new THREE.SphereGeometry(.01,8,6),new THREE.MeshBasicMaterial({color:0xc5d2b8}),0,0,D+.02);
+    this.marker.name='fuse-box-interaction-marker';this.marker.visible=false;
     // A brief blue-white arc behind the levers when they all fall.
     this.spark = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.06), new THREE.MeshBasicMaterial({ name: 'fuse-spark', color: 0xbfe4ff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.spark.position.set(0.04, 0.095, 0.07); this.group.add(this.spark);
@@ -151,6 +154,7 @@ export class FuseBox {
 
   /** Prompt only once it is reachable in the story. */
   updatePrompt(eye: THREE.Vector3, direction: THREE.Vector3, enabled: boolean): void {
+    this.marker.visible=enabled&&!this.isBusy;
     const label = !enabled || this.isBusy || !this.targeted(eye, direction) ? null
       : this.stage === 'closed' ? 'Ouvrir le tableau électrique' : 'Réarmer les disjoncteurs';
     if (label) { this.hooks.ui.setInteraction(label); this.prompted = true; }
