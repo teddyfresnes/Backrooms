@@ -29,6 +29,8 @@ la chaise, le corps reste tourné vers le bureau et les clips latéraux assurent
 l'alignement. La longueur des pas suit la vitesse ; leur phase suit la distance
 réellement parcourue, avec la référence de marche à 2,05 m/s, jamais l'horloge
 globale pendant un arrêt.
+L'assise dure environ une demi-seconde ; les raccords sont courts. L'alignement
+attend la stabilisation des petits pas avant de planter les pieds pour l'assise.
 
 `SeatedCharacterPose` évalue les clips déjà chargés sur le personnage courant,
 sans clone. Le FBX `standing-to-crouched` fournit le mouvement principal, adapté

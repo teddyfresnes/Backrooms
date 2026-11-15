@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { RiftAudio } from './RiftAudio';
 
-it('keeps even a panic heartbeat quiet and spaces the double beats instead of stacking them every frame', () => {
+it('restores the old double-beat envelope without restarting or stacking at the exhaustion threshold', () => {
   const gains: ReturnType<typeof vi.fn>[] = [];
   const param = () => ({ setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() });
   const node = () => ({ connect: vi.fn(() => ({ connect: vi.fn() })), disconnect: vi.fn(), addEventListener: vi.fn() });
@@ -13,7 +13,7 @@ it('keeps even a panic heartbeat quiet and spaces the double beats instead of st
   const audio = new RiftAudio(() => ({ context, destination: {} }) as never);
   audio.heartbeat(.016, .2); expect(context.createOscillator).not.toHaveBeenCalled();
   audio.heartbeat(.016, 1); expect(context.createOscillator).toHaveBeenCalledTimes(2);
-  for (const gain of gains) expect(Math.max(...gain.mock.calls.map(call => call[0]))).toBeLessThanOrEqual(.016);
+  expect(gains.map(gain=>Math.max(...gain.mock.calls.map(call=>call[0])))).toEqual([.087,.054]);
   for (let i=0;i<20;i++) audio.heartbeat(1/60,i%2?1:.2);
   expect(context.createOscillator).toHaveBeenCalledTimes(2);
   audio.heartbeat(.2,1); expect(context.createOscillator).toHaveBeenCalledTimes(4);

@@ -11,8 +11,9 @@ function fixture(){
 }
 it('draws the original local face only during Pressure, using the existing TV canvas texture',async()=>{
   const {picture,draw,image}=fixture();expect(image.src).toBe('/assets/apartment/tv-pressure-smile.webp');image.onload!();await picture.ready;
-  draw.mockClear();picture.draw(1,false);expect(draw.mock.calls.some(c=>c[0]===image)).toBe(false);
-  picture.draw(1,true);expect(draw.mock.calls.some(c=>c[0]===image)).toBe(true);expect(picture.canvas.width).toBe(256);expect(picture.canvas.height).toBe(192);
+  draw.mockClear();picture.draw(1,'normal');expect(draw.mock.calls.some(c=>c[0]===image)).toBe(false);
+  picture.draw(1,'static');expect(draw.mock.calls.some(c=>c[0]===image)).toBe(false);
+  picture.draw(1,'broadcast');expect(draw.mock.calls.some(c=>c[0]===image)).toBe(true);expect(picture.canvas.width).toBe(256);expect(picture.canvas.height).toBe(192);
 });
 it('settles readiness and removes late load listeners when a session ends during image loading',async()=>{
   const {picture,image}=fixture();picture.dispose();await picture.ready;expect(image.onload).toBe(null);expect(image.onerror).toBe(null);

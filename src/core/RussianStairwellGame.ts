@@ -1,9 +1,11 @@
 import { InventoryState, FLASHLIGHT_ID, COMPASS_ID, isQuestItem, type InventoryProgress } from '../apartment/InventoryState';
 import { Compass } from '../apartment/Compass';
 import { FuseBox, FUSE_BOX_MOUNT } from '../apartment/FuseBox';
+import {televisionSignal}from '../story/TelevisionSignal';
 import { GiftParcel } from '../stairwell/GiftParcel';
 import type { PalmFrame } from '../character/HeldItemPose';
 import { InventoryHUD } from '../ui/InventoryHUD';
+import { EquipmentTransition } from '../player/EquipmentTransition';
 import { EquipmentInput } from '../input/EquipmentInput';
 import { formatKeyLabel } from '../input/ControlBindings';
 import { MaterialLibrary } from '../render/MaterialLibrary';
@@ -174,6 +176,7 @@ export class RussianStairwellGame {
   private pcUse?: ComputerUseSequence;
   private readonly inventory:InventoryState;
   private readonly inventoryHUD:InventoryHUD;
+  private readonly equipmentTransition=new EquipmentTransition();
   private readonly equipmentInput:EquipmentInput;
   private readonly corridorStory:CorridorStory;
   private flashlight?:Flashlight;
@@ -1212,15 +1215,14 @@ export class RussianStairwellGame {
   }
   private updateEquipment(delta:number):void {
     this.flashlight?.setPickupAvailable(this.flashlightAvailable());
-    const owned=this.inventory.hasLamp,equipped=owned&&this.inventory.equipped?.id===FLASHLIGHT_ID&&!this.objects?.isHolding&&!this.pcUse?.isActive&&!this.closet?.isActive&&!this.peephole?.isActive&&!this.character?.isBusy;
-    const hand=this.character?.getEquipmentHandPosition(this.equipmentHand)?this.equipmentHand:undefined;
-    const small=this.inventory.equipped;
-    const showSmall=small&&!isQuestItem(small.id)&&!this.objects?.isHolding&&!this.pcUse?.isActive&&!this.closet?.isActive&&!this.peephole?.isActive&&!this.character?.isBusy;
-    this.objects?.presentEquipped(showSmall?small.id:undefined,hand,this.camera.quaternion);
-    // Quest items have a stable frame (fixed in the view in first person); the right hand grips them.
     const free=!this.objects?.isHolding&&!this.pcUse?.isActive&&!this.closet?.isActive&&!this.peephole?.isActive&&!this.character?.isBusy&&!this.encounter?.isHidden&&!this.shotDeath;
-    const reading=small?.id===COMPASS_ID&&free;
-    this.character?.setHeldItem(reading?'compass':equipped&&free?'torch':null,!!this.objects?.isHolding||!!showSmall);
+    if(free)this.equipmentTransition.update(this.inventory.equipped?.id,delta);else this.equipmentTransition.hide();
+    const id=this.equipmentTransition.presented,owned=this.inventory.hasLamp;
+    const equipped=owned&&id===FLASHLIGHT_ID&&free,reading=id===COMPASS_ID&&free;
+    const showSmall=!!id&&!isQuestItem(id)&&free;
+    this.character?.setHeldItem(reading?'compass':equipped?'torch':null,!!this.objects?.isHolding||showSmall,this.equipmentTransition.amount,showSmall);
+    const hand=this.character?.getEquipmentHandPosition(this.equipmentHand)?this.equipmentHand:undefined;
+    this.objects?.presentEquipped(showSmall?id:undefined,hand,this.camera.quaternion);
     const frame=(reading||equipped)&&this.character?.getHeldItemFrame(this.palm)?this.palm:undefined;
     this.flashlight?.update(this.camera,hand,owned,!!equipped,this.inventory.state.lampOn,delta,!this.settings.cameraMotion,equipped&&!reading?frame:undefined,this.corridorStory.modal);
     this.compass?.update(this.camera,reading?frame:undefined,!!reading&&(!!frame||!this.character),this.encounter?.creatureProximity??0,delta);
@@ -1471,6 +1473,7 @@ export class RussianStairwellGame {
 
   private applyApartmentPower(): void {
     const state = this.quest.devices;
+    this.devices?.setTelevisionSignal(televisionSignal(state.outageTriggered,!!this.corridorStory?.state.apartmentRelit));
     this.apartment?.setInteriorLightsEnabled(state.lightOn);
     this.apartment?.setPowerAvailable(!state.outageTriggered||this.corridorStory?.state.apartmentRelit);
     this.environment?.setPowerAvailable(!state.outageTriggered);
@@ -1560,6 +1563,7 @@ export class RussianStairwellGame {
     if(active&&this.corridorMounted&&!this.pcUse?.isActive&&!this.closet?.isActive&&!this.peephole?.isActive&&!this.character?.isBusy){
       this.player.getViewDirection(this.viewDirection);
       if(this.corridorStory.observe(this.player.position,{x:this.apartment!.doorCenter.x,y:this.apartment!.corridorFloorY,z:this.apartment!.doorCenter.z},this.inventory.hasLamp,Math.atan2(this.viewDirection.x,this.viewDirection.z))){
+        this.quest.setTelevision(true);
         this.objects?.release();this.neighbors?.suspend();
         this.deviceAudio?.corridorImpact(this.apartment!.doorCenter);this.applyApartmentPower();this.saveNow('autosave');
       }

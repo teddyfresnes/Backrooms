@@ -193,17 +193,18 @@ describe('backrooms hunter behaviour', () => {
     const events: HunterEvent[] = [];
     // Seen the whole time from 40 m: it may slink off, but never goes dormant while in sight.
     for (let t = 0; t < 60; t += DT) {
-      hunter.update(DT, senseAt(50, 50, { sees: false, seen: true }));
+      hunter.update(DT, senseAt(10, 30, { sees: false, seen: true }));
       events.push(...hunter.events);
       expect(hunter.state).not.toBe('dormant');
     }
     expect(events).toContain('sniff');
     // A sprint close by: it heads there.
-    const before = Math.hypot(hunter.position.x - 40, hunter.position.z - 40);
-    for (let t = 0; t < 2; t += DT) { hunter.update(DT, senseAt(40, 40, { noise: 1, speed: SPRINT })); events.push(...hunter.events); }
+    const target={x:hunter.position.x+4,z:hunter.position.z+2};
+    const before = Math.hypot(hunter.position.x-target.x,hunter.position.z-target.z);
+    for (let t = 0; t < 2; t += DT) { hunter.update(DT, senseAt(target.x,target.z, { noise: 1, speed: SPRINT })); events.push(...hunter.events); }
     if (hunter.state === 'search') {
       expect(events).toContain('heard');
-      expect(Math.hypot(hunter.position.x - 40, hunter.position.z - 40)).toBeLessThan(before);
+      expect(Math.hypot(hunter.position.x-target.x,hunter.position.z-target.z)).toBeLessThan(before);
     }
   });
 

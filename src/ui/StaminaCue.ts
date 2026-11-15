@@ -2,8 +2,8 @@ import './rift-hud.css';
 
 /**
  * The only visible trace of the player's breath: a thin, faint line under
- * the crosshair that appears in the critical zone and pulses while the
- * sprint is cut. Everything else (panting, heart, vignette, bob) is felt.
+ * the crosshair while stamina is below full, including recovery. It pulses
+ * while the sprint is cut.
  */
 export class StaminaCue {
   private readonly root = document.createElement('div');

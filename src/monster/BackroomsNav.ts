@@ -1,6 +1,8 @@
 /**
  * Local navigation for the Backrooms hunter: a square window of cells (0.5 m,
- * 64 m wide by default) on one story, centred near the player. Each cell is
+ * 64 m wide by default), retaining up to six walkable surfaces per column.
+ * Adjacent probes use the actual supporting height, so stairs connect floors.
+ * Each surface is
  * probed once (lazily, under a budget) through `NavCellProbe` — Rapier in the
  * game, a synthetic maze in tests — and cached until the window moves away or
  * the world changes. A Dijkstra field (8-neighbourhood, metres) is computed
@@ -12,7 +14,7 @@
 /** Walkable floor height of the creature-sized cell centred on (x, z) near `floorY`, or NaN when blocked. */
 export type NavCellProbe = (x: number, z: number, floorY: number) => number;
 
-export interface NavPoint { x: number; z: number }
+export interface NavPoint { x: number; z: number; y?: number }
 
 export interface NavSteer {
   /** Next point to walk straight to (farthest clear point down the field). */
@@ -35,6 +37,7 @@ const UNKNOWN = 0;
 const FREE = 1;
 const BLOCKED = 2;
 const QUEUED = 4;
+const LAYERS = 6;
 const DI = [1, -1, 0, 0, 1, 1, -1, -1] as const;
 const DJ = [0, 0, 1, -1, 1, -1, 1, -1] as const;
 
@@ -52,11 +55,15 @@ export class NavGrid {
   fieldVersion = 0;
   targetX = 0;
   targetZ = 0;
+  targetY = 0;
+  private readonly columns: number;
   private initialized = false;
   private readonly state: Uint8Array;
   private readonly heights: Float32Array;
+  private readonly references: Float32Array;
   private readonly scratchState: Uint8Array;
   private readonly scratchHeights: Float32Array;
+  private readonly scratchReferences: Float32Array;
   private readonly heap: Int32Array;
   private readonly heapCost: Float32Array;
   private heapLength = 0;
@@ -69,11 +76,14 @@ export class NavGrid {
   constructor(private readonly probe: NavCellProbe, size = NAV_SIZE, cell = NAV_CELL) {
     this.size = size;
     this.cell = cell;
-    const count = size * size;
+    this.columns = size * size;
+    const count = this.columns * LAYERS;
     this.state = new Uint8Array(count);
     this.heights = new Float32Array(count);
+    this.references = new Float32Array(count).fill(NaN);
     this.scratchState = new Uint8Array(count);
     this.scratchHeights = new Float32Array(count);
+    this.scratchReferences = new Float32Array(count);
     this.field = new Float32Array(count).fill(Infinity);
     this.heap = new Int32Array(count * 4);
     this.heapCost = new Float32Array(count * 4);
@@ -84,13 +94,14 @@ export class NavGrid {
   get ready(): boolean { return this.initialized; }
 
   /**
-   * Keeps the window around (x, z) on the story whose floor is `floorY`.
-   * Moving more than `margin` from the centre shifts the known cells; a new
-   * floor forgets them. Returns true when the window changed.
+   * Keeps the window around (x, z). A height change updates the default query
+   * surface without discarding paths on other floors. Horizontal shifts retain
+   * every overlapping surface. Returns true when the window changed.
    */
   follow(x: number, z: number, floorY: number, margin = 10): boolean {
     const half = this.width / 2;
-    if (!this.initialized || Math.abs(floorY - this.floorY) > 0.6) {
+    this.floorY = floorY;
+    if (!this.initialized) {
       this.originX = this.snap(x - half);
       this.originZ = this.snap(z - half);
       this.floorY = floorY;
@@ -115,7 +126,10 @@ export class NavGrid {
     for (let j = cj - reach; j <= cj + reach; j += 1) {
       for (let i = ci - reach; i <= ci + reach; i += 1) {
         if (i < 0 || j < 0 || i >= this.size || j >= this.size) continue;
-        this.state[j * this.size + i] = UNKNOWN;
+        for (let layer = 0; layer < LAYERS; layer++) {
+          const node = layer * this.columns + j * this.size + i;
+          this.state[node] = this.state[node]! & QUEUED;
+        }
       }
     }
     this.fieldValid = false;
@@ -123,12 +137,29 @@ export class NavGrid {
 
   columnOf(x: number): number { return Math.floor((x - this.originX) / this.cell); }
   rowOf(z: number): number { return Math.floor((z - this.originZ) / this.cell); }
-  indexAt(x: number, z: number): number {
+  indexAt(x: number, z: number, y = this.floorY): number {
     const i = this.columnOf(x), j = this.rowOf(z);
-    return i < 0 || j < 0 || i >= this.size || j >= this.size ? -1 : j * this.size + i;
+    if (i < 0 || j < 0 || i >= this.size || j >= this.size) return -1;
+    const column = j * this.size + i;
+    let known = -1, distance = Infinity, pending = -1, empty = -1, blocked = -1;
+    for (let layer = 0; layer < LAYERS; layer++) {
+      const node = layer * this.columns + column, state = this.state[node]! & 3;
+      const reference = this.references[node]!;
+      if (state === FREE) {
+        const d = Math.abs(this.heights[node]! - y);
+        if (d <= NAV_MAX_STEP + .07 && d < distance) { known = node; distance = d; }
+      } else if (!Number.isFinite(reference)) { if (empty < 0) empty = node; }
+      else if (Math.abs(reference - y) < .12) pending = node;
+      else if (state === BLOCKED && !(this.state[node]! & QUEUED)) blocked = node;
+    }
+    if (known >= 0) return known;
+    if (pending >= 0) return pending;
+    const node = empty >= 0 ? empty : blocked;
+    if (node >= 0) { this.references[node] = y; this.state[node] = UNKNOWN; this.field[node] = Infinity; }
+    return node;
   }
   centreX(index: number): number { return this.originX + ((index % this.size) + 0.5) * this.cell; }
-  centreZ(index: number): number { return this.originZ + (Math.floor(index / this.size) + 0.5) * this.cell; }
+  centreZ(index: number): number { return this.originZ + (Math.floor((index % this.columns) / this.size) + 0.5) * this.cell; }
   heightOf(index: number): number { return this.heights[index]!; }
 
   /** Known free (never probes). */
@@ -142,21 +173,27 @@ export class NavGrid {
     return (this.state[index]! & 3) === FREE;
   }
 
-  isFreeAt(x: number, z: number): boolean { return this.isFree(this.indexAt(x, z)); }
+  isFreeAt(x: number, z: number, y = this.floorY): boolean { return this.isFree(this.indexAt(x, z, y)); }
+  /** Discover both ends of a route, even when they occupy different floors. */
+  seed(x: number, z: number, y = this.floorY): void {
+    const index = this.indexAt(x, z, y);
+    if (!this.isFree(index)) return;
+    for (let k = 0; k < 4; k++) this.queue(this.neighbour(index, DI[k]!, DJ[k]!));
+  }
 
   /** Clearance in the cached body-sized cells, without extra physics probes. */
-  hasClearanceAt(x: number, z: number, radius: number): boolean {
-    if (!this.isKnownFree(this.indexAt(x, z))) return false;
+  hasClearanceAt(x: number, z: number, radius: number, y = this.floorY): boolean {
+    if (!this.isKnownFree(this.indexAt(x, z, y))) return false;
     for (let i = 0; i < 8; i += 1) {
       const angle = i * Math.PI / 4;
-      if (!this.isKnownFree(this.indexAt(x + Math.cos(angle) * radius, z + Math.sin(angle) * radius))) return false;
+      if (!this.isKnownFree(this.indexAt(x + Math.cos(angle) * radius, z + Math.sin(angle) * radius, y))) return false;
     }
     return true;
   }
 
   /** Floor height under (x, z), or NaN outside the walkable cells. */
-  floorAt(x: number, z: number): number {
-    const index = this.indexAt(x, z);
+  floorAt(x: number, z: number, y = this.floorY): number {
+    const index = this.indexAt(x, z, y);
     return this.isFree(index) ? this.heights[index]! : Number.NaN;
   }
 
@@ -167,7 +204,7 @@ export class NavGrid {
    */
   warm(budget: number): number {
     let done = 0;
-    const size = this.size, capacity = this.frontier.length;
+    const capacity = this.frontier.length;
     while (done < budget && this.frontierLength > 0) {
       const index = this.frontier[this.frontierHead]!;
       this.frontierHead = (this.frontierHead + 1) % capacity;
@@ -177,11 +214,9 @@ export class NavGrid {
       this.probeCell(index);
       done += 1;
       if ((this.state[index]! & 3) !== FREE) continue;
-      const i = index % size, j = (index - i) / size;
       for (let k = 0; k < 4; k += 1) {
-        const ni = i + DI[k]!, nj = j + DJ[k]!;
-        if (ni < 0 || nj < 0 || ni >= size || nj >= size) continue;
-        const next = nj * size + ni;
+        const next = this.neighbour(index, DI[k]!, DJ[k]!);
+        if (next < 0) continue;
         if ((this.state[next]! & 3) === UNKNOWN) this.queue(next);
       }
     }
@@ -195,28 +230,28 @@ export class NavGrid {
    * while `probeBudget` lasts, otherwise queued for `warm` and treated as
    * blocked for now. `maxCost` (metres) bounds the search.
    */
-  computeField(x: number, z: number, probeBudget = 64, maxCost = 96): boolean {
+  computeField(x: number, z: number, probeBudget = 64, maxCost = 192, y = this.floorY): boolean {
     this.field.fill(Infinity);
     this.heapLength = 0;
     this.targetX = x;
     this.targetZ = z;
-    let start = this.indexAt(x, z);
+    this.targetY = y;
+    let start = this.indexAt(x, z, y);
     if (start >= 0 && !this.isFree(start)) start = this.nearestFree(start, 2);
     if (start < 0) { this.fieldValid = false; this.fieldVersion += 1; return false; }
     let budget = probeBudget;
     this.field[start] = 0;
     this.push(start, 0);
-    const size = this.size, cell = this.cell, diagonal = cell * Math.SQRT2;
+    const cell = this.cell, diagonal = cell * Math.SQRT2;
     while (this.heapLength > 0) {
       const cost = this.heapCost[0]!;
       const index = this.pop();
       if (cost > this.field[index]!) continue;
       if (cost > maxCost) break;
-      const i = index % size, j = (index - i) / size, height = this.heights[index]!;
+      const height = this.heights[index]!;
       for (let k = 0; k < 8; k += 1) {
-        const ni = i + DI[k]!, nj = j + DJ[k]!;
-        if (ni < 0 || nj < 0 || ni >= size || nj >= size) continue;
-        const next = nj * size + ni;
+        const next = this.neighbour(index, DI[k]!, DJ[k]!);
+        if (next < 0) continue;
         const known = this.state[next]! & 3;
         if (known === UNKNOWN) {
           if (budget > 0) { this.probeCell(next); budget -= 1; }
@@ -226,10 +261,9 @@ export class NavGrid {
         if (Math.abs(this.heights[next]! - height) > NAV_MAX_STEP) continue;
         if (k >= 4) {
           // No diagonal squeeze between two blocked corners.
-          const a = j * size + ni, b = nj * size + i;
-          if ((this.state[a]! & 3) !== FREE || (this.state[b]! & 3) !== FREE) continue;
+          if (!this.diagonalClear(index, DI[k]!, DJ[k]!)) continue;
         }
-        const nextCost = cost + (k >= 4 ? diagonal : cell);
+        const nextCost = cost + Math.hypot(k >= 4 ? diagonal : cell, this.heights[next]! - height);
         if (nextCost < this.field[next]!) {
           this.field[next] = nextCost;
           this.push(next, nextCost);
@@ -242,9 +276,9 @@ export class NavGrid {
   }
 
   /** Path metres from (x, z) to the field's target (Infinity when unknown). */
-  distanceAt(x: number, z: number): number {
+  distanceAt(x: number, z: number, y = this.floorY): number {
     if (!this.fieldValid) return Infinity;
-    const index = this.indexAt(x, z);
+    const index = this.indexAt(x, z, y);
     if (index < 0) return Infinity;
     const value = this.field[index]!;
     if (Number.isFinite(value)) {
@@ -260,14 +294,14 @@ export class NavGrid {
    * clearance-checked line allows (`lookahead` cells). Null when there is no
    * route from here. `mode` -1 climbs the field instead (away from the target).
    */
-  steer(x: number, z: number, lookahead = 14, mode: 1 | -1 = 1): NavSteer | null {
+  steer(x: number, z: number, lookahead = 14, mode: 1 | -1 = 1, y = this.floorY): NavSteer | null {
     if (!this.fieldValid) return null;
-    let index = this.indexAt(x, z);
+    let index = this.indexAt(x, z, y);
     if (index < 0) return null;
     if (!Number.isFinite(this.field[index]!)) index = this.nearestReached(index, 2);
     if (index < 0) return null;
     const out = this.steerScratch;
-    if (mode === 1 && this.clearLine(x, z, this.targetX, this.targetZ, lookahead * this.cell)) {
+    if (mode === 1 && this.clearLine(x, z, this.targetX, this.targetZ, lookahead * this.cell, .18, y, this.targetY)) {
       out.x = this.targetX; out.z = this.targetZ; out.direct = true;
       out.reach = Math.hypot(out.x - x, out.z - z); out.turn = 0;
       return out;
@@ -277,7 +311,7 @@ export class NavGrid {
       const next = this.descend(cursor, mode);
       if (next < 0) break;
       cursor = next;
-      if (this.clearLine(x, z, this.centreX(cursor), this.centreZ(cursor))) best = cursor;
+      if (this.clearLine(x, z, this.centreX(cursor), this.centreZ(cursor), Infinity, .18, y, this.heights[cursor]!)) best = cursor;
       else if (best >= 0) break;
       if (mode === 1 && this.field[cursor] === 0) break;
     }
@@ -298,23 +332,23 @@ export class NavGrid {
   }
 
   /** Every sample of the segment lies in a known free cell, with a body clearance either side. */
-  clearLine(ax: number, az: number, bx: number, bz: number, maxLength = Infinity, clearance = 0.18): boolean {
+  clearLine(ax: number, az: number, bx: number, bz: number, maxLength = Infinity, clearance = 0.18, y = this.floorY, endY?: number): boolean {
     const dx = bx - ax, dz = bz - az, length = Math.hypot(dx, dz);
     if (length > maxLength) return false;
-    if (length < 1e-4) return this.isKnownFree(this.indexAt(ax, az));
+    if (length < 1e-4) return (endY === undefined || Math.abs(endY-y) < NAV_MAX_STEP) && this.isKnownFree(this.indexAt(ax, az, y));
     const steps = Math.ceil(length / (this.cell * 0.5));
     const nx = -dz / length * clearance, nz = dx / length * clearance;
-    let previousHeight = Number.NaN;
+    let previousHeight = y;
     for (let step = 0; step <= steps; step += 1) {
       const t = step / steps, x = ax + dx * t, z = az + dz * t;
-      const index = this.indexAt(x, z);
+      const index = this.indexAt(x, z, previousHeight);
       if (!this.isKnownFree(index)) return false;
       const height = this.heights[index]!;
       if (Number.isFinite(previousHeight) && Math.abs(height - previousHeight) > NAV_MAX_STEP) return false;
       previousHeight = height;
-      if (clearance > 0 && (!this.isKnownFree(this.indexAt(x + nx, z + nz)) || !this.isKnownFree(this.indexAt(x - nx, z - nz)))) return false;
+      if (clearance > 0 && (!this.isKnownFree(this.indexAt(x + nx, z + nz, height)) || !this.isKnownFree(this.indexAt(x - nx, z - nz, height)))) return false;
     }
-    return true;
+    return endY === undefined || Math.abs(previousHeight-endY) <= NAV_MAX_STEP;
   }
 
   /**
@@ -329,7 +363,7 @@ export class NavGrid {
     const mx = dx / steps, mz = dz / steps;
     let travelled = 0;
     for (let i = 0; i < steps; i += 1) {
-      const from = this.indexAt(position.x, position.z);
+      const from = this.indexAt(position.x, position.z, position.y ?? this.floorY);
       if (this.tryMove(position, from, mx, mz)) travelled += Math.hypot(mx, mz);
       else if (Math.abs(mx) > 1e-5 && this.tryMove(position, from, mx, 0)) travelled += Math.abs(mx);
       else if (Math.abs(mz) > 1e-5 && this.tryMove(position, from, 0, mz)) travelled += Math.abs(mz);
@@ -340,36 +374,50 @@ export class NavGrid {
 
   private tryMove(position: NavPoint, from: number, mx: number, mz: number): boolean {
     const x = position.x + mx, z = position.z + mz;
-    const to = this.indexAt(x, z);
+    const y = this.isKnownFree(from) ? this.heights[from]! : position.y ?? this.floorY;
+    const to = this.indexAt(x, z, y);
     if (to < 0 || !this.isFree(to)) return false;
     if (from >= 0 && to !== from) {
       if (this.isKnownFree(from) && Math.abs(this.heights[to]! - this.heights[from]!) > NAV_MAX_STEP) return false;
-      const size = this.size, fi = from % size, fj = (from - fi) / size, ti = to % size, tj = (to - ti) / size;
-      if (fi !== ti && fj !== tj && (!this.isFree(fj * size + ti) || !this.isFree(tj * size + fi))) return false;
+      const fi = from % this.size, fj = Math.floor((from % this.columns)/this.size), ti = to % this.size, tj = Math.floor((to % this.columns)/this.size);
+      if (fi !== ti && fj !== tj && (!this.isFree(this.neighbour(from, ti-fi, 0)) || !this.isFree(this.neighbour(from, 0, tj-fj)))) return false;
     }
     position.x = x; position.z = z;
+    if (position.y !== undefined) position.y = this.heights[to]!;
     return true;
   }
 
   /** Free metres from (x, z) along a horizontal direction (known cells only). */
-  openLength(x: number, z: number, dirX: number, dirZ: number, max = 30): number {
+  openLength(x: number, z: number, dirX: number, dirZ: number, max = 30, y = this.floorY): number {
     const length = Math.hypot(dirX, dirZ);
     if (length < 1e-6) return 0;
     const ux = dirX / length, uz = dirZ / length, step = this.cell * 0.5;
     for (let travelled = step; travelled <= max; travelled += step) {
-      if (!this.isKnownFree(this.indexAt(x + ux * travelled, z + uz * travelled))) return travelled - step;
+      const node = this.indexAt(x + ux * travelled, z + uz * travelled, y);
+      if (!this.isKnownFree(node) || Math.abs(this.heights[node]!-y)>NAV_MAX_STEP) return travelled-step;
+      y = this.heights[node]!;
     }
     return max;
+  }
+  /** Height reached along a known continuous surface, including several metres of ramp. */
+  floorAlong(ax:number,az:number,bx:number,bz:number,y=this.floorY):number{
+    const steps=Math.max(1,Math.ceil(Math.hypot(bx-ax,bz-az)/(this.cell*.5)));
+    for(let step=0;step<=steps;step++){
+      const t=step/steps,node=this.indexAt(ax+(bx-ax)*t,az+(bz-az)*t,y);
+      if(!this.isKnownFree(node)||Math.abs(this.heights[node]!-y)>NAV_MAX_STEP)return NaN;
+      y=this.heights[node]!;
+    }
+    return y;
   }
 
   /** The nearest known free cell to `index` within `radius` cells (or -1). */
   nearestFree(index: number, radius: number): number {
-    const size = this.size, ci = index % size, cj = (index - ci) / size;
+    const size = this.size, ci = index % size, cj = Math.floor((index % this.columns) / size), y = this.references[index]!;
     let best = -1, bestDistance = Infinity;
     for (let j = cj - radius; j <= cj + radius; j += 1) {
       for (let i = ci - radius; i <= ci + radius; i += 1) {
         if (i < 0 || j < 0 || i >= size || j >= size) continue;
-        const candidate = j * size + i;
+        const candidate = this.indexAt(this.originX+(i+.5)*this.cell, this.originZ+(j+.5)*this.cell, y);
         if (!this.isFree(candidate)) continue;
         const distance = (i - ci) * (i - ci) + (j - cj) * (j - cj);
         if (distance < bestDistance) { bestDistance = distance; best = candidate; }
@@ -381,9 +429,9 @@ export class NavGrid {
   /** Visits known free cells every `stride` cells (for placement scoring). */
   forEachFree(stride: number, visit: (index: number, x: number, z: number) => void): void {
     const size = this.size;
-    for (let j = 0; j < size; j += stride) {
+    for (let layer = 0; layer < LAYERS; layer++) for (let j = 0; j < size; j += stride) {
       for (let i = 0; i < size; i += stride) {
-        const index = j * size + i;
+        const index = layer * this.columns + j * size + i;
         if ((this.state[index]! & 3) === FREE) visit(index, this.centreX(index), this.centreZ(index));
       }
     }
@@ -395,6 +443,7 @@ export class NavGrid {
 
   private clear(): void {
     this.state.fill(UNKNOWN);
+    this.references.fill(NaN);
     this.field.fill(Infinity);
     this.fieldValid = false;
     this.frontierLength = 0;
@@ -404,19 +453,22 @@ export class NavGrid {
   private shift(shiftI: number, shiftJ: number): void {
     const size = this.size;
     this.scratchState.fill(UNKNOWN);
-    for (let j = 0; j < size; j += 1) {
+    this.scratchReferences.fill(NaN);
+    for (let layer = 0; layer < LAYERS; layer++) for (let j = 0; j < size; j += 1) {
       const sj = j + shiftJ;
       if (sj < 0 || sj >= size) continue;
       for (let i = 0; i < size; i += 1) {
         const si = i + shiftI;
         if (si < 0 || si >= size) continue;
-        const source = sj * size + si, target = j * size + i;
+        const source = layer * this.columns + sj * size + si, target = layer * this.columns + j * size + i;
         this.scratchState[target] = this.state[source]! & 3;
         this.scratchHeights[target] = this.heights[source]!;
+        this.scratchReferences[target] = this.references[source]!;
       }
     }
     this.state.set(this.scratchState);
     this.heights.set(this.scratchHeights);
+    this.references.set(this.scratchReferences);
     this.originX += shiftI * this.cell;
     this.originZ += shiftJ * this.cell;
     this.field.fill(Infinity);
@@ -427,13 +479,14 @@ export class NavGrid {
 
   private probeCell(index: number): void {
     this.probes += 1;
-    const height = this.probe(this.centreX(index), this.centreZ(index), this.floorY);
+    const height = this.probe(this.centreX(index), this.centreZ(index), this.references[index]!);
     const free = Number.isFinite(height);
     this.state[index] = (this.state[index]! & QUEUED) | (free ? FREE : BLOCKED);
     if (free) this.heights[index] = height;
   }
 
   private queue(index: number): void {
+    if (index < 0 || (this.state[index]! & 3) !== UNKNOWN) return;
     if (this.state[index]! & QUEUED || this.frontierLength >= this.frontier.length) return;
     this.state[index] = this.state[index]! | QUEUED;
     this.frontier[(this.frontierHead + this.frontierLength) % this.frontier.length] = index;
@@ -442,30 +495,43 @@ export class NavGrid {
 
   /** The reachable neighbour with the lowest (mode 1) or highest (mode -1) field value. */
   private descend(index: number, mode: 1 | -1): number {
-    const size = this.size, i = index % size, j = (index - i) / size, here = this.field[index]!;
+    const here = this.field[index]!;
     let best = -1, bestValue = here;
     for (let k = 0; k < 8; k += 1) {
-      const ni = i + DI[k]!, nj = j + DJ[k]!;
-      if (ni < 0 || nj < 0 || ni >= size || nj >= size) continue;
-      const next = nj * size + ni, value = this.field[next]!;
+      const next = this.neighbour(index, DI[k]!, DJ[k]!);
+      if (!this.isKnownFree(next) || Math.abs(this.heights[next]!-this.heights[index]!)>NAV_MAX_STEP) continue;
+      const value = this.field[next]!;
       if (!Number.isFinite(value)) continue;
-      if (k >= 4 && ((this.state[j * size + ni]! & 3) !== FREE || (this.state[nj * size + i]! & 3) !== FREE)) continue;
+      if (k >= 4 && !this.diagonalClear(index, DI[k]!, DJ[k]!)) continue;
       if (mode === 1 ? value < bestValue : value > bestValue) { bestValue = value; best = next; }
     }
     return best;
   }
 
   private nearestReached(index: number, radius: number): number {
-    const size = this.size, ci = index % size, cj = (index - ci) / size;
+    const size = this.size, ci = index % size, cj = Math.floor((index % this.columns) / size);
+    const y = this.isKnownFree(index) ? this.heights[index]! : this.references[index]!;
     let best = -1, bestValue = Infinity;
     for (let j = cj - radius; j <= cj + radius; j += 1) {
       for (let i = ci - radius; i <= ci + radius; i += 1) {
         if (i < 0 || j < 0 || i >= size || j >= size) continue;
-        const value = this.field[j * size + i]!;
-        if (value < bestValue) { bestValue = value; best = j * size + i; }
+        const node = this.indexAt(this.originX+(i+.5)*this.cell,this.originZ+(j+.5)*this.cell,y);
+        if (!this.isKnownFree(node) || Math.abs(this.heights[node]!-y)>NAV_MAX_STEP) continue;
+        const value = this.field[node]!;
+        if (value < bestValue) { bestValue = value; best = node; }
       }
     }
     return Number.isFinite(bestValue) ? best : -1;
+  }
+
+  private neighbour(index: number, di: number, dj: number): number {
+    const i=index%this.size+di, j=Math.floor((index%this.columns)/this.size)+dj;
+    if(i<0||j<0||i>=this.size||j>=this.size)return -1;
+    return this.indexAt(this.originX+(i+.5)*this.cell,this.originZ+(j+.5)*this.cell,this.heights[index]!);
+  }
+  private diagonalClear(index: number, di: number, dj: number): boolean {
+    const a=this.neighbour(index,di,0), b=this.neighbour(index,0,dj), y=this.heights[index]!;
+    return this.isKnownFree(a)&&this.isKnownFree(b)&&Math.abs(this.heights[a]!-y)<=NAV_MAX_STEP&&Math.abs(this.heights[b]!-y)<=NAV_MAX_STEP;
   }
 
   private push(index: number, cost: number): void {

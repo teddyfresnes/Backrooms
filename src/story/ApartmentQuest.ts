@@ -103,6 +103,13 @@ export class ApartmentQuest {
   get isComputerAvailable(): boolean { return this.state.gasSeen && this.state.tvSeen && this.state.radioSeen; }
   /** The TV and the radio wait for the meal to be on the stove. */
   get canUseMediaDevices(): boolean { return this.state.gasSeen || this.state.outageTriggered; }
+  get deviceGoals(): readonly ('gas'|'tv'|'radio')[] {
+    const s=this.state;
+    if(!this.homeReached||!s.lightSeen||s.outageTriggered)return [];
+    if(!s.gasSeen)return ['gas'];
+    if(!s.tvSeen||!s.radioSeen)return [...(!s.tvSeen?['tv' as const]:[]),...(!s.radioSeen?['radio' as const]:[])];
+    return s.firstGameFinished&&s.journey?.thoughtFinished&&s.gasOn?['gas']:[];
+  }
   get bankChecked(): boolean { return this.progress.readMailIds.includes(BANK_PAGE_ID); }
   snapshot(): ComputerProgress {
     return { ...this.progress, readMailIds: [...this.progress.readMailIds], apartment: { ...this.state, spoken: [...this.state.spoken],journey:copyJourney(this.state.journey!) } };

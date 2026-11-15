@@ -71,7 +71,7 @@ export const HUNTER_TUNING = {
   vanishDistance: 25,
   /** A still lurker wakes when he comes this close (path), or stares from this close. */
   lurkWake: 9,
-  visionRange: 46,
+  visionRange: 160,
   stareNotice: 1.4,
   /** A brief hesitation, followed by a turn and pursuit if the gaze continues. */
   stareFreeze: 14,
@@ -158,7 +158,7 @@ export class BackroomsHunter {
   private lungeCooldown = 0;
   private fieldTimer = 0;
   private fieldTargetsPlayer = false;
-  private readonly goal = { x: 0, z: 0 };
+  private readonly goal = { x: 0, y: 0, z: 0 };
   private readonly anchor = { x: 0, z: 0 };
   private crouched = false;
   private peek = 0;
@@ -180,7 +180,7 @@ export class BackroomsHunter {
   private trailHead = 0;
   private trailLength = 0;
   private trailCursor = 0;
-  private readonly lastFeet = { x: Number.NaN, z: 0 };
+  private readonly lastFeet = { x: Number.NaN, y: 0, z: 0 };
 
   constructor(private readonly nav: NavGrid, private readonly random: SeededRandom) {}
 
@@ -224,7 +224,7 @@ export class BackroomsHunter {
     this.crouched = !!spot.crouched;
     this.peek = spot.peek ?? 0;
     this.anchor.x = spot.x; this.anchor.z = spot.z;
-    this.goal.x = spot.x; this.goal.z = spot.z;
+    this.goal.x = spot.x; this.goal.y = spot.y; this.goal.z = spot.z;
     if (spot.crossTo) { this.goal.x = spot.crossTo.x; this.goal.z = spot.crossTo.z; }
     else if (spot.style === 'prowl') this.pickProwlGoal();
     this.speed = 0;
@@ -280,7 +280,7 @@ export class BackroomsHunter {
     // A few unknown cells per frame: the field keeps growing without a frame spike.
     this.nav.warm(24);
     const straight = Math.hypot(feet.x - this.position.x, feet.z - this.position.z);
-    const fieldGap = this.fieldIsPlayer ? this.nav.distanceAt(this.position.x, this.position.z) : Infinity;
+    const fieldGap = this.fieldIsPlayer ? this.nav.distanceAt(this.position.x, this.position.z, this.position.y) : Infinity;
     this.gap = Number.isFinite(fieldGap) ? Math.max(straight, fieldGap) : straight * 1.3;
     const heard = senses.noise > 0.02 && senses.noise * HUNTER_TUNING.hearRange >= this.gap;
     const chaseHeard = senses.noise > .02 && senses.noise * HUNTER_TUNING.chaseHearRange >= this.gap;
@@ -293,11 +293,13 @@ export class BackroomsHunter {
       this.lastKnown.x = feet.x; this.lastKnown.y = feet.y; this.lastKnown.z = feet.z;
       this.hasSighting = true;
     }
-    const lead = this.state === 'chase' && !perceived ? this.nav.openLength(this.lastKnown.x, this.lastKnown.z, this.lastHeading.x, this.lastHeading.z, 8) : 0;
+    const lead = this.state === 'chase' && !perceived ? this.nav.openLength(this.lastKnown.x, this.lastKnown.z, this.lastHeading.x, this.lastHeading.z, 8, this.lastKnown.y) : 0;
     this.pursuitGoal.x = this.lastKnown.x + this.lastHeading.x * lead;
-    this.pursuitGoal.y = this.lastKnown.y; this.pursuitGoal.z = this.lastKnown.z + this.lastHeading.z * lead;
+    this.pursuitGoal.z = this.lastKnown.z + this.lastHeading.z * lead;
+    const leadY = this.nav.floorAlong(this.lastKnown.x,this.lastKnown.z,this.pursuitGoal.x,this.pursuitGoal.z,this.lastKnown.y);
+    this.pursuitGoal.y = Number.isFinite(leadY) ? leadY : this.lastKnown.y;
     this.refreshField(dt, feet, perceived);
-    this.lastFeet.x = feet.x; this.lastFeet.z = feet.z;
+    this.lastFeet.x = feet.x; this.lastFeet.y = feet.y; this.lastFeet.z = feet.z;
 
     if (senses.cinematic && this.state !== 'withdraw') {
       // A scripted shot: it never presses on, it slinks out of the frame.
@@ -370,7 +372,7 @@ export class BackroomsHunter {
       if (this.walkTo(dt, this.goal.x, this.goal.z, tuning.crossSpeed, 0.5)) { this.enter('withdraw'); return; }
       if (this.watchProgress(dt)) { this.style = 'prowl'; this.pickProwlGoal(); }
     } else {
-      // Ambush: the knock, a few seconds of nothing, then it comes for him.
+      // A noise behind a wall is followed by a patrol, not an omniscient charge.
       this.lookAtPlayer = false;
       if (this.ambushWait > 0) {
         this.ambushWait -= dt;
@@ -378,11 +380,8 @@ export class BackroomsHunter {
         this.speed = 0;
         if (this.ambushWait <= 0) this.events.push('surge');
       } else {
-        this.motion = 'run';
-        this.speed += (tuning.ambushSpeed - this.speed) * (1 - Math.exp(-dt * 3));
-        const steer = this.steerToPlayer(senses.feet);
-        if (steer) this.advance(dt, steer.x, steer.z, this.speed, 10);
-        if (senses.sees || this.stateTime > 14) { this.beginNotice('ambush'); return; }
+        if (senses.sees || heard) { this.beginNotice('ambush'); return; }
+        this.style='prowl'; this.crouched=false; this.pickProwlGoal(); this.fieldTimer=0;
       }
     }
     if (this.state === 'lurk' && this.stateTime > tuning.lurkPatience && this.style !== 'ambush' && this.canVanish(senses)) this.vanish();
@@ -392,14 +391,14 @@ export class BackroomsHunter {
     this.noticeFrom = from;
     this.noticeLength = HUNTER_TUNING.noticeTime[from];
     this.chaseStart.x = this.lastFeet.x; this.chaseStart.z = this.lastFeet.z;
-    this.chaseStart.y = this.nav.floorY;
+    this.chaseStart.y = this.lastFeet.y;
     // A stare can alert it while its back is turned. Remember that new
     // sighting now, before any chase frame can reuse an older encounter.
     if (!this.hasSighting) {
       const dx = this.lastFeet.x - this.position.x, dz = this.lastFeet.z - this.position.z, length = Math.hypot(dx, dz) || 1;
       this.lastHeading.x = dx / length; this.lastHeading.z = dz / length;
     }
-    this.lastKnown.x = this.lastFeet.x; this.lastKnown.y = this.nav.floorY; this.lastKnown.z = this.lastFeet.z;
+    this.lastKnown.x = this.lastFeet.x; this.lastKnown.y = this.lastFeet.y; this.lastKnown.z = this.lastFeet.z;
     this.hasSighting = true;
     this.enter('notice');
     this.events.push('notice');
@@ -434,7 +433,7 @@ export class BackroomsHunter {
     if (heard) { this.lastKnown.x = senses.feet.x; this.lastKnown.y = senses.feet.y; this.lastKnown.z = senses.feet.z; }
     if (senses.sees || heard) this.recordTrail(senses.feet);
     if (straight < tuning.catchRadius && Math.abs(senses.feet.y - this.position.y) < 1.3
-      && (senses.sees || this.nav.clearLine(this.position.x, this.position.z, senses.feet.x, senses.feet.z))) {
+      && (senses.sees || this.nav.clearLine(this.position.x, this.position.z, senses.feet.x, senses.feet.z, Infinity, .18, this.position.y, senses.feet.y))) {
       this.events.push('caught');
       this.enter('dormant');
       return;
@@ -487,7 +486,7 @@ export class BackroomsHunter {
     }
     if (steer && this.fallback <= 0) {
       // In the open, at him as he is now, not where the field was last computed.
-      const live = steer.direct && this.nav.clearLine(this.position.x, this.position.z, target.x, target.z);
+      const live = steer.direct && this.nav.clearLine(this.position.x, this.position.z, target.x, target.z, Infinity, .18, this.position.y, target.y);
       if (live) this.advance(dt, target.x, target.z, this.speed, 12);
       else this.advanceField(dt, this.speed, 12);
     } else this.followTrail(dt, target);
@@ -496,7 +495,7 @@ export class BackroomsHunter {
 
   private beginSearch(): void {
     const tuning = HUNTER_TUNING;
-    this.goal.x = this.lastKnown.x; this.goal.z = this.lastKnown.z;
+    this.goal.x = this.lastKnown.x; this.goal.y = this.lastKnown.y; this.goal.z = this.lastKnown.z;
     this.pointsLeft = this.random.int(tuning.searchPoints[0], tuning.searchPoints[1]);
     this.searchLeft = this.random.float(tuning.searchTime[0], tuning.searchTime[1]);
     this.searchSpeed = tuning.searchSpeed;
@@ -524,7 +523,7 @@ export class BackroomsHunter {
     if (heard && this.heardCooldown <= 0) {
       // Footsteps: straight there, faster.
       this.heardCooldown = 1.5;
-      this.goal.x = senses.feet.x; this.goal.z = senses.feet.z;
+      this.goal.x = senses.feet.x; this.goal.y = senses.feet.y; this.goal.z = senses.feet.z;
       this.searchSpeed = tuning.heardSpeed;
       this.pointsLeft = Math.max(this.pointsLeft, 2);
       this.pause = 0;
@@ -639,8 +638,8 @@ export class BackroomsHunter {
   }
 
   private provokedByStare(senses: HunterSenses): boolean {
-    return senses.stared && senses.seen && this.staredTime >= HUNTER_TUNING.stareNotice
-      && Math.hypot(senses.feet.x - this.position.x, senses.feet.z - this.position.z) <= HUNTER_TUNING.visionRange;
+    return senses.seen && ((senses.stared && this.staredTime >= HUNTER_TUNING.stareNotice)
+      || (this.gap>46 && this.seenTime>=.3));
   }
 
   private accrueAwareness(dt: number, senses: HunterSenses, heard: boolean): void {
@@ -657,37 +656,37 @@ export class BackroomsHunter {
     this.fieldTimer = 0.25;
     const toGoal = this.state === 'search' || (this.state === 'lurk' && (this.style === 'prowl' || this.style === 'cross'));
     if (toGoal) {
-      this.nav.computeField(this.goal.x, this.goal.z, 48);
+      this.nav.computeField(this.goal.x, this.goal.z, 48, 192, this.goal.y);
       this.fieldTargetsPlayer = false;
     } else {
       const memory = this.state === 'chase' && !perceived;
       const target = memory ? this.pursuitGoal : feet;
-      this.nav.computeField(target.x, target.z, 48);
+      this.nav.computeField(target.x, target.z, 48, 192, target.y);
       this.fieldTargetsPlayer = !memory;
     }
   }
 
   private steerToPlayer(feet: Readonly<Vec3Data>, live = true): NavSteer | null {
-    if (!this.nav.fieldValid || this.fieldTargetsPlayer !== live) { this.nav.computeField(feet.x, feet.z, 48); this.fieldTargetsPlayer = live; this.fieldTimer = 0.25; }
-    return this.nav.steer(this.position.x, this.position.z, 24);
+    if (!this.nav.fieldValid || this.fieldTargetsPlayer !== live) { this.nav.computeField(feet.x, feet.z, 48, 192, feet.y); this.fieldTargetsPlayer = live; this.fieldTimer = 0.25; }
+    return this.nav.steer(this.position.x, this.position.z, 24, 1, this.position.y);
   }
 
   /** Down the goal field; true once within `radius` of the goal. */
   private walkTo(dt: number, x: number, z: number, speed: number, radius: number): boolean {
     const distance = Math.hypot(x - this.position.x, z - this.position.z);
-    if (distance <= radius) return true;
-    if (this.fieldTargetsPlayer || !this.nav.fieldValid || Math.abs(this.nav.targetX - x) > 0.01 || Math.abs(this.nav.targetZ - z) > 0.01) {
-      this.nav.computeField(x, z, 48);
+    if (distance <= radius && Math.abs(this.position.y-this.goal.y)<.5) return true;
+    if (this.fieldTargetsPlayer || !this.nav.fieldValid || Math.abs(this.nav.targetX - x) > 0.01 || Math.abs(this.nav.targetZ - z) > 0.01 || Math.abs(this.nav.targetY-this.goal.y)>.1) {
+      this.nav.computeField(x, z, 48, 192, this.goal.y);
       this.fieldTargetsPlayer = false;
       this.fieldTimer = 0.25;
     }
-    const steer = this.nav.steer(this.position.x, this.position.z, 16);
+    const steer = this.nav.steer(this.position.x, this.position.z, 16, 1, this.position.y);
     // An incomplete field is not an arrival. Keep exploring it instead of
     // idling forever at the spawn or pretending to have reached a search room.
     if (!steer) { this.speed *= Math.exp(-dt * 4); return false; }
     this.speed += (speed - this.speed) * (1 - Math.exp(-dt * 4));
     this.advanceField(dt, this.speed, 8);
-    return Math.hypot(x - this.position.x, z - this.position.z) <= radius;
+    return Math.hypot(x - this.position.x, z - this.position.z) <= radius && Math.abs(this.position.y-this.goal.y)<.5;
   }
 
   /** Spend the whole frame's movement across short grid legs. Clamping each
@@ -696,7 +695,7 @@ export class BackroomsHunter {
     if (speed <= 0) return;
     let remaining = dt;
     for (let leg = 0; leg < 6 && remaining > 1e-5; leg += 1) {
-      const steer = this.nav.steer(this.position.x, this.position.z, 24);
+      const steer = this.nav.steer(this.position.x, this.position.z, 24, 1, this.position.y);
       if (!steer || steer.reach < 1e-4) return;
       const elapsed = Math.min(remaining, steer.reach / speed);
       const moved = this.advance(elapsed, steer.x, steer.z, speed, turnRate);
@@ -707,8 +706,8 @@ export class BackroomsHunter {
 
   /** Away from the player: up the player field. */
   private retreat(dt: number, feet: Readonly<Vec3Data>, speed: number): void {
-    if (!this.fieldIsPlayer) { this.nav.computeField(feet.x, feet.z, 48); this.fieldTargetsPlayer = true; this.fieldTimer = 0.25; }
-    const steer = this.nav.steer(this.position.x, this.position.z, 10, -1);
+    if (!this.fieldIsPlayer) { this.nav.computeField(feet.x, feet.z, 48, 192, feet.y); this.fieldTargetsPlayer = true; this.fieldTimer = 0.25; }
+    const steer = this.nav.steer(this.position.x, this.position.z, 10, -1, this.position.y);
     this.speed += ((steer ? speed : 0) - this.speed) * (1 - Math.exp(-dt * 4));
     if (steer) this.advance(dt, steer.x, steer.z, this.speed, 7);
   }
@@ -719,8 +718,6 @@ export class BackroomsHunter {
     if (distance < 1e-4 || speed <= 0) return 0;
     const step = Math.min(distance, speed * dt);
     const moved = this.nav.move(this.position, dx / distance * step, dz / distance * step);
-    const floor = this.nav.floorAt(this.position.x, this.position.z);
-    if (Number.isFinite(floor)) this.position.y += (floor - this.position.y) * (1 - Math.exp(-dt * 12));
     this.yaw += wrap(Math.atan2(dx, dz) - this.yaw) * (1 - Math.exp(-dt * turnRate));
     this.stepDistance += moved;
     if (this.stepDistance > (this.speed > 4 ? 1.5 : 0.9)) { this.stepDistance = 0; this.events.push('step'); }
@@ -777,15 +774,15 @@ export class BackroomsHunter {
     for (let attempt = 0; attempt < 24; attempt += 1) {
       const angle = this.yaw + this.random.float(-2.4, 2.4), length = this.random.float(3, 10);
       const x = this.anchor.x + Math.sin(angle) * length, z = this.anchor.z + Math.cos(angle) * length;
-      if (this.nav.isFreeAt(x, z) && this.nav.clearLine(this.position.x, this.position.z, x, z)) { this.goal.x = x; this.goal.z = z; return; }
+      if (this.nav.clearLine(this.position.x, this.position.z, x, z, Infinity, .18, this.position.y)) { this.goal.x = x; this.goal.y=this.nav.floorAlong(this.position.x,this.position.z,x,z,this.position.y); this.goal.z = z; return; }
     }
     let best = -Infinity;
     this.nav.forEachFree(2, (index, x, z) => {
       const distance = Math.hypot(x - this.position.x, z - this.position.z);
-      if (distance < 2 || distance > 10 || !Number.isFinite(this.nav.field[index]!)) return;
+      if (distance < 2 || distance > 10 || Math.abs(this.nav.heightOf(index)-this.position.y)>.43) return;
       const along = ((x - this.position.x) * Math.sin(this.yaw) + (z - this.position.z) * Math.cos(this.yaw)) / distance;
       const score = this.random.float(0, 1) + along * .5 - Math.abs(distance - 6) * 0.1;
-      if (score > best) { best = score; this.goal.x = x; this.goal.z = z; }
+      if (score > best) { best = score; this.goal.x = x; this.goal.y=this.nav.heightOf(index); this.goal.z = z; }
     });
   }
 
@@ -798,13 +795,14 @@ export class BackroomsHunter {
       const angle = this.random.float(0, Math.PI * 2), length = this.random.float(3, 12);
       const ux = Math.sin(angle), uz = Math.cos(angle);
       const x = baseX + ux * length, z = baseZ + uz * length;
-      if (!this.nav.isFreeAt(x, z) || !Number.isFinite(this.nav.field[this.nav.indexAt(x, z)]!)) continue;
+      if (!this.nav.isFreeAt(x, z, this.lastKnown.y) || !Number.isFinite(this.nav.field[this.nav.indexAt(x, z, this.lastKnown.y)]!)) continue;
       const along = ux * this.lastHeading.x + uz * this.lastHeading.z;
       if (this.stateTime < 4 && along < 0.3) continue;
       const score = along * 0.8 + this.random.float(0, 0.6) - Math.abs(length - 7) * 0.03;
       if (score > bestScore) { bestScore = score; bestX = x; bestZ = z; }
     }
-    this.goal.x = bestX; this.goal.z = bestZ;
+    this.goal.x = bestX; this.goal.y=this.nav.floorAt(bestX,bestZ,this.lastKnown.y); this.goal.z = bestZ;
+    if(!Number.isFinite(this.goal.y))this.goal.y=this.lastKnown.y;
     this.fieldTimer = 0;
   }
 

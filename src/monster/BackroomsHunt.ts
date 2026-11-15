@@ -109,7 +109,7 @@ export class BackroomsHunt {
     // Without a cell probe (tests of other sequences) the floor is open everywhere.
     this.nav = new NavGrid(physics.probeWalkableCell
       ? (x, z, floorY) => physics.probeWalkableCell!(x, z, floorY)
-      : (_x, _z, floorY) => floorY);
+      : (_x, _z, floorY) => floorY, 256);
     this.hunter = new BackroomsHunter(this.nav, this.random.fork('hunter'));
     this.director = new TensionDirector(this.random.fork('director'));
   }
@@ -224,7 +224,11 @@ export class BackroomsHunt {
     // Keep both ends of the route in the window. Centring only on the player
     // could strand a living hunter outside the grid after a single recenter.
     const focus = this.hunter.visible ? this.hunter.position : this.feet;
-    this.nav.follow((this.feet.x + focus.x) * .5, (this.feet.z + focus.z) * .5, this.feet.y);
+    const dx=this.feet.x-focus.x,dz=this.feet.z-focus.z;
+    const scale=Math.min(.5,(this.nav.width*.5-5)/Math.max(1,Math.abs(dx),Math.abs(dz)));
+    this.nav.follow(focus.x+dx*scale,focus.z+dz*scale,this.feet.y);
+    this.nav.seed(this.feet.x,this.feet.z,this.feet.y);
+    if(this.hunter.visible)this.nav.seed(focus.x,focus.z,focus.y);
     // Fill in the cells the last field could not afford, a few per frame (the hunter adds its own).
     this.nav.warm(force ? 400 : this.hunter.state === 'dormant' ? 40 : 16);
   }
@@ -286,7 +290,9 @@ export class BackroomsHunt {
     if (actor && actor.root.position.distanceToSquared(position) < .25) actor.getHeadPosition?.(this.creatureEye);
     // Its own eyes detect the player's eyes or torso. Seeing one of its long
     // hands around a wall does not let it see through that wall in return.
-    this.senses.sees = facing && range < HUNTER_TUNING.visionRange && (
+    // A clearly exposed, rendered creature can answer the player's gaze even
+    // beyond its normal perception radius. Its own sight rays still block walls.
+    this.senses.sees = facing && (range < HUNTER_TUNING.visionRange || seen) && (
       this.clearSight(this.creatureEye, this.eye.x, this.eye.y, this.eye.z)
       || this.clearSight(this.creatureEye, this.feet.x, this.feet.y + 1.1, this.feet.z)
       || this.clearSight(this.creatureEye, this.feet.x + .22, this.feet.y + 1.35, this.feet.z)

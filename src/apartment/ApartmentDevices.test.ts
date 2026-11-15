@@ -42,6 +42,29 @@ it('marks the radio and television with small dots attached to their real object
     const size=new THREE.Box3().setFromObject(marker,true).getSize(new THREE.Vector3());expect(size.length()).toBeLessThan(.05);
   }
 });
+it('shows only current device goals and keeps the television dot high on the cabinet',async()=>{
+  const {environment,quest,devices}=await fixture();
+  const marker=(name:string)=>environment.group.getObjectByName(`apartment-${name}-interaction-marker`)!;
+  const visible=()=>['gas','tv','radio'].filter(n=>marker(n).visible);
+  devices.update(0,true,false);expect(visible()).toEqual([]);
+  quest.reachHome();quest.setLight(true);devices.update(0,true,false);expect(visible()).toEqual(['gas']);
+  quest.setGas(true);devices.update(0,true,false);expect(visible()).toEqual(['tv','radio']);
+  quest.setTelevision(true);devices.update(0,true,false);expect(visible()).toEqual(['radio']);
+  quest.setRadio(true);devices.update(0,true,false);expect(visible()).toEqual([]);
+  const tvBox=new THREE.Box3().setFromObject(environment.television!,true),point=marker('tv').getWorldPosition(new THREE.Vector3());
+  expect(point.y).toBeGreaterThan(tvBox.getCenter(new THREE.Vector3()).y);expect(point.y).toBeLessThan(tvBox.max.y+.02);
+  quest.readMail(RENT_MAIL_ID);quest.checkBank();quest.finishGame('won');quest.nextThought();quest.advanceNarration(1,true);
+  devices.update(0,true,false);expect(visible()).toEqual(['gas']);
+  reachPowerCut(quest);devices.update(0,true,false);expect(visible()).toEqual([]);
+});
+it('dims the static signal until the relit broadcast audio is ready, including restored states',async()=>{
+  const {environment,quest,devices,sound}=await fixture();quest.reachHome();quest.setLight(true);quest.setGas(true);quest.setTelevision(true);quest.setRadio(true);quest.readMail(RENT_MAIL_ID);quest.checkBank();quest.finishGame('won');quest.nextThought();reachPowerCut(quest);
+  const light=environment.group.getObjectByName('apartment-tv-light') as THREE.PointLight;
+  devices.setTelevisionSignal('static');devices.update(0,true,false);expect(light.intensity).toBe(.12);
+  devices.setTelevisionSignal('broadcast');devices.update(0,true,false);expect(light.intensity).toBe(.12);
+  Object.assign(sound,{pressureBroadcastReady:true});devices.update(0,true,false);expect(light.intensity).toBe(2.1);
+  quest.setTelevision(false);devices.update(0,true,false);expect(light.intensity).toBe(0);
+});
 it('uses the actual TV target and makes radio clicks produce only static after the unique outage', async () => {
   const { environment, quest, devices, sound, camera } = await fixture();
   // The evening order: gas first, then the TV may be switched on.

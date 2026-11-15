@@ -360,11 +360,15 @@ describe('BacteriaEncounter', () => {
 });
 
 describe('other hiding places', () => {
-  it('bursts through on the next tick when already hidden, without waiting for the remaining corridor charge', () => {
+  it('must physically reach the door before breaching even when the player hides immediately', () => {
     const world=setup({tvOn:true});playToHiding(world);
     expect(world.door.breached).toBe(false);
     world.step(DT);
-    expect(world.door.breached).toBe(true);
+    expect(world.door.breached).toBe(false);
+    expect(world.actor.root.position.x).toBeGreaterThan(threshold.x+5);
+    const elapsed=world.until(()=>world.door.breached,15);
+    expect(elapsed).toBeGreaterThan(2);
+    expect(world.actor.root.position.x).toBeLessThanOrEqual(threshold.x+.66);
     expect(world.events).not.toContain('impact:door-bang');
   });
   it('keeps the full door delay while the player is looking, but breaches as soon as he hides', () => {

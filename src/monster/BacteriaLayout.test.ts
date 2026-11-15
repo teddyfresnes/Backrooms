@@ -38,13 +38,13 @@ describe('Bacteria corridor reveal', () => {
     expect(door!.x).toBeCloseTo(threshold.x + 0.65);
   });
 
-  it('keeps its back turned through the swelling sting, then turns, then charges', () => {
+  it('briefly reveals its back, snaps round and charges without waiting for the full sting', () => {
     expect(R.freeze).toBeLessThan(R.headTurn);
     expect(R.headTurn).toBeLessThan(R.bodySnap);
     expect(R.bodySnap).toBeLessThan(R.charge);
-    // The sting lasts 7.7 s: the scream takes over as it ends.
-    expect(R.charge).toBeGreaterThan(7.2);
-    expect(R.charge).toBeLessThan(7.9);
+    expect(R.charge).toBeGreaterThan(.9);
+    expect(R.charge).toBeLessThan(1.3);
+    expect(R.releaseDelay).toBeLessThan(.2);
   });
 
   it('runs far faster than a sprinting player, and accelerates', () => {

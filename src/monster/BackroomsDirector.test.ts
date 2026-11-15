@@ -52,7 +52,7 @@ describe('backrooms spawn director', () => {
           expect(distance).toBeGreaterThanOrEqual(DIRECTOR_TUNING.minDistance);
           expect(spotVisible(context, spot.x, spot.y, spot.z)).toBe(false);
           if (style === 'ambush' || distance < DIRECTOR_TUNING.openSightDistance) expect(spotOccluded(context, spot.x, spot.y, spot.z)).toBe(true);
-          // Stationary scares stay ahead; a passer-by may come from either side.
+          // Encounters favour travel; all bodies stay hidden at placement.
           const ux = (spot.x - player.x) / distance, uz = (spot.z - player.z) / distance;
           if(style==='still'||style==='ambush')expect(0.5 * -uz + 0.5 * (ux * context.heading.x + uz * context.heading.z)).toBeGreaterThan(-0.16);
           if (style === 'cross') expect(spot.crossTo).toBeDefined();
@@ -76,13 +76,14 @@ describe('backrooms spawn director', () => {
     for(const style of STYLES)expect(chooseLurkSpot(nav,context,new SeededRandom(style),style)).toBeNull();
   });
 
-  it('lets roaming creatures approach from behind as well as ahead instead of always staging the next corner',()=>{
+  it('places roamers along actual travel even when travel disagrees with north or the camera',()=>{
     const {nav,context}=setup(0,-1,{x:33,y:0,z:33});let behind=0,ahead=0;
     for(let seed=0;seed<32;seed++)for(const style of ['prowl','cross'] as const){
       const spot=chooseLurkSpot(nav,context,new SeededRandom(`passing-${seed}`),style);
       if(!spot)continue;if(spot.z>33)behind++;else ahead++;
     }
-    expect(behind).toBeGreaterThan(0);expect(ahead).toBeGreaterThan(0);
+    expect(behind).toBe(0);expect(ahead).toBeGreaterThan(0);
+    for(const style of ['prowl','cross'] as const){const spot=chooseLurkSpot(nav,{...context,heading:{x:0,z:1}},new SeededRandom(`south-${style}`),style);if(spot)expect(spot.z).toBeGreaterThan(33);}
   });
 
   it('is deterministic for a seed and varies between seeds', () => {

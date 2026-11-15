@@ -223,7 +223,9 @@ describe('rift encounter', () => {
     harness.run(0.05);
     expect(harness.internals.phase).toBe('turn');
     expect(harness.encounter.ownsCharacter).toBe(true);
-    harness.run(5.3);
+    let revealSeconds=0;
+    while(harness.internals.phase==='turn'&&revealSeconds<3){harness.run(DT);revealSeconds+=DT;}
+    expect(revealSeconds).toBeLessThan(2);
     expect(harness.state.appearances).toBe(appearances);
     expect(harness.internals.phase).toBe('standoff');
     expect(harness.state.presentation).toBe(0);
@@ -263,7 +265,7 @@ describe('rift encounter', () => {
     harness.position.set(riftLaneX(lane), EYE, RIFT_CENTER_Z - 7.2);
     const mode = () => (harness.encounter as unknown as { creatureMode: string }).creatureMode;
     for (let waited = 0; waited < 12 && mode() !== 'plank'; waited += 0.1) harness.run(0.1);
-    harness.run(1.5);
+    harness.run(.45);
     expect(mode()).toBe('plank');
     expect(harness.encounter.handleInteract()).toBe(true);
     const before = harness.creature.root.position.y;
@@ -281,11 +283,11 @@ describe('rift encounter', () => {
     const mode=()=>(h.encounter as unknown as {creatureMode:string}).creatureMode;
     for(let t=0;t<8&&mode()!=='plank';t+=DT){
       expect(mode()).not.toBe('wait');const before=h.creature.root.position.z;h.run(DT);
-      expect(before-h.creature.root.position.z).toBeCloseTo(6.4*DT,5);
+      expect(before-h.creature.root.position.z).toBeCloseTo(8.8*DT,5);
     }
     expect(mode()).toBe('plank');const start=h.creature.root.position.z;
     for(let i=0;i<12;i++)h.run(DT);expect(h.state.creatureMotion).toBe('run');
-    expect(start-h.creature.root.position.z).toBeCloseTo(1.28,2);
+    expect(start-h.creature.root.position.z).toBeCloseTo(1.76,2);
   });
 
   it('lets a runner outpace the creature once it is across, and catches one who stays', () => {

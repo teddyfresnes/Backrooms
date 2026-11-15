@@ -49,6 +49,7 @@ import type { PalmFrame } from '../character/HeldItemPose';
 import { EquipmentInput } from '../input/EquipmentInput';
 import { formatKeyLabel } from '../input/ControlBindings';
 import { InventoryHUD } from '../ui/InventoryHUD';
+import { EquipmentTransition } from '../player/EquipmentTransition';
 import { NarrativeCaption } from '../ui/NarrativeCaption';
 import { QuestTracker } from '../ui/QuestTracker';
 import { StoryHud } from '../ui/StoryHud';
@@ -186,6 +187,7 @@ export class Game {
   private readonly journey: boolean;
   private readonly inventory?: InventoryState;
   private inventoryHUD?: InventoryHUD;
+  private readonly equipmentTransition = new EquipmentTransition();
   private equipmentInput?: EquipmentInput;
   private flashlight?: Flashlight;
   private compass?: Compass;
@@ -717,9 +719,12 @@ export class Game {
     if (!inventory || !this.flashlight || !this.compass) return;
     const hidden = !!this.rift?.ownsCharacter;
     const free = !hidden && !this.character?.isBusy;
-    const torch = inventory.hasLamp && inventory.equipped?.id === FLASHLIGHT_ID && free;
-    const reading = inventory.equipped?.id === COMPASS_ID && free;
-    this.character?.setHeldItem(reading ? 'compass' : torch ? 'torch' : null);
+    if (free) this.equipmentTransition.update(inventory.equipped?.id, delta);
+    else this.equipmentTransition.hide();
+    const id = this.equipmentTransition.presented;
+    const torch = inventory.hasLamp && id === FLASHLIGHT_ID && free;
+    const reading = id === COMPASS_ID && free;
+    this.character?.setHeldItem(reading ? 'compass' : torch ? 'torch' : null, false, this.equipmentTransition.amount);
     const frame = (reading || torch) && this.character?.getHeldItemFrame(this.palm) ? this.palm : undefined;
     const hand = this.character?.getEquipmentHandPosition(this.equipmentHand) ? this.equipmentHand : undefined;
     this.flashlight.update(this.camera, hand, inventory.hasLamp, torch, inventory.state.lampOn, delta,
@@ -1164,7 +1169,7 @@ export class Game {
     this.updateJourneyHud(rawDelta, playing);
     // Interference: only the creature disturbs the Backrooms picture.
     this.postFX.setVhs(this.rift?.cameraDisturbance ?? 0);
-    this.staminaCue?.update(playing && !this.rift?.ownsCharacter && this.stamina.critical, this.stamina.level, this.stamina.exhausted);
+    this.staminaCue?.update(playing && !this.rift?.ownsCharacter && this.stamina.showCue, this.stamina.level, this.stamina.exhausted);
     this.player.getViewDirection(this.lookDirection);
     const interaction = !playing || this.character?.isBusy || this.player.isTraversing || this.player.isNoclipEnabled
       || this.rift?.ownsCharacter
@@ -1212,8 +1217,8 @@ export class Game {
 
   /**
    * Cardio: sprinting drains the breath, fear brings adrenaline. Spent, the
-   * sprint is cut until it recovers; panting, the pounding heart, a heavier
-   * bob and a closing vignette say so without a gauge.
+   * sprint is cut until it recovers. The discreet gauge remains visible below
+   * full; only near-empty stamina adds a heartbeat.
    */
   private updateBreath(delta: number): void {
     if (!this.journey || !this.player) return;
@@ -1222,8 +1227,7 @@ export class Game {
     player.setSprintExhausted(!this.stamina.canSprint);
     player.setExertion(this.stamina.breath);
     this.postFX?.setExertion(this.settings.cameraMotion ? this.stamina.breath : this.stamina.breath * 0.5);
-    this.riftAudio.breath(delta, this.stamina.breath);
-    this.riftAudio.heartbeat(delta, Math.max(this.rift?.heartFear ?? 0, this.stamina.heart > 0.65 ? this.stamina.heart : 0));
+    this.riftAudio.heartbeat(delta, this.stamina.heart);
   }
 
   private readonly resize = (): void => {

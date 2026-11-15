@@ -1185,10 +1185,16 @@ export class CharacterRuntime {
     this.presentCamera();
   }
   /** The right hand holds a quest item (presentation only): the compass or the torch. */
-  setHeldItem(kind: HeldItemKind | null, carryingObject = false): void {
+  setHeldItem(kind: HeldItemKind | null, carryingObject = false, lower = 0, pocketItem = false): void {
     if (kind !== this.heldKind) this.firstPersonHeldPose.snap(!!kind);
     this.heldKind = kind;
     this.carryingObject = carryingObject;
+    this.equipmentLower = lower;
+    this.pocketItem = pocketItem;
+    // Hosts update equipment after the rig: publish the matching hand/frame in
+    // this same frame, including the concealed model swap.
+    if (this.viewMode === 'first-person') this.applyFirstPersonHeldItemPose(0);
+    else this.applyHeldItemPose(0);
   }
   /**
    * The stable frame of the held item for the drawn view: fixed in the view in
@@ -1213,6 +1219,7 @@ export class CharacterRuntime {
   private readonly heldCollision = { center: new THREE.Vector3(), normal: new THREE.Vector3() };
   /** Third-person rig: the item in front of the chest, aimed where the player looks. */
   private applyHeldItemPose(delta: number, presentationAim?: THREE.Vector3): void {
+    if (this.viewMode !== 'first-person' && !this.heldKind) this.applyPocketItemPose(false);
     if (presentationAim) this.heldPose.snap(!!this.heldKind);
     const weight = this.heldPose.advance(!!presentationAim || this.heldItemAllowed(), delta);
     if (this.viewMode !== 'first-person') this.heldFrameValid = false;
@@ -1230,6 +1237,7 @@ export class CharacterRuntime {
     else this.firstPersonCamera.getWorldDirection(this.heldAim).multiplyScalar(12).add(this.firstPersonCamera.getWorldPosition(this.heldShoulder));
     const frame = this.viewMode === 'first-person' && !presentationAim ? this.heldScratch : this.heldFrame;
     heldItemFrame(this.heldKind, this.heldView, this.heldAim, false, frame);
+    frame.position.addScaledVector(this.heldUp, -.65 * this.equipmentLower).addScaledVector(this.heldForward, -.1 * this.equipmentLower);
     if (frame === this.heldFrame) this.heldFrameValid = true;
     this.heldGrip.curl = gripForItem(this.heldKind, frame, this.heldRight, this.heldUp, this.heldGrip, this.heldPose.getHandSpan(this.rightHandBone), true);
     this.heldPose.apply([this.rightUpperArmBone, this.rightForearmBone, this.rightHandBone], this.heldGrip);
@@ -1243,11 +1251,14 @@ export class CharacterRuntime {
   private applyFirstPersonHeldItemPose(delta: number): void {
     const weight = this.firstPersonHeldPose.advance(this.heldItemAllowed() && this.viewMode === 'first-person', delta);
     this.heldFrameValid = false;
+    if (this.viewMode === 'first-person' && !this.heldKind) this.applyPocketItemPose(true);
     if (!this.heldKind || this.viewMode !== 'first-person' || !this.heldItemAllowed()) return;
     this.firstPersonCamera.updateMatrixWorld(true);
     this.heldView.copy(this.firstPersonCamera.matrixWorld);
     this.firstPersonCamera.getWorldDirection(this.heldAim).multiplyScalar(12).add(this.firstPersonCamera.getWorldPosition(this.heldOrigin));
     heldItemFrame(this.heldKind, this.heldView, this.heldAim, true, this.heldFrame);
+    this.heldProbe.setFromMatrixColumn(this.heldView, 1).multiplyScalar(-.8 * this.equipmentLower);
+    this.heldFrame.position.add(this.heldProbe).addScaledVector(this.heldAxis.setFromMatrixColumn(this.heldView, 2), .1 * this.equipmentLower);
     // Retract the object and its grip together near a wall. A later arm-only
     // obstacle correction would leave the fixed object floating beside the hand.
     this.constrainFirstPersonHeldFrame();
@@ -1282,6 +1293,16 @@ export class CharacterRuntime {
   getEquipmentHandPosition(output:THREE.Vector3):boolean {
     const hand=this.viewMode==='first-person'&&!this.computerPose?this.firstPersonRightHandBone:this.rightHandBone;
     if(!hand||this.isBusy)return false;hand.getWorldPosition(output);return true;
+  }
+  private applyPocketItemPose(firstPerson: boolean): void {
+    if (!this.pocketItem || this.isBusy || this.ragdoll || this.computerPose || this.activeEmote) return;
+    const upper = firstPerson ? this.firstPersonRightUpperArmBone : this.rightUpperArmBone;
+    const forearm = firstPerson ? this.firstPersonRightForearmBone : this.rightForearmBone;
+    const hand = firstPerson ? this.firstPersonRightHandBone : this.rightHandBone;
+    if (!upper || !forearm || !hand) return;
+    this.firstPersonCamera.updateMatrixWorld(true);
+    this.heldProbe.set(.16, -.24 - .8 * this.equipmentLower, -.35 + .1 * this.equipmentLower).applyMatrix4(this.firstPersonCamera.matrixWorld);
+    solveCombatTwoBone(upper, forearm, hand, this.heldProbe, 1);
   }
   sampleCorridorPresentation(position:THREE.Vector3,yaw:number,headYaw:number,time:number,firstPerson:boolean):ComputerPoseFrame {
     const feet=position.clone();feet.y-=.865;
@@ -1598,6 +1619,8 @@ export class CharacterRuntime {
   private readonly heldScratch: PalmFrame = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
   private heldFrameValid = false;
   private carryingObject = false;
+  private equipmentLower = 0;
+  private pocketItem = false;
   private readonly heldOrigin = new THREE.Vector3();
   private readonly heldForward = new THREE.Vector3();
   private readonly heldUp = new THREE.Vector3();

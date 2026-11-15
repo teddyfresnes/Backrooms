@@ -301,23 +301,23 @@ export const distance = (a: Readonly<Vec3Data>, b: Readonly<Vec3Data>): number =
   Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
 
 /**
- * The far reveal, synchronised with the 7.7 s tension sting (it swells to a
- * peak around 6.5 s). Times are seconds after the reveal troffer strikes.
+ * Brief far reveal: head, body, then charge. Times are seconds after the
+ * reveal troffer strikes; the shot no longer waits for the full audio sting.
  */
 export const REVEAL_TIMELINE = {
   /** Push in from the player's field of view to a long-lens close-up, quick
    * once the far tubes light it. */
-  zoomDuration: 1.6,
+  zoomDuration: .4,
   /** Feeding stops dead: it has heard something. */
-  freeze: 3.6,
+  freeze: .18,
   /** The head starts to come round, alone, much too far. */
-  headTurn: 4.3,
+  headTurn: .35,
   /** The body whips round to follow the head. */
-  bodySnap: 6.3,
+  bodySnap: .75,
   /** Scream, fast pull-out, charge. */
-  charge: 7.55,
+  charge: 1.15,
   dezoomDuration: 0.36,
-  releaseDelay: 0.22,
+  releaseDelay: 0.12,
 } as const;
 
 /** The escape: the creature sees the player on the landing, then gives chase. */

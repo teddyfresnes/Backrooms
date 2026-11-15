@@ -53,7 +53,7 @@ type Phase =
 const CREATURE_RUN_SPEED = 6.4;
 /** It first appears this far down the lane corridor behind the far portal. */
 const CREATURE_APPROACH_DEPTH = 21;
-const CREATURE_CHARGE_SPEED = CREATURE_RUN_SPEED;
+const CREATURE_CHARGE_SPEED = 8.8;
 const CREATURE_FLEE_SPEED = 7;
 /** The far-bank hunt (monster/BackroomsHunt) starts this far from the rift's centre. */
 const HUNT_RIFT_CLEARANCE = 26;
@@ -64,6 +64,7 @@ const GIVE_UP_SECONDS = 20;
 const EDGE_EXTERIOR = 1.75;
 const EDGE_DURATION = 6.7;
 const TURN_DURATION = 4.3;
+const TURN_PLAYBACK_RATE = 2.4;
 const FALL_DURATION = 3.3;
 const DEATH_HOLD = 3;
 
@@ -759,7 +760,9 @@ export class RiftEncounter {
   }
 
   private updateTurn(dt: number): void {
-    const t = this.phaseTime, camera = this.host.renderCamera, character = this.host.character;
+    // Keep the authored camera/turn raccords together, in a brief 1.8 s reveal.
+    const t = this.phaseTime * TURN_PLAYBACK_RATE, shotDelta = dt * TURN_PLAYBACK_RATE;
+    const camera = this.host.renderCamera, character = this.host.character;
     const feet = this.turn.feet, plank = this.plank!, toward = this.crossFrom;
     const turnAmount = smooth((t - 0.55) / 1.05);
     const yaw = lerpAngle(this.turn.yawFrom, this.turn.yawTo, turnAmount);
@@ -767,8 +770,8 @@ export class RiftEncounter {
     const frame = character?.sampleCorridorPresentation(feet, yaw, THREE.MathUtils.clamp(headLead, -0.9, 0.9), t, false);
     const head = frame ? this.vectorB.copy(frame.head) : this.vectorB.copy(feet).add({ x: 0, y: 0.78, z: 0 });
     // Far off, standing in the corridor behind the other portal, then the charge.
-    if (crossed(t, dt, 1.6)) this.host.creatureSound.startVoice();
-    if (crossed(t, dt, 2.55)) {
+    if (crossed(t, shotDelta, 1.6)) this.host.creatureSound.startVoice();
+    if (crossed(t, shotDelta, 2.55)) {
       // It rears and screams at the far end of its corridor; the charge waits for the end of the shot.
       this.host.creature()?.snapHead();
       this.host.creatureSound.roar();
@@ -847,6 +850,7 @@ export class RiftEncounter {
     if (this.creatureMode === 'plank' && this.creaturePosition.distanceTo(feet) < CATCH_RADIUS) { this.startCaught(); return; }
     if (this.creatureMode === 'plank' && this.creatureAlong >= EPIC3_FACADE_HALF_DEPTH * 2 + 0.9) {
       this.creatureMode = 'run';
+      this.creatureTime = 0;
       this.host.creatureSound.startScream();
       this.host.creatureSound.setScreamActive(true);
       this.host.hud.hideHint();
@@ -1170,6 +1174,7 @@ export class RiftEncounter {
     if (mode === 'hidden') { if (creature.isVisible) creature.setVisible(false); this.creatureLight.intensity = 0; return; }
     // The far-bank hunter drives the actor, its sound and its glow itself.
     if (mode === 'hunt') return;
+    creature.setPace((mode==='charge'||mode==='plank'?CREATURE_CHARGE_SPEED:mode==='run'?this.chaseRunSpeed:CREATURE_RUN_SPEED)/6.4);
     if (!creature.isVisible) creature.setVisible(true);
     const eye = this.host.renderCamera.position;
     this.creatureLight.intensity = mode === 'falling' ? Math.max(0, 1.1 - this.creatureTime * 0.4) : 1.1;
@@ -1210,10 +1215,10 @@ export class RiftEncounter {
       }
     } else if (mode === 'plank' && plank) {
       creature.setMotion('run');
-      this.creatureAlong += dt * CREATURE_RUN_SPEED;
+      this.creatureAlong += dt * CREATURE_CHARGE_SPEED;
       this.placeCreatureOnPlank();
       this.creatureYaw = bodyYaw(0, -this.crossFrom);
-      if (Math.floor(this.creatureAlong / 1.5) !== Math.floor((this.creatureAlong - dt * CREATURE_RUN_SPEED) / 1.5)) {
+      if (Math.floor(this.creatureAlong / 1.5) !== Math.floor((this.creatureAlong - dt * CREATURE_CHARGE_SPEED) / 1.5)) {
         this.host.sound.creak(0.75, 0.5);
       }
     } else if (mode === 'run') {
@@ -1274,7 +1279,7 @@ export class RiftEncounter {
 
   /** Across the plank and along the player's own footsteps (always walkable). */
   private followTrail(dt: number): void {
-    let budget = dt * CREATURE_RUN_SPEED;
+    let budget = dt * this.chaseRunSpeed;
     while (budget > 0 && this.trailIndex < this.trail.length) {
       const target = this.trail[this.trailIndex]!;
       const dx = target.x - this.creaturePosition.x, dz = target.z - this.creaturePosition.z, distance = Math.hypot(dx, dz);
@@ -1298,6 +1303,8 @@ export class RiftEncounter {
     this.creaturePosition.z += dz / distance * move;
     this.creatureYaw = bodyYaw(dx, dz);
   }
+  /** After leaving the board, settle into the sustained chase over half a second. */
+  private get chaseRunSpeed():number{return THREE.MathUtils.lerp(CREATURE_CHARGE_SPEED,CREATURE_RUN_SPEED,smooth(Math.min(1,this.creatureTime/.5)));}
 
   /** Back along its own path, away from him. */
   private followTrailBack(dt: number): void {

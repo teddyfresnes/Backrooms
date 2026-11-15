@@ -10,7 +10,7 @@ import type { LurkPlacement, LurkStyle } from './BackroomsHunter';
  * encounter → guaranteed relief. `chooseLurkSpot` scores the walkable cells of
  * the nav window and returns a place the player will stumble upon: never on
  * his screen, never within `DIRECTOR_TUNING.minDistance`, never during a
- * scripted shot; moving passers-by may approach from either direction,
+ * scripted shot; moving passers-by favour the player's actual direction,
  * preferring dark corners, corridor ends, door frames and empty halls.
  * Deterministic for a given seed and inputs.
  */
@@ -33,8 +33,8 @@ export const DIRECTOR_TUNING = {
   /** Encounters whose presence drone stays off until the chase. */
   silentChance: 0.35,
   /** Straight metres from the player. */
-  minDistance: 22,
-  maxDistance: 44,
+  minDistance: 28,
+  maxDistance: 52,
   /** Crossing destinations may be exposed beyond this distance. */
   openSightDistance: 28,
   retryEvery: 1.2,
@@ -168,7 +168,7 @@ interface Candidate { index: number; x: number; z: number; y: number; score: num
 
 const HEAD = 1.95;
 const CHEST = 1.2;
-const BODY_SAMPLES = [[0, 0, HEAD], [0, 0, CHEST], [-1, 0, .8], [1, 0, .8], [0, -1, .8], [0, 1, .8]] as const;
+const BODY_SAMPLES = [[0, 0, HEAD], [0, 0, CHEST], [0, 0, .18], [-1, 0, .8], [1, 0, .8], [0, -1, .8], [0, 1, .8], [-.7, -.7, .65], [.7, .7, .65]] as const;
 
 /** Visible = on his screen and unoccluded (head or chest). */
 export const spotVisible = (context: PlacementContext, x: number, y: number, z: number): boolean => {
@@ -182,7 +182,7 @@ export const spotVisible = (context: PlacementContext, x: number, y: number, z: 
 
 /** Behind at least one wall from his eyes. */
 export const spotOccluded = (context: PlacementContext, x: number, y: number, z: number): boolean =>
-  !context.lineOfSight(x, y + HEAD, z) && !context.lineOfSight(x, y + CHEST, z);
+  BODY_SAMPLES.every(([dx,dz,height])=>!context.lineOfSight(x+dx,y+height,z+dz));
 
 /**
  * The best place for a lurk of `style`, or null. The nav field must measure
@@ -197,27 +197,27 @@ export const chooseLurkSpot = (
   const player = context.player;
   const headingLength = Math.hypot(context.heading.x, context.heading.z) || 1;
   const hx = context.heading.x / headingLength, hz = context.heading.z / headingLength;
-  const passing = style === 'prowl' || style === 'cross';
-  const approach = passing ? random.float(-Math.PI, Math.PI) : 0;
   const candidates: Candidate[] = [];
   nav.forEachFree(2, (index, x, z) => {
     const dx = x - player.x, dz = z - player.z, straight = Math.hypot(dx, dz);
     if (straight < tuning.minDistance || straight > tuning.maxDistance) return;
-    if (!nav.hasClearanceAt(x, z, 0.65)) return;
-    const path = nav.field[index]!;
-    if (!Number.isFinite(path) || path > 70) return;
-    const ux = dx / straight, uz = dz / straight;
-    const ahead = 0.5 * (ux * context.north.x + uz * context.north.z) + 0.5 * (ux * hx + uz * hz);
-    if (!passing && ahead < -0.15) return;
     const y = nav.heightOf(index);
+    if (Math.abs(y-player.y)>.43 || !nav.hasClearanceAt(x, z, 0.65, y)) return;
+    const path = nav.field[index]!;
+    if (!Number.isFinite(path) || path > 100) return;
+    const ux = dx / straight, uz = dz / straight;
+    const ahead = ux * hx + uz * hz;
+    if (ahead < -.15) return;
+    // A nearer/lateral encounter must sit beyond an actual corner or doorway,
+    // not behind a thin prop within the player's own open room.
+    if ((straight<34||ahead<.25)&&nav.clearLine(player.x,player.z,x,z,Infinity,.18,player.y,y)) return;
     const east = nav.openLength(x, z, 1, 0, 24), west = nav.openLength(x, z, -1, 0, 24);
     const south = nav.openLength(x, z, 0, 1, 24), northLength = nav.openLength(x, z, 0, -1, 24);
     const corridor = Math.max(east + west, south + northLength);
     const hall = Math.min(east, west, south, northLength);
     const doorway = (Math.min(east, west) < 0.6 && south > 2 && northLength > 2) || (Math.min(south, northLength) < 0.6 && east > 2 && west > 2);
     const ratio = path / straight;
-    let score = (passing ? .15 : .45) * Math.max(0, ahead);
-    if (passing) score += (ux * Math.sin(approach) + uz * Math.cos(approach)) * .7;
+    let score = .8 * Math.max(0, ahead);
     score += 0.25 * Math.max(0, 1 - Math.abs(path - 30) / 16);
     if (ratio > 1.15) score += 0.12;
     score += 0.2 * Math.max(0, Math.min(1, (corridor - 6) / 14));

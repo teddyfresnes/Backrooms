@@ -109,7 +109,12 @@ export class HeldItemPose {
 
   apply(chain: HeldArmChain, grip: HandGrip): void {
     const [upper, lower, hand] = chain;
-    if (!upper || !lower || !hand?.parent || this.weight <= 0.001 || !this.palmBasis(hand)) return;
+    if (!upper || !lower || !hand?.parent || this.weight <= 0.001) return;
+    if(!this.handPose){let root:THREE.Object3D=hand;while(root.parent&&!(root.parent as THREE.Scene).isScene)root=root.parent;this.handPose=new HandPose(root);}
+    // Fix every finger before measuring the palm. Animated finger tracks used
+    // to change both its basis and the additive compass curl on every frame.
+    if(grip.kind==='compass')this.handPose.gripCompass(hand,grip.curl,this.weight);
+    if(!this.palmBasis(hand))return;
     const markers = this.markers.get(hand)!;
     this.wantedFingers.copy(grip.fingers).addScaledVector(grip.normal, -grip.fingers.dot(grip.normal)).normalize();
     // Right hand: the thumb side is fingers × palm normal.
@@ -137,14 +142,10 @@ export class HeldItemPose {
       this.palmBasis(hand);
     }
     if (grip.kind === 'torch') {
-      if (!this.handPose) {
-        let root: THREE.Object3D = hand;
-        while (root.parent && !(root.parent as THREE.Scene).isScene) root = root.parent;
-        this.handPose = new HandPose(root);
-      }
       this.handPose.gripTorch(hand, grip.handSpan ?? this.getHandSpan(hand), this.wantedFingers, grip.normal, this.weight, grip.physical);
       return;
     }
+    if(grip.kind==='compass'){this.handPose.gripCompass(hand,grip.curl,this.weight);return;}
     if (grip.curl <= 0) return;
     // Close the fingers toward the palm, joint by joint, about the knuckle axis.
     this.axis.crossVectors(this.fingers, this.normal).normalize();

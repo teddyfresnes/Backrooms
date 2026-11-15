@@ -472,8 +472,8 @@ export class BacteriaEncounter {
       this.actor.setMotion('idle');
     }
     if (crossed(t, dt, R.headTurn)) {
-      // Only the head comes round, slowly, much too far.
-      this.actor.setHeadTwist(2.75, 1.05);
+      // The head snaps round just before the body follows.
+      this.actor.setHeadTwist(2.75, 14);
       this.shakeLevel = Math.max(this.shakeLevel, 0.12);
     }
     if (crossed(t, dt, R.bodySnap)) {
@@ -518,9 +518,6 @@ export class BacteriaEncounter {
     }
 
     const inside = this.playerInside();
-    // Hidden behind a secured door, the player cannot see the remaining run.
-    // Spend that margin only while he is still looking for somewhere to hide.
-    if (inside && this.hidden && host.door.isSecured()) { this.enterApartment(true); return; }
     const doorX = host.threshold.x + 0.65;
     this.chargeTime += dt;
     if (!inside && this.monsterPosition.x <= doorX + 1e-3) {

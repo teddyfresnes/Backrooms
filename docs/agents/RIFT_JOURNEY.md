@@ -59,9 +59,10 @@ le −Z monde : la direction de la faille.
    la voie, au long foyer, à travers les deux portails et la porte d'en face : la
    créature, déjà placée pendant le regard forcé sur la planche, reste au fond
    du couloir d'approche (21 m), se cabre et hurle
-   (`rear`) ; elle ne charge qu'une fois le plan terminé.
+   (`rear`) ; elle charge dès la fin du bref plan (~1,8 s).
 7. Retour en 1P : elle remonte son couloir puis court sur la planche à la même
-   vitesse (6,4 m/s), sans pause au bord.
+   vitesse (8,8 m/s, cadence adaptée), sans pause au bord. Après la traversée,
+   elle rejoint progressivement l'allure de poursuite de 6,4 m/s.
    E près du bout de la planche (sur le sol) la pousse : avant qu'elle monte, elle
    repart en courant et en hurlant dans son couloir jusqu'à disparaître au loin ;
    dessus, elle tombe avec la planche. Sans cela elle traverse et suit la trace du
@@ -80,11 +81,14 @@ Three : `BackroomsNav`, `BackroomsHunter`, `BackroomsDirector`. La phase vaut
 `blocksSaving` couvre aussi la fouille. Capture : `startCaught` puis reprise au
 point où elle l'a remarqué, créature retirée, répit garanti.
 
-- **Navigation** : grille de 128 × 128 cellules de 0,5 m sur l'étage du joueur,
-  centrée entre le joueur et la créature active, recentrée à 10 m, oubliée au changement de chunk
-  (`worldRevision`). Chaque cellule est sondée une fois par
+- **Navigation** : fenêtre runtime de 256 × 256 cellules de 0,5 m, jusqu'à six
+  surfaces par colonne, centrée entre joueur et créature en gardant celle-ci
+  dans la fenêtre même à grande distance. Un changement d'altitude conserve les
+  surfaces reliées ; le décalage horizontal garde leur recouvrement. Le champ
+  est oublié au changement de chunk (`worldRevision`). Chaque surface est sondée par
   `PhysicsWorld.probeWalkableCell` (boîte de corps libre, sol à ±0,42 m), sous
-  budget (48 par champ, ~40 par image) : pas de pic. Dijkstra depuis la cible
+  budget (48 par champ, ~40 par image), depuis la hauteur réelle du support
+  voisin ; les deux extrémités du trajet sont amorcées séparément. Dijkstra depuis la cible
   toutes les 0,25 s ; elle descend le champ et tire la ligne droite la plus
   longue (marge 0,18 m), donc coupe les angles sans traverser un mur. Bloquée,
   elle re-sonde autour d'elle et suit les pas du joueur en secours. Les charges
@@ -95,14 +99,16 @@ point où elle l'a remarqué, créature retirée, répit garanti.
   les balayages sphériques de `CharacterEnvironment` après chaque pose.
 - **États** : `dormant` → `lurk` (`still` attend 1,5–3,5 s avant de repartir,
   `prowl` explore de nouveaux points, `cross` passe au loin,
-  `ambush` annoncée par le toc toc) → `notice` → `chase`
+  `ambush` annoncée par le toc toc puis patrouille sans connaissance du joueur) → `notice` → `chase`
   → `search` (élan conservé dans la dernière direction observée, puis pièces
   voisines en ralentissant, reniflements,
   réagit au sprint à 13 m) → `shadow` (suit hors de vue à 15–30 m) →
   `withdraw` → `dormant`. Elle ne disparaît que hors ligne de vue et à ≥ 25 m ;
-  une cinématique la fait toujours se retirer. Vision jusqu'à 46 m, cône large
+  une cinématique la fait toujours se retirer. Vision jusqu'à 160 m, cône large
   et plusieurs rayons depuis sa tête vers les yeux et le torse du joueur ; un regard prolongé de 1,4 s provoque
-  son retournement puis une poursuite, même si elle présentait son dos. Les
+  son retournement puis une poursuite, même si elle présentait son dos. Au-delà
+  de 46 m, une silhouette nettement visible réagit après 0,3 s d'observation,
+  même au-delà du rayon normal de perception. Les rayons de vue restent obligatoires. Les
   brèves pertes de visée ne remettent pas ce délai à zéro. Hors contact visuel
   et auditif, la poursuite prolonge le dernier cap observé ; elle ne lit plus
   les déplacements cachés du joueur.
@@ -114,8 +120,8 @@ point où elle l'a remarqué, créature retirée, répit garanti.
   virages = semée, marche = capturé, longue ligne droite = rattrapé.
 - **Directeur** : premier contact après 25 s et 35 m sur la rive, tension par
   temps et pas, fausses alertes, répit de 55–85 s après chaque rencontre.
-  `chooseLurkSpot` note les cellules à 22–44 m (les patrouilles peuvent aussi
-  venir de derrière, selon un cap seedé indépendant du joueur),
+  `chooseLurkSpot` note les cellules à 28–52 m, vers le déplacement réel ; les
+  positions proches ou latérales nécessitent un détour praticable entre pièces,
   obscurité (`WorldStream.darknessAt`), couloirs longs, halls, encadrements,
   angles ; jamais à l'écran, toujours derrière un mur, avec une marge pour les bras. 35 % d'approches
   silencieuses (nappe coupée jusqu'au cri). Les passages en mouvement dominent ;
@@ -130,9 +136,9 @@ point où elle l'a remarqué, créature retirée, répit garanti.
   distance au monstre varient indépendamment. Le directeur varie aussi
   les faux bruits et clignotements sans créature. Parasites :
   `cameraDisturbance` → `PostFX.setVhs`.
-- **Endurance** (`player/Stamina`, jamais sauvegardée) : ~22 s de sprint au
+- **Endurance** (`player/Stamina`, jamais sauvegardée) : ~66 s de sprint au
   calme, sprint coupé jusqu'à 35 %, adrénaline (`threat`) et contrecoup ;
-  `Game` pilote `setSprintExhausted`, `setExertion`, souffle, cœur, vignette et
-  `StaminaCue` (trait discret en zone critique). Le cœur reste discret et
-  réservé à l'effort intense ou à la peur ; son délai persiste entre les petites
-  variations de peur pour empêcher l'empilement des doubles battements.
+  `Game` pilote `setSprintExhausted`, `setExertion`, cœur, vignette et
+  `StaminaCue` (visible sous 100 %, jusqu'à récupération complète). Le son
+  d'essoufflement est supprimé. Le cœur ne démarre qu'à ≤ 6 %, s'arrête à ≥ 10 %
+  et garde son délai entre doubles battements ; la peur seule ne le déclenche pas.

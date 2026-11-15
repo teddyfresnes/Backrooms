@@ -79,7 +79,7 @@ describe('backrooms nav grid', () => {
     for (const point of path) expect(maze.rows[Math.floor(point.z / CELL)]![Math.floor(point.x / CELL)]).toBe('.');
   });
 
-  it('keeps what it knows when the window slides, forgets it on another floor', () => {
+  it('keeps overlapping surfaces when the window slides and leaves a new floor unexplored', () => {
     const open = carve(200, 200, [[1, 1, 99, 99]]);
     let probes = 0;
     const probe = mazeProbe(open);
@@ -94,6 +94,7 @@ describe('backrooms nav grid', () => {
     expect(probes - first).toBeLessThan(first * 0.5);
     nav.follow(32, 20, 5.4);
     expect(nav.isKnown(nav.indexAt(32, 20))).toBe(false);
+    expect(nav.isKnownFree(nav.indexAt(32,20,0))).toBe(true);
   });
 
   it('defers probes beyond its budget to warm-up instead of stalling a frame', () => {

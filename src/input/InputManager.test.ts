@@ -50,3 +50,15 @@ it('resumes held movement after a scripted shot, including keys pressed or relea
   expect(input.axes.sprint).toBe(false);
   key('ArrowUp');input.setEnabled(false);input.setEnabled(true);expect(input.axes.forward).toBe(0);
 });
+it('upgrades a prior modal lock to a cinematic lock and restores remapped movement and right Shift',()=>{
+  const input=fixture();input.setBindings({...defaultControlBindings(),forward:'KeyU'});
+  key('KeyU','keydown','u');key('ShiftRight','keydown','Shift');input.setEnabled(false);
+  key('KeyE','keydown','e');input.setEnabled(false,true);input.setEnabled(true);
+  expect(input.axes.forward).toBe(1);expect(input.axes.sprint).toBe(true);expect(input.consumeActionPress('interact')).toBe(false);
+  input.setEnabled(false);key('KeyU','keyup','U');key('ShiftRight','keyup','Shift');
+  key('ArrowDown');input.setEnabled(false,true);input.setEnabled(true);
+  expect(input.axes.forward).toBe(-1);expect(input.axes.sprint).toBe(false);
+  input.setEnabled(false,true);window.dispatchEvent(new Event('blur'));input.setEnabled(true);expect(input.axes.forward).toBe(0);
+  key('ArrowUp');key('ShiftRight');input.setEnabled(false,true);input.reset();
+  key('ArrowUp','keydown','ArrowUp',window,{repeat:true});input.setEnabled(true);expect(input.axes.forward).toBe(0);expect(input.axes.sprint).toBe(false);
+});

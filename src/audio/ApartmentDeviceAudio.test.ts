@@ -53,17 +53,22 @@ it('creates no song request or song decoder at startup; streams only the current
   radio!.dispatchEvent(new Event('ended')); expect(next).toHaveBeenCalledOnce(); expect(radio!.src).toBe(RADIO_PLAYLIST[1]);
   expect(context.decodeAudioData).not.toHaveBeenCalled();
 });
-it('stops the playlist at the surge, starts Pressure afterward at the TV, and pauses it inside the TV-off event', async () => {
+it('stops the playlist at the surge, waits for relighting to play Pressure, and pauses it inside the TV-off event', async () => {
   const fixture = audioFixture(); ({ audio } = fixture); const { quest, context, positions, panners, next } = fixture;
   quest.setGas(true); quest.setRadio(true); audio.sync(quest.devices, true); await Promise.resolve();
   outage(quest); audio.powerCut(); audio.sync(quest.devices, true);
   const [radio, pressure] = StreamMock.instances; expect(radio!.paused).toBe(true); expect(pressure!.src).toBe('');
   for (let i = 0; i < 14; i++) audio.sync(quest.devices, true, .05);
+  expect(pressure!.src).toBe('');expect(audio.pressureBroadcastReady).toBe(false);
+  // The corridor's relighting event explicitly switches the signal.
+  audio.setTelevisionSignal('broadcast');
+  expect(audio.pressureBroadcastReady).toBe(false);
+  await vi.waitFor(()=>expect(audio!.pressureBroadcastReady).toBe(true));
   expect(pressure!.src).toBe(PRESSURE_URL); expect(pressure!.paused).toBe(false);
   expect(panners.some(p => p.setPosition.mock.calls.some(args => args.join() === Object.values(positions.tv).join()))).toBe(true);
   // Only fixed mains harmonics remain: the outage has no pitched arcade sweep.
   const harmonics = context.createOscillator.mock.results.map(result => result.value);
-  expect(harmonics.map(source => source.frequency.value)).toEqual([50, 100, 150]);
+  expect(harmonics.map(source => source.frequency.value)).toEqual([50, 100, 150, 50, 100, 150]);
   expect(harmonics.every(source => source.frequency.exponentialRampToValueAtTime.mock.calls.length === 0)).toBe(true);
   quest.setTelevision(false); audio.sync(quest.devices, true); expect(pressure!.paused).toBe(true);
   const starts = radio!.play.mock.calls.length; audio.radioStatic(); audio.sync(quest.devices, true);
@@ -71,7 +76,7 @@ it('stops the playlist at the surge, starts Pressure afterward at the TV, and pa
 });
 it('pauses streamed time with gameplay and restores a saved outage without replaying the electrical shock', async () => {
   const fixture = audioFixture(); ({ audio } = fixture); const { quest, context } = fixture;
-  outage(quest); audio.sync(quest.devices, true); await Promise.resolve();
+  outage(quest); audio.setTelevisionSignal('broadcast');audio.sync(quest.devices, true); await Promise.resolve();
   const pressure = StreamMock.instances[1]!; expect(pressure.paused).toBe(false); expect(context.createOscillator).not.toHaveBeenCalled();
   audio.sync(quest.devices, false); expect(pressure.paused).toBe(true);
   audio.sync(quest.devices, true); await vi.waitFor(() => expect(pressure.paused).toBe(false));
@@ -86,7 +91,7 @@ it('reduces only the local cooking bus and keeps the reusable appliance loops bo
   expect(f.context.createGain.mock.results.at(-1)!.value.gain.value).toBe(0);
 });
 it('attenuates Pressure continuously by distance from the TV and stops immediately when switched off',async()=>{
-  const {pressureDistanceGain}=await import('./ApartmentDeviceAudio');const f=audioFixture();({audio}=f);outage(f.quest);audio.sync(f.quest.devices,true);
+  const {pressureDistanceGain}=await import('./ApartmentDeviceAudio');const f=audioFixture();({audio}=f);outage(f.quest);audio.setTelevisionSignal('broadcast');audio.sync(f.quest.devices,true);
   expect(pressureDistanceGain(14)).toBe(1);expect(pressureDistanceGain(20)).toBeGreaterThan(0);expect(pressureDistanceGain(32)).toBe(0);
   expect(Math.abs(pressureDistanceGain(18.001)-pressureDistanceGain(18))).toBeLessThan(.001);
   const p=f.positions.tv;audio.setListenerPosition({x:p.x+32,y:p.y,z:p.z});expect(f.context.createGain.mock.results.at(-1)!.value.gain.value).toBe(0);
@@ -96,7 +101,12 @@ it('ducks the existing music buses under speech without restarting or allocating
   const f=audioFixture();({audio}=f);f.quest.setGas(true);f.quest.setRadio(true);audio.sync(f.quest.devices,true);
   const radioGain=f.context.createGain.mock.results.at(-1)!.value.gain,streams=f.context.createMediaElementSource.mock.calls.length;
   audio.setNarrationActive(true);expect(radioGain.value).toBeCloseTo(.38*.28);audio.setNarrationActive(false);expect(radioGain.value).toBe(.38);
-  outage(f.quest);audio.sync(f.quest.devices,true);const pressureGain=f.context.createGain.mock.results.at(-1)!.value.gain;
+  outage(f.quest);audio.setTelevisionSignal('broadcast');audio.sync(f.quest.devices,true);const pressureGain=f.context.createGain.mock.results.at(-1)!.value.gain;
   audio.setNarrationActive(true);expect(pressureGain.value).toBeCloseTo(.43*.28);audio.setListenerPosition(f.positions.tv);expect(pressureGain.value).toBeCloseTo(.43*.28);
   const count=f.context.createMediaElementSource.mock.calls.length;audio.setNarrationActive(false);expect(pressureGain.value).toBe(.43);expect(f.context.createMediaElementSource).toHaveBeenCalledTimes(count);expect(count).toBe(streams+1);
+});
+it('restores static silently before relighting without requesting the frightening soundtrack',()=>{
+  const f=audioFixture();({audio}=f);outage(f.quest);audio.setTelevisionSignal('static');audio.sync(f.quest.devices,true);
+  expect(StreamMock.instances[1]!.src).toBe('');expect(audio.pressureBroadcastReady).toBe(false);expect(f.context.createOscillator).not.toHaveBeenCalled();
+  const gains=f.context.createGain.mock.results.map(r=>r.value.gain.value);expect(gains).toContain(.012);
 });

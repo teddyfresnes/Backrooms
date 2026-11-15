@@ -48,6 +48,15 @@ it('does not see or react to a stare through an opaque wall',()=>{
     expect(h.hunt.engaged).toBe(false);
   }finally{h.dispose();}
 });
+it('reacts beyond its normal sight radius at 175 metres and closes the gap across navigation windows',()=>{
+  const h=setup();try{
+    h.hunt.hunter.place({x:0,y:0,z:-175,yaw:Math.PI,style:'still'});
+    for(let t=0;t<4&&h.hunt.state!=='chase';t+=DT)h.frame(new THREE.Vector3(0,1.5,-175));
+    expect(h.hunt.state).toBe('chase');
+    for(let t=0;t<10;t+=DT)h.frame(new THREE.Vector3(0,1.5,-175));
+    expect(h.hunt.position.z).toBeGreaterThan(-135);
+  }finally{h.dispose();}
+});
 
 it('keeps a roaming creature inside its navigation window as the player walks away',()=>{
   const h=setup(true);

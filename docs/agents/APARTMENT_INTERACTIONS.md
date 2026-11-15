@@ -60,7 +60,12 @@ l'épaisseur de la peau et du pouce autour du boîtier ; les phalanges de la lam
 pointent vers le haut pour garder le poignet sous la prise. `HandPose` règle
 chaque phalange autour du manche selon l'échelle réelle de la main ; le pouce
 oppose une pose de référence fixe, indépendante de la marche. La paume et les
-doigts utilisent le même repère orthogonal, même en visée oblique. En 3P et dans
+phalanges de la boussole sont également reconstruites depuis la pose de liaison,
+avant de mesurer le repère de paume : aucune fermeture additive sur les pistes
+d'attente ou de locomotion. `EquipmentTransition` garde un seul objet présenté ;
+la sélection remplace la destination, la main descend et le modèle change sous
+le cadre avant de remonter. Les deux runtimes utilisent cet état de présentation.
+La paume et les doigts utilisent le même repère orthogonal, même en visée oblique. En 3P et dans
 les plans animés, la lampe suit la paume résolue si le bras atteint sa limite.
 Un obstacle rétracte
 l'objet et la prise ensemble. La réaction du couloir
@@ -149,10 +154,15 @@ La capsule normale est rétablie à l’extérieur. Aucun voile ne masque la coq
 la caméra est réellement à l’intérieur. Les sauvegardes gardent l’ancrage sûr
 extérieur, pour ne jamais recharger une capsule normale enfermée dans le meuble.
 
-La TV et la radio portent les mêmes petits points pâles que le cadeau ; ces
-repères sont attachés à leurs objets et suivent donc leurs déplacements.
+Les points pâles du gaz, de la TV et de la radio suivent `ApartmentQuest.deviceGoals` :
+ils disparaissent dès l'action accomplie. Fusibles et lampe suivent leurs étapes
+respectives du couloir. Les repères restent attachés aux vrais objets.
 La TV garde son CanvasTexture à 12 Hz. L’image originale locale est prête avant
-l’entrée en jeu et apparaît avec Pressure. Le son reste sur la TV ; son enveloppe
+l’entrée en jeu. `TelevisionSignal` dérive des flags sauvegardés de panne et de
+rallumage : programme normal, parasites faiblement lumineux à la coupure,
+puis visage et Pressure au rallumage du couloir. Image et forte lueur attendent
+le démarrage effectif du flux ; charger ne rejoue pas les effets de commutation.
+Le son reste sur la TV ; son enveloppe
 de distance est continue, sans test de seuil de porte. La radio conserve sa
 playlist, ses parasites après la panne et sa source mobile. Chaque boucle
 utilise le bus spatial/master existant et possède un nettoyage explicite.

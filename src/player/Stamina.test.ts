@@ -9,11 +9,10 @@ const sprintUntilEmpty = (stamina: Stamina, threat = 0, limit = 120): number => 
 };
 
 describe('stamina', () => {
-  it('lets a calm player sprint for about twenty seconds in one go', () => {
+  it('triples the previous 22-second calm sprint', () => {
     const stamina = new Stamina();
     const seconds = sprintUntilEmpty(stamina);
-    expect(seconds).toBeGreaterThan(18);
-    expect(seconds).toBeLessThan(25);
+    expect(seconds).toBeCloseTo(22*3,0);
     expect(stamina.exhausted).toBe(true);
     expect(stamina.critical).toBe(true);
     expect(stamina.breath).toBeGreaterThan(0.6);
@@ -49,19 +48,19 @@ describe('stamina', () => {
 
   it('gives adrenaline when hunted: cheaper sprint and a refill at the scream', () => {
     const calm = new Stamina(), hunted = new Stamina();
-    for (let t = 0; t < 12; t += DT) calm.update(DT, { sprinting: true, moving: true, threat: 0 });
-    for (let t = 0; t < 12; t += DT) hunted.update(DT, { sprinting: true, moving: true, threat: t < 0.5 ? 0 : 1 });
+    for (let t = 0; t < 36; t += DT) calm.update(DT, { sprinting: true, moving: true, threat: 0 });
+    for (let t = 0; t < 36; t += DT) hunted.update(DT, { sprinting: true, moving: true, threat: t < 0.5 ? 0 : 1 });
     expect(hunted.adrenaline).toBeGreaterThan(0.9);
     expect(hunted.level).toBeGreaterThan(calm.level + 0.2);
     // A whole chase from rested lasts well beyond the calm sprint.
     const chased = new Stamina();
     chased.update(DT, { sprinting: false, moving: true, threat: 0 });
-    expect(sprintUntilEmpty(chased, 1)).toBeGreaterThan(34);
+    expect(sprintUntilEmpty(chased, 1)).toBeGreaterThan(100);
   });
 
   it('crashes after the fear: heavy breath and a slower recovery for a few seconds', () => {
     const stamina = new Stamina(), rested = new Stamina();
-    for (let t = 0; t < 28; t += DT) stamina.update(DT, { sprinting: true, moving: true, threat: 1 });
+    for (let t = 0; t < 84; t += DT) stamina.update(DT, { sprinting: true, moving: true, threat: 1 });
     let crashed = false;
     for (let t = 0; t < 14 && !crashed; t += DT) {
       stamina.update(DT, { sprinting: false, moving: true, threat: 0 });
@@ -86,5 +85,15 @@ describe('stamina', () => {
     expect(stamina.level).toBe(1);
     expect(stamina.canSprint).toBe(true);
     expect(stamina.adrenaline).toBe(0);
+  });
+  it('shows the cue throughout recovery and gates the pulse with exhaustion hysteresis, never fear',()=>{
+    const stamina=new Stamina();stamina.update(DT,{sprinting:false,moving:false,threat:1});
+    expect(stamina.heart).toBe(0);expect(stamina.showCue).toBe(false);
+    stamina.reset();stamina.update(DT,{sprinting:true,moving:true,threat:0});expect(stamina.showCue).toBe(true);expect(stamina.heart).toBe(0);
+    for(const [level,audible] of [[.07,false],[.055,true],[.075,true],[.095,true],[.105,false],[.075,false]] as const){
+      stamina.level=level;stamina.update(0,{sprinting:true,moving:true,threat:0});expect(stamina.heart>0).toBe(audible);
+    }
+    for(let t=0;t<20;t+=DT){stamina.update(DT,{sprinting:false,moving:false,threat:0});expect(stamina.showCue).toBe(stamina.level<1);}
+    expect(stamina.showCue).toBe(false);expect(stamina.heart).toBe(0);
   });
 });

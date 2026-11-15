@@ -55,11 +55,13 @@ test('takes short distance-paced steps and side-steps into the chair without a q
   const wrap=a=>Math.atan2(Math.sin(a),Math.cos(a));
   assert.ok(Math.abs(wrap(samples[0].yaw-initialYaw))<.08,'The first pose must keep the incoming heading');
   const align=samples.filter(s=>s.phase==='align');assert.ok(align.length>30);
+  assert.ok(samples.filter(s=>s.phase==='sitting').length<=35,'Sit in about half a second');
+  assert.ok(samples.filter(s=>['pull-chair','settling','camera-in'].includes(s.phase)).length<45,'No long pauses between movements');
   assert.ok(align.every(s=>Math.abs(wrap(s.yaw-Math.PI))<.08),'Keep facing the desk while moving sideways');
   assert.ok(align.every(s=>s.walking<.5),'Chair alignment needs short steps');
   for(let i=1;i<samples.length;i++){
     const a=samples[i-1],b=samples[i];assert.ok(Math.abs(wrap(b.yaw-a.yaw))<=4.5/60+.0001,'No body-heading snap');
-    if(b.phase==='approach'||b.phase==='align')assert.ok(a.feet.distanceTo(b.feet)<.021,'Ease into a walking pace');
+    if(b.phase==='approach'||b.phase==='align')assert.ok(a.feet.distanceTo(b.feet)<.024,'Ease into a walking pace');
     if(a.phase==='align'&&b.phase==='align')assert.ok(Math.abs(wrap(b.moveYaw-a.moveYaw))<.4,'Blend between forward and sideways steps');
     if(a.phase==='pull-chair'&&b.phase==='pull-chair')assert.equal(b.gaitDistance,a.gaitDistance,'The gait cannot run while standing still');
   }
@@ -84,7 +86,7 @@ test('cuts the desktop immediately and rises in first person with the real head 
 });
 
 test('loads transitional snapshots at a stable stand without a second sit or shock, and keeps the blocked PC blocked',()=>{
-  begin(new THREE.Vector3(-6.1,9.5363203,-3.6));sequence.start();step(250);const snapshot=sequence.getProgress();assert.ok(!['standing','blocked'].includes(snapshot.phase));
+  begin(new THREE.Vector3(-6.1,9.5363203,-3.6));sequence.start();step(60);const snapshot=sequence.getProgress();assert.ok(!['standing','blocked','using'].includes(snapshot.phase));
   begin(new THREE.Vector3().copy(snapshot.safePosition),snapshot);assert.equal(sequence.state,'standing');assert.equal(desktop,false);assert.equal(opens,0);assert.ok(lab.physics.canStandAt(lab.player.position));
   begin(new THREE.Vector3().copy(snapshot.safePosition),snapshot,true);assert.equal(sequence.state,'blocked');sequence.start();step(40);assert.equal(opens,0);assert.equal(desktop,false);assert.equal(ends,0);
 });

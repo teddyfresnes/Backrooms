@@ -7,6 +7,7 @@ import type { ApartmentDeviceAudio, DeviceAudioPositions } from '../audio/Apartm
 import { SeededRandom } from '../world/SeededRandom';
 import { geometryIslands } from './GeometryIslands';
 import { burnerTop, GasFlame, panBase } from './GasFlame';
+import type { TelevisionSignal } from '../story/TelevisionSignal';
 
 type Device = 'tv' | 'radio' | 'gas';
 const boundsOf = (object?: THREE.Object3D) => object ? new THREE.Box3().setFromObject(object, true) : new THREE.Box3();
@@ -38,7 +39,7 @@ export class TelevisionPicture {
   private readonly context: CanvasRenderingContext2D;
   private readonly grain = document.createElement('canvas');
   private previous = -1;
-  private previousOutage = false;
+  private previousSignal:TelevisionSignal='normal';
   private disposed = false;
   private readonly smile = new Image();
   private imageReady = false;
@@ -59,11 +60,16 @@ export class TelevisionPicture {
     this.smile.onload = () => { if(!this.disposed) { this.imageReady=true; this.previous=-1; } this.finishReady(); };
     this.smile.onerror = () => this.finishReady();
     this.smile.src='/assets/apartment/tv-pressure-smile.webp';
-    this.draw(0, false);
+    this.draw(0, 'normal');
   }
-  draw(elapsed: number, outage: boolean): void {
-    const frame = Math.floor(elapsed * 12); if (frame === this.previous && outage === this.previousOutage) return; this.previous = frame; this.previousOutage = outage;
+  draw(elapsed: number, signal: TelevisionSignal): void {
+    const frame = Math.floor(elapsed * 12); if (frame === this.previous && signal === this.previousSignal) return; this.previous = frame; this.previousSignal = signal;
     const c = this.context, t = frame / 12;
+    if(signal==='static'){
+      c.fillStyle='#101719';c.fillRect(0,0,256,192);c.drawImage(this.grain,frame%5-4,frame%3-2,264,198);
+      c.fillStyle='#aacbd52a';c.fillRect(0,(frame*17)%192,256,1);this.texture.needsUpdate=true;return;
+    }
+    const outage=signal==='broadcast';
     c.fillStyle = outage ? '#2c3236' : '#7b8d88'; c.fillRect(0, 0, 256, 192);
     c.fillStyle = '#b6ae85'; c.beginPath(); c.ellipse(198, 38, 22, 22, 0, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#424c48'; c.fillRect(185 + Math.sin(t * .7) * 2, 34, 4, 8); c.fillRect(201 + Math.sin(t * .7) * 2, 34, 4, 8);
@@ -113,6 +119,7 @@ export class ApartmentDevices {
   private readonly ray = new THREE.Raycaster();
   private readonly direction = new THREE.Vector3();
   private readonly targets = new Map<Device, THREE.Object3D>();
+  private readonly markers = new Map<Device,THREE.Mesh>();
   private readonly radioLocalCenter = new THREE.Vector3();
   private readonly radioPosition = new THREE.Vector3();
   private readonly tvScreen?: THREE.Mesh;
@@ -123,6 +130,8 @@ export class ApartmentDevices {
   private hoverElapsed = .1;
   private prompted = false;
   private elapsed = 0;
+  private signal:TelevisionSignal='normal';
+  setTelevisionSignal(signal:TelevisionSignal):void {this.signal=signal;this.audio.setTelevisionSignal?.(signal);}
   constructor(private readonly apartment: ImportedApartmentEnvironment, private readonly physics: PhysicsWorld,
     private readonly camera: THREE.Camera, private readonly ui: { setInteraction(label: string | null): void },
     private readonly quest: ApartmentQuest, private readonly audio: ApartmentDeviceAudio) {
@@ -163,13 +172,15 @@ export class ApartmentDevices {
     }
     // Match the small, depth-tested dots used by the mailbox and Chloé's gift.
     for(const [name,root,point] of [
-      ['tv',apartment.television,new THREE.Vector3(boundsOf(apartment.television).max.x+.012,positions.tv.y-.13,positions.tv.z-.18)],
+      ['tv',apartment.television,new THREE.Vector3(boundsOf(apartment.television).max.x+.012,positions.tv.y+.13,positions.tv.z-.08)],
       ['radio',apartment.radio,new THREE.Vector3(positions.radio.x,positions.radio.y,radioBounds.max.z+.012)],
+      ['gas',apartment.stove,gasControlBounds(apartment.stove)[0]?.getCenter(new THREE.Vector3()).add(new THREE.Vector3(0,0,-.018))??positions.gas],
     ] as const){
       if(!root)continue;
       const material=new THREE.MeshBasicMaterial({color:0xc5d2b8});this.materials.add(material);
       const marker=this.mesh(new THREE.SphereGeometry(.01,8,6),material);marker.name=`apartment-${name}-interaction-marker`;marker.position.copy(point);
       this.apartment.group.updateWorldMatrix(true,true);root.attach(marker);
+      marker.visible=false;this.markers.set(name,marker);
     }
     this.gasControls = gasControlBounds(apartment.stove).map(box => box.expandByScalar(.008));
     if (apartment.stove) this.targets.set('gas', apartment.stove);
@@ -243,6 +254,7 @@ export class ApartmentDevices {
   }
   update(delta: number, active: boolean, canInteract: boolean): void {
     const state = this.quest.devices;
+    const goals=this.quest.deviceGoals;for(const [device,marker]of this.markers)marker.visible=goals.includes(device);
     this.updateRadioPosition();
     if (active) this.elapsed += delta;
     this.screenMaterial.color.setHex(state.tvOn ? 0xffffff : 0x000000);
@@ -255,11 +267,11 @@ export class ApartmentDevices {
     this.pcMaterial.color.setHex(state.outageTriggered?0xffffff:state.pcUsed ? 0xc9dfd7 : 0x000000);
     this.pcLight.color.setHex(state.outageTriggered?0x467dff:0xa5c8bf);
     this.radioMaterial.color.setHex(state.radioOn ? 0xe3a657 : 0x28231b);
-    this.tvLight.intensity = state.tvOn ? 2.1 : 0; this.radioLight.intensity = state.radioOn ? .65 : 0; this.pcLight.intensity = state.outageTriggered ? .8 : state.pcUsed ? 1.35 : 0;
+    this.tvLight.intensity = state.tvOn ? state.outageTriggered&&!(this.signal==='broadcast'&&this.audio.pressureBroadcastReady)?.12:2.1 : 0; this.radioLight.intensity = state.radioOn ? .65 : 0; this.pcLight.intensity = state.outageTriggered ? .8 : state.pcUsed ? 1.35 : 0;
     this.flame.update(state.gasOn, this.elapsed, delta);
     this.gasLight.intensity = .8 * this.flame.intensity * (.9 + .1 * Math.sin(this.elapsed * 21));
     this.audio.sync(state, active, delta);
-    if (state.tvOn && active) this.picture.draw(this.elapsed, state.outageTriggered && this.audio.pressureBroadcastReady);
+    if (state.tvOn && active) this.picture.draw(this.elapsed,state.outageTriggered?this.signal==='broadcast'&&this.audio.pressureBroadcastReady?'broadcast':'static':'normal');
     if (!canInteract) { if (this.prompted) this.ui.setInteraction(null); this.prompted = false; return; }
     this.hoverElapsed += delta; if (this.hoverElapsed < .075) return; this.hoverElapsed = 0;
     const device = this.hit();

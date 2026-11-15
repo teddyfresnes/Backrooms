@@ -255,6 +255,7 @@ export class PlayerController {
     this.pauseAfterCaptureLoss();
   };
   private pauseAfterCaptureLoss(): void {
+    this.input.reset();
     // Browsers may consume Escape before dispatching a key event. Capture loss
     // itself must pause, rather than silently enabling uncaptured mouse look.
     const wasPlaying = this.playingRequested;
@@ -349,6 +350,7 @@ export class PlayerController {
   }
 
   unlock(): void {
+    this.input.reset();
     this.playingRequested = false; clearTimeout(this.unlockDecision); this.unlockDecision = undefined;
     const playing = this.isLocked;
     this.fallbackPlaying = false;

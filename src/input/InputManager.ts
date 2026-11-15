@@ -12,6 +12,7 @@ export class InputManager {
   private readonly justPressed = new Set<string>();
   private readonly justReleased = new Set<string>();
   private readonly physical = new Map<string, string>();
+  private readonly physicalMovement=new Map<string,string>();
   private enabled = true;
   private preserveMovement = false;
   private bindings = defaultControlBindings();
@@ -80,26 +81,36 @@ export class InputManager {
   }
   /** Scripted shots may retain held movement, without buffering one-shot actions. */
   setEnabled(enabled: boolean, preserveMovement = false): void {
-    if (this.enabled === enabled) return;
+    if(this.enabled===enabled){
+      if(!enabled&&preserveMovement){this.preserveMovement=true;this.restoreMovement();}
+      return;
+    }
+    const restore=enabled&&this.preserveMovement;
     this.enabled = enabled;
     this.preserveMovement = !enabled && preserveMovement;
     if (!enabled) {
-      if (!preserveMovement) this.clear();
+      if (!preserveMovement) {this.pressed.clear();this.justPressed.clear();this.justReleased.clear();this.physical.clear();}
       else {
         this.justPressed.clear(); this.justReleased.clear();
         for (const [physical, code] of this.physical) if (!this.isMovementCode(code)) this.physical.delete(physical);
         for (const code of this.pressed) if (!this.isMovementCode(code)) this.pressed.delete(code);
       }
+      if(preserveMovement)this.restoreMovement();
     }
+    if(restore)this.restoreMovement();
   }
+  private restoreMovement():void{for(const [physical,code]of this.physicalMovement){this.physical.set(physical,code);this.pressed.add(code);}}
+  reset():void{this.preserveMovement=false;this.clear();}
   private isMovementCode(code: string): boolean {
     return (['forward', 'backward', 'left', 'right', 'sprint'] as const).some(action => this.actionCodes[action].includes(code));
   }
   private has(...codes: string[]): boolean { return codes.some((code) => this.pressed.has(code)); }
   private readonly onKeyDown = (event: KeyboardEvent): void => {
-    if (!this.enabled && !this.preserveMovement) return;
     if (isEditableKeyTarget(event) || event.isComposing || event.metaKey || event.altKey) { this.clear(); return; }
     const code = controlCodeFromKeyboardEvent(event);
+    if(event.repeat&&!this.physicalMovement.has(event.code)&&!this.physical.has(event.code))return;
+    if(this.isMovementCode(code))this.physicalMovement.set(event.code,code);
+    if(!this.enabled&&!this.preserveMovement)return;
     if (!this.enabled && !this.isMovementCode(code)) return;
     const mapped = this.gameCodes.has(code);
     if (event.ctrlKey && !mapped) { this.clear(); return; }
@@ -109,13 +120,14 @@ export class InputManager {
     this.pressed.add(code);
   };
   private readonly onKeyUp = (event: KeyboardEvent): void => {
-    const code = this.physical.get(event.code) ?? controlCodeFromKeyboardEvent(event);
+    const code = this.physical.get(event.code) ?? this.physicalMovement.get(event.code) ?? controlCodeFromKeyboardEvent(event);
     this.physical.delete(event.code);
+    this.physicalMovement.delete(event.code);
     if (this.enabled && !isEditableKeyTarget(event) && this.pressed.has(code)) this.justReleased.add(code);
     if (![...this.physical.values()].includes(code)) this.pressed.delete(code);
   };
   private readonly clear = (): void => {
-    this.pressed.clear(); this.justPressed.clear(); this.justReleased.clear(); this.physical.clear();
+    this.pressed.clear(); this.justPressed.clear(); this.justReleased.clear(); this.physical.clear();this.physicalMovement.clear();
   };
   private readonly onVisibility = (): void => { if (this.inputDocument?.hidden) this.clear(); };
   dispose(): void {

@@ -38,6 +38,38 @@ function desiredPalm(kind) {
   return frame.position.clone().addScaledVector(side, .0193 + .0197 * scale).addScaledVector(fingers, -.018 * scale);
 }
 
+for(const view of ['first-person','third-person'])test(`compass finger joints remain fixed during locomotion and camera turns in ${view}`,()=>{
+  equip('compass');lab.viewMode=view;lab.applyViewMode(true);for(let i=0;i<90;i++)stepLab(lab);
+  const hand=view==='first-person'?lab.firstPersonRightHandBone:lab.rightHandBone,joints=[];
+  hand.traverse(b=>{if(/righthand(thumb|index|middle|ring|pinky)[123]$/i.test(b.name))joints.push([b,b.quaternion.clone()]);});
+  assert.equal(joints.length,15);
+  for(let i=0;i<180;i++){
+    lab.player.input.clear();if(i>30)lab.player.input.pressed.add(lab.player.input.bindings.forward);
+    if(i>90)lab.player.input.pressed.add(lab.player.input.bindings.sprint);
+    lab.player.setLookQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(i*.03)*.8,Math.PI+Math.sin(i*.04)*.4,0,'YXZ')));
+    stepLab(lab);
+    for(const [bone,q]of joints)assert.ok(bone.quaternion.angleTo(q)<.001,`${bone.name} changed pose while holding the compass`);
+  }
+  lab.player.input.clear();
+});
+
+test('pocket transitions lower the object and gripping hand together and conceal both item identities at the swap',()=>{
+  for(const kind of ['compass','torch']){
+    equip(kind);
+    let previous;
+    for(let i=0;i<=30;i++){
+      const lower=i/30;lab.setHeldItem(kind,false,lower);assert.ok(lab.getHeldItemFrame(frame));
+      const view=frame.position.clone().applyMatrix4(lab.firstPersonCamera.matrixWorldInverse);
+      if(previous)assert.ok(view.distanceTo(previous)<.04,'equipment presentation jumped');previous=view;
+      if(lower<.5)assert.ok(palm().distanceTo(desiredPalm(kind))<.035,'grip separated during the visible part of stowing');
+    }
+    assert.ok(frame.position.clone().project(lab.firstPersonCamera).y<-1.3,'model swap is visible on screen');
+    lab.setHeldItem(kind==='compass'?'torch':'compass',false,1);assert.ok(lab.getHeldItemFrame(frame));
+    assert.ok(frame.position.clone().project(lab.firstPersonCamera).y<-1.3,'new model appears before the hand is raised');
+  }
+  lab.setHeldItem(null);
+});
+
 function handSkinSamples(root) {
   const samples = [];
   root.traverse(mesh => {

@@ -12,8 +12,6 @@ export class RiftAudio {
   private noise?: AudioBuffer;
   private readonly random = new SeededRandom('rift-audio');
   private heartTimer = 0;
-  private breathTimer = 0;
-  private inhale = true;
   private disposed = false;
 
   constructor(private readonly output: () => RiftAudioOutput | null) {}
@@ -57,52 +55,18 @@ export class RiftAudio {
     this.release([band, body, depth, tremolo], source);
   }
 
-  /** Heartbeat paced by fear (0 calm .. 1 panic); call every frame while it matters. */
-  heartbeat(delta: number, fear: number): void {
-    const level = Math.min(1, Math.max(0, fear));
+  /** Exhaustion pulse; the caller gates it with stamina, never fear. */
+  heartbeat(delta: number, effort: number): void {
+    const level = Math.min(1, Math.max(0, effort));
     this.heartTimer = Math.max(0, this.heartTimer - Math.max(0, delta));
     // Keep the cooldown through small fear fluctuations, which used to restart
     // a double beat immediately and stack several bass envelopes.
     if (level <= 0.55) return;
     if (this.heartTimer > 0) return;
-    const bpm = 68 + 52 * level;
+    const bpm = 72 + 70 * level;
     this.heartTimer = 60 / bpm;
-    const intensity = (level - 0.55) / 0.45;
-    const gain = 0.004 + 0.012 * intensity * intensity;
-    this.thump(gain, 0);
-    this.thump(gain * 0.6, 0.19);
-  }
-
-  /**
-   * The player's own breath, paced by effort (0 rested .. 1 panting); call
-   * every frame. Silent when rested, ragged and fast when spent.
-   */
-  breath(delta: number, effort: number): void {
-    const level = Math.min(1, Math.max(0, effort));
-    if (level <= 0.12) { this.breathTimer = Math.min(this.breathTimer, 0.4); return; }
-    this.breathTimer -= delta;
-    if (this.breathTimer > 0) return;
-    const cycle = 3.6 - 2.85 * level;
-    this.breathTimer = cycle * (this.inhale ? 0.42 : 0.58) * this.random.float(0.88, 1.12);
-    this.gasp(this.inhale, level, this.breathTimer);
-    this.inhale = !this.inhale;
-  }
-
-  private gasp(inhale: boolean, level: number, length: number): void {
-    const output = this.output(); if (!output || this.disposed) return;
-    const { context } = output, now = context.currentTime, duration = Math.max(0.18, length * 0.82);
-    const source = context.createBufferSource(), band = context.createBiquadFilter(), env = context.createGain();
-    source.buffer = this.noiseBuffer(context);
-    band.type = 'bandpass'; band.Q.value = inhale ? 1.6 : 1.1;
-    band.frequency.setValueAtTime(inhale ? 900 : 1250, now);
-    band.frequency.linearRampToValueAtTime(inhale ? 1500 : 620, now + duration);
-    const peak = Math.max(0.002, 0.2 * Math.pow(level, 1.3) * (inhale ? 0.8 : 1));
-    env.gain.setValueAtTime(0.0001, now);
-    env.gain.exponentialRampToValueAtTime(peak, now + duration * (inhale ? 0.55 : 0.18));
-    env.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    source.connect(band).connect(env).connect(output.destination);
-    source.start(now, this.random.float(0, 1)); source.stop(now + duration + 0.05);
-    this.release([band, env], source);
+    this.thump(.022 + .065 * level * level, 0);
+    this.thump(.014 + .04 * level * level, .17);
   }
 
   private thump(gain: number, delay: number): void {

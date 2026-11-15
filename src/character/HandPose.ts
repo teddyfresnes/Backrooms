@@ -112,6 +112,12 @@ export class HandPose {
     hand.updateWorldMatrix(true, true);
   }
 
+  gripCompass(hand: THREE.Bone, amount: number, weight: number): void {
+    this.curl(hand, amount, weight);
+    for(const joint of this.thumbs.get(hand)??[])joint.bone.quaternion.slerp(joint.reference,weight);
+    hand.updateWorldMatrix(true,true);
+  }
+
   sample(hand: THREE.Bone, out: HandSurfaceFrame): boolean {
     const bones = this.hands.get(hand);
     if (!bones) return false;

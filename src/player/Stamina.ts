@@ -4,11 +4,11 @@
  * sprinting stays cut until the bar is back to `resumeThreshold` (no stutter
  * sprint). Fear (`threat`) brings adrenaline: the sprint costs less, and the
  * scream that starts a chase refills part of the bar once. When it wears off
- * the crash follows: heavy panting and a slower recovery for a few seconds.
+ * the crash follows with a slower recovery for a few seconds.
  * Never saved: a loaded game starts rested.
  */
 export const STAMINA_TUNING = {
-  calmSprintSeconds: 22,
+  calmSprintSeconds: 66,
   /** Fractions of the full bar per second. */
   walkRecovery: 1 / 40,
   idleRecovery: 1 / 13,
@@ -52,11 +52,13 @@ export class Stamina {
   private previousThreat = 0;
   private peakAdrenaline = 0;
   private sprinting = false;
+  private pulseActive = false;
 
   get canSprint(): boolean { return !this.exhausted; }
   get critical(): boolean { return this.exhausted || this.level < STAMINA_TUNING.critical; }
-  /** 0..1 how hard the heart pounds (effort or fear). */
-  get heart(): number { return Math.max(this.breath * 0.85, this.adrenaline * 0.7); }
+  /** The pulse is audible only at near-total exhaustion, never from fear alone. */
+  get heart(): number { return this.pulseActive ? .75 + .25 * Math.max(0,1-this.level/.08) : 0; }
+  get showCue(): boolean { return this.level < 1; }
 
   update(delta: number, input: StaminaInput): void {
     const tuning = STAMINA_TUNING;
@@ -95,6 +97,8 @@ export class Stamina {
     if (this.level <= 0) { this.level = 0; this.exhausted = true; }
     this.level = Math.min(1, this.level);
     if (this.exhausted && this.level >= tuning.resumeThreshold) this.exhausted = false;
+    if(this.level<=.06)this.pulseActive=true;
+    else if(this.level>=.1)this.pulseActive=false;
 
     const spent = Math.pow(1 - this.level, 1.2) * (this.sprinting ? 1 : 0.85);
     const target = Math.max(spent, this.crash > 0 ? 0.75 : 0, this.exhausted ? 0.9 : 0);
@@ -104,5 +108,6 @@ export class Stamina {
   reset(): void {
     this.level = 1; this.exhausted = false; this.adrenaline = 0; this.crash = 0; this.breath = 0;
     this.sinceSprint = 99; this.hold = 0; this.kickCooldown = 0; this.previousThreat = 0; this.peakAdrenaline = 0;
+    this.pulseActive=false;
   }
 }

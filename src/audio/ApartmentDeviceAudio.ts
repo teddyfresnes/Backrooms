@@ -2,6 +2,7 @@ import { SeededRandom } from '../world/SeededRandom';
 import type { ApartmentProgress } from '../story/ApartmentQuest';
 import { doorAudioChain, type SpatialAudioBus } from './SpatialDoorAudio';
 import type { Vec3Data } from '../world/types';
+import type { TelevisionSignal } from '../story/TelevisionSignal';
 
 export const RADIO_PLAYLIST = [
   '/assets/audio/apartment/Waiting.mp3', '/assets/audio/apartment/sleepwalking.mp3',
@@ -28,12 +29,21 @@ export class ApartmentDeviceAudio {
   private state?: Readonly<ApartmentProgress>;
   private active = false;
   private pressureDelay = 0;
+  private signal:TelevisionSignal='normal';
+  private signalInitialized=false;
   private lastFixtureClick = -1;
   private lastChairMotion = -1;
   private listenerDistance = 0;
   private narrationGain = 1;
   private readonly fixtures = new Map<string, { source: AudioBufferSourceNode; gain: GainNode; chain: ReturnType<typeof doorAudioChain> }>();
-  get pressureBroadcastReady(): boolean { return this.pressureDelay === 0; }
+  get pressureBroadcastReady(): boolean { return this.signal==='broadcast'&&this.pressureDelay===0&&!this.pressure.pending&&!this.pressure.element.paused&&!this.pressure.blocked; }
+  setTelevisionSignal(signal:TelevisionSignal):void {
+    if(this.signalInitialized&&signal===this.signal)return;
+    const previous=this.signal;this.signal=signal;
+    if(this.signalInitialized&&previous!==signal)this.televisionSwitch(signal==='broadcast');
+    this.signalInitialized=true;this.pressureDelay=0;
+    if(this.state)this.sync(this.state,this.active);
+  }
   setListenerPosition(position: Vec3Data): void {
     this.listenerDistance = Math.hypot(position.x-this.positions.tv.x, position.y-this.positions.tv.y, position.z-this.positions.tv.z);
     this.pressure.chain?.setLevel(.43 * pressureDistanceGain(this.listenerDistance)*this.narrationGain);
@@ -137,11 +147,11 @@ export class ApartmentDeviceAudio {
     if (this.disposed) return;
     this.state = state; this.active = active;
     if (active) this.pressureDelay = Math.max(0, this.pressureDelay - Math.max(0, delta));
-    this.loops[0]!.gain.gain.value = active && state.tvOn && !state.outageTriggered ? .022 : 0;
+    this.loops[0]!.gain.gain.value = active&&state.tvOn?(state.outageTriggered&&this.signal!=='broadcast'?.012:!state.outageTriggered?.022:0):0;
     this.loops[1]!.gain.gain.value = active && state.gasOn ? COOKING_LEVEL : 0;
     this.stream(this.radio, RADIO_PLAYLIST[state.radioTrack]!, this.positions.radio,
       active && state.radioOn && !state.outageTriggered, .38*this.narrationGain);
-    this.stream(this.pressure, PRESSURE_URL, this.positions.tv, active && state.outageTriggered && state.tvOn && this.pressureDelay === 0, .43 * pressureDistanceGain(this.listenerDistance)*this.narrationGain);
+    this.stream(this.pressure, PRESSURE_URL, this.positions.tv, active && state.outageTriggered && this.signal==='broadcast'&&state.tvOn && this.pressureDelay === 0, .43 * pressureDistanceGain(this.listenerDistance)*this.narrationGain);
   }
   private stream(stream: Stream, url: string, position: Vec3Data, wanted: boolean, volume: number): void {
     stream.wanted = wanted;
@@ -178,7 +188,7 @@ export class ApartmentDeviceAudio {
    * pitched oscillator sweeps made the failure sound like an arcade effect.
    */
   powerCut(): void {
-    this.pressureDelay = .65;
+    this.setTelevisionSignal('static');
     const panel = this.positions.panel ?? this.positions.pc;
     const range = { refDistance: 2.5, maxDistance: 40, rolloff: .8 };
     this.burst(panel, .014, .8, 1900, 'bandpass', range);

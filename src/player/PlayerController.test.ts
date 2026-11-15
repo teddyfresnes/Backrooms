@@ -47,6 +47,7 @@ vi.mock('three/addons/controls/PointerLockControls.js', async () => {
 
 vi.mock('../input/InputManager', () => ({
   InputManager: class {
+    reset():void{inputState.presses.clear();inputState.releases.clear();inputState.down.clear();}
     get axes() { return inputState.axes; }
     consumePress(code: string): boolean {
       const pressed = inputState.presses.has(code);
