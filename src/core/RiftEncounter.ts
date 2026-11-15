@@ -669,6 +669,9 @@ export class RiftEncounter {
     }
     const sway = this.host.reducedMotion() ? 0 : Math.sin(this.phaseTime * 1.7) * 0.04;
     this.setLook(viewYaw(0, -this.crossFrom) + balance.lean * 0.12, -0.6 + sway);
+    // Populate the approach corridor during the forced downward gaze, well
+    // before the free look and the camera travelling into the reverse shot.
+    if (this.progress.stage !== 'done' && this.creatureMode === 'hidden') this.resetCreature(true);
     if (this.fallOff === 0) this.cameraRoll = -balance.lean * 0.85 * this.motionScale();
     this.cameraSag = this.sagAt(player.position.z, 1);
     const travelled = progress * EPIC3_FACADE_HALF_DEPTH * 2;
@@ -688,9 +691,6 @@ export class RiftEncounter {
     }
     // Off the far end of the board (past its bearing on the gallery floor).
     if (local < -(EPIC3_FACADE_HALF_DEPTH + PLANK_BEARING + 0.05)) {
-      // The gaze is still held down the board: place it behind the player now,
-      // before either the free look or the reverse shot can reveal the corridor.
-      if (this.progress.stage !== 'done') this.resetCreature(true);
       this.stopCrossing();
       if (this.progress.stage === 'done') { this.enter('done'); return; }
       this.say('across');
@@ -842,15 +842,6 @@ export class RiftEncounter {
     this.fear = Math.max(this.fear, 0.55 + 0.45 * this.creatureProximity);
     // Only now, the shot over, does it come up its corridor.
     if (this.creatureMode === 'hidden' || this.creatureMode === 'distant' || this.creatureMode === 'rear') { this.creatureMode = 'charge'; this.creatureTime = 0; }
-    if (this.creatureMode === 'charge') {
-      const brink = this.creatureBrink(this.vectorB);
-      if (Math.abs(this.creaturePosition.z - brink.z) < 0.05) {
-        // Keep charging straight onto the board, without braking at the void.
-        this.creatureMode = 'plank';
-        this.creatureTime = 0;
-        this.creatureAlong = 0;
-      }
-    }
     // Walking back out onto the board to meet it.
     const feet = this.vector.copy(this.host.player.position).setY(this.host.player.position.y - EYE);
     if (this.creatureMode === 'plank' && this.creaturePosition.distanceTo(feet) < CATCH_RADIUS) { this.startCaught(); return; }
@@ -1200,9 +1191,15 @@ export class RiftEncounter {
       creature.setMotion('run');
       const brink = this.creatureBrink(this.vectorB);
       const remaining = Math.abs(brink.z - this.creaturePosition.z);
-      this.creaturePosition.z += Math.sign(brink.z - this.creaturePosition.z) * Math.min(remaining, dt * CREATURE_CHARGE_SPEED);
+      const travel = dt * CREATURE_CHARGE_SPEED;
+      this.creaturePosition.z += Math.sign(brink.z - this.creaturePosition.z) * Math.min(remaining, travel);
       this.creaturePosition.x = brink.x;
       this.creatureYaw = bodyYaw(0, -this.crossFrom);
+      if (travel >= remaining) {
+        this.creatureMode = 'plank'; this.creatureTime = 0;
+        this.creatureAlong = travel - remaining;
+        this.placeCreatureOnPlank();
+      }
     } else if (mode === 'wait') {
       creature.setMotion(this.phase === 'caught' ? 'lunge' : this.creatureTime < 0.7 ? 'lunge' : 'crouch');
       if (this.phase === 'caught') {
@@ -1214,10 +1211,7 @@ export class RiftEncounter {
     } else if (mode === 'plank' && plank) {
       creature.setMotion('run');
       this.creatureAlong += dt * CREATURE_RUN_SPEED;
-      const start = this.creatureBrink(this.vectorB);
-      const z = start.z - this.crossFrom * this.creatureAlong;
-      this.creaturePosition.set(riftLaneX(plank.lane) + Math.sin(this.creatureTime * 2.1) * 0.05,
-        riftFloorY(plank.story) + PLANK_THICKNESS - this.sagAt(z, 1.5), z);
+      this.placeCreatureOnPlank();
       this.creatureYaw = bodyYaw(0, -this.crossFrom);
       if (Math.floor(this.creatureAlong / 1.5) !== Math.floor((this.creatureAlong - dt * CREATURE_RUN_SPEED) / 1.5)) {
         this.host.sound.creak(0.75, 0.5);
@@ -1269,6 +1263,13 @@ export class RiftEncounter {
     // In the maze its howl is muffled behind the walls once it loses sight of him.
     const occluded = this.creatureMode === 'retreat' && !this.lastSeen;
     this.host.creatureSound.updateSpatial(distance, pan, occluded ? 0.85 : 0);
+  }
+
+  private placeCreatureOnPlank(): void {
+    const plank = this.plank!, start = this.creatureBrink(this.vectorB);
+    const z = start.z - this.crossFrom * this.creatureAlong;
+    this.creaturePosition.set(riftLaneX(plank.lane) + Math.sin(this.creatureTime * 2.1) * .05,
+      riftFloorY(plank.story) + PLANK_THICKNESS - this.sagAt(z, 1.5), z);
   }
 
   /** Across the plank and along the player's own footsteps (always walkable). */

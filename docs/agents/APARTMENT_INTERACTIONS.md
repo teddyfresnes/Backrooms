@@ -4,7 +4,8 @@
 `selected === items.length` est la main vide, toujours dessinée en dernière case
 par `InventoryHUD`, qui grandit avec les objets. Les snapshots v1 (cinq cases,
 lampe en case 0) migrent à la lecture. Lampe et boussole (`isQuestItem`) ne se
-rangent ni ne se posent ; la boussole a une icône SVG dessinée (`compassIcon`). `ApartmentObjectInteraction`
+rangent ni ne se posent ; `InventoryHUD` fournit par défaut l'icône SVG de la
+boussole (`compassIcon`), indépendamment du chargement des modèles. `ApartmentObjectInteraction`
 désactive le corps rangé et réutilise son unique mesh pour l’équipement ; G le
 reprend physiquement ou le range. La molette choisit un emplacement hors portage,
 et conserve la distance pendant le portage. `EquipmentInput` attend le relâchement
@@ -125,8 +126,9 @@ le relais au PC, dans le judas ou la cachette ; il ne s’ajoute jamais au condu
 du personnage. Pause et onglet masqué suspendent tous les ticks.
 
 Les pales sont `Bone003_03` du ventilateur à la racine, pas l’extracteur de cuisine.
-La cage reste fixe. La lampe utilise son ampoule et son interrupteur propres,
-avec un état indépendant et une extinction imposée pendant la panne.
+La cage reste fixe. La lampe utilise son ampoule, son réflecteur intérieur et
+son interrupteur propres, avec un état indépendant et une extinction imposée
+pendant la panne ; ses matériaux restent indépendants de ceux du plafonnier.
 
 Pendant la chasse, la sortie silencieuse se maintient sur interagir (E), pas sur
 sprint ; relâcher trop tôt fait jaillir le joueur. Si la TV est éteinte, elle

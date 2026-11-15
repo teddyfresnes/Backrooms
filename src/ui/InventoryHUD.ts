@@ -1,12 +1,12 @@
-import { FLASHLIGHT_ID, type InventoryState } from '../apartment/InventoryState';
+import { COMPASS_ID, FLASHLIGHT_ID, type InventoryState } from '../apartment/InventoryState';
 import './inventory-hud.css';
 import type * as THREE from 'three';
-import { inventoryObjectIcon } from './InventoryIcons';
+import { compassIcon, inventoryObjectIcon } from './InventoryIcons';
 export class InventoryHUD {
   readonly element=document.createElement('aside');
   private readonly slots:HTMLElement[]=[];
   private readonly icons = new Map<string,string>();
-  private readonly questIcons = new Map<string,string>();
+  private readonly questIcons = new Map<string,string>([[COMPASS_ID, compassIcon()]]);
   private readonly sources = new Map<string,readonly THREE.Object3D[]>();
   private peek=0;private accent=0;private last='';private selected=-1;
   private readonly rail=document.createElement('div');

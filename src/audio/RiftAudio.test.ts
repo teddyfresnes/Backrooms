@@ -13,9 +13,9 @@ it('keeps even a panic heartbeat quiet and spaces the double beats instead of st
   const audio = new RiftAudio(() => ({ context, destination: {} }) as never);
   audio.heartbeat(.016, .2); expect(context.createOscillator).not.toHaveBeenCalled();
   audio.heartbeat(.016, 1); expect(context.createOscillator).toHaveBeenCalledTimes(2);
-  for (const gain of gains) expect(Math.max(...gain.mock.calls.map(call => call[0]))).toBeLessThan(.09);
-  for (let i=0;i<20;i++) audio.heartbeat(1/60,1);
+  for (const gain of gains) expect(Math.max(...gain.mock.calls.map(call => call[0]))).toBeLessThanOrEqual(.016);
+  for (let i=0;i<20;i++) audio.heartbeat(1/60,i%2?1:.2);
   expect(context.createOscillator).toHaveBeenCalledTimes(2);
-  audio.heartbeat(.15,1); expect(context.createOscillator).toHaveBeenCalledTimes(4);
+  audio.heartbeat(.2,1); expect(context.createOscillator).toHaveBeenCalledTimes(4);
   audio.dispose();audio.heartbeat(1,1);expect(context.createOscillator).toHaveBeenCalledTimes(4);
 });

@@ -145,7 +145,9 @@ export class PhysicsWorld {
   }
 
   private readonly navRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
-  private readonly navBody = new RAPIER.Cuboid(0.48, 0.95, 0.48);
+  // A 0.5 m cell permits positions up to 0.25 m from its probe centre. Include
+  // that margin so the 0.96 m torso stays clear at every position in the cell.
+  private readonly navBody = new RAPIER.Cuboid(0.73, 0.95, 0.73);
   private readonly navPoint = { x: 0, y: 0, z: 0 };
   /**
    * Floor height of a creature-sized cell centred on (x, z) near `floorY`, or

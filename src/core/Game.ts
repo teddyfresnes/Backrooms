@@ -49,7 +49,6 @@ import type { PalmFrame } from '../character/HeldItemPose';
 import { EquipmentInput } from '../input/EquipmentInput';
 import { formatKeyLabel } from '../input/ControlBindings';
 import { InventoryHUD } from '../ui/InventoryHUD';
-import { compassIcon } from '../ui/InventoryIcons';
 import { NarrativeCaption } from '../ui/NarrativeCaption';
 import { QuestTracker } from '../ui/QuestTracker';
 import { StoryHud } from '../ui/StoryHud';
@@ -283,7 +282,6 @@ export class Game {
       this.inventory = carriedInventory(launch?.kind === 'new' ? launch.inventory : saved?.inventory);
       this.savedRift = saved?.rift;
       this.inventoryHUD = new InventoryHUD(this.root);
-      this.inventoryHUD.setQuestIcon(COMPASS_ID, compassIcon());
       this.questTracker = new QuestTracker(this.root);
       this.caption = new NarrativeCaption(this.root);
       this.storyHud = new StoryHud(this.root);
@@ -1225,7 +1223,7 @@ export class Game {
     player.setExertion(this.stamina.breath);
     this.postFX?.setExertion(this.settings.cameraMotion ? this.stamina.breath : this.stamina.breath * 0.5);
     this.riftAudio.breath(delta, this.stamina.breath);
-    this.riftAudio.heartbeat(delta, Math.max(this.rift?.heartFear ?? 0, this.stamina.heart > 0.35 ? this.stamina.heart : 0));
+    this.riftAudio.heartbeat(delta, Math.max(this.rift?.heartFear ?? 0, this.stamina.heart > 0.65 ? this.stamina.heart : 0));
   }
 
   private readonly resize = (): void => {

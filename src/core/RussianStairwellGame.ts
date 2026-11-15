@@ -1,6 +1,5 @@
 import { InventoryState, FLASHLIGHT_ID, COMPASS_ID, isQuestItem, type InventoryProgress } from '../apartment/InventoryState';
 import { Compass } from '../apartment/Compass';
-import { compassIcon } from '../ui/InventoryIcons';
 import { FuseBox } from '../apartment/FuseBox';
 import { GiftParcel } from '../stairwell/GiftParcel';
 import type { PalmFrame } from '../character/HeldItemPose';
@@ -579,7 +578,6 @@ export class RussianStairwellGame {
     this.flashlight=new Flashlight(this.scene,physics,apartment.group.getObjectByName('Desk'));
     this.inventoryHUD.setObjectSources(apartment.pickables,this.flashlight.model);
     this.compass=new Compass(this.scene);
-    this.inventoryHUD.setQuestIcon(COMPASS_ID,compassIcon());
     this.setupGift();
     this.fuseBox=new FuseBox(apartment.floorY,{
       ui:this.ui,

@@ -38,7 +38,7 @@ const setup = (viewX: number, viewZ: number, player = { x: 33, y: 0, z: 49 }) =>
 const STYLES: LurkStyle[] = ['still', 'prowl', 'cross', 'ambush'];
 
 describe('backrooms spawn director', () => {
-  it('never places it on screen, never within 20 m, and always ahead', () => {
+  it('never places it on screen or within 20 m, and keeps stationary ambushes ahead', () => {
     let placed = 0;
     for (const [vx, vz] of [[0, -1], [1, 0], [-1, -1], [0, 1]] as const) {
       const { nav, context, player } = setup(vx, vz);
@@ -52,9 +52,9 @@ describe('backrooms spawn director', () => {
           expect(distance).toBeGreaterThanOrEqual(DIRECTOR_TUNING.minDistance);
           expect(spotVisible(context, spot.x, spot.y, spot.z)).toBe(false);
           if (style === 'ambush' || distance < DIRECTOR_TUNING.openSightDistance) expect(spotOccluded(context, spot.x, spot.y, spot.z)).toBe(true);
-          // Ahead on his way north or along his heading, never behind both.
+          // Stationary scares stay ahead; a passer-by may come from either side.
           const ux = (spot.x - player.x) / distance, uz = (spot.z - player.z) / distance;
-          expect(0.5 * -uz + 0.5 * (ux * context.heading.x + uz * context.heading.z)).toBeGreaterThan(-0.16);
+          if(style==='still'||style==='ambush')expect(0.5 * -uz + 0.5 * (ux * context.heading.x + uz * context.heading.z)).toBeGreaterThan(-0.16);
           if (style === 'cross') expect(spot.crossTo).toBeDefined();
         }
       }
@@ -67,6 +67,22 @@ describe('backrooms spawn director', () => {
     for (const style of STYLES) {
       expect(chooseLurkSpot(nav, { ...context, cinematic: true }, new SeededRandom('cinematic'), style)).toBeNull();
     }
+  });
+
+  it('never materialises in an open hall even when the player is looking away', () => {
+    const nav=new NavGrid((_x,_z,y)=>y);nav.follow(0,0,0);nav.computeField(0,0,1e6);
+    const context:PlacementContext={player:{x:0,y:0,z:0},heading:{x:0,z:-1},north:{x:0,z:-1},cinematic:false,
+      lineOfSight:()=>true,inView:()=>false};
+    for(const style of STYLES)expect(chooseLurkSpot(nav,context,new SeededRandom(style),style)).toBeNull();
+  });
+
+  it('lets roaming creatures approach from behind as well as ahead instead of always staging the next corner',()=>{
+    const {nav,context}=setup(0,-1,{x:33,y:0,z:33});let behind=0,ahead=0;
+    for(let seed=0;seed<32;seed++)for(const style of ['prowl','cross'] as const){
+      const spot=chooseLurkSpot(nav,context,new SeededRandom(`passing-${seed}`),style);
+      if(!spot)continue;if(spot.z>33)behind++;else ahead++;
+    }
+    expect(behind).toBeGreaterThan(0);expect(ahead).toBeGreaterThan(0);
   });
 
   it('is deterministic for a seed and varies between seeds', () => {

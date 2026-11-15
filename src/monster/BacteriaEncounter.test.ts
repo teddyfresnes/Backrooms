@@ -327,9 +327,13 @@ describe('BacteriaEncounter', () => {
   it('bursts the door after the siege', () => {
     const world = setup();
     playToHiding(world);
+    world.encounter.requestHiddenExit();
+    world.until(()=>world.state.motion==='bang',15);
     const before = world.events.length;
     world.step(DOOR_BANG_SECONDS * 0.5);
     expect(world.events.slice(before)).not.toContain('breach');
+    world.step(DOOR_BANG_SECONDS * .5 + .1);
+    expect(world.door.breached).toBe(true);
   });
 
   it('resumes a survived save as a free walk out into the street, where the player trips and falls', () => {
@@ -356,6 +360,13 @@ describe('BacteriaEncounter', () => {
 });
 
 describe('other hiding places', () => {
+  it('bursts through on the next tick when already hidden, without waiting for the remaining corridor charge', () => {
+    const world=setup({tvOn:true});playToHiding(world);
+    expect(world.door.breached).toBe(false);
+    world.step(DT);
+    expect(world.door.breached).toBe(true);
+    expect(world.events).not.toContain('impact:door-bang');
+  });
   it('keeps the full door delay while the player is looking, but breaches as soon as he hides', () => {
     const world=setup({tvOn:true});playToHiding(world);world.encounter.requestHiddenExit();
     world.until(()=>world.state.motion==='bang',15);

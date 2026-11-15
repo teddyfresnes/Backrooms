@@ -80,7 +80,8 @@ it('probes clearance for the hunter torso, including low ceilings and nearby wal
     {id:'low-ceiling',kind:'barrier',center:{x:2,y:2.2,z:0},halfExtents:{x:.4,y:.1,z:1}},
   ]);
   expect(Number.isNaN(physics.probeWalkableCell(.3,0,0))).toBe(true);
-  expect(physics.probeWalkableCell(.8,0,0)).toBeCloseTo(0,3);
+  expect(Number.isNaN(physics.probeWalkableCell(.8,0,0))).toBe(true);
+  expect(physics.probeWalkableCell(.9,1.8,0)).toBeCloseTo(0,3);
   expect(Number.isNaN(physics.probeWalkableCell(2,0,0))).toBe(true);
   expect(Number.isNaN(physics.probeWalkableCell(4.5,0,0))).toBe(true);
 });

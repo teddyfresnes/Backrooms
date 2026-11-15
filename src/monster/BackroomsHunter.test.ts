@@ -138,6 +138,17 @@ describe('backrooms hunter behaviour', () => {
     expect(Math.hypot(hunter.position.x-30,hunter.position.z-10)).toBeGreaterThan(2);
   });
 
+  it('reacts to a distant stare despite brief losses of the gaze and an inflated path distance', () => {
+    const nav=new NavGrid(mazeProbe(room),128,CELL);nav.follow(30,30,0);nav.computeField(30,48,1e6);
+    const hunter=new BackroomsHunter(nav,new SeededRandom('distant-gaze'));
+    hunter.place({x:30,y:0,z:8,yaw:Math.PI,style:'still'});
+    for(let frame=0;frame<130&&hunter.state!=='chase';frame++){
+      hunter.update(DT,senseAt(30,48,{seen:true,stared:frame%8!==0}));
+    }
+    expect(hunter.state).toBe('chase');
+    expect(hunter.lastKnown).toMatchObject({x:30,z:48});
+  });
+
   it('keeps running when close to a stationary target, without pace matching', () => {
     const nav=new NavGrid(mazeProbe(room),128,CELL);nav.follow(30,30,0);nav.computeField(30,30,1e6);
     const hunter=new BackroomsHunter(nav,new SeededRandom('close'));
@@ -160,12 +171,25 @@ describe('backrooms hunter behaviour', () => {
     expect(hunter.speed).toBeGreaterThan(4);
   });
 
+  it('pursues the observed escape direction rather than following movements hidden behind walls', () => {
+    const run=(hidden:{x:number;z:number})=>{
+      const nav=new NavGrid(mazeProbe(room),128,CELL);nav.follow(30,30,0);nav.computeField(30,30,1e6);
+      const hunter=new BackroomsHunter(nav,new SeededRandom('memory'));
+      hunter.adopt({x:30,y:0,z:10},0,'chase');
+      for(let t=0;t<.6;t+=DT)hunter.update(DT,senseAt(30,30+t*3,{sees:true,speed:3}));
+      for(let t=0;t<3;t+=DT)hunter.update(DT,senseAt(hidden.x,hidden.z));
+      return {...hunter.position,state:hunter.state,lastKnown:{...hunter.lastKnown}};
+    };
+    expect(run({x:5,z:55})).toEqual(run({x:55,z:5}));
+  });
+
   it('searches the last place it saw him, reacts to a sprint, never vanishes in sight', () => {
     const nav = new NavGrid(mazeProbe(room), 128, CELL);
     nav.follow(30, 30, 0);
     const hunter = new BackroomsHunter(nav, new SeededRandom('search'));
     hunter.lastKnown.x = 20; hunter.lastKnown.z = 20;
     hunter.adopt({ x: 10, y: 0, z: 10 }, 0, 'search');
+    expect(hunter.lastKnown).toMatchObject({x:20,z:20});
     const events: HunterEvent[] = [];
     // Seen the whole time from 40 m: it may slink off, but never goes dormant while in sight.
     for (let t = 0; t < 60; t += DT) {

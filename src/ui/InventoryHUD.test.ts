@@ -5,6 +5,19 @@ import {createFlashlightModel}from '../apartment/FlashlightModel';
 import {InventoryState}from '../apartment/InventoryState';
 import {InventoryHUD}from './InventoryHUD';
 import {compassIcon,inventoryObjectIcon}from './InventoryIcons';
+it('restores the compass icon in a fresh Backrooms rail before and after loading object sources',()=>{
+  const state=new InventoryState();state.acquireLamp();state.acquireCompass();
+  const host=document.createElement('div'),hud=new InventoryHUD(host),torch=new THREE.Group();
+  try{
+    const restored=new InventoryState(state.snapshot());
+    hud.update(restored,.016,true,true,'G','F');
+    const slot=()=>host.querySelector('[aria-label="Boussole de Chloé"] img') as HTMLImageElement;
+    expect(decodeURIComponent(slot().src.split(',').slice(1).join(','))).toBe(compassIcon());
+    const original=slot().src;
+    hud.setObjectSources([],torch);hud.update(restored,.016,true,true,'G','F');
+    expect(slot().src).toBe(original);
+  }finally{hud.dispose();}
+});
 it('draws the actual torch and stored geometry in the rail, retains selection and exposes labels only to assistive technology',()=>{
   const torch=createFlashlightModel(),book=new THREE.Mesh(new THREE.BoxGeometry(.12,.02,.18),new THREE.MeshStandardMaterial({color:0x704e31}));
   const host=document.createElement('div'),hud=new InventoryHUD(host),state=new InventoryState();

@@ -67,6 +67,7 @@ export class BackroomsHunt {
   };
   private readonly heading = { x: 0, z: -1 };
   private readonly eye = new THREE.Vector3();
+  private readonly creatureEye = new THREE.Vector3();
   private readonly view = new THREE.Vector3();
   private readonly point = new THREE.Vector3();
   private readonly direction = new THREE.Vector3();
@@ -220,7 +221,10 @@ export class BackroomsHunt {
   private prepareNav(force: boolean): void {
     const revision = this.host.worldRevision?.() ?? 0;
     if (revision !== this.revision) { this.revision = revision; this.nav.invalidate(); }
-    this.nav.follow(this.feet.x, this.feet.z, this.feet.y);
+    // Keep both ends of the route in the window. Centring only on the player
+    // could strand a living hunter outside the grid after a single recenter.
+    const focus = this.hunter.visible ? this.hunter.position : this.feet;
+    this.nav.follow((this.feet.x + focus.x) * .5, (this.feet.z + focus.z) * .5, this.feet.y);
     // Fill in the cells the last field could not afford, a few per frame (the hunter adds its own).
     this.nav.warm(force ? 400 : this.hunter.state === 'dormant' ? 40 : 16);
   }
@@ -248,11 +252,15 @@ export class BackroomsHunt {
 
   /** Clear line from the player's eyes to a world point (walls only). */
   private lineOfSight(x: number, y: number, z: number): boolean {
-    this.direction.set(x - this.eye.x, y - this.eye.y, z - this.eye.z);
+    return this.clearSight(this.eye, x, y, z);
+  }
+
+  private clearSight(origin: Readonly<Vec3Data>, x: number, y: number, z: number): boolean {
+    this.direction.set(x - origin.x, y - origin.y, z - origin.z);
     const distance = this.direction.length();
     if (distance < 0.3) return true;
-    const hit = this.host.physics.castEnvironmentRay(this.eye, this.direction.multiplyScalar(1 / distance), distance);
-    return !hit || hit.distance > distance - 0.35;
+    const hit = this.host.physics.castEnvironmentRay(origin, this.direction.multiplyScalar(1 / distance), distance);
+    return !hit || hit.distance > distance - 0.08;
   }
 
   private inView(x: number, y: number, z: number): boolean {
@@ -262,17 +270,31 @@ export class BackroomsHunt {
 
   private sense(): void {
     const position = this.hunter.position;
-    const head = this.lineOfSight(position.x, position.y + HEAD, position.z);
-    const chest = head || this.lineOfSight(position.x, position.y + CHEST, position.z);
-    const shoulder = chest || this.lineOfSight(position.x + Math.cos(this.hunter.yaw) * .35, position.y + CHEST, position.z - Math.sin(this.hunter.yaw) * .35)
-      || this.lineOfSight(position.x - Math.cos(this.hunter.yaw) * .35, position.y + CHEST, position.z + Math.sin(this.hunter.yaw) * .35);
+    let seen = false;
+    // Test each exposed point in the frustum: a visible shoulder counts even
+    // when the centre of its body is just outside the frame.
+    for (const [side, height] of [[0, HEAD], [0, CHEST], [-.36, CHEST], [.36, CHEST], [0, .65]] as const) {
+      const x = position.x + Math.cos(this.hunter.yaw) * side;
+      const z = position.z - Math.sin(this.hunter.yaw) * side;
+      if (!this.lineOfSight(x, position.y + height, z)) continue;
+      seen ||= this.inView(x, position.y + height, z);
+    }
     const dx = this.feet.x - position.x, dz = this.feet.z - position.z, range = Math.hypot(dx, dz);
     const facing = range < 3 || (dx * Math.sin(this.hunter.yaw) + dz * Math.cos(this.hunter.yaw)) / Math.max(.01, range) > -0.35;
-    this.senses.sees = shoulder && facing && range < HUNTER_TUNING.visionRange;
-    this.senses.seen = shoulder && (this.inView(position.x, position.y + HEAD, position.z) || this.inView(position.x, position.y + CHEST, position.z));
+    this.creatureEye.set(position.x, position.y + HEAD, position.z);
+    const actor = this.host.creature();
+    if (actor && actor.root.position.distanceToSquared(position) < .25) actor.getHeadPosition?.(this.creatureEye);
+    // Its own eyes detect the player's eyes or torso. Seeing one of its long
+    // hands around a wall does not let it see through that wall in return.
+    this.senses.sees = facing && range < HUNTER_TUNING.visionRange && (
+      this.clearSight(this.creatureEye, this.eye.x, this.eye.y, this.eye.z)
+      || this.clearSight(this.creatureEye, this.feet.x, this.feet.y + 1.1, this.feet.z)
+      || this.clearSight(this.creatureEye, this.feet.x + .22, this.feet.y + 1.35, this.feet.z)
+      || this.clearSight(this.creatureEye, this.feet.x - .22, this.feet.y + 1.35, this.feet.z));
+    this.senses.seen = seen;
     this.point.set(position.x, position.y + 1.5, position.z).sub(this.eye);
     const distance = this.point.length();
-    this.senses.stared = this.senses.seen && distance > 0.1 && this.point.dot(this.view) / distance > 0.975;
+    this.senses.stared = seen && distance > 0.1 && this.point.dot(this.view) / distance > 0.965;
   }
 
   // ----------------------------------------------------------- director
@@ -302,7 +324,7 @@ export class BackroomsHunt {
     this.wasSeen = false;
     this.occlusion = 1;
     this.presenceStarted = false;
-    this.lightTimer = this.random.float(1.5, 9);
+    this.lightTimer = this.random.float(4, 16);
     // The ambush is announced: three knocks from where it will come, a few seconds before.
     if (style === 'ambush') this.knockFrom(spot.x, spot.y, spot.z);
   }
@@ -458,11 +480,11 @@ export class BackroomsHunt {
     if (hunter.visible && this.lightEventTime === 0) {
       this.lightTimer -= dt;
       if (this.lightTimer <= 0) {
-        this.lightTimer = this.random.float(4, 13);
+        this.lightTimer = this.random.float(4, 20);
         // Some passages leave the lights alone, including during a chase.
-        if (this.random.chance(.65)) {
+        if (this.random.chance(.5)) {
           const single = this.random.chance(.4);
-          this.startLightEvent(position, single ? 3.2 : this.random.float(12, 46), single, this.random.chance(.6));
+          this.startLightEvent(position, single ? 3.2 : this.random.float(12, 52), single, this.random.chance(.5));
         }
       }
     }
@@ -483,13 +505,14 @@ export class BackroomsHunt {
   }
 
   private startLightEvent(origin: Readonly<Vec3Data>, radius: number, single: boolean, audible: boolean): void {
-    const x = origin.x + this.random.float(-6, 6), z = origin.z + this.random.float(-6, 6);
+    const offset = single ? 12 : radius * .45;
+    const x = origin.x + this.random.float(-offset, offset), z = origin.z + this.random.float(-offset, offset);
     const fixture = this.host.lightNear?.(x, origin.y + 2.6, z);
     if (single && this.host.lightNear && !fixture) return;
     this.lightCentre.x = fixture?.x ?? x; this.lightCentre.y = fixture?.y ?? origin.y + 2.6; this.lightCentre.z = fixture?.z ?? z;
     this.lightRadius = radius; this.singleLight = single; this.lightAudible = audible;
-    this.lightEventTime = this.random.float(1.2, 5.5);
-    this.lightStrength = this.random.float(.65, 1);
+    this.lightEventTime = this.random.float(.45, 6.5);
+    this.lightStrength = this.random.float(.35, 1);
   }
 
   // --------------------------------------------------------- interference

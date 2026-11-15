@@ -518,6 +518,9 @@ export class BacteriaEncounter {
     }
 
     const inside = this.playerInside();
+    // Hidden behind a secured door, the player cannot see the remaining run.
+    // Spend that margin only while he is still looking for somewhere to hide.
+    if (inside && this.hidden && host.door.isSecured()) { this.enterApartment(true); return; }
     const doorX = host.threshold.x + 0.65;
     this.chargeTime += dt;
     if (!inside && this.monsterPosition.x <= doorX + 1e-3) {

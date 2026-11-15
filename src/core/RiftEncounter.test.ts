@@ -207,6 +207,7 @@ describe('rift encounter', () => {
     let held = 0;
     harness.run(11, (dt) => {
       const balance = harness.internals.balance;
+      if(harness.internals.phase==='crossing'&&Math.abs(harness.position.z-RIFT_CENTER_Z)<1)expect(harness.creature.isVisible).toBe(true);
       if (balance) {
         if (Math.abs(balance.lean) > 0.16) held = -Math.sign(balance.lean);
         else if (Math.abs(balance.lean) < 0.05) held = 0;
@@ -278,7 +279,10 @@ describe('rift encounter', () => {
     const h=createHarness();const lane=crossOver(h);
     h.position.set(riftLaneX(lane),EYE,RIFT_CENTER_Z-35);
     const mode=()=>(h.encounter as unknown as {creatureMode:string}).creatureMode;
-    for(let t=0;t<8&&mode()!=='plank';t+=DT){expect(mode()).not.toBe('wait');h.run(DT);}
+    for(let t=0;t<8&&mode()!=='plank';t+=DT){
+      expect(mode()).not.toBe('wait');const before=h.creature.root.position.z;h.run(DT);
+      expect(before-h.creature.root.position.z).toBeCloseTo(6.4*DT,5);
+    }
     expect(mode()).toBe('plank');const start=h.creature.root.position.z;
     for(let i=0;i<12;i++)h.run(DT);expect(h.state.creatureMotion).toBe('run');
     expect(start-h.creature.root.position.z).toBeCloseTo(1.28,2);

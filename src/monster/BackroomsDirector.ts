@@ -10,7 +10,7 @@ import type { LurkPlacement, LurkStyle } from './BackroomsHunter';
  * encounter → guaranteed relief. `chooseLurkSpot` scores the walkable cells of
  * the nav window and returns a place the player will stumble upon: never on
  * his screen, never within `DIRECTOR_TUNING.minDistance`, never during a
- * scripted shot, ahead on his probable route (compass north, his heading),
+ * scripted shot; moving passers-by may approach from either direction,
  * preferring dark corners, corridor ends, door frames and empty halls.
  * Deterministic for a given seed and inputs.
  */
@@ -35,7 +35,7 @@ export const DIRECTOR_TUNING = {
   /** Straight metres from the player. */
   minDistance: 22,
   maxDistance: 44,
-  /** Beyond this an out-of-frame spot may stay in the line of sight. */
+  /** Crossing destinations may be exposed beyond this distance. */
   openSightDistance: 28,
   retryEvery: 1.2,
 } as const;
@@ -124,7 +124,7 @@ export class TensionDirector {
       if (event < 0.42) return { kind: 'false-noise' };
       if (event < 0.7) {
         const single = event < 0.56;
-        return { kind: 'flicker', radius: single ? 3.2 : this.random.float(24, 46), single, audible: this.random.chance(0.45) };
+        return { kind: 'flicker', radius: single ? 3.2 : this.random.float(24, 52), single, audible: this.random.chance(0.45) };
       }
     }
     if (this.tension < this.peak || !input.hunterDormant) return null;
@@ -197,16 +197,18 @@ export const chooseLurkSpot = (
   const player = context.player;
   const headingLength = Math.hypot(context.heading.x, context.heading.z) || 1;
   const hx = context.heading.x / headingLength, hz = context.heading.z / headingLength;
+  const passing = style === 'prowl' || style === 'cross';
+  const approach = passing ? random.float(-Math.PI, Math.PI) : 0;
   const candidates: Candidate[] = [];
   nav.forEachFree(2, (index, x, z) => {
     const dx = x - player.x, dz = z - player.z, straight = Math.hypot(dx, dz);
     if (straight < tuning.minDistance || straight > tuning.maxDistance) return;
-    if (!nav.hasClearanceAt(x, z, 0.35)) return;
+    if (!nav.hasClearanceAt(x, z, 0.65)) return;
     const path = nav.field[index]!;
     if (!Number.isFinite(path) || path > 70) return;
     const ux = dx / straight, uz = dz / straight;
     const ahead = 0.5 * (ux * context.north.x + uz * context.north.z) + 0.5 * (ux * hx + uz * hz);
-    if (ahead < -0.15) return;
+    if (!passing && ahead < -0.15) return;
     const y = nav.heightOf(index);
     const east = nav.openLength(x, z, 1, 0, 24), west = nav.openLength(x, z, -1, 0, 24);
     const south = nav.openLength(x, z, 0, 1, 24), northLength = nav.openLength(x, z, 0, -1, 24);
@@ -214,7 +216,8 @@ export const chooseLurkSpot = (
     const hall = Math.min(east, west, south, northLength);
     const doorway = (Math.min(east, west) < 0.6 && south > 2 && northLength > 2) || (Math.min(south, northLength) < 0.6 && east > 2 && west > 2);
     const ratio = path / straight;
-    let score = 0.45 * Math.max(0, ahead);
+    let score = (passing ? .15 : .45) * Math.max(0, ahead);
+    if (passing) score += (ux * Math.sin(approach) + uz * Math.cos(approach)) * .7;
     score += 0.25 * Math.max(0, 1 - Math.abs(path - 30) / 16);
     if (ratio > 1.15) score += 0.12;
     score += 0.2 * Math.max(0, Math.min(1, (corridor - 6) / 14));
@@ -253,8 +256,8 @@ export const chooseLurkSpot = (
     if (spotVisible(context, x, y, z)) continue;
     const straight = Math.hypot(x - player.x, z - player.z);
     const occluded = spotOccluded(context, x, y, z);
-    // An ambush comes from behind a wall; anything else may wait in the open only far off.
-    if (!occluded && (style === 'ambush' || straight < tuning.openSightDistance)) continue;
+    // Every appearance starts behind a wall, even far away and out of frame.
+    if (!occluded) continue;
     if (style === 'cross' && spotVisible(context, candidate.crossX, y, candidate.crossZ) && straight < tuning.openSightDistance) continue;
     const placement: LurkPlacement = { x, y, z, yaw: candidate.yaw, style };
     if (style === 'still') {

@@ -60,13 +60,17 @@ export class RiftAudio {
   /** Heartbeat paced by fear (0 calm .. 1 panic); call every frame while it matters. */
   heartbeat(delta: number, fear: number): void {
     const level = Math.min(1, Math.max(0, fear));
-    if (level <= 0.25) { this.heartTimer = 0; return; }
-    this.heartTimer -= delta;
+    this.heartTimer = Math.max(0, this.heartTimer - Math.max(0, delta));
+    // Keep the cooldown through small fear fluctuations, which used to restart
+    // a double beat immediately and stack several bass envelopes.
+    if (level <= 0.55) return;
     if (this.heartTimer > 0) return;
-    const bpm = 72 + 70 * level;
+    const bpm = 68 + 52 * level;
     this.heartTimer = 60 / bpm;
-    this.thump(0.022 + 0.065 * level * level, 0);
-    this.thump(0.014 + 0.04 * level * level, 0.17);
+    const intensity = (level - 0.55) / 0.45;
+    const gain = 0.004 + 0.012 * intensity * intensity;
+    this.thump(gain, 0);
+    this.thump(gain * 0.6, 0.19);
   }
 
   /**
