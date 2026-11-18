@@ -138,6 +138,21 @@ const walkOn = (harness: ReturnType<typeof createHarness>) => {
 };
 
 describe('rift encounter', () => {
+  it('borrows the dormant hunter for the telephone without advancing the rift story', () => {
+    const h = createHarness(undefined, false);
+    try {
+      h.run(.1);
+      const progress = h.encounter.snapshot;
+      for (let i = 0; i < 150; i++) h.encounter.prepareEnvironmentalChase();
+      expect(h.encounter.canStartEnvironmentalChase).toBe(true);
+      expect(h.encounter.startEnvironmentalChase()).toBe(true);
+      expect(h.encounter.startEnvironmentalChase()).toBe(false);
+      h.run(.4);
+      expect(h.encounter.snapshot).toEqual(progress);
+      expect(h.encounter.blocksSaving).toBe(true);
+      expect(h.internals.phase).toBe('north');
+    } finally { h.encounter.dispose(); }
+  });
   it('speaks after the fall, lays the plank out of sight, then shows it from the brink', () => {
     const harness = createHarness();
     harness.run(1.5);

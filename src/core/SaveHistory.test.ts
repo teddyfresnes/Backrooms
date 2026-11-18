@@ -33,6 +33,16 @@ class MemoryStorage implements GameSaveStorage {
   }
 }
 
+it('preserves the environmental session across saves while accepting older saves', () => {
+  const storage = new MemoryStorage(), input = backroomsInput();
+  const result = writeGameSave(storage, { ...input, payload: { ...input.payload, environmentSession: 'environment-session-123' } });
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw new Error('Expected valid environmental save');
+  const saved = loadGameSave(storage, result.save.id);
+  expect(saved?.experienceId === 'backrooms' ? saved.payload.environmentSession : undefined).toBe('environment-session-123');
+  expect(writeGameSave(new MemoryStorage(), input).ok).toBe(true);
+});
+
 const russianInput = (playTimeSeconds = 83): RussianStairwellGameSaveInput => ({
   experienceId: 'russian-stairwell',
   kind: 'manual',

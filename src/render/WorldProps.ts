@@ -118,13 +118,17 @@ const cloneAsset = (
   return instance;
 };
 
-const disposeObject = (object: THREE.Object3D): void => {
+export const disposePropInstance = (object: THREE.Object3D): void => {
   object.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
     const materials = Array.isArray(child.material) ? child.material : [child.material];
     materials.forEach((material) => material.dispose());
   });
 };
+
+/** Reuses the bounded catalogue cache, normalization and chunk material ownership. */
+export const createPropInstance = async (placement: PropPlacement, biome: VisualBiome, lighting: ZonalLightingContext | null = null): Promise<THREE.Object3D> =>
+  cloneAsset(await loadAsset(getPropAsset(placement.assetId)), placement, biome, lighting);
 
 export class WorldPropLayer {
   readonly group = new THREE.Group();
@@ -143,7 +147,7 @@ export class WorldPropLayer {
           const source = await loadAsset(getPropAsset(placement.assetId));
           const instance = cloneAsset(source, placement, biome, lighting);
           if (this.disposed) {
-            disposeObject(instance);
+            disposePropInstance(instance);
             return;
           }
           this.group.add(instance);
@@ -157,7 +161,7 @@ export class WorldPropLayer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    disposeObject(this.group);
+    disposePropInstance(this.group);
     this.group.clear();
     this.group.removeFromParent();
   }

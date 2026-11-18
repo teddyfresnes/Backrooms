@@ -5526,6 +5526,7 @@ export const fingerprintWorld = (world: WorldPlan): string => {
     world.seed,
     JSON.stringify(world.topology ?? null),
     JSON.stringify(world.spatial ?? null),
+    JSON.stringify(world.environmentEvents ?? []),
     world.rooms
       .map((room) => `${room.id}:${room.kind}:${room.access ?? 'open'}:${rectArea(room.bounds).toFixed(2)}`)
       .join('|'),

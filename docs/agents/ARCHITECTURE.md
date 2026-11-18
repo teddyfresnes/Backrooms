@@ -211,6 +211,11 @@ la `WeakMap` du worker ne traverse pas ce transfert.
 - `Game` possède les grands systèmes du runtime procédural et les détruit dans
   `dispose()`.
 - `WorldStream` possède les `WorldView` montés et leurs entrées physiques.
+- `Game` possède aussi `EnvironmentRuntime` : l’observateur de `WorldStream`
+  monte/démonte ses événements, sans attacher leurs ressources à une vue remplacée.
+  Les états rares sont écrits séparément et la sauvegarde conserve leur session.
+  Voir [Événements environnementaux](ENVIRONMENT_EVENTS.md) pour les placements,
+  la lumière locale et l’emprunt exclusif de la vraie Bacteria.
 - `WorldView` possède sa géométrie, ses matériaux zonaux clonés, textures
   générées et couche de props.
 - Les matériaux partagés de `MaterialLibrary` restent la propriété de la

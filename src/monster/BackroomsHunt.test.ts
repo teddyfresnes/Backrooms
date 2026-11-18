@@ -22,6 +22,24 @@ const setup=(blocked=false)=>{
   return {hunt,position,frame,dispose:()=>{hunt.dispose();glow.dispose();}};
 };
 
+it('starts a telephone pursuit behind the camera and never replaces an active hunter', () => {
+  const h = setup();
+  try {
+    h.frame();
+    for (let i = 0; i < 150; i++) h.hunt.prepareEnvironmentalChase();
+    expect(h.hunt.visible).toBe(false);
+    expect(h.hunt.startEnvironmentalChase()).toBe(true);
+    expect(h.hunt.state).toBe('chase'); expect(h.hunt.visible).toBe(true);
+    const first = { ...h.hunt.position };
+    expect(first.z).toBeGreaterThan(0); // The camera faces -Z.
+    expect(Math.hypot(first.x, first.z)).toBeGreaterThanOrEqual(8);
+    expect(h.hunt.startEnvironmentalChase()).toBe(false);
+    expect(h.hunt.position).toEqual(first);
+    for (let t = 0; t < .6; t += DT) h.frame();
+    expect(Math.hypot(h.hunt.position.x, h.hunt.position.z)).toBeLessThan(Math.hypot(first.x, first.z));
+  } finally { h.dispose(); }
+});
+
 it('sees a quiet player in its field of view through the actual runtime senses',()=>{
   const h=setup();
   try{

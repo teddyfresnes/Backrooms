@@ -99,6 +99,14 @@
   ],
   "audio": [
     {
+      "name": "Environmental telephone warning",
+      "author": "Project-authored sound design",
+      "source": "Local Windows French speech synthesis (Hortense), original phrase",
+      "license": "Project asset",
+      "files": ["audio/environment/telephone-warning.ogg"],
+      "changes": "Ne te retourne pas. French speech converted to whispered noise excitation, telephone-band filtering and short reflections; mono Vorbis 24 kHz. Other environmental sounds are deterministic procedural synthesis in EnvironmentAudio.ts."
+    },
+    {
       "name": "Super Dialogue Audio Pack v1",
       "author": "Dillon Becker",
       "source": "https://dillonbecker.itch.io/sdap",

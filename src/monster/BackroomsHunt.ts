@@ -115,6 +115,44 @@ export class BackroomsHunt {
   }
 
   get state(): HunterState { return this.hunter.state; }
+
+  /** Prepare navigation during the call without touching the creature/director. */
+  prepareEnvironmentalChase(): void {
+    if (this.hunter.state !== 'dormant' || this.caught) return;
+    this.feet.copy(this.host.player.position).setY(this.host.player.position.y - EYE);
+    this.prepareNav(false);
+    this.nav.computeField(this.feet.x, this.feet.z, 40, 80, this.feet.y);
+  }
+
+  /** Borrow the one real creature only from dormant. Existing navigation,
+   * perception, pursuit, search and capture take charge of it afterwards. */
+  startEnvironmentalChase(): boolean {
+    if (this.hunter.state !== 'dormant' || this.caught || !this.host.creature() || this.host.creature()!.isVisible) return false;
+    this.prepareEnvironmentalChase();
+    this.eye.copy(this.host.renderCamera.position);
+    this.host.renderCamera.getWorldDirection(this.view);
+    this.updateFrustum();
+    let best: { x: number; y: number; z: number; score: number } | undefined;
+    this.nav.forEachFree(2, (index, x, z) => {
+      const y = this.nav.heightOf(index), dx = x - this.feet.x, dz = z - this.feet.z, d = Math.hypot(dx, dz);
+      if (d < 8 || d > 24 || Math.abs(y - this.feet.y) > 1.5 || this.nav.distanceAt(x, z, y) > d * 3 + 12) return;
+      if ((dx * this.view.x + dz * this.view.z) / d > -.2 || !this.nav.hasClearanceAt(x, z, .72, y)) return;
+      this.sphere.center.set(x, y + 1.25, z); this.sphere.radius = 1.5;
+      if (this.frustum.intersectsSphere(this.sphere)) return;
+      const score = d + Math.abs(y - this.feet.y) * 5;
+      if (!best || score < best.score) best = { x, y, z, score };
+    });
+    if (!best) return false;
+    const spot = best as { x: number; y: number; z: number };
+    const yaw = Math.atan2(this.feet.x - spot.x, this.feet.z - spot.z);
+    this.hunter.adopt(spot, yaw, 'chase');
+    Object.assign(this.hunter.chaseStart, this.feet);
+    Object.assign(this.hunter.lastKnown, this.feet);
+    this.director.encounterStarted(); this.silent = false; this.chased = true; this.caught = false;
+    this.host.creature()!.setPlacement(spot, yaw); this.host.creature()!.setVisible(true);
+    this.host.creatureSound.startScream(); this.host.creatureSound.setScreamActive(true);
+    return true;
+  }
   get position(): Readonly<Vec3Data> { return this.hunter.position; }
   get yaw(): number { return this.hunter.yaw; }
   get visible(): boolean { return this.hunter.visible; }

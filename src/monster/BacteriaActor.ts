@@ -193,8 +193,9 @@ export class BacteriaActor {
 
   static async load(signal?: AbortSignal): Promise<BacteriaActor> {
     const gltf = await new GLTFLoader().loadAsync(MODEL_URL);
-    signal?.throwIfAborted();
-    return new BacteriaActor(gltf.scene);
+    const actor = new BacteriaActor(gltf.scene);
+    if (signal?.aborted) { actor.dispose(); signal.throwIfAborted(); }
+    return actor;
   }
 
   private prepareMaterial(source: THREE.Material): THREE.Material {

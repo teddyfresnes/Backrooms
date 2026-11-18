@@ -5,9 +5,9 @@
       "source": "/assets/blood/blood-decal-a.png",
       "runtime": "/assets/blood/blood-decal-a.webp",
       "sourceBytes": 2625982,
-      "runtimeBytes": 1691598,
+      "runtimeBytes": 1661590,
       "sourceSha256": "2f625d3ce46c723c54f3a78a94cd54aef808ef2480b470dd70bf7b6fdbb42c14",
-      "runtimeSha256": "ae3430ff9b8859f32f105f4069add948d58d28793aa2c122cc63980f65d44edc",
+      "runtimeSha256": "4b165afac983b5c24b61ff815db1242dab146071c3aae32f795e1d0f19f87acd",
       "rgbaSha256": "62d1b4eca864ee3e0e9ad033572d3722c0eac2861af5f385f616df67c8475048",
       "dimensions": [
         1600,
@@ -30,5 +30,5 @@
       "pixelsIdentical": true
     }
   ],
-  "bytesSaved": 1519428
+  "bytesSaved": 1549436
 }

@@ -2,6 +2,7 @@ import type { InfiniteEdgeGates } from './InfiniteWorld';
 import type { WalkableTopology } from './WalkableTopology';
 import type { SpatialArchitecture } from './SpatialTypes';
 import type { LiminalArchitectureFeature } from './ArchitecturalOpenings';
+import type { EnvironmentEventPlan } from './EnvironmentEvents';
 
 export type RoomKind =
   | 'office'
@@ -438,6 +439,8 @@ export interface WorldPlan {
   detailSockets: DetailSocket[];
   /** Rare isolated objects and small multi-object tableaux. */
   propPlacements?: PropPlacement[];
+  /** Independent deterministic environmental encounters, owned by this chunk. */
+  environmentEvents?: EnvironmentEventPlan[];
   colliders: StaticCollider[];
   floorRects: Rect[];
   /** Canonical apertures cut from this story's walkable floor. */

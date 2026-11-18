@@ -63,6 +63,8 @@ import { Stamina } from '../player/Stamina';
 import { StaminaCue } from '../ui/StaminaCue';
 import type { RiftProgress } from '../story/RiftProgress';
 import { RIFT_LINES } from '../story/RiftJourney';
+import { EnvironmentRuntime } from '../environment/EnvironmentRuntime';
+import { EnvironmentStateStore } from '../environment/EnvironmentBehavior';
 
 export type DebugExperience = DiagnosticsSnapshot;
 
@@ -199,6 +201,9 @@ export class Game {
   private readonly creatureAudio = new BacteriaAudio(() => this.audio.getOutput());
   private creature?: BacteriaActor;
   private rift?: RiftEncounter;
+  private environment?: EnvironmentRuntime;
+  private readonly environmentPosition = new THREE.Vector3();
+  private readonly environmentSession: string;
   private readonly savedRift?: RiftProgress;
   /** The player's breath (never saved: rested after a load). */
   private readonly stamina = new Stamina();
@@ -232,6 +237,9 @@ export class Game {
     this.seed = this.options.preparedOrigin?.seed ?? (this.options.launch?.kind === 'load'
       ? this.options.launch.save.payload.seed
       : resolveSeed());
+    this.environmentSession = this.options.launch?.kind === 'load'
+      ? this.options.launch.save.payload.environmentSession ?? this.options.launch.save.id
+      : crypto.randomUUID();
     this.plan = this.options.preparedOrigin?.plan ?? generateInfiniteChunk(this.seed, { x: 0, z: 0, story: 0 });
     this.originFingerprint = fingerprintWorld(this.plan);
     this.cinematicPhase = [...this.originFingerprint]
@@ -375,8 +383,8 @@ export class Game {
     this.player = new PlayerController(this.playerCamera, this.renderer.domElement, this.physics, {
       onLockChange: (locked) => this.onPlayerLockChange(locked),
       onPointerCaptureChange: captured => this.ui.setPointerCaptureRequired(!captured),
-      onFootstep: (strength) => this.audio.footstep('backrooms-carpet', strength),
-      onMovementAudioState: (state) => this.audio.setMovementState('backrooms-carpet', state),
+      onFootstep: (strength) => { if (!this.environment?.footstep(strength)) this.audio.footstep('backrooms-carpet', strength); },
+      onMovementAudioState: (state) => this.audio.setMovementState('backrooms-carpet', this.environment?.inWater ? 'idle' : state),
       onInteract: (mode) => this.tryInteract(mode),
       onLand: (impactSpeed, impact) => {
         this.audio.land('backrooms-carpet', impactSpeed);
@@ -451,6 +459,17 @@ export class Game {
       if (this.disposed) { this.creature?.dispose(); return; }
       if (this.creature) { this.creature.setVisible(false); this.scene.add(this.creature.root); }
       this.rift = this.createRiftEncounter();
+      this.environment = new EnvironmentRuntime({
+        scene: this.scene, camera: this.camera, physics: this.physics,
+        output: () => this.audio.getOutput(), playerPosition: () => this.physics!.getStandingPosition(this.environmentPosition),
+        canDiscover: () => !this.rift?.ownsCharacter && !this.character?.isBusy && !this.player?.isNoclipEnabled && (this.rift?.threat ?? 0) < .5,
+        prepareChase: () => this.rift?.prepareEnvironmentalChase(),
+        startChase: () => this.rift?.startEnvironmentalChase() ?? false,
+        caption: text => this.caption?.say(text),
+      }, new EnvironmentStateStore(this.environmentSession, this.storage));
+      this.worldStream.setEnvironmentObserver(this.environment);
+      await this.environment.load();
+      if (this.disposed) return;
     }
 
     // The walk after the fall gets the camcorder layer: the creature interferes with the picture.
@@ -737,6 +756,7 @@ export class Game {
     if (this.rift?.handleInteract()) return;
     if (!this.player || !this.worldStream || this.character?.isBusy || this.player.isTraversing || this.player.isNoclipEnabled) return;
     this.player.getViewDirection(this.lookDirection);
+    if (this.environment?.interact()) { this.ui.setInteraction(null); return; }
     const interaction = this.worldStream.getInteraction(this.player.position, this.lookDirection);
     if (!interaction) return;
     if (interaction.kind === 'door') {
@@ -768,7 +788,7 @@ export class Game {
     if (!this.storage || !this.player || !this.worldStream) return false;
     // Scripted shots, balancing and the creature cannot be saved mid-action.
     // Both banks before the reveal are stable checkpoints.
-    if (this.rift?.blocksSaving) return false;
+    if (this.rift?.blocksSaving || this.environment?.blocksSaving) return false;
     const chunk = this.worldStream.supportedCoordAt(this.lastSafePosition);
     const offset = getChunkWorldOffset(chunk);
     const look = this.player.getLookQuaternion();
@@ -783,6 +803,7 @@ export class Game {
       ...(previewImage ? { previewImage } : {}),
       payload: {
         seed: this.seed,
+        environmentSession: this.environmentSession,
         chunk,
         ...(this.worldStream.surfaceAnchorAt(this.lastSafePosition) ? { surface: this.worldStream.surfaceAnchorAt(this.lastSafePosition) } : {}),
         localPosition: {
@@ -1148,6 +1169,7 @@ export class Game {
       this.player.getViewDirection(this.lookDirection);
       this.worldStream.update(this.elapsed, rawDelta, this.character?.getWorldPosition() ?? this.player.position, this.lookDirection,
         this.character?.getWorldVelocity(this.streamingVelocity));
+      this.environment?.update(rawDelta, this.stamina.breath);
       const center = this.worldStream.getCenterCoord();
       if (center.x !== this.lastCenter.x || center.z !== this.lastCenter.z || center.story !== this.lastCenter.story) {
         this.lastCenter.x = center.x; this.lastCenter.z = center.z; this.lastCenter.story = center.story;
@@ -1174,7 +1196,7 @@ export class Game {
     const interaction = !playing || this.character?.isBusy || this.player.isTraversing || this.player.isNoclipEnabled
       || this.rift?.ownsCharacter
       ? null
-      : this.worldStream.getInteraction(this.player.position, this.lookDirection);
+      : this.environment?.getInteraction() ?? this.worldStream.getInteraction(this.player.position, this.lookDirection);
     this.ui.setInteraction(interaction?.label ?? null);
     const room = this.worldStream.findRoomAt(
       this.player.position.x,
@@ -1431,6 +1453,8 @@ export class Game {
     this.renderer.domElement.removeEventListener('wheel', this.onInventoryWheel);
     // The rift releases its scripted pose, plank collider and shot before the rig goes.
     this.rift?.dispose();
+    this.worldStream?.setEnvironmentObserver();
+    this.environment?.dispose();
     this.creature?.dispose();
     this.creatureAudio.dispose();
     this.riftAudio.dispose();

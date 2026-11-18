@@ -23,6 +23,7 @@ import {
   getEpicStructureVoidBounds,
 } from './EpicStructures';
 import { populateRareProps } from './PropPlacement';
+import { populateEnvironmentEvents } from './EnvironmentEvents';
 import { SeededRandom } from './SeededRandom';
 import { cleanWallJunctions } from './WallJunctions';
 import type {
@@ -2169,6 +2170,11 @@ const prefixPlanIds = (plan: WorldPlan, key: ChunkKey): void => {
     roomId: `${prefix}${light.roomId}`,
   }));
   plan.features = plan.features.map((feature) => prefixFeature(feature, prefix));
+  plan.environmentEvents = plan.environmentEvents?.map(event => ({ ...event,
+    id: `${prefix}${event.id}`, roomId: `${prefix}${event.roomId}`,
+    lightIds: event.lightIds.map(id => `${prefix}${id}`),
+    ...(event.mount ? { mount: { ...event.mount, wallId: `${prefix}${event.mount.wallId}` } } : {}),
+  }));
   plan.detailSockets = plan.detailSockets.map((socket) => ({
     ...socket,
     id: `${prefix}${socket.id}`,
@@ -2416,6 +2422,7 @@ export const generateInfiniteChunk = (seed: string, key: ChunkKey | ChunkCoord):
   const biome = getInfiniteBiome(seed, coord), visual = getInfiniteVisualBiome(seed, coord);
   plan.visualBiome = visual;
   applyVisualBiome(plan, visual, `${seed}:spatial-palette:v2:${coord.x}:${coord.z}`);
+  populateEnvironmentEvents(plan, seed, coord);
   populateRareProps(plan, `${seed}:${normalizedKey}:spatial-props:v2`);
   prefixPlanIds(plan, normalizedKey); plan.edgeGates = gates;
   attachInfiniteChunkMetadata(seed, plan, coord, biome, gates, visual);

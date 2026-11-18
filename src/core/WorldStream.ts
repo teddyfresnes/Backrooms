@@ -55,6 +55,17 @@ import { pointInRect, rectArea, rectCenter, rectDepth, rectWidth } from '../worl
 
 const ACTIVE_RADIUS = 1;
 const HALF_CHUNK_SIZE = INFINITE_CHUNK_SIZE * 0.5;
+export interface EnvironmentChunk {
+  key: string;
+  plan: WorldPlan;
+  view: WorldView;
+  offset: THREE.Vector3;
+}
+export interface EnvironmentChunkObserver {
+  mount(chunk: EnvironmentChunk): void;
+  unmount(key: string): void;
+}
+
 interface ActiveChunk {
   key: ChunkKey;
   coord: Readonly<ChunkCoord>;
@@ -227,6 +238,11 @@ const approachPointForRect = (
 };
 
 export class WorldStream {
+  private environmentObserver?: EnvironmentChunkObserver;
+  setEnvironmentObserver(observer?: EnvironmentChunkObserver): void {
+    this.environmentObserver = observer;
+    if (observer) for (const chunk of this.chunks.values()) observer.mount(chunk);
+  }
   private characterPitsCache: CharacterPit[] | null = null;
   private readonly chunks = new Map<ChunkKey, ActiveChunk>();
   private readonly localPlayer = new THREE.Vector3();
@@ -1460,6 +1476,7 @@ export class WorldStream {
     this.scene.add(view.group);
     runtime.view.dispose();
     runtime.view = view;
+    this.environmentObserver?.mount(runtime);
     this.connectLightNeighbors(runtime.coord);
     runtime.lightingMode = mode;
     if (lightMaps) runtime.lightMaps = lightMaps;
@@ -1516,6 +1533,7 @@ export class WorldStream {
         offset,
       });
       this.mountRevision++;
+      this.environmentObserver?.mount(this.chunks.get(key)!);
       this.connectLightNeighbors(coord);
     } catch (error) {
       view.dispose();
@@ -1536,6 +1554,7 @@ export class WorldStream {
   private unmountChunk(key: ChunkKey): void {
     const runtime = this.chunks.get(key);
     if (!runtime) return;
+    this.environmentObserver?.unmount(key);
     if (!this.disposed) this.cachePreparedChunk(key, { plan: runtime.plan, lightMaps: runtime.lightMaps, regionalLightData: runtime.regionalLightData, architectureData: runtime.architectureData });
     if (!this.disposed && key === this.recoveryChunkKey) {
       // Retain CPU data only. Keeping the complete source WorldView mounted

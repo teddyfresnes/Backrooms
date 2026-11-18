@@ -2,6 +2,9 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 vi.mock('@dimforge/rapier3d', () => ({ default: {} }));
 vi.mock('../physics/PhysicsWorld', () => ({ PhysicsWorld: class {} }));
+// This host lifecycle fixture stubs collision queries; its Rapier-backed
+// adapter must also stay outside happy-dom's browser import resolution.
+vi.mock('../character/CharacterEnvironment', () => ({ CharacterEnvironment: class {} }));
 vi.mock('../apartment/Flashlight', () => ({ Flashlight: class {} }));
 vi.mock('../apartment/ApartmentFixtures', () => ({ ApartmentFixtures: class {} }));
 vi.mock('../apartment/ClosetHide', () => ({ ClosetHide: class {} }));

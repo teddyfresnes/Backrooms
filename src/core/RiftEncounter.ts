@@ -173,6 +173,7 @@ export class RiftEncounter {
     | 'hunt' = 'hidden';
   /** The far-bank hunter (created when the creature first hunts). */
   private hunt?: BackroomsHunt;
+  private environmentalHunt?: 'north' | 'done';
   /** 0..1 dread this frame (the host paces the heartbeat with it). */
   private fear = 0;
   private creatureTime = 0;
@@ -208,7 +209,20 @@ export class RiftEncounter {
   }
   /** The rig must not run: the shot or the fall owns camera and body. */
   get ownsCharacter(): boolean { return this.owns; }
+  /** Environmental calls cannot steal a scripted reveal or an active creature. */
+  get canStartEnvironmentalChase(): boolean {
+    return !this.owns && (this.phase === 'north' || this.phase === 'done') && this.creatureMode === 'hidden'
+      && !this.hunt?.visible && !!this.host.creature() && !this.host.creature()!.isVisible;
+  }
+  prepareEnvironmentalChase(): void { if (this.canStartEnvironmentalChase) this.ensureHunt()?.prepareEnvironmentalChase(); }
+  startEnvironmentalChase(): boolean {
+    if (!this.canStartEnvironmentalChase || !this.ensureHunt()?.startEnvironmentalChase()) return false;
+    this.environmentalHunt = this.phase as 'north' | 'done'; this.creatureMode = 'hunt';
+    this.creaturePosition.copy(this.hunt!.position); this.creatureYaw = this.hunt!.yaw;
+    return true;
+  }
   get blocksSaving(): boolean {
+    if (this.environmentalHunt) return true;
     // Never while it hunts or searches for him on the far bank.
     if (this.phase === 'done' && this.hunt?.blocksSaving) return true;
     return !['arrival', 'north', 'plank', 'crossed', 'done'].includes(this.phase);
@@ -244,6 +258,7 @@ export class RiftEncounter {
     return 1 - THREE.MathUtils.smoothstep(Math.abs(position.z - RIFT_CENTER_Z), EPIC3_OUTER_HALF_DEPTH, EPIC3_OUTER_HALF_DEPTH + 24);
   }
   get questText(): { text: string; urgent: boolean } | null {
+    if (this.environmentalHunt && this.hunt?.engaged) return { text: 'COURS !', urgent: true };
     switch (this.phase) {
       case 'arrival': return null;
       case 'north': return { text: 'Suivre la boussole vers le nord', urgent: false };
@@ -272,6 +287,9 @@ export class RiftEncounter {
     this.fear = 0;
     this.screamerKick = Math.max(0, this.screamerKick - dt * 2.4);
     if (this.phase !== 'falling' && this.phase !== 'dead' && this.phase !== 'caught' && this.detectFall()) return;
+    if (this.environmentalHunt && this.phase === this.environmentalHunt) {
+      this.updateHunt(dt, true); this.updateAmbience(dt); return;
+    }
     switch (this.phase) {
       case 'arrival': this.updateArrival(dt); break;
       case 'north': this.updateNorth(); break;
@@ -1030,6 +1048,7 @@ export class RiftEncounter {
   }
 
   private startFalling(): void {
+    this.environmentalHunt = undefined;
     const player = this.host.player, camera = this.host.renderCamera;
     if (this.phase === 'dropping') this.finishDrop(true);
     const respawn = this.checkpoint();
@@ -1340,23 +1359,25 @@ export class RiftEncounter {
    * phase is 'stalk' while it runs at him; a capture resumes where he stood
    * when it noticed him.
    */
-  private updateHunt(dt: number): void {
+  private updateHunt(dt: number, environmental = false): void {
     const hunt = this.ensureHunt();
     if (!hunt) return;
     if (this.creatureMode !== 'hidden' && this.creatureMode !== 'hunt') return;
     const position = this.host.player.position;
-    const armed = !this.owns && riftBank(position.z) === -this.crossFrom && Math.abs(position.z - RIFT_CENTER_Z) >= HUNT_RIFT_CLEARANCE;
+    const armed = !environmental && !this.owns && riftBank(position.z) === -this.crossFrom && Math.abs(position.z - RIFT_CENTER_Z) >= HUNT_RIFT_CLEARANCE;
     if (hunt.update(dt, armed, this.owns) === 'caught') {
       this.creaturePosition.copy(hunt.position);
       this.creatureYaw = hunt.yaw;
       const respawn = hunt.respawnPoint(new THREE.Vector3());
-      this.startCaught({ position: respawn, look: new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.05, viewYaw(0, -1), 0, 'YXZ')), phase: 'done' });
+      const phase = this.environmentalHunt ?? 'done'; this.environmentalHunt = undefined;
+      this.startCaught({ position: respawn, look: new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.05, viewYaw(0, -1), 0, 'YXZ')), phase });
       return;
     }
     this.creatureMode = hunt.visible ? 'hunt' : 'hidden';
     if (hunt.visible) this.creaturePosition.copy(hunt.position);
     this.screamerKick = Math.max(this.screamerKick, hunt.kick);
     this.fear = Math.max(this.fear, hunt.fear);
+    if (environmental) { if (hunt.state === 'dormant') this.environmentalHunt = undefined; return; }
     if (hunt.engaged && this.phase === 'done') this.enter('stalk');
     else if (!hunt.engaged && this.phase === 'stalk') this.enter('done');
   }

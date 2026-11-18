@@ -7,6 +7,7 @@ import { createWalkableGeometry } from './WalkableGeometry';
 import { setRegionalLightNeighbor, createRegionalLightField, type RegionalLightData, type RegionalLightField } from './RegionalLighting';
 import { applySurfaceLighting } from './SurfaceLighting';
 import * as THREE from 'three';
+import { EnvironmentLighting } from './EnvironmentLighting';
 import { DEFAULT_BRIGHTNESS, resolveLightingBrightness } from './LightingBrightness';
 import { applyMatteSurface } from './MatteSurface';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -1425,12 +1426,14 @@ export interface WorldViewOptions {
 
 export class WorldView {
   readonly group = new THREE.Group();
+  readonly environmentLighting: EnvironmentLighting;
   private architectureDebug?: ArchitectureDebug;
   private readonly initialReady: Promise<void>;
   private detailReady?: Promise<void>;
   private previewOnly: boolean;
   get ready(): Promise<void> { return this.detailReady ?? this.initialReady; }
   get architectureOnly(): boolean { return this.previewOnly; }
+  get decorLightingContext(): ZonalLightingContext | null { return this.lightingContext ?? null; }
   private readonly emitterMesh: THREE.InstancedMesh;
   private readonly fixtureSlots: LightSlot[];
   private readonly previewMaterials: Pick<
@@ -1463,6 +1466,7 @@ export class WorldView {
     options: WorldViewOptions = {},
   ) {
     this.previewOnly = options.architectureOnly ?? false;
+    this.environmentLighting = new EnvironmentLighting(plan);
     this.group.name = `world-${plan.seed}`;
     this.regionalLightField = plan.spatial && options.lightingMode !== 'legacy' ? createRegionalLightField(plan, options.regionalLightData) : undefined;
     if (options.lightingMode === 'legacy') {
@@ -1576,7 +1580,8 @@ export class WorldView {
       if (!this.lightingContext) this.legacyBrightnessDefaults.set(material, { lightMap: material.lightMapIntensity, emissive: material.emissiveIntensity });
     }
     this.setBrightness(options.brightness ?? DEFAULT_BRIGHTNESS);
-    this.initialReady = Promise.all([this.doorLayer.ready, this.propLayer.ready]).then(() => undefined);
+    this.environmentLighting.decorate(this.group);
+    this.initialReady = Promise.all([this.doorLayer.ready, this.propLayer.ready]).then(() => { this.environmentLighting.decorate(this.group); });
   }
 
   /** Keep the existing architecture and lighting when the player approaches. */
@@ -1587,7 +1592,8 @@ export class WorldView {
     this.propLayer.dispose();
     this.propLayer = new WorldPropLayer(this.plan, this.lightingContext ?? null);
     this.group.add(this.propLayer.group);
-    this.detailReady = Promise.all([this.initialReady, this.propLayer.ready]).then(() => undefined);
+    this.environmentLighting.decorate(this.group);
+    this.detailReady = Promise.all([this.initialReady, this.propLayer.ready]).then(() => { this.environmentLighting.decorate(this.group); });
     return this.detailReady;
   }
 
@@ -4156,6 +4162,7 @@ export class WorldView {
   }
 
   setWorldOffset(offset: Readonly<THREE.Vector3>): void {
+    this.environmentLighting.offset.value.copy(offset);
     this.lightingContext?.worldOffset.copy(offset);
     this.regionalLightField?.offset.copy(offset);
   }

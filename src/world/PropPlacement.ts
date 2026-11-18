@@ -625,6 +625,7 @@ const tryScenePlacement = (
 const eligibleRooms = (plan: WorldPlan): RoomRecord[] => {
   const special = structuralRects(plan);
   return plan.rooms.filter((room) => {
+    if (plan.environmentEvents?.some(event => event.roomId === room.id)) return false;
     const width = rectWidth(room.bounds);
     const depth = rectDepth(room.bounds);
     if (room.access === 'sealed') return false;

@@ -138,9 +138,9 @@ export class PhysicsWorld {
     return !!hit && hit.normal.y > 0.7;
   }
   /** First static environment surface along a ray (distance and surface normal), or null. */
-  castEnvironmentRay(origin: Vec3Data, direction: Vec3Data, maxDistance: number): { distance: number; normal: Vec3Data } | null {
+  castEnvironmentRay(origin: Vec3Data, direction: Vec3Data, maxDistance: number, ignoredChunk?: string): { distance: number; normal: Vec3Data } | null {
     const hit = this.world.castRayAndGetNormal(new RAPIER.Ray(origin, direction), maxDistance, true,
-      undefined, undefined, undefined, undefined, this.isEnvironmentCollider);
+      undefined, undefined, undefined, ignoredChunk ? this.chunkBodies.get(ignoredChunk) : undefined, this.isEnvironmentCollider);
     return hit ? { distance: hit.timeOfImpact, normal: { x: hit.normal.x, y: hit.normal.y, z: hit.normal.z } } : null;
   }
 
