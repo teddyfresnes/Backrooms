@@ -12,6 +12,7 @@ import type { ChunkCoord } from '../world/InfiniteWorld';
 import type { WorldPlan } from '../world/types';
 import { predictFallOwners } from './FallPrefetch';
 import { RIFT_CENTER_Z, riftLaneX } from '../story/RiftJourney';
+import { EPIC3_RIFT_CHUNK_Z } from '../world/EpicStructures';
 
 it('mounts prepared real fall owners one per frame before their landing is reached', async () => {
   const plan=generateInfiniteChunk('REGIONAL-AUDIT-2',{x:0,z:0,story:0});
@@ -76,7 +77,7 @@ it('keeps raised support in its owner story, restores both layers and releases a
 });
 
 it('restores the exact saved far-bank position in the rift owner instead of a maze spawn', async () => {
-  const coord={x:0,z:-4,story:0},plan=generateInfiniteChunk('RIFT-FAR-BANK-SAVE',coord),offset=getChunkWorldOffset(coord);
+  const coord={x:0,z:EPIC3_RIFT_CHUNK_Z,story:0},plan=generateInfiniteChunk('RIFT-FAR-BANK-SAVE',coord),offset=getChunkWorldOffset(coord);
   const physics=await PhysicsWorld.create({...plan,colliders:[]});
   physics.addChunk(createChunkKey(coord),plan.colliders,offset);
   const stream=new WorldStream(plan.seed,plan,new THREE.Scene(),{} as never,physics);

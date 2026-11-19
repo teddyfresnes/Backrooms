@@ -191,7 +191,7 @@ class EventInstance {
         if (!base) { base = { before: material.onBeforeCompile, key: material.customProgramCacheKey }; this.baseHooks.set(material, base); }
         material.onBeforeCompile = base.before; material.customProgramCacheKey = base.key;
         if (material instanceof THREE.MeshStandardMaterial && material !== this.water?.material && chunk.view.decorLightingContext) applyZonalLighting(material, chunk.view.decorLightingContext);
-        chunk.view.environmentLighting.apply(material); material.needsUpdate = true;
+        chunk.view.environmentLighting.apply(material); chunk.view.northernLighting.apply(material); material.needsUpdate = true;
         this.bindings.set(material, chunk.view.environmentLighting);
       }
     });

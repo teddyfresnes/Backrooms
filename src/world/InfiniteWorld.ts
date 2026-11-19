@@ -24,6 +24,8 @@ import {
 } from './EpicStructures';
 import { populateRareProps } from './PropPlacement';
 import { populateEnvironmentEvents } from './EnvironmentEvents';
+import { populateNorthernWorld } from './NorthernWorld';
+import { isRedZoneRow } from './NorthernLayout';
 import { SeededRandom } from './SeededRandom';
 import { cleanWallJunctions } from './WallJunctions';
 import type {
@@ -373,6 +375,7 @@ export const getInfiniteVisualBiome = (
   const coord = resolveCoord(key);
   const macroX = Math.floor(coord.x / 2);
   const macroZ = Math.floor(coord.z / 2);
+  if (isRedZoneRow(coord.z)) return 'red';
   if (macroX === 0 && macroZ === 0) return 'yellow';
   const roll = new SeededRandom(
     `${seed}::infinite-visual-biome:v${WRAPPER_VERSION}:${macroX}:${macroZ}`,
@@ -1106,7 +1109,9 @@ const inheritedShaftEnclosuresForPlan = (
         );
       })[0];
     if (!host) continue;
-    const groupKey = `${host.id}:${opening.sourceStory}`;
+    // A room has one enclosure regardless of the source story. Separate shells
+    // around claims from different heights could cut through a neighbouring shaft.
+    const groupKey = host.id;
     const group = openingGroups.get(groupKey) ?? { roomId: host.id, openings: [] };
     group.openings.push(opening);
     openingGroups.set(groupKey, group);
@@ -1116,6 +1121,10 @@ const inheritedShaftEnclosuresForPlan = (
   const wallInset = 0.32;
   const shaftClearance = 0.9;
   const enclosures: InheritedShaftEnclosure[] = [];
+  // Prefer room anchors only if their walls clear every inherited claim.
+  const clearsAllShafts = (b: Rect): boolean => openings.every(o =>
+    !rectsOverlap(b, o, .13) || (b.minX <= o.minX - .35 && b.maxX >= o.maxX + .35
+      && b.minZ <= o.minZ - .35 && b.maxZ >= o.maxZ + .35));
   for (const { roomId, openings: roomOpenings } of openingGroups.values()) {
     const assignedRoom = plan.rooms.find((candidate) => candidate.id === roomId);
     if (!assignedRoom) continue;
@@ -1164,7 +1173,7 @@ const inheritedShaftEnclosuresForPlan = (
           max: outerMax,
         });
       }
-      if (choices.length === 0 && allowFloating) {
+      if (allowFloating) {
         choices.push({
           min: Math.max(-half + wallInset, unionMin - shaftClearance),
           max: Math.min(half - wallInset, unionMax + shaftClearance),
@@ -1200,6 +1209,7 @@ const inheritedShaftEnclosuresForPlan = (
         })));
       })
       .filter(({ bounds }) =>
+        clearsAllShafts(bounds) &&
         bounds.minX <= union.minX - 0.35 &&
         bounds.maxX >= union.maxX + 0.35 &&
         bounds.minZ <= union.minZ - 0.35 &&
@@ -1212,9 +1222,8 @@ const inheritedShaftEnclosuresForPlan = (
       continue;
     }
 
-    // If no single intermediate room can own both axes, keep a closed shell
-    // around the entire claim. This remains preferable to exposing an open
-    // exterior shaft through an unrelated floor plan.
+    // If anchors cross another shaft, a freestanding closed shell preserves
+    // both fall volumes. Include floating choices even when anchors exist.
     const xChoices = axisChoices(
       assignedRoom.bounds.minX,
       assignedRoom.bounds.maxX,
@@ -1235,6 +1244,7 @@ const inheritedShaftEnclosuresForPlan = (
       minZ: z.min,
       maxZ: z.max,
     }))).filter((candidate) =>
+      clearsAllShafts(candidate) &&
       candidate.minX <= union.minX - 0.35 &&
       candidate.maxX >= union.maxX + 0.35 &&
       candidate.minZ <= union.minZ - 0.35 &&
@@ -2170,6 +2180,11 @@ const prefixPlanIds = (plan: WorldPlan, key: ChunkKey): void => {
     roomId: `${prefix}${light.roomId}`,
   }));
   plan.features = plan.features.map((feature) => prefixFeature(feature, prefix));
+  if (plan.northern) {
+    plan.northern.circuits = plan.northern.circuits.map(c => ({...c,id:prefix+c.id,roomId:prefix+c.roomId,
+      ...(c.mount ? {mount:{...c.mount,wallId:prefix+c.mount.wallId}} : {})}));
+    if (plan.northern.slides) { plan.northern.slides.id=prefix+plan.northern.slides.id; plan.northern.slides.roomId=prefix+plan.northern.slides.roomId; }
+  }
   plan.environmentEvents = plan.environmentEvents?.map(event => ({ ...event,
     id: `${prefix}${event.id}`, roomId: `${prefix}${event.roomId}`,
     lightIds: event.lightIds.map(id => `${prefix}${id}`),
@@ -2422,6 +2437,7 @@ export const generateInfiniteChunk = (seed: string, key: ChunkKey | ChunkCoord):
   const biome = getInfiniteBiome(seed, coord), visual = getInfiniteVisualBiome(seed, coord);
   plan.visualBiome = visual;
   applyVisualBiome(plan, visual, `${seed}:spatial-palette:v2:${coord.x}:${coord.z}`);
+  populateNorthernWorld(plan, seed, coord);
   populateEnvironmentEvents(plan, seed, coord);
   populateRareProps(plan, `${seed}:${normalizedKey}:spatial-props:v2`);
   prefixPlanIds(plan, normalizedKey); plan.edgeGates = gates;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Vector3 } from 'three';
 import {
   EPIC_MACRO_SIZE,
   EPIC_STRUCTURE_DEFINITIONS,
@@ -11,6 +12,7 @@ import {
   isInsideEpicStoryVolume,
 } from '../world/EpicStructures';
 import type { EpicStructureFeature } from '../world/types';
+import { isNorthernReservedRow } from '../world/NorthernLayout';
 import {
   getChunkWorldOffset,
   INFINITE_CHUNK_SIZE,
@@ -27,12 +29,25 @@ import {
 } from './WorldStream';
 
 it('targets a working light across a chunk edge using world coordinates and the matching floor', () => {
-  const stream={chunks:new Map([['a',{offset:{x:112,y:10.8,z:-112},plan:{lights:[
+  const stream={chunks:new Map([['a',{view:{northernLighting:{powerAt:()=>1}},offset:{x:112,y:10.8,z:-112},plan:{lights:[
     {x:-54,z:4,ceilingY:2.7,dead:false},{x:-55,z:4,ceilingY:2.7,dead:true},
     {x:-56,z:4,ceilingY:13.5,dead:false},
   ]}}]])} as unknown as WorldStream;
   expect(WorldStream.prototype.nearestWorkingLight.call(stream,56,13.5,-108)).toEqual({x:58,y:13.5,z:-108});
   expect(WorldStream.prototype.nearestWorkingLight.call(stream,0,13.5,0)).toBeNull();
+});
+
+it('reports switched-off circuits to the hunter and ignores their fixtures until restored', () => {
+  let restored = false;
+  const runtime = { offset: new Vector3(), view: { northernLighting: { powerAt: (x: number) => restored || x > 1 ? 1 : 0 } },
+    plan: { unlitZones: [], lights: [{x:0,z:0,ceilingY:3,dead:false},{x:6,z:0,ceilingY:3,dead:false}] } };
+  const stream = { initialized:true,disposed:false,runtimeOffset:new Vector3(),runtimeAt:()=>runtime,chunks:new Map([['a',runtime]]) } as unknown as WorldStream;
+  expect(WorldStream.prototype.darknessAt.call(stream,0,1,0)).toBe(1);
+  expect(WorldStream.prototype.nearestWorkingLight.call(stream,0,1,0)).toEqual({x:6,y:3,z:0});
+  expect(WorldStream.prototype.darknessAt.call(stream,2,1,0)).toBeGreaterThan(.25);
+  restored = true;
+  expect(WorldStream.prototype.darknessAt.call(stream,0,1,0)).toBe(0);
+  expect(WorldStream.prototype.nearestWorkingLight.call(stream,0,1,0)).toEqual({x:0,y:3,z:0});
 });
 
 describe('multi-storey world streaming coordinates', () => {
@@ -161,7 +176,7 @@ describe('sparse epic structure slots', () => {
         .toEqual(activeIndices);
       // The tiled epic3 slot is retired; a slot touching the rift row keeps its halo.
       const expected = slots
-        .filter((slot) => slot.index !== 3 && Math.abs(slot.z - EPIC3_RIFT_CHUNK_Z) > 1)
+        .filter((slot) => slot.index !== 3 && Math.abs(slot.z - EPIC3_RIFT_CHUNK_Z) > 1 && !isNorthernReservedRow(slot.z))
         .map((slot) => slot.index)
         .sort((left, right) => left - right);
 

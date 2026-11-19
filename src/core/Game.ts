@@ -65,6 +65,9 @@ import type { RiftProgress } from '../story/RiftProgress';
 import { RIFT_LINES } from '../story/RiftJourney';
 import { EnvironmentRuntime } from '../environment/EnvironmentRuntime';
 import { EnvironmentStateStore } from '../environment/EnvironmentBehavior';
+import { NorthernJourney } from './NorthernJourney';
+import type { NorthernProgress } from '../story/NorthernProgress';
+import { migrateNorthernSaveCoord } from '../story/NorthernSaveMigration';
 
 export type DebugExperience = DiagnosticsSnapshot;
 
@@ -202,6 +205,9 @@ export class Game {
   private creature?: BacteriaActor;
   private rift?: RiftEncounter;
   private environment?: EnvironmentRuntime;
+  private northern?: NorthernJourney;
+  private unsubscribeNorthern?: () => void;
+  private readonly savedNorthern?: NorthernProgress;
   private readonly environmentPosition = new THREE.Vector3();
   private readonly environmentSession: string;
   private readonly savedRift?: RiftProgress;
@@ -291,6 +297,7 @@ export class Game {
       const saved = launch?.kind === 'load' ? launch.save.payload : undefined;
       this.inventory = carriedInventory(launch?.kind === 'new' ? launch.inventory : saved?.inventory);
       this.savedRift = saved?.rift;
+      this.savedNorthern = saved?.northern;
       this.inventoryHUD = new InventoryHUD(this.root);
       this.questTracker = new QuestTracker(this.root);
       this.caption = new NarrativeCaption(this.root);
@@ -402,7 +409,10 @@ export class Game {
       },
     });
     if (this.options.launch?.kind === 'load') {
-      const { chunk, localPosition, quaternion, surface } = this.options.launch.save.payload;
+      const payload = this.options.launch.save.payload;
+      const { localPosition, quaternion } = payload;
+      const chunk = migrateNorthernSaveCoord(payload.chunk, localPosition.z, payload.rift, !!payload.northern);
+      const surface = chunk === payload.chunk ? payload.surface : undefined;
       const offset = getChunkWorldOffset(chunk);
       const restoredPosition = {
         x: offset.x + localPosition.x,
@@ -459,6 +469,7 @@ export class Game {
       if (this.disposed) { this.creature?.dispose(); return; }
       if (this.creature) { this.creature.setVisible(false); this.scene.add(this.creature.root); }
       this.rift = this.createRiftEncounter();
+      const states = new EnvironmentStateStore(this.environmentSession, this.storage);
       this.environment = new EnvironmentRuntime({
         scene: this.scene, camera: this.camera, physics: this.physics,
         output: () => this.audio.getOutput(), playerPosition: () => this.physics!.getStandingPosition(this.environmentPosition),
@@ -466,8 +477,19 @@ export class Game {
         prepareChase: () => this.rift?.prepareEnvironmentalChase(),
         startChase: () => this.rift?.startEnvironmentalChase() ?? false,
         caption: text => this.caption?.say(text),
-      }, new EnvironmentStateStore(this.environmentSession, this.storage));
+      }, states);
       this.worldStream.setEnvironmentObserver(this.environment);
+      this.northern = new NorthernJourney({
+        scene: this.scene, camera: this.camera, physics: this.physics, audio: this.environment.audio,
+        position: () => this.physics!.getStandingPosition(this.environmentPosition),
+        owner: () => this.worldStream!.supportedCoordAt(this.physics!.getStandingPosition(this.environmentPosition)),
+        available: () => !this.rift?.ownsCharacter && !this.character?.isBusy && !this.player?.isNoclipEnabled && (this.rift?.threat ?? 0) < .5,
+        riftResolved: () => this.rift?.snapshot.stage === 'done',
+        compassVisible: () => !!this.compass?.model.visible && this.inventory?.equipped?.id === COMPASS_ID && this.equipmentTransition.amount > .7,
+        caption: text => this.caption?.say(text), revealCompass: () => this.inventoryHUD?.reveal(),
+        checkpoint: () => { this.saveNow('autosave'); },
+      }, states, this.savedNorthern);
+      this.unsubscribeNorthern = this.worldStream.addChunkObserver(this.northern);
       await this.environment.load();
       if (this.disposed) return;
     }
@@ -530,7 +552,8 @@ export class Game {
     this.caption?.update(delta, playing);
     this.storyHud?.setPlaying(playing);
     this.storyHud?.update(playing ? delta : 0);
-    const quest = this.rift?.questText ?? null;
+    const riftQuest = this.rift?.questText;
+    const quest = riftQuest?.urgent ? riftQuest : this.northern?.questText ?? riftQuest ?? null;
     // Urgent orders take the centre of the screen; the calm objective stays top left.
     this.storyHud?.setQuest(quest?.urgent ? quest.text : null, 'urgent');
     this.questTracker?.update(quest && !quest.urgent ? quest.text : null, visible && !!quest && !quest.urgent && !this.rift?.ownsCharacter);
@@ -749,13 +772,14 @@ export class Game {
     this.flashlight.update(this.camera, hand, inventory.hasLamp, torch, inventory.state.lampOn, delta,
       !this.settings.cameraMotion, torch && !reading ? frame : undefined);
     this.compass.update(this.camera, reading ? frame : undefined, reading && (!!frame || !this.character),
-      this.rift?.creatureProximity ?? 0, delta);
+      Math.max(this.rift?.creatureProximity ?? 0, this.northern?.anomaly ?? 0), delta, this.northern?.compassDirection);
   }
 
   private tryInteract(mode: DoorOpenMode): void {
     if (this.rift?.handleInteract()) return;
     if (!this.player || !this.worldStream || this.character?.isBusy || this.player.isTraversing || this.player.isNoclipEnabled) return;
     this.player.getViewDirection(this.lookDirection);
+    if (this.northern?.interact()) { this.ui.setInteraction(null); return; }
     if (this.environment?.interact()) { this.ui.setInteraction(null); return; }
     const interaction = this.worldStream.getInteraction(this.player.position, this.lookDirection);
     if (!interaction) return;
@@ -814,6 +838,7 @@ export class Game {
         quaternion: { x: look.x, y: look.y, z: look.z, w: look.w },
         ...(this.inventory ? { inventory: this.inventory.snapshot() } : {}),
         ...(this.rift ? { rift: this.rift.snapshot } : {}),
+        ...(this.northern ? { northern: this.northern.snapshot } : {}),
       },
     });
     if (result.ok) {
@@ -1170,6 +1195,7 @@ export class Game {
       this.worldStream.update(this.elapsed, rawDelta, this.character?.getWorldPosition() ?? this.player.position, this.lookDirection,
         this.character?.getWorldVelocity(this.streamingVelocity));
       this.environment?.update(rawDelta, this.stamina.breath);
+      this.northern?.update(rawDelta);
       const center = this.worldStream.getCenterCoord();
       if (center.x !== this.lastCenter.x || center.z !== this.lastCenter.z || center.story !== this.lastCenter.story) {
         this.lastCenter.x = center.x; this.lastCenter.z = center.z; this.lastCenter.story = center.story;
@@ -1196,7 +1222,7 @@ export class Game {
     const interaction = !playing || this.character?.isBusy || this.player.isTraversing || this.player.isNoclipEnabled
       || this.rift?.ownsCharacter
       ? null
-      : this.environment?.getInteraction() ?? this.worldStream.getInteraction(this.player.position, this.lookDirection);
+      : this.northern?.getInteraction() ?? this.environment?.getInteraction() ?? this.worldStream.getInteraction(this.player.position, this.lookDirection);
     this.ui.setInteraction(interaction?.label ?? null);
     const room = this.worldStream.findRoomAt(
       this.player.position.x,
@@ -1453,6 +1479,8 @@ export class Game {
     this.renderer.domElement.removeEventListener('wheel', this.onInventoryWheel);
     // The rift releases its scripted pose, plank collider and shot before the rig goes.
     this.rift?.dispose();
+    this.unsubscribeNorthern?.();
+    this.northern?.dispose();
     this.worldStream?.setEnvironmentObserver();
     this.environment?.dispose();
     this.creature?.dispose();

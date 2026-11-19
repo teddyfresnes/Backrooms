@@ -77,9 +77,7 @@ describe('epic3 rift', () => {
         }
       }
     }
-    // About 450 m north of the origin, where the compass leads.
-    expect(-getChunkWorldOffset({ x: 0, z: EPIC3_RIFT_CHUNK_Z, story: 0 }).z).toBeGreaterThan(400);
-    expect(-getChunkWorldOffset({ x: 0, z: EPIC3_RIFT_CHUNK_Z, story: 0 }).z).toBeLessThan(520);
+    expect(-getChunkWorldOffset({ x: 0, z: EPIC3_RIFT_CHUNK_Z, story: 0 }).z).toBe(336);
   });
 
   it('runs edge to edge with facing portal pairs and no end walls', () => {

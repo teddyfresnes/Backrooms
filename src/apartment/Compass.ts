@@ -69,7 +69,7 @@ export class Compass {
    * +Y is the palm normal and -Z the fingers); without a rig the compass sits
    * low in the view.
    */
-  update(camera: THREE.Camera, palm: { position: THREE.Vector3; quaternion: THREE.Quaternion } | undefined, visible: boolean, danger: number, delta: number): void {
+  update(camera: THREE.Camera, palm: { position: THREE.Vector3; quaternion: THREE.Quaternion } | undefined, visible: boolean, danger: number, delta: number, direction: THREE.Vector3Like = NORTH): void {
     this.model.visible = visible;
     if (!visible) return;
     this.time += delta;
@@ -91,7 +91,7 @@ export class Compass {
     this.model.updateMatrixWorld(true);
     // North in the case frame, projected on the dial plane.
     this.inverse.copy(this.model.quaternion).invert();
-    this.local.copy(NORTH).applyQuaternion(this.inverse);
+    this.local.copy(direction).normalize().applyQuaternion(this.inverse);
     const flat = Math.hypot(this.local.x, this.local.z);
     // Held on edge, the needle has no meaningful north: it keeps its momentum.
     const target = flat > 0.2 ? Math.atan2(-this.local.x, -this.local.z) : this.physics.angle;

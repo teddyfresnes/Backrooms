@@ -166,6 +166,7 @@ export const ENVIRONMENT_EVENT_DEFINITIONS: Readonly<Record<EnvironmentEventKind
 
 export const populateEnvironmentEvents = (plan: WorldPlan, seed: string, owner: Address, config = ENVIRONMENT_EVENT_CONFIG): void => {
   plan.environmentEvents = [];
+  if (plan.northern?.kind === 'red-zone' || plan.northern?.kind === 'slides-approach') return;
   if (!plan.spatial || plan.features.some(f => f.kind === 'epic-structure')) return;
   const ox = owner.x * 112, oz = owner.z * 112;
   const used = new Set<string>();
@@ -177,7 +178,7 @@ export const populateEnvironmentEvents = (plan: WorldPlan, seed: string, owner: 
       const c = rectCenter(room.bounds), cell = spatialCellAt(c.x + ox, c.z + oz);
       return cell.x === x && cell.z === z && Math.hypot(c.x + ox - trial.x, c.z + oz - trial.z) <= MAX_ROOM_DRIFT
         && Math.abs((room.floorY ?? 0) + owner.story * ADDRESS_PITCH - trial.y) < .02
-        && !used.has(room.id) && room.access !== 'sealed' && room.access !== 'secret' && room.ceilingHeight - (room.floorY ?? 0) >= 2.7
+        && !used.has(room.id) && !plan.northern?.circuits.some(c => c.roomId === room.id) && room.access !== 'sealed' && room.access !== 'secret' && room.ceilingHeight - (room.floorY ?? 0) >= 2.7
         && room.bounds.minX > -55 && room.bounds.maxX < 55 && room.bounds.minZ > -55 && room.bounds.maxZ < 55
         && !plan.features.some(f => overlapRect(room.bounds, f.bounds, .5))
         && !(plan.symmetryZones ?? []).some(b => overlapRect(room.bounds, b))

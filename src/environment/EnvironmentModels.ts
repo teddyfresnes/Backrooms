@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SeededRandom } from '../world/SeededRandom';
 
-export interface EventModel { root: THREE.Group; head?: THREE.Group; receiver?: THREE.Group; lens?: THREE.MeshBasicMaterial; dispose(): void }
+export interface EventModel { root: THREE.Group; head?: THREE.Group; receiver?: THREE.Group; lever?: THREE.Group; lens?: THREE.MeshBasicMaterial; dispose(): void }
 const roundedCase = (w: number, h: number, depth: number, radius = .035): THREE.BufferGeometry => {
   const s = new THREE.Shape(), x = -w / 2, y = -h / 2, r = Math.min(radius, w / 3, h / 3);
   s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
@@ -15,7 +15,7 @@ const roundedCase = (w: number, h: number, depth: number, radius = .035): THREE.
 /** Authored assemblies, in metres with +Z pointing out of the mounting wall.
  * Chamfered Bakelite, rotary dial, coiled lead, bell grilles, gimbal and lens
  * are final geometry; no placeholder meshes or external model dependencies. */
-export const createEnvironmentModel = (kind: 'fire-alarm' | 'telephone' | 'surveillance', seed: string): EventModel => {
+export const createEnvironmentModel = (kind: 'fire-alarm' | 'telephone' | 'surveillance' | 'circuit-breaker', seed: string): EventModel => {
   const root = new THREE.Group(), rng = new SeededRandom(seed), ownedTextures: THREE.Texture[] = [];
   root.name = `environment-${kind}`;
   const makeMaterial = (name: string, color: number, roughness = .62, metalness = .1): THREE.MeshStandardMaterial => {
@@ -36,8 +36,20 @@ export const createEnvironmentModel = (kind: 'fire-alarm' | 'telephone' | 'surve
     const s = mesh(new THREE.CylinderGeometry(.008, .008, .004, 8).rotateX(Math.PI / 2), metal, { x, y, z }, parent);
     const slot = mesh(new THREE.BoxGeometry(.009, .0018, .001), dark, { x: 0, y: 0, z: .003 }, s); slot.rotation.z = rng.float(-1, 1);
   };
-  let head: THREE.Group | undefined, receiver: THREE.Group | undefined, lens: THREE.MeshBasicMaterial | undefined;
-  if (kind === 'fire-alarm') {
+  let head: THREE.Group | undefined, receiver: THREE.Group | undefined, lever: THREE.Group | undefined, lens: THREE.MeshBasicMaterial | undefined;
+  if (kind === 'circuit-breaker') {
+    mesh(roundedCase(.34, .48, .07), shell);
+    mesh(roundedCase(.27, .39, .018), metal, { x: 0, y: 0, z: .085 });
+    mesh(roundedCase(.085, .18, .012, .012), dark, { x: 0, y: -.01, z: .111 });
+    lever = new THREE.Group(); lever.name = 'circuit-breaker-lever'; lever.position.set(0, -.01, .13); root.add(lever);
+    mesh(new THREE.CylinderGeometry(.012, .012, .085, 12).rotateX(Math.PI / 2), metal, { x: 0, y: 0, z: .035 }, lever);
+    mesh(roundedCase(.095, .037, .035, .01), dark, { x: 0, y: 0, z: .085 }, lever);
+    for (const x of [-.14, .14]) for (const y of [-.21, .21]) screw(x, y, .092);
+    // I/O marks are ordinary paint: no luminous hint in a dead circuit.
+    mesh(new THREE.BoxGeometry(.004, .023, .002), dark, { x: 0, y: .155, z: .113 });
+    mesh(new THREE.TorusGeometry(.013, .002, 5, 18), dark, { x: 0, y: -.158, z: .113 });
+    for (const y of [-.24, .24]) mesh(new THREE.CylinderGeometry(.018, .018, .065, 10), metal, { x: 0, y, z: .035 });
+  } else if (kind === 'fire-alarm') {
     mesh(roundedCase(.34, .46, .085), shell);
     mesh(roundedCase(.28, .25, .012, .025), dark, { x: 0, y: -.065, z: .093 });
     for (let i = 0; i < 9; i++) mesh(roundedCase(.235, .009, .006, .002), shell, { x: 0, y: -.16 + i * .023, z: .112 });
@@ -94,7 +106,7 @@ export const createEnvironmentModel = (kind: 'fire-alarm' | 'telephone' | 'surve
   }
   const materials = new Set<THREE.Material>([shell, dark, metal]);
   root.traverse(o => { if (o instanceof THREE.Mesh) for (const m of Array.isArray(o.material) ? o.material : [o.material]) materials.add(m); });
-  return { root, head, receiver, lens, dispose() {
+  return { root, head, receiver, lever, lens, dispose() {
     root.removeFromParent(); root.traverse(o => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
     materials.forEach(m => m.dispose()); ownedTextures.forEach(t => t.dispose()); root.clear();
   } };

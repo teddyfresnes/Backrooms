@@ -7,6 +7,7 @@ vi.mock('../render/WorldProps', () => ({
 import { PhysicsWorld } from '../physics/PhysicsWorld';
 import type { WorldView } from '../render/WorldBuilder';
 import { EnvironmentLighting } from '../render/EnvironmentLighting';
+import { NorthernLighting } from '../render/NorthernLighting';
 import { EnvironmentRuntime } from './EnvironmentRuntime';
 import { EnvironmentStateStore } from './EnvironmentBehavior';
 import { environmentFixture } from '../../tests/support/environment-fixture';
@@ -22,7 +23,7 @@ const mounted = async (kind: EnvironmentEventKind) => {
   const values = new Map<string, string>(), states = new EnvironmentStateStore('runtime', { getItem: k => values.get(k) ?? null, setItem: (k, v) => { values.set(k, v); } });
   const runtime = new EnvironmentRuntime({ scene, camera, physics, output: () => null, playerPosition: () => player, canDiscover: () => true,
     prepareChase() {}, startChase: () => false, caption() {} }, states);
-  const view = { environmentLighting: new EnvironmentLighting(plan), decorLightingContext: null } as WorldView;
+  const view = { environmentLighting: new EnvironmentLighting(plan), northernLighting: new NorthernLighting(plan), decorLightingContext: null } as WorldView;
   const chunk = { key: '2:-3:-2', plan, offset, view }; runtime.mount(chunk); await runtime.ready();
   cleanup.push(() => physics.dispose(), () => runtime.dispose());
   return { runtime, physics, scene, plan, camera, player, offset, states, chunk };
@@ -67,7 +68,7 @@ describe('mounted environmental encounters with Rapier', () => {
     const h = await mounted('fire-alarm'), initial = h.physics.world.colliders.len();
     h.runtime.update(.05);
     for (let i = 0; i < 50; i++) {
-      h.runtime.mount({ ...h.chunk, view: { environmentLighting: new EnvironmentLighting(h.plan), decorLightingContext: null } as WorldView });
+      h.runtime.mount({ ...h.chunk, view: { environmentLighting: new EnvironmentLighting(h.plan), northernLighting: new NorthernLighting(h.plan), decorLightingContext: null } as WorldView });
       expect(h.physics.world.colliders.len()).toBe(initial);
       h.runtime.unmount(h.chunk.key); expect(h.scene.children).toHaveLength(0);
       h.runtime.mount(h.chunk);

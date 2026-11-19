@@ -16,6 +16,7 @@ import type {
 } from './types';
 import { pointInRect, rectCenter, rectDepth, rectWidth } from './types';
 import { SeededRandom } from './SeededRandom';
+import { NORTHERN_LAYOUT, isNorthernReservedRow } from './NorthernLayout';
 
 const STORY_PITCH = 5.4;
 const EPIC_ABYSS_PREVIEW_STORIES = 17;
@@ -31,7 +32,7 @@ const EPIC1_LEDGE_DEPTH = EPIC1_FACADE_HALF_SPAN - EPIC1_VOID_HALF_SPAN;
  * 112 m segment of the same fissure. Walking north (world -Z, where the
  * compass points) from the origin always meets it, whatever the floor.
  */
-export const EPIC3_RIFT_CHUNK_Z = -4;
+export const EPIC3_RIFT_CHUNK_Z = NORTHERN_LAYOUT.riftRow;
 export const isEpic3RiftCoord = (coord: Pick<EpicCoord, 'z'>): boolean => coord.z === EPIC3_RIFT_CHUNK_Z;
 const EPIC3_HALF_LENGTH = 56;
 export const EPIC3_FACADE_HALF_DEPTH = 6;
@@ -194,13 +195,14 @@ export const getEpicStructureSlotsForMacro = (
 
 /** A tiled monument keeps its empty halo from the rift row; the tiled epic3 slot is retired. */
 const isRetiredEpicSlot = (slot: EpicStructureSlot): boolean =>
-  slot.index === 3 || Math.abs(slot.z - EPIC3_RIFT_CHUNK_Z) <= 1;
+  slot.index === 3 || Math.abs(slot.z - EPIC3_RIFT_CHUNK_Z) <= 1 || isNorthernReservedRow(slot.z);
 
 export const epicStructureIndexForCoord = (
   seed: string,
   coord: Pick<EpicCoord, 'x' | 'z'>,
 ): EpicStructureIndex | null => {
   if (isEpic3RiftCoord(coord)) return 3;
+  if (isNorthernReservedRow(coord.z)) return null;
   if (Math.abs(coord.z - EPIC3_RIFT_CHUNK_Z) <= 1) return null;
   const macroX = Math.floor(coord.x / EPIC_MACRO_SIZE);
   const macroZ = Math.floor(coord.z / EPIC_MACRO_SIZE);

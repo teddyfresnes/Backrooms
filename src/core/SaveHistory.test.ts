@@ -43,6 +43,18 @@ it('preserves the environmental session across saves while accepting older saves
   expect(writeGameSave(new MemoryStorage(), input).ok).toBe(true);
 });
 
+it('round-trips the northern story and rejects a missing or invalid compass destination', () => {
+  const storage = new MemoryStorage(), input = backroomsInput();
+  const northern = { version: 1 as const, stage: 'compass-glitch' as const, walkedRed: 8, compassSeconds: .7, target: { x: -48, story: -3 } };
+  const result = writeGameSave(storage, { ...input, payload: { ...input.payload, northern } });
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw new Error('Expected northern checkpoint');
+  const loaded = loadGameSave(storage, result.save.id);
+  expect(loaded?.experienceId === 'backrooms' ? loaded.payload.northern : undefined).toEqual(northern);
+  expect(writeGameSave(storage, { ...input, payload: { ...input.payload, northern: { ...northern, target: undefined } } }).ok).toBe(false);
+  expect(writeGameSave(storage, { ...input, payload: { ...input.payload, northern: { ...northern, target: { x: Infinity, story: 0 } } } }).ok).toBe(false);
+});
+
 const russianInput = (playTimeSeconds = 83): RussianStairwellGameSaveInput => ({
   experienceId: 'russian-stairwell',
   kind: 'manual',

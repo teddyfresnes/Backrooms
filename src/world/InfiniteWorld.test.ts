@@ -1,5 +1,6 @@
 import { surfaceRange, validateTopology } from './WalkableTopology';
 import { describe, expect, it } from 'vitest';
+import { isRedZoneRow } from './NorthernLayout';
 import {
   INFINITE_CHUNK_SIZE,
   INFINITE_STORY_PITCH,
@@ -641,6 +642,10 @@ describe('legacy monument and migration chunk contracts', () => {
           story: 0,
         }));
         const biomes = members.map((coord) => getInfiniteVisualBiome(biomeSeed, coord));
+        if (members.some(c => isRedZoneRow(c.z))) {
+          for (const c of members.filter(c => isRedZoneRow(c.z))) expect(getInfiniteVisualBiome(biomeSeed, c)).toBe('red');
+          continue;
+        }
         expect(new Set(biomes).size).toBe(1);
         for (const story of [-8, -1, 1, 9]) {
           expect(getInfiniteVisualBiome(biomeSeed, { ...members[0]!, story }))
@@ -1184,11 +1189,11 @@ describe('legacy monument and migration chunk contracts', () => {
         center.x >= floor.minX && center.x <= floor.maxX &&
         center.z >= floor.minZ && center.z <= floor.maxZ
       )).toBe(false);
-      expect(plan.colliders.some((collider) =>
+      expect(plan.colliders.filter((collider) =>
         collider.kind !== 'floor' &&
         Math.abs(center.x - collider.center.x) < collider.halfExtents.x &&
         Math.abs(center.z - collider.center.z) < collider.halfExtents.z
-      )).toBe(false);
+      ), JSON.stringify({ sourceCoord, coord, center })).toHaveLength(0);
       const continuesBelowPreview = (plan.lowerPreviewOpenings ?? [])
         .some((opening) => containsPoint(opening, center));
       expect(continuesBelowPreview).toBe(distance < shaft.stories! - 1);
@@ -1224,19 +1229,13 @@ describe('legacy monument and migration chunk contracts', () => {
         )).toBe(true);
         const hostRoom = plan.rooms.find((room) => room.id === enclosure.walls[0]!.roomId);
         expect(hostRoom).toBeDefined();
-        if (hostRoom) {
-          expect(
-            Math.min(
-              Math.abs(enclosure.bounds.minX - hostRoom.bounds.minX),
-              Math.abs(enclosure.bounds.maxX - hostRoom.bounds.maxX),
-            ),
-          ).toBeLessThan(0.4);
-          expect(
-            Math.min(
-              Math.abs(enclosure.bounds.minZ - hostRoom.bounds.minZ),
-              Math.abs(enclosure.bounds.maxZ - hostRoom.bounds.maxZ),
-            ),
-          ).toBeLessThan(0.4);
+        // A freestanding shell is valid when a room anchor would cut another
+        // shaft. Every wall must leave ALL inherited fall volumes clear.
+        for (const wall of enclosure.walls) {
+          const hx = (wall.orientation === 'x' ? wall.length : wall.thickness) / 2;
+          const hz = (wall.orientation === 'z' ? wall.length : wall.thickness) / 2;
+          const bounds = { minX:wall.x-hx,maxX:wall.x+hx,minZ:wall.z-hz,maxZ:wall.z+hz };
+          expect(allActiveOpenings.some(o => overlaps(bounds,o))).toBe(false);
         }
         for (const wall of enclosure.walls) {
           const localId = wall.id.slice(wall.id.lastIndexOf('/') + 1);

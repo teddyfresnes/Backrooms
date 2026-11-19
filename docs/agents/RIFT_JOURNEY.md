@@ -13,7 +13,8 @@ sauvegardes Backrooms ajoutent les clés optionnelles `inventory` et `rift`
 lampe et la boussole sont rendues. `Game` reprend le rail (`InventoryHUD`), la
 molette, la touche lampe (`EquipmentInput`), `Flashlight` et `Compass` tenus par
 `CharacterRuntime.setHeldItem`, comme dans l'immeuble. Le nord de la boussole est
-le −Z monde : la direction de la faille.
+le −Z monde jusqu'à la faille, puis `NorthernJourney.compassDirection` après
+consultation dans la zone rouge.
 
 ## Modules
 
@@ -71,6 +72,33 @@ le −Z monde : la direction de la faille.
 8. Sur l'autre rive (après résolution, à plus de 26 m de la faille) : la traque.
 
 Le brouillard et le fond virent au sombre près de la faille (`atmosphereAt`).
+
+## Progression vers la zone rouge et les toboggans
+
+`world/NorthernLayout` réserve la faille à −336 m, les rangées rouges −4/−5
+(entrée −392 m, sortie −616 m) et l'approche des toboggans en −6. Ces bandes
+traversent tous les X et propriétaires verticaux ; aucun slot épique aléatoire
+ne les remplace. `NorthernWorld` choisit des sols ouverts du BSP final, réserve
+les salles contre le mobilier, et publie `WorldPlan.northern`. Le landmark
+`slides` est le contrat de branchement du futur générateur de toboggans ; cette
+étape prépare son approche praticable, sans produire ses tubes détaillés.
+
+`core/NorthernJourney` observe les chunks (y compris les remplacements de vue),
+possède les boîtiers/colliders et partage le bus audio et `EnvironmentStateStore`.
+Entrer dans un circuit de réparation le coupe une seule fois ; E sur son boîtier
+mural rallume uniquement ce circuit. `off`/`restored` restent dans la session
+environnementale. Les petites poches avant la faille restent purement ambiantes.
+`NorthernLighting` module les matériaux et la fog par fragment ; il extrait les
+spotlights natifs avant le traitement ambiant pour conserver la flashlight.
+
+Après résolution de la faille, huit mètres vers le nord dans le rouge donnent
+la réplique et l'objectif de consultation. `NorthernProgress` persiste la suite
+`approach` → `red-zone` → `inspect-compass` → `compass-glitch` → `slides` →
+`slides-ready`. Les 3,2 s d'anomalie avancent seulement boussole réellement tenue,
+en jeu libre. Son cap vise l'approche du propriétaire choisi, affinée au montage
+du chunk. Une sauvegarde sans `northern` près de l'ancienne faille est translatée
+avec celle-ci par `NorthernSaveMigration` ; les reprises déjà résolues rattrapent
+la progression rouge sans rejouer la planche.
 
 ## Traque de l'autre rive
 

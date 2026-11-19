@@ -25,7 +25,7 @@ import { classifySurfaceAccess, cutRects, findSurface, overlapRect, surfaceColli
   type HeightProfile, type SurfaceConnection, type WalkableSurface } from './WalkableTopology';
 
 /** Version of ordinary regional plans, reported as the session's generator version. */
-export const SPATIAL_PLAN_VERSION = 21;
+export const SPATIAL_PLAN_VERSION = 22;
 const sides = ['north', 'east', 'south', 'west'] as const;
 type Side = typeof sides[number];
 const deltas: Record<Side, [number, number]> = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };

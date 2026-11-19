@@ -35,6 +35,22 @@ it('points the red tip of the held compass toward world north whatever the case 
   expect(scene.children).toHaveLength(0);
 });
 
+it('visibly loses its heading then settles on a supplied main destination', () => {
+  const scene = new THREE.Scene(), compass = new Compass(scene), camera = new THREE.PerspectiveCamera();
+  const palm = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), -.7) };
+  const target = new THREE.Vector3(.8,0,-.6), needle = compass.model.getObjectByName('compass-needle')!;
+  let worst = 0;
+  for(let i=0;i<120;i++) {
+    compass.update(camera,palm,true,1,1/60,target);
+    const tip = new THREE.Vector3(0,0,-1).applyQuaternion(needle.getWorldQuaternion(new THREE.Quaternion()));
+    worst = Math.max(worst, tip.distanceTo(target));
+  }
+  expect(worst).toBeGreaterThan(1);
+  for(let i=0;i<240;i++) compass.update(camera,palm,true,0,1/60,target);
+  const tip = new THREE.Vector3(0,0,-1).applyQuaternion(needle.getWorldQuaternion(new THREE.Quaternion()));
+  expect(tip.distanceTo(target)).toBeLessThan(.02); compass.dispose();
+});
+
 it.each(['compass', 'torch'] as const)('brings the real right hand to a %s fixed in the view', kind => {
   const bytes = readFileSync('public/assets/character/character.fbx');
   const root = new FBXLoader().parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');

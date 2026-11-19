@@ -7,6 +7,7 @@ import { sanitizeComputerUse, type ComputerUseProgress } from '../apartment/Comp
 import { FLASHLIGHT_ID, sanitizeInventory, type InventoryProgress } from '../apartment/InventoryState';
 import { sanitizeCorridor, type CorridorProgress } from '../story/CorridorProgress';
 import { sanitizeRiftProgress, type RiftProgress } from '../story/RiftProgress';
+import { sanitizeNorthernProgress, type NorthernProgress } from '../story/NorthernProgress';
 import { sanitizeApartmentObjects, sanitizeApartmentFixtures, type ApartmentObjectsProgress, type ApartmentFixturesProgress } from '../apartment/ApartmentInteractionState';
 import type { CharacterVoiceId } from '../audio/VoiceCatalog';
 import { sanitizeComputerProgress, type ComputerProgress } from '../story/ApartmentQuest';
@@ -70,6 +71,7 @@ export interface BackroomsSavePayload {
   readonly rift?: RiftProgress;
   /** Namespace for sparse environmental state, shared across streamed chunks. */
   readonly environmentSession?: string;
+  readonly northern?: NorthernProgress;
 }
 
 interface GameSaveInputBase {
@@ -372,7 +374,7 @@ const sanitizeChunk = (value: unknown): BackroomsSavePayload['chunk'] | null => 
 };
 
 const BACKROOMS_REQUIRED_KEYS = ['seed', 'chunk', 'localPosition', 'quaternion'] as const;
-const BACKROOMS_OPTIONAL_KEYS = new Set(['surface', 'inventory', 'rift', 'environmentSession']);
+const BACKROOMS_OPTIONAL_KEYS = new Set(['surface', 'inventory', 'rift', 'environmentSession', 'northern']);
 const sanitizeBackroomsPayload = (value: unknown): BackroomsSavePayload | null => {
   if (!isRecord(value) || !BACKROOMS_REQUIRED_KEYS.every((key) => Object.hasOwn(value, key))
     || !Object.keys(value).every((key) => (BACKROOMS_REQUIRED_KEYS as readonly string[]).includes(key) || BACKROOMS_OPTIONAL_KEYS.has(key))) {
@@ -380,8 +382,9 @@ const sanitizeBackroomsPayload = (value: unknown): BackroomsSavePayload | null =
   }
   const inventory = value.inventory === undefined ? undefined : sanitizeInventory(value.inventory);
   const rift = value.rift === undefined ? undefined : sanitizeRiftProgress(value.rift);
+  const northern = value.northern === undefined ? undefined : sanitizeNorthernProgress(value.northern);
   if (value.environmentSession !== undefined && (typeof value.environmentSession !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(value.environmentSession))) return null;
-  if (inventory === null || rift === null) return null;
+  if (inventory === null || rift === null || northern === null) return null;
   if (
     typeof value.seed !== 'string'
     || value.seed.length === 0
@@ -403,6 +406,7 @@ const sanitizeBackroomsPayload = (value: unknown): BackroomsSavePayload | null =
   return Object.freeze({
     seed: value.seed, chunk, localPosition, quaternion, ...(surface ? { surface } : {}),
     ...(inventory ? { inventory } : {}), ...(rift ? { rift } : {}),
+    ...(northern ? { northern } : {}),
     ...(typeof value.environmentSession === 'string' ? { environmentSession: value.environmentSession } : {}),
   });
 };

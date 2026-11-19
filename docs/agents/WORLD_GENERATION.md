@@ -20,7 +20,7 @@ rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/
 
 ## Ordre du pipeline
 
-Le pipeline ordinaire (plan version 21, topologie/spatial version 2) est :
+Le pipeline ordinaire (plan version 22, topologie/spatial version 2) est :
 
 1. `RegionalPlan` choisit les districts mondiaux et leurs datums signés ;
 2. il réserve les atria sur deux à quatre adresses verticales. Les galeries
@@ -59,7 +59,8 @@ Le pipeline ordinaire (plan version 21, topologie/spatial version 2) est :
    décrochements de plafond entre volumes de même datum, par bandes de propriétaire ;
 7. `LiminalArchitecture` ajoute les rares parois percées après les réparations BSP,
    puis les sols et finitions sont recalculés ; `generateInfiniteChunk` applique palette,
-   événements environnementaux, props et préfixes. Les événements réservent des
+   réservations `NorthernWorld` (circuits et approche des toboggans),
+   événements environnementaux, props et préfixes. Ces systèmes réservent des
    salles compatibles avant le mobilier, sans changer leurs sols ni passages.
    Voir [le vocabulaire liminal](LIMINAL_ARCHITECTURE.md) pour
    les arches, galeries partielles et nouvelles fosses.
@@ -84,7 +85,7 @@ contrôle cette dernière, y compris les épaisseurs, les continuations de pièc
 et la connexion des sols aux vraies circulations. Le cache de 32 domaines BSP
 est vidé avec `clearInfiniteWorldCaches`.
 
-Les biomes visuels occupent des macro-zones 2×2 stables sur tous les étages
+Hors bande rouge garantie (`NorthernLayout`), les biomes visuels occupent des macro-zones 2×2 stables sur tous les étages
 (`getInfiniteVisualBiome`, partagé avec la faille : changer ses poids change
 les plans d'`epic3`).
 Le jaune ordinaire couvre 70 % des macro-zones ; rouge, blanc et jaune sombre

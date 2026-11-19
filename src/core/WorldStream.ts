@@ -239,6 +239,13 @@ const approachPointForRect = (
 
 export class WorldStream {
   private environmentObserver?: EnvironmentChunkObserver;
+  private readonly chunkObservers = new Set<EnvironmentChunkObserver>();
+  /** Runtime systems survive view replacement, and own only mounted chunks. */
+  addChunkObserver(observer: EnvironmentChunkObserver): () => void {
+    this.chunkObservers.add(observer);
+    for (const chunk of this.chunks.values()) observer.mount(chunk);
+    return () => { if (this.chunkObservers.delete(observer)) for (const key of this.chunks.keys()) observer.unmount(key); };
+  }
   setEnvironmentObserver(observer?: EnvironmentChunkObserver): void {
     this.environmentObserver = observer;
     if (observer) for (const chunk of this.chunks.values()) observer.mount(chunk);
@@ -639,10 +646,11 @@ export class WorldStream {
     const runtime = this.runtimeAt(this.runtimeOffset);
     if (!runtime) return 0;
     const plan = runtime.plan, lx = x - runtime.offset.x, ly = y - runtime.offset.y, lz = z - runtime.offset.z;
+    if (runtime.view.northernLighting.powerAt(lx, ly, lz) === 0) return 1;
     const zone = unlitZoneInfluence(plan.unlitZones ?? [], lx, lz, 1.35);
     let nearest = Infinity;
     for (const light of plan.lights) {
-      if (light.dead || Math.abs(light.ceilingY - ly) > 4.5) continue;
+      if (light.dead || Math.abs(light.ceilingY - ly) > 4.5 || runtime.view.northernLighting.powerAt(light.x, light.ceilingY, light.z) === 0) continue;
       const distance = (light.x - lx) * (light.x - lx) + (light.z - lz) * (light.z - lz);
       if (distance < nearest) nearest = distance;
     }
@@ -659,7 +667,7 @@ export class WorldStream {
     for (const runtime of this.chunks.values()) {
       for (const light of runtime.plan.lights) {
         const ly = light.ceilingY + runtime.offset.y;
-        if (light.dead || Math.abs(ly - y) > 4.5) continue;
+        if (light.dead || Math.abs(ly - y) > 4.5 || runtime.view.northernLighting.powerAt(light.x, light.ceilingY, light.z) === 0) continue;
         const lx = light.x + runtime.offset.x, lz = light.z + runtime.offset.z;
         const distance = (lx - x) ** 2 + (lz - z) ** 2;
         if (distance < nearest) { nearest = distance; result = { x: lx, y: ly, z: lz }; }
@@ -875,8 +883,8 @@ export class WorldStream {
 
     for (const runtime of this.chunks.values()) {
       for (const l of runtime.plan.spatial?.landmarks ?? []) {
-        const aliases = l.kind.startsWith('escalier-') ? ['escalier', l.kind] : [l.kind];
-        addTarget(runtime, l.kind, l.kind.replaceAll('-', ' '), aliases, l.position);
+        const aliases = l.kind === 'slides' ? ['slides', 'toboggans', 'toboggan'] : l.kind.startsWith('escalier-') ? ['escalier', l.kind] : [l.kind];
+        addTarget(runtime, l.kind, l.kind === 'slides' ? 'Approche des toboggans' : l.kind.replaceAll('-', ' '), aliases, l.position);
       }
       for (const c of runtime.plan.spatial?.cells.filter(c => c.mode === 'rooms') ?? []) {
         const p = rectCenter(c.bounds); addTarget(runtime, 'grand-plateau', 'grande zone régionale', ['plateau', 'zone'], { ...p, y: c.floorY + .865 });
@@ -1388,6 +1396,8 @@ export class WorldStream {
     this.recoveryChunkKey = undefined;
     this.recoveryChunk = undefined;
     this.clearMountedChunks();
+    this.chunkObservers.clear();
+    this.environmentObserver = undefined;
     this.sourceCount = 0;
     this.pendingChunks = 0;
   }
@@ -1477,6 +1487,7 @@ export class WorldStream {
     runtime.view.dispose();
     runtime.view = view;
     this.environmentObserver?.mount(runtime);
+    for (const observer of this.chunkObservers) observer.mount(runtime);
     this.connectLightNeighbors(runtime.coord);
     runtime.lightingMode = mode;
     if (lightMaps) runtime.lightMaps = lightMaps;
@@ -1534,6 +1545,7 @@ export class WorldStream {
       });
       this.mountRevision++;
       this.environmentObserver?.mount(this.chunks.get(key)!);
+      for (const observer of this.chunkObservers) observer.mount(this.chunks.get(key)!);
       this.connectLightNeighbors(coord);
     } catch (error) {
       view.dispose();
@@ -1555,6 +1567,7 @@ export class WorldStream {
     const runtime = this.chunks.get(key);
     if (!runtime) return;
     this.environmentObserver?.unmount(key);
+    for (const observer of this.chunkObservers) observer.unmount(key);
     if (!this.disposed) this.cachePreparedChunk(key, { plan: runtime.plan, lightMaps: runtime.lightMaps, regionalLightData: runtime.regionalLightData, architectureData: runtime.architectureData });
     if (!this.disposed && key === this.recoveryChunkKey) {
       // Retain CPU data only. Keeping the complete source WorldView mounted

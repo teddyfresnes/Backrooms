@@ -4,6 +4,7 @@ export interface EventState {
   chairMoved?: boolean;
   cameraYaw?: number;
   cameraPitch?: number;
+  circuit?: 'off' | 'restored';
 }
 export interface EventStorage { getItem(key: string): string | null; setItem(key: string, value: string): void }
 /** Only sparse deltas on disk; the cache stays bounded after arbitrarily many chunks.
@@ -21,7 +22,8 @@ export class EnvironmentStateStore {
         if (saved && typeof saved === 'object') {
           const s = saved as EventState;
           state = { consumed: s.consumed === true, visited: s.visited === true, chairMoved: s.chairMoved === true,
-            ...(Number.isFinite(s.cameraYaw) ? { cameraYaw: s.cameraYaw } : {}), ...(Number.isFinite(s.cameraPitch) ? { cameraPitch: s.cameraPitch } : {}) };
+            ...(Number.isFinite(s.cameraYaw) ? { cameraYaw: s.cameraYaw } : {}), ...(Number.isFinite(s.cameraPitch) ? { cameraPitch: s.cameraPitch } : {}),
+            ...(s.circuit === 'off' || s.circuit === 'restored' ? { circuit: s.circuit } : {}) };
         }
       } catch { /* Denied storage: the bounded session cache still works. */ }
     }

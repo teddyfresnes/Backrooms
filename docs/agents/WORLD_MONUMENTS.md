@@ -8,11 +8,12 @@ propriétaires monumentaux du monde régional.
   construits : le slot `epic3` est retiré. Les huit slots candidats, leurs
   transformations et leur marge garantissent qu’aucun epic ne touche un autre,
   même en diagonale ou sur une couture de supercellule.
-- `epic3` est la faille : toute la rangée `EPIC3_RIFT_CHUNK_Z` (−4, ≈ 450 m au
+- `epic3` est la faille : toute la rangée `EPIC3_RIFT_CHUNK_Z` (−3, 336 m au
   nord de l'origine, là où pointe la boussole) sur tous les x et tous les étages.
   `epicStructureIndexForCoord` la classe avant le pavage ; les rangées voisines
   (±1) restent ordinaires (halo), et `getNearestEpicStructureCoord(…, 3, o)`
-  rend `{ x: o.x, z: −4, story: o.story }`.
+  rend `{ x: o.x, z: −3, story: o.story }`. Les bandes de progression nord
+  (`NorthernLayout`) retirent aussi leurs slots monumentaux du pavage.
 - Le slot horizontal ne dépend pas de l’étage : les grands volumes restent
   cohérents verticalement. Dans `epic1`, chaque story absolue dérive toutefois
   sa propre rangée de passages. Le plan sérialise quatre rangées au-dessus et

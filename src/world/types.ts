@@ -3,6 +3,7 @@ import type { WalkableTopology } from './WalkableTopology';
 import type { SpatialArchitecture } from './SpatialTypes';
 import type { LiminalArchitectureFeature } from './ArchitecturalOpenings';
 import type { EnvironmentEventPlan } from './EnvironmentEvents';
+import type { NorthernWorldPlan } from './NorthernWorld';
 
 export type RoomKind =
   | 'office'
@@ -441,6 +442,7 @@ export interface WorldPlan {
   propPlacements?: PropPlacement[];
   /** Independent deterministic environmental encounters, owned by this chunk. */
   environmentEvents?: EnvironmentEventPlan[];
+  northern?: NorthernWorldPlan;
   colliders: StaticCollider[];
   floorRects: Rect[];
   /** Canonical apertures cut from this story's walkable floor. */
