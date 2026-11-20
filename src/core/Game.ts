@@ -901,7 +901,9 @@ export class Game {
       { value: '/noclip', label: '/noclip', detail: 'ACTIVE OU DESACTIVE LE VOL LIBRE' },
       { value: '/locate ', label: '/locate <cible>', detail: 'TÉLÉPORTE VERS UNE CIBLE CONNUE' },
     ];
-    if (!trimmed.includes(' ')) {
+    // Preserve the argument separator: `/locate ` must offer destinations,
+    // even though trimming it is useful for matching the command name.
+    if (!/\s/.test(value)) {
       const normalized = trimmed.toLowerCase();
       const suggestions = commandSuggestions.filter((suggestion) =>
         suggestion.value.trim().startsWith(normalized),
@@ -1092,6 +1094,9 @@ export class Game {
     const requestId = ++this.locateRequestId;
     try {
       const ready = await worldStream.prepareLocateTarget(target);
+      if (!ready && !this.disposed && requestId === this.locateRequestId) {
+        this.ui.showConsoleMessage({ kind: 'error', text: `DESTINATION INDISPONIBLE: ${target.label.toUpperCase()}. RÉESSAIE /locate ${target.command}.` });
+      }
       if (
         !ready ||
         this.disposed ||

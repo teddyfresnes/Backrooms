@@ -1003,7 +1003,7 @@ export class RussianStairwellGame {
   private currentObjective():string|null {
     if(this.corridorStory?.state.active)return this.corridorStory.objective(this.inventory.hasLamp);
     const hall=this.arrivalStory?.getState()??'done';
-    if(hall==='home'&&!this.quest.homeReached&&!this.giftOpened)return 'Ouvrir le cadeau de Chloé devant ma porte.';
+    if(hall==='home'&&!this.quest.homeReached&&!this.giftOpened)return 'Ouvrir le cadeau de Chloé devant ma porte, au dernier étage.';
     return this.quest.objective(hall);
   }
   /** Mail read, parcel still shut on the landing. */

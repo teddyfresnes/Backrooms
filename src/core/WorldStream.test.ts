@@ -40,7 +40,7 @@ it('targets a working light across a chunk edge using world coordinates and the 
 
 it('locates the nearest real slide structure analytically even before any chunk is mounted',()=>{
   const stream={initialized:true,disposed:false,seed:'SLIDES-LOCATE',chunks:new Map(),centerCoord:{x:2,z:0,story:-3}} as unknown as WorldStream;
-  const point=new Vector3(180,-15.335,0),targets=WorldStream.prototype.getLocateTargets.call(stream,point),slides=targets.find(t=>t.command==='slides');
+  const point=new Vector3(180,-15.335,0),targets=WorldStream.prototype.getLocateTargets.call(stream,point),slides=targets.find(t=>t.command==='toboggans');
   expect(slides?.chunkKey).toBe('0:-5:-3');expect(slides?.aliases).toContain('toboggans');expect(slides?.position.x).toBe(0);expect(slides?.position.z).toBe(-548);expect(slides?.position.y).toBeCloseTo(-15.335);
   expect(nearestSlidesCoord({x:270/112,story:-3})).toEqual({x:4,z:-5,story:-3});
 });

@@ -147,11 +147,11 @@ export class PhysicsWorld {
   private readonly navRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
   // A 0.5 m cell permits positions up to 0.25 m from its probe centre. Include
   // that margin so the 0.96 m torso stays clear at every position in the cell.
-  private readonly navBody = new RAPIER.Cuboid(0.73, 0.85, 0.73);
+  private readonly navBody = new RAPIER.Cuboid(0.73, 0.75, 0.73);
   private readonly navPoint = { x: 0, y: 0, z: 0 };
   /**
    * Floor height of a creature-sized cell centred on (x, z) near `floorY`, or
-   * NaN: its torso (0.52..2.22 m above the supporting floor) must be clear of the
+   * NaN: its torso (0.72..2.22 m above the supporting floor) must be clear of the
    * environment and a floor within `maxStep` of the datum must lie under it.
    * Reuses its query objects (called many times per second by the hunter).
    */
@@ -165,8 +165,10 @@ export class PhysicsWorld {
     const y = floorY + 0.5 - hit.timeOfImpact;
     if (Math.abs(y-floorY)>maxStep) return Number.NaN;
     // Test the body relative to the support, not the caller's previous datum.
-    // The lower margin clears neighbouring stair treads under the long arms.
-    point.x=x; point.y=y+1.37; point.z=z;
+    // The padded footprint reaches three 17.5 cm risers uphill, plus a tread
+    // thickness underneath open stairs. Keep those supports below the torso;
+    // the actor's existing limb sweeps handle its arms near the steps.
+    point.x=x; point.y=y+1.47; point.z=z;
     if (this.world.intersectionWithShape(point, IDENTITY_ROTATION, this.navBody,
       RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, undefined, undefined, this.isEnvironmentCollider)) return Number.NaN;
     return y;

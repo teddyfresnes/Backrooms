@@ -30,10 +30,52 @@ import { PlayerController } from '../player/PlayerController';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import { defaultControlBindings } from '../input/ControlBindings';
 import { ComputerDesktop } from '../ui/desktop/ComputerDesktop';
+import { ExperienceUI } from '../ui/ExperienceUI';
+import { defaultGameSettings } from '../ui/settings';
+import { ApartmentQuest } from '../story/ApartmentQuest';
 
 // WebGL and collision queries are stand-ins here. The host's actual frame,
 // entry/pause code, UI, InputManager and PlayerController run unchanged.
 const games: RussianStairwellGame[]=[];
+it('completes locate arguments through the actual input and executes the French target and its aliases', async () => {
+  const game=Object.create(Game.prototype) as Record<string, any>;
+  const target={command:'toboggans',label:'Les quatre toboggans',aliases:['slides','toboggan','backrooms-slides'],distance:548,chunkKey:'0:-5:0',position:{x:0,y:.865,z:-548}};
+  const prepareLocateTarget=vi.fn(async()=>true),teleport=vi.fn(),showConsoleMessage=vi.fn();
+  Object.assign(game,{worldStream:{getLocateTargets:()=>[target],prepareLocateTarget,update:vi.fn()},player:{position:new THREE.Vector3(),teleport},
+    locateRequestId:0,disposed:false,elapsed:0,updateDebugState:vi.fn()});
+  const ui=new ExperienceUI(document.body,{
+    enter:vi.fn(),regenerate:vi.fn(),returnToMainMenu:vi.fn(),toggleFullscreen:vi.fn(),settingsChanged:vi.fn(),consoleVisibility:vi.fn(),
+    submitConsole:(value,mode)=>game.submitConsole(value,mode),completeConsole:(value,mode)=>game.completeConsole(value,mode),
+  },defaultGameSettings());
+  game.ui=ui; vi.spyOn(ui,'showConsoleMessage').mockImplementation(showConsoleMessage);
+  try {
+    ui.openConsole('command');
+    const input=document.querySelector<HTMLInputElement>('[data-ui="console-input"]')!;
+    const type=(value:string)=>{input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));};
+    const tab=()=>input.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',code:'Tab',bubbles:true,cancelable:true}));
+    type('/loc');tab();expect(input.value).toBe('/locate ');
+    tab();expect(input.value).toBe('/locate toboggans');
+    type('/locate ');tab();expect(input.value).toBe('/locate toboggans');
+    type('/locate tobo');tab();expect(input.value).toBe('/locate toboggans');
+    type('/locate\t');tab();expect(input.value).toBe('/locate toboggans');
+    for (const alias of ['toboggans','slides','toboggan','backrooms-slides']) {
+      const result=game.submitConsole(`/locate ${alias}`,'command');
+      expect(result.close).toBe(true);await Promise.resolve();
+      expect(teleport).toHaveBeenLastCalledWith(target.position);
+    }
+    expect(prepareLocateTarget).toHaveBeenCalledTimes(4);
+    prepareLocateTarget.mockResolvedValueOnce(false);
+    const before=teleport.mock.calls.length;
+    await game.teleportToLocateTarget(target);
+    expect(teleport).toHaveBeenCalledTimes(before);
+    expect(showConsoleMessage).toHaveBeenLastCalledWith(expect.objectContaining({kind:'error',text:expect.stringContaining('DESTINATION INDISPONIBLE')}));
+  } finally { ui.dispose(); }
+});
+it('keeps the top-floor direction in the parcel objective after collecting the mail',()=>{
+  const game=Object.create(RussianStairwellGame.prototype) as Record<string,any>;
+  Object.assign(game,{arrivalStory:{getState:()=> 'home'},quest:new ApartmentQuest(),giftOpened:false});
+  expect(game.currentObjective()).toBe('Ouvrir le cadeau de Chloé devant ma porte, au dernier étage.');
+});
 it('warms the launcher effects at low resolution and presents only the final frame at full size', async () => {
   const game = Object.create(Game.prototype) as Record<string, any>;
   let width = 800, height = 600;

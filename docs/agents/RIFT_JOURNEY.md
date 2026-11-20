@@ -133,6 +133,8 @@ point où elle l'a remarqué, créature retirée, répit garanti.
   elle re-sonde autour d'elle et suit les pas du joueur en secours. Les charges
   sont sous-échantillonnées contre les murs fins ; la sonde de 1,46 m couvre le
   torse de 0,96 m et les 0,25 m de déplacement permis dans chaque cellule.
+  Son bas reste à 0,72 m du support pour laisser passer les trois contremarches
+  et l'épaisseur du limon que cette empreinte peut recouvrir en amont.
   Le mouvement consomme aussi le reste du pas après chaque point de passage.
   Les bras se replient par `FirstPersonObstaclePose` avec
   les balayages sphériques de `CharacterEnvironment` après chaque pose.

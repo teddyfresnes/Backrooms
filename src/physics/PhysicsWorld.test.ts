@@ -7,6 +7,8 @@ vi.mock('@dimforge/rapier3d', async () =>
 );
 
 import { PhysicsWorld } from './PhysicsWorld';
+import { NavGrid } from '../monster/BackroomsNav';
+import { endpointStairRun, slabMeshCollider, stairRunLength } from '../world/SpatialGeometry';
 import {
   applyEpicStructure,
   getEpicStairwellLayout,
@@ -84,6 +86,38 @@ it('probes clearance for the hunter torso, including low ceilings and nearby wal
   expect(physics.probeWalkableCell(.9,1.8,0)).toBeCloseTo(0,3);
   expect(Number.isNaN(physics.probeWalkableCell(2,0,0))).toBe(true);
   expect(Number.isNaN(physics.probeWalkableCell(4.5,0,0))).toBe(true);
+});
+
+it.each(['stairs', 'ramp'] as const)('routes the hunter up and down real %s colliders', async kind => {
+  const rise = 3.15, run = kind === 'stairs' ? stairRunLength(rise) : rise * 8;
+  const bounds = { minX: 0, maxX: run, minZ: -2, maxZ: 2 };
+  const surfaces = kind === 'stairs' ? endpointStairRun(bounds, 'x', 0, rise)
+    : [{ bounds, profile: { kind: 'linear' as const, axis: 'x' as const, startY: 0, endY: rise } }];
+  const physics = await createPhysics([
+    { id:'lower', kind:'floor', center:{x:-2,y:-.1,z:0}, halfExtents:{x:2,y:.1,z:2} },
+    { id:'upper', kind:'floor', center:{x:run+2,y:rise-.1,z:0}, halfExtents:{x:2,y:.1,z:2} },
+    ...surfaces.map((s, i) => slabMeshCollider({ id:`flight-${i}`, roomId:'test', ...s,
+      role:kind === 'stairs' ? 'stair' : 'ramp', thickness:.16, ownerStory:0,
+      layer:'test', ceilingY:10, support:'slab', access:'open', edges:'architecture' })),
+  ]);
+  for (const descending of [false, true]) {
+    const from = { x:descending ? run+1 : -1, y:descending ? rise : 0, z:.25 };
+    const to = { x:descending ? -1 : run+1, y:descending ? 0 : rise, z:.25 };
+    const nav = new NavGrid((x,z,y) => physics.probeWalkableCell(x,z,y), 80);
+    nav.follow(run/2,0,from.y);
+    nav.seed(from.x,from.z,from.y);
+    nav.computeField(to.x,to.z,100000,100,to.y);
+    expect(Number.isFinite(nav.distanceAt(from.x,from.z,from.y))).toBe(true);
+    for (let step=0;step<1200 && Math.abs(from.x-to.x)>.2;step++) {
+      const steer=nav.steer(from.x,from.z,16,1,from.y);
+      expect(steer).not.toBeNull();
+      if (!steer) break;
+      const dx=steer.x-from.x,dz=steer.z-from.z,d=Math.hypot(dx,dz),speed=Math.min(d,.12);
+      nav.move(from,dx/d*speed,dz/d*speed);
+    }
+    expect(from.x).toBeCloseTo(to.x,0);
+    expect(from.y).toBeCloseTo(to.y,2);
+  }
 });
 
 it('mounts the real transformed shell in cooperative tasks without advancing dynamics', async () => {
