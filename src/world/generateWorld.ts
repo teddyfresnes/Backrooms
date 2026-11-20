@@ -61,6 +61,9 @@ const BSP_GRAINS: Record<BspGrain, BspGrainProfile> = {
   rooms: { minRoomSpan: 12, minCeiling: 3.05, details: false, lightSpacing: 7.2 },
   halls: { minRoomSpan: 19, minCeiling: 3.7, details: false, lightSpacing: 9.6 },
 };
+/** Ordinary ceiling and luminaire pitch of a district grain, for spaces built
+ * without a BSP room that must still read like their neighbours. */
+export const bspGrainProfile = (grain: BspGrain): Readonly<BspGrainProfile> => BSP_GRAINS[grain];
 /** Set only while `generateBspArchitecture` runs; the legacy pipeline (monuments,
  * the rift, `RAW_LOCAL_`) never sees it and keeps its historical constants. */
 let activeGrain: BspGrainProfile | null = null;

@@ -2,6 +2,8 @@ export interface EventState {
   consumed?: boolean;
   visited?: boolean;
   chairMoved?: boolean;
+  /** Station of the lonely chair; it advances once per visit and departure. */
+  chairIndex?: number;
   cameraYaw?: number;
   cameraPitch?: number;
   circuit?: 'off' | 'restored';
@@ -22,6 +24,7 @@ export class EnvironmentStateStore {
         if (saved && typeof saved === 'object') {
           const s = saved as EventState;
           state = { consumed: s.consumed === true, visited: s.visited === true, chairMoved: s.chairMoved === true,
+            ...(Number.isInteger(s.chairIndex) && s.chairIndex! >= 0 ? { chairIndex: s.chairIndex } : {}),
             ...(Number.isFinite(s.cameraYaw) ? { cameraYaw: s.cameraYaw } : {}), ...(Number.isFinite(s.cameraPitch) ? { cameraPitch: s.cameraPitch } : {}),
             ...(s.circuit === 'off' || s.circuit === 'restored' ? { circuit: s.circuit } : {}) };
         }

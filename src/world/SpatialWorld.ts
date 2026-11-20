@@ -13,7 +13,9 @@ import { clearSpatialFeatureCache, planSpatialFeature, installSpatialFeature, co
 import { planRegionalTransition, transitionRoofBounds, restrictProfile } from './TransitionLayout';
 import { transitionSurfaces } from './TransitionSurfaces';
 import { stitchBspPartitions } from './BspConnectivity';
-import { lightPanelOverlapsRect } from './generateWorld';
+import { bspGrainProfile, lightPanelOverlapsRect } from './generateWorld';
+import { SeededRandom } from './SeededRandom';
+import { LONELY_HALL_SUFFIX, lonelyHallCell } from './EnvironmentEvents';
 import type { Rect, SurfaceStyle, WallSegment, WorldPlan } from './types';
 import { pointInRect, rectCenter, rectDepth, rectWidth } from './types';
 import { ADDRESS_PITCH, hasRegionalTransition, regionalAtrium, regionalCellId, regionalDatum, regionalStyle, SPATIAL_CLEARANCE, spatialCellBounds } from './RegionalPlan';
@@ -25,7 +27,7 @@ import { classifySurfaceAccess, cutRects, findSurface, overlapRect, surfaceColli
   type HeightProfile, type SurfaceConnection, type WalkableSurface } from './WalkableTopology';
 
 /** Version of ordinary regional plans, reported as the session's generator version. */
-export const SPATIAL_PLAN_VERSION = 23;
+export const SPATIAL_PLAN_VERSION = 24;
 const sides = ['north', 'east', 'south', 'west'] as const;
 type Side = typeof sides[number];
 const deltas: Record<Side, [number, number]> = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
@@ -55,6 +57,14 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
   // two grains only ever meet across a district facade.
   const cellTemplates = new Map<string, WorldPlan>();
   const gateVestibules: Rect[] = [];
+  // A reserved empty hall (EnvironmentEvents) behaves like a district of its
+  // own: facades with central gates, and a clear vestibule behind each gate.
+  const hallMemo = new Map<string, boolean>(), lonelyCells = new Set<string>(), lonelyHalls: Rect[] = [];
+  const hallAt = (x: number, z: number): boolean => {
+    const key = `${x}/${z}`; let value = hallMemo.get(key);
+    if (value === undefined) { value = lonelyHallCell(seed, x, z, owner.story); hallMemo.set(key, value); }
+    return value;
+  };
   const shift = { x: mx * 224 + 56 - offset.x, z: mz * 224 + 56 - offset.z };
   const move = (r: Rect): Rect => ({ minX: r.minX + shift.x, maxX: r.maxX + shift.x, minZ: r.minZ + shift.z, maxZ: r.maxZ + shift.z });
 
@@ -112,6 +122,8 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     const mode = !atrium ? 'rooms' : owner.story === atrium.owner ? 'gallery' : owner.story === atrium.lower ? 'lower-maze' : atrium.perimeter === 'stepped' ? 'terrace' : 'void';
     const roofY = atrium ? h + (atrium.owner - owner.story) * ADDRESS_PITCH + SPATIAL_CLEARANCE : h + SPATIAL_CLEARANCE;
     const roomId = `${id}/room`;
+    const lonely = !atrium && hallAt(gx, gz);
+    if (lonely) { lonelyCells.add(id); lonelyHalls.push(expand(b, -1)); }
     spatial.cells.push({ id, regionId: datum.id, bounds: b, floorY: h, mode, ...(atrium ? { atriumOwner: atrium.owner, atriumLower: atrium.lower, atriumPerimeter: atrium.perimeter } : {}) });
     world.rooms.push({ id: roomId, bounds: b, kind: mode === 'lower-maze' ? 'lower-maze' : mode === 'gallery' ? 'pit-gallery' : family === 'maze' ? 'corridor' : 'open-hall', level: 0,
       floorY: h, ceilingHeight: roofY, structuralCeilingY: roofY, baseboards: true, detailDensity: mode === 'void' ? 0 : .25, access: 'open' });
@@ -123,7 +135,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     // clear behind every gate, so a threshold never opens onto a partition.
     if (!atrium) for (const side of sides) {
       const [dx, dz] = deltas[side], other = regionalDatum(seed, gx + dx, gz + dz);
-      if (other.id === datum.id || Math.abs(other.y - h) > .001) continue;
+      if ((other.id === datum.id && !hallAt(gx + dx, gz + dz)) || Math.abs(other.y - h) > .001) continue;
       const vestibule: Rect = dz !== 0
         ? { minX: p.x - 2.6, maxX: p.x + 2.6, minZ: side === 'north' ? b.minZ : b.maxZ - 4, maxZ: side === 'north' ? b.minZ + 4 : b.maxZ }
         : { minZ: p.z - 2.6, maxZ: p.z + 2.6, minX: side === 'west' ? b.minX : b.maxX - 4, maxX: side === 'west' ? b.minX + 4 : b.maxX };
@@ -292,9 +304,12 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
           const c = rectCenter(floor.bounds); protectedRoutes.push({ minX: c.x - .6, maxX: c.x + .6, minZ: c.z - .6, maxZ: c.z + .6 });
         }
       } else protectedRoutes.push(...routeReservations);
-      const normal = mode === 'lower-maze' ? !atrium?.openLower : family === 'maze';
+      const normal = mode === 'lower-maze' ? !atrium?.openLower : family === 'maze' && !lonely;
+      // The lonely hall keeps the district's ordinary ceiling and light lattice.
+      const hallCeiling = lonely ? bspGrainProfile(grain).minCeiling : 2.74;
       const parts = normal ? template.rooms.flatMap(r => { const bounds = intersect(move(r.bounds), b); return bounds ? [{ source: r, bounds, id: `${id}/bsp/${r.id}` }] : []; })
-        : [{ source: { ...world.rooms.find(r => r.id === roomId)!, kind: 'open-hall' as const, ceilingHeight: 2.74, id: 'hall' }, bounds: b, id: `${id}/hall` }];
+        : [{ source: { ...world.rooms.find(r => r.id === roomId)!, kind: 'open-hall' as const, ceilingHeight: hallCeiling, id: lonely ? 'lonely-hall' : 'hall' },
+          bounds: b, id: lonely ? `${id}${LONELY_HALL_SUFFIX}` : `${id}/hall` }];
       world.rooms = world.rooms.filter(r => r.id !== roomId);
       for (const part of parts) world.rooms.push({ ...part.source, id: part.id, bounds: part.bounds, floorY: h,
         ceilingHeight: mode === 'lower-maze' ? roofY : h + part.source.ceilingHeight, structuralCeilingY: mode === 'lower-maze' ? roofY : h + part.source.ceilingHeight, baseboards: part.source.baseboards ?? true, access: 'open' });
@@ -326,11 +341,24 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
         }
       }
       const lightBlocked = (x: number, z: number) => world.walls.some(w => w.bottom <= h + .1 && w.height > 1.8 && Math.abs(w.x - x) < (w.orientation === 'x' ? w.length : w.thickness) / 2 + .8 && Math.abs(w.z - z) < (w.orientation === 'z' ? w.length : w.thickness) / 2 + .8);
-      if (mode === 'rooms') {
+      if (mode === 'rooms' && lonely) {
+        // A full regular lattice on the template's own rows: the empty hall is
+        // lit exactly like the rooms around it, with no gap where BSP walls were.
+        const spacing = bspGrainProfile(grain).lightSpacing, rng = new SeededRandom(`${seed}:lonely-hall-lights:v1:${id}`);
+        const nodes = (min: number, max: number, s: number): number[] => {
+          const values: number[] = [];
+          for (let v = Math.ceil((min - s + 1.3) / spacing) * spacing; v <= max - s - 1.3; v += spacing) values.push(v + s);
+          return values;
+        };
+        const sample = template.lights[0];
+        for (const x of nodes(b.minX, b.maxX, shift.x)) for (const z of nodes(b.minZ, b.maxZ, shift.z))
+          world.lights.push({ id: `${id}/lonely-light/${world.lights.length}`, x, z, roomId: parts[0]!.id, ceilingY: h + hallCeiling, rotation: 0,
+            width: sample?.width ?? 1.55, intensity: rng.float(.98, 1.18), color: sample?.color ?? 0xffffe4, dead: false, unstable: false, phase: rng.float(0, Math.PI * 2), level: 0 });
+      } else if (mode === 'rooms') {
         for (const l of template.lights) {
           const x = l.x + shift.x, z = l.z + shift.z, room = roomAt(x, z);
           if (!room || !pointInRect(x, z, b, -.001) || lightBlocked(x, z) || protectedRoutes.some(r => pointInRect(x, z, r, -.1))) continue;
-          world.lights.push({ ...l, id: `${id}/${l.id}`, x, z, roomId: room.id, ceilingY: h + (normal ? l.ceilingY : 2.74) });
+          world.lights.push({ ...l, id: `${id}/${l.id}`, x, z, roomId: room.id, ceilingY: h + (normal ? l.ceilingY : hallCeiling) });
         }
         for (const socket of template.detailSockets) {
           const x = socket.position.x + shift.x, z = socket.position.z + shift.z, room = roomAt(x, z);
@@ -370,7 +398,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     for (const side of sides) {
       const [dx, dz] = deltas[side], alongX = dz !== 0, otherH = regionalDatum(seed, gx + dx, gz + dz).y, portalY = (h + otherH) / 2;
       const neighborAtrium = regionalAtrium(seed, gx + dx, gz + dz, owner.story);
-      if (mode === 'rooms' && !neighborAtrium && regionalDatum(seed, gx + dx, gz + dz).id === datum.id) continue;
+      if (mode === 'rooms' && !neighborAtrium && regionalDatum(seed, gx + dx, gz + dz).id === datum.id && !lonely && !hallAt(gx + dx, gz + dz)) continue;
       const min = alongX ? b.minX : b.minZ, max = alongX ? b.maxX : b.maxZ, mid = alongX ? p.x : p.z;
       const sideBounds = (lo: number, hi: number): Rect => alongX ? { minX: lo, maxX: hi, minZ: side === 'north' ? b.minZ : b.maxZ - wallHalf, maxZ: side === 'north' ? b.minZ + wallHalf : b.maxZ }
         : { minZ: lo, maxZ: hi, minX: side === 'west' ? b.minX : b.maxX - wallHalf, maxX: side === 'west' ? b.minX + wallHalf : b.maxX };
@@ -401,7 +429,7 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     prism: addPrism, wall,
   });
 
-  applySpatialRelief(world, featureSlices.map(s => s.reservation));
+  applySpatialRelief(world, [...featureSlices.map(s => s.reservation), ...lonelyHalls]);
 
   const carve = (source: typeof world.walls[number], aperture: Rect) => {
     if (!world.walls.includes(source)) return;
@@ -469,11 +497,11 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
   reconcileStructuralSupports(world, (id, b, bottom, top, tint, detail) => wall(id, b, bottom, top, tint, detail, 'support'));
   completeCeilingEnvelope(world, addPrism);
   const wallCount = world.walls.length;
-  installOrdinaryArchitecture(world, featureSlices.map(s => s.reservation), gateVestibules);
+  installOrdinaryArchitecture(world, [...featureSlices.map(s => s.reservation), ...lonelyHalls], gateVestibules);
   if (world.walls.length !== wallCount) rebuildFloors();
 
   world.unlitZones = [];
-  for (const cell of spatial.cells.filter(c => c.mode === 'rooms')) for (const zone of cellTemplates.get(cell.id)?.unlitZones ?? []) {
+  for (const cell of spatial.cells.filter(c => c.mode === 'rooms' && !lonelyCells.has(c.id))) for (const zone of cellTemplates.get(cell.id)?.unlitZones ?? []) {
     const bounds = intersect(move(zone), cell.bounds); if (bounds) world.unlitZones.push(bounds);
   }
   for (const light of world.lights) if (world.unlitZones.some(r => pointInRect(light.x, light.z, r))) light.dead = true;

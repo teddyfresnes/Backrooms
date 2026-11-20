@@ -1481,9 +1481,16 @@ export class WorldView {
       this.ownedMaterials = baked.ownedMaterials;
     } else {
       const zonal = createZonalMaterialSet(sourceMaterials, plan, this.regionalLightField);
-      this.materials = zonal.materials;
       this.lightingContext = zonal.context;
       this.ownedMaterials = zonal.ownedMaterials;
+      // The library diffuser is shared by every chunk. A chunk whose panels follow
+      // its own circuits (events, northern mains) needs its own copy: decorating the
+      // shared one from two views nested the shader injections and broke the panels.
+      if (this.environmentLighting.active || this.northernLighting.active) {
+        const fixtureGlow = zonal.materials.fixtureGlow.clone();
+        this.materials = { ...zonal.materials, fixtureGlow };
+        this.ownedMaterials.push(fixtureGlow);
+      } else this.materials = zonal.materials;
     }
     this.surfaceStyle = plan.surfaceStyle ?? DEFAULT_SURFACE_STYLE;
     for (const material of [this.materials.floor, this.materials.wall, this.materials.plaster, this.materials.ceiling, this.materials.baseboard]) {

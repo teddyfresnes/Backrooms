@@ -6,6 +6,7 @@ import { lightPanelOverlapsRect } from './generateWorld';
 import * as THREE from 'three';
 import { ceilingFixturePose } from '../render/CeilingFixture';
 import { findSurface, surfaceY } from './WalkableTopology';
+import { lonelyHallCell } from './EnvironmentEvents';
 
 it('restores varied historical architecture in the actual ordinary entry point, with a majority of non-hall area', () => {
   let ordinaryArea = 0, hallArea = 0, thickLength = 0, wallLength = 0, crossCellRooms = 0, lights = 0;
@@ -13,7 +14,7 @@ it('restores varied historical architecture in the actual ordinary entry point, 
   for (let i = 0; i < 48; i++) {
     // The last 16 seeds are a holdout corpus distinct from the physical demos.
     const w = generateInfiniteChunk(`${i < 32 ? 'BSP-RESTORE' : 'BSP-HOLDOUT'}-${i}`, { x: 0, z: 0, story: 0 });
-    expect(w.version).toBe(23);
+    expect(w.version).toBe(24);
     expect(w.rooms.some(r => r.id.includes('/quarter-'))).toBe(false);
     const united = new Map<string, { minX: number; maxX: number; minZ: number; maxZ: number }>();
     for (const r of w.rooms.filter(r => r.id.includes('/bsp/') || r.id.endsWith('/hall'))) {
@@ -38,11 +39,13 @@ it('restores varied historical architecture in the actual ordinary entry point, 
         expect(lightPanelOverlapsRect(l, bounds), `${w.seed} ${l.id} through ${wall.id}`).toBe(false);
       }
     }
-    // Cell boundaries within a plateau no longer receive a facade in maze mode.
+    // Cell boundaries within a plateau no longer receive a facade in maze mode,
+    // except around the reserved empty hall of the lonely chair.
     for (const cell of w.spatial!.cells.filter(c => c.mode === 'rooms')) {
       const m = /cell\/(-?\d+)\/(-?\d+)\//.exec(cell.id)!, x = Number(m[1]), z = Number(m[2]);
       for (const [side, dx, dz] of [['east', 1, 0], ['south', 0, 1]] as const) if (!regionalAtrium(w.seed, x + dx, z + dz, 0) && regionalDatum(w.seed, x + dx, z + dz).id === cell.regionId) {
-        expect(w.walls.some(wall => wall.id.startsWith(`${cell.id}/facade-${side}`))).toBe(false);
+        const hall = lonelyHallCell(w.seed, x, z, 0) || lonelyHallCell(w.seed, x + dx, z + dz, 0);
+        expect(w.walls.some(wall => wall.id.startsWith(`${cell.id}/facade-${side}`))).toBe(hall);
       }
     }
   }

@@ -54,8 +54,18 @@ import type {
 import { pointInRect, rectArea, rectCenter, rectDepth, rectWidth } from '../world/types';
 import { nearestSlidesCoord } from '../world/NorthernLayout';
 import { SLIDES_APPROACH } from '../world/SlidesStructure';
+import type { EnvironmentEventKind } from '../world/EnvironmentEvents';
 
 const ACTIVE_RADIUS = 1;
+/** `/locate` command, label and aliases of each environmental event. */
+const ENVIRONMENT_LOCATE: Record<EnvironmentEventKind, readonly [string, string, ...string[]]> = {
+  'fire-alarm': ['alarme', 'alarme incendie', 'alarm', 'sirene', 'sirène'],
+  flicker: ['neons', 'néons défaillants', 'néons', 'flicker', 'clignotement'],
+  flood: ['inondation', 'zone inondée', 'eau', 'water', 'flood'],
+  telephone: ['telephone', 'téléphone mural', 'téléphone', 'phone'],
+  'lonely-chair': ['chaise', 'chaise solitaire', 'chair'],
+  surveillance: ['camera', 'caméra de surveillance', 'caméra', 'surveillance'],
+};
 const HALF_CHUNK_SIZE = INFINITE_CHUNK_SIZE * 0.5;
 export interface EnvironmentChunk {
   key: string;
@@ -887,6 +897,14 @@ export class WorldStream {
       for (const l of runtime.plan.spatial?.landmarks ?? []) {
         const aliases = l.kind === 'slides' ? ['slides', 'toboggans', 'toboggan'] : l.kind.startsWith('escalier-') ? ['escalier', l.kind] : [l.kind];
         addTarget(runtime, l.kind === 'slides' ? 'toboggans' : l.kind, l.kind === 'slides' ? 'Les quatre toboggans' : l.kind.replaceAll('-', ' '), aliases, l.position);
+      }
+      // Rare environmental events of the mounted neighbourhood, at a free standing
+      // point: facing a wall device, at the far end of the flicker, beside the chair.
+      for (const e of runtime.plan.environmentEvents ?? []) {
+        const [command, label, ...aliases] = ENVIRONMENT_LOCATE[e.kind], c = rectCenter(e.bounds);
+        const point = e.mount ? { x: e.mount.position.x + Math.sin(e.mount.yaw) * 1.6, z: e.mount.position.z + Math.cos(e.mount.yaw) * 1.6 }
+          : e.apparition ? { x: e.apparition.approach.x, z: e.apparition.approach.z } : e.chair ? { x: c.x, z: c.z + 9 } : c;
+        addTarget(runtime, command, label, ['evenement', 'event', ...aliases], { ...point, y: e.floorY + .865 });
       }
       for (const c of runtime.plan.spatial?.cells.filter(c => c.mode === 'rooms') ?? []) {
         const p = rectCenter(c.bounds); addTarget(runtime, 'grand-plateau', 'grande zone régionale', ['plateau', 'zone'], { ...p, y: c.floorY + .865 });

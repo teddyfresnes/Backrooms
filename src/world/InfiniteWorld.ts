@@ -2188,9 +2188,10 @@ const prefixPlanIds = (plan: WorldPlan, key: ChunkKey): void => {
     if (plan.northern.slides) { plan.northern.slides.id=prefix+plan.northern.slides.id; plan.northern.slides.roomId=prefix+plan.northern.slides.roomId; }
   }
   plan.environmentEvents = plan.environmentEvents?.map(event => ({ ...event,
-    id: `${prefix}${event.id}`, roomId: `${prefix}${event.roomId}`,
+    id: `${prefix}${event.id}`, roomId: `${prefix}${event.roomId}`, roomIds: event.roomIds.map(id => `${prefix}${id}`),
     lightIds: event.lightIds.map(id => `${prefix}${id}`),
     ...(event.mount ? { mount: { ...event.mount, wallId: `${prefix}${event.mount.wallId}` } } : {}),
+    ...(event.extraMounts ? { extraMounts: event.extraMounts.map(m => ({ ...m, wallId: `${prefix}${m.wallId}` })) } : {}),
   }));
   plan.detailSockets = plan.detailSockets.map((socket) => ({
     ...socket,

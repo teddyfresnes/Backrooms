@@ -1,14 +1,15 @@
 import type { WorldPlan, RoomRecord, StaticCollider } from '../../src/world/types';
 import { rectCenter } from '../../src/world/types';
-import type { EnvironmentEventKind, EnvironmentEventPlan } from '../../src/world/EnvironmentEvents';
-import { ENVIRONMENT_EVENT_CONFIG, ENVIRONMENT_EVENT_DEFINITIONS } from '../../src/world/EnvironmentEvents';
+import type { EnvironmentEventKind, EnvironmentEventPlan, EventZone } from '../../src/world/EnvironmentEvents';
+import { ENVIRONMENT_EVENT_CONFIG, ENVIRONMENT_EVENT_DEFINITIONS, LONELY_HALL_SUFFIX, zoneEnclosed } from '../../src/world/EnvironmentEvents';
 import { SeededRandom } from '../../src/world/SeededRandom';
 import { surfaceCollider } from '../../src/world/WalkableTopology';
 
-/** A real closed room with a 2m doorway, slab and three working panels. */
+/** A real closed room with a 2m doorway, slab and three working panels. The
+ * chair only accepts the hall that SpatialWorld reserves, hence its room id. */
 export const environmentFixture = (kind: EnvironmentEventKind, floorY = 0): WorldPlan => {
   const bounds = { minX: -10, maxX: 10, minZ: -10, maxZ: 10 };
-  const room: RoomRecord = { id: 'room', bounds, kind: 'open-hall', level: 0, floorY, ceilingHeight: floorY + 3.05, detailDensity: 0, access: 'open' };
+  const room: RoomRecord = { id: kind === 'lonely-chair' ? `cell/0/0/0${LONELY_HALL_SUFFIX}` : 'room', bounds, kind: 'open-hall', level: 0, floorY, ceilingHeight: floorY + 3.05, detailDensity: 0, access: 'open' };
   const surface = { id: 'slab', roomId: room.id, ownerStory: 0, layer: 'floor', role: 'floor' as const, bounds,
     profile: { kind: 'flat' as const, y: floorY }, ceilingY: floorY + 3.05, thickness: .16, support: 'slab' as const, access: 'open' as const, edges: 'architecture' as const };
   const walls: WorldPlan['walls'] = [
@@ -22,9 +23,10 @@ export const environmentFixture = (kind: EnvironmentEventKind, floorY = 0): Worl
     lights: [-6, 0, 6].map((z, i) => ({ id: `lamp-${i}`, x: 0, z, ceilingY: floorY + 3.05, rotation: 0, width: 1, intensity: 1, color: 0xffffff, dead: false, unstable: false, phase: 0, roomId: room.id, level: 0 })),
     missingCeilingTiles: [], features: [], detailSockets: [], propPlacements: [], colliders, floorRects: [bounds], floorOpenings: [],
     topology: { version: 2, ownerStory: 0, surfaces: [surface], connections: [], volumes: [], diagnostics: [] }, spawn: { x: 0, y: floorY + .865, z: 8 } };
-  const event: EnvironmentEventPlan = { id: `event-${kind}`, kind, roomId: room.id, bounds, floorY, ceilingY: floorY + 3.05, seed: 'EVENT-FIXTURE', lightIds: plan.lights.map(l => l.id) };
-  const definition = ENVIRONMENT_EVENT_DEFINITIONS[kind];
-  if (!definition.eligible(room) || !definition.prepare(plan, event, room, new SeededRandom(event.seed), { ...ENVIRONMENT_EVENT_CONFIG, dripChance: 1 })) throw new Error(`Invalid ${kind} fixture at ${JSON.stringify(rectCenter(bounds))}`);
+  const event: EnvironmentEventPlan = { id: `event-${kind}`, kind, roomId: room.id, roomIds: [room.id], bounds, floorY, ceilingY: floorY + 3.05, seed: 'EVENT-FIXTURE', lightIds: plan.lights.map(l => l.id) };
+  const definition = ENVIRONMENT_EVENT_DEFINITIONS[kind], zone: EventZone = { room, roomIds: [room.id], bounds, floorY, ceilingY: floorY + 3.05 };
+  if (!definition.eligible(zone) || (definition.enclosed && !zoneEnclosed(plan, bounds, floorY))
+    || !definition.prepare(plan, event, zone, new SeededRandom(event.seed), { ...ENVIRONMENT_EVENT_CONFIG, dripChance: 1 })) throw new Error(`Invalid ${kind} fixture at ${JSON.stringify(rectCenter(bounds))}`);
   plan.environmentEvents = [event];
   return plan;
 };

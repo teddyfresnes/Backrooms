@@ -5,19 +5,25 @@ import type { WorldPlan } from '../world/types';
  * overwrite global lighting or a neighbouring room's lamps, in either mode. */
 export class EnvironmentLighting {
   readonly offset = { value: new THREE.Vector3() };
-  readonly slots: { id: string; bounds: THREE.Vector4; height: THREE.Vector4; lamp: THREE.Vector4 }[];
+  /** One slot per light source: each alarm unit adds its own red pulse. */
+  readonly slots: { id: string; primary: boolean; bounds: THREE.Vector4; height: THREE.Vector4; lamp: THREE.Vector4 }[];
   private readonly decorated = new WeakSet<THREE.Material>();
   constructor(plan: WorldPlan) {
-    this.slots = (plan.environmentEvents ?? []).filter(e => e.kind === 'flicker' || e.kind === 'fire-alarm').map(e => ({
-      id: e.id, bounds: new THREE.Vector4(e.bounds.minX, e.bounds.minZ, e.bounds.maxX, e.bounds.maxZ),
-      // z circuit level, w red pulse. min/max Y clip the actual room volume.
-      height: new THREE.Vector4(e.floorY - .08, e.ceilingY + .08, 1, 0),
-      lamp: new THREE.Vector4(e.mount?.position.x ?? 0, e.mount?.position.y ?? 0, e.mount?.position.z ?? 0, 7),
-    }));
+    this.slots = (plan.environmentEvents ?? []).filter(e => e.kind === 'flicker' || e.kind === 'fire-alarm').flatMap(e => {
+      const lamps = e.kind === 'fire-alarm' && e.mount ? [e.mount, ...(e.extraMounts ?? [])] : [e.mount];
+      return lamps.map((m, i) => ({
+        id: e.id, primary: i === 0, bounds: new THREE.Vector4(e.bounds.minX, e.bounds.minZ, e.bounds.maxX, e.bounds.maxZ),
+        // z circuit level, w red pulse. min/max Y clip the actual room volume.
+        height: new THREE.Vector4(e.floorY - .08, e.ceilingY + .08, 1, 0),
+        lamp: new THREE.Vector4(m?.position.x ?? 0, m?.position.y ?? 0, m?.position.z ?? 0, 7),
+      }));
+    });
   }
+  /** Whether this chunk's materials receive any local event lighting. */
+  get active(): boolean { return this.slots.length > 0; }
+  /** The circuit level dims the zone once (first slot); every unit pulses red. */
   set(id: string, level: number, red = 0): void {
-    const slot = this.slots.find(s => s.id === id);
-    if (slot) { slot.height.z = level; slot.height.w = red; }
+    for (const slot of this.slots) if (slot.id === id) { slot.height.z = slot.primary ? level : 1; slot.height.w = red; }
   }
   decorate(root: THREE.Object3D): void {
     if (!this.slots.length) return;
@@ -33,6 +39,8 @@ export class EnvironmentLighting {
     const before = material.onBeforeCompile.bind(material), key = material.customProgramCacheKey.bind(material);
     material.onBeforeCompile = (shader, renderer) => {
       before(shader, renderer);
+      // Safety for a material shared by two chunk views: inject once, never twice.
+      if (shader.vertexShader.includes('vEnvironmentWorld')) return;
       Object.assign(shader.uniforms, { envOffset: this.offset,
         envBounds: { value: this.slots.map(s => s.bounds) }, envHeight: { value: this.slots.map(s => s.height) },
         envLamps: { value: this.slots.map(s => s.lamp) } });

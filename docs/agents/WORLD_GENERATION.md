@@ -20,7 +20,7 @@ rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/
 
 ## Ordre du pipeline
 
-Le pipeline ordinaire (plan version 23, topologie/spatial version 2) est :
+Le pipeline ordinaire (plan version 24, topologie/spatial version 2) est :
 
 1. `RegionalPlan` choisit les districts mondiaux et leurs datums signés ;
 2. il réserve les atria sur deux à quatre adresses verticales. Les galeries
@@ -44,7 +44,10 @@ Le pipeline ordinaire (plan version 23, topologie/spatial version 2) est :
    derrière chaque seuil. Les luminaires suivent une trame régulière par
    gabarit (4,8 / 7,2 / 9,6 m), alignée d'une pièce à l'autre. Les cloisons
    restent à 2 m au moins des lignes de cellules de 28 m : plus de fragment
-   de pièce en écharde. Le chemin legacy ne voit jamais ces réglages ;
+   de pièce en écharde. Une cellule réservée par `lonelyHallCell` (chaise
+   solitaire, voir [les événements](ENVIRONMENT_EVENTS.md)) devient une salle
+   vide unique, fermée comme une façade de district. Le chemin legacy ne voit
+   jamais ces réglages ;
 5. `SpatialRelief` ajoute les socles et terrasses pleins au sol porteur ;
 6. `BspConnectivity` relie les composantes d'un même datum, même si chacune a
    déjà sa propre sortie ; une réparation ouvre une porte par composante, pas

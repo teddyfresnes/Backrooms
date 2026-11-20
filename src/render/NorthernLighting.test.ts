@@ -31,6 +31,16 @@ describe('local mains supply with a working flashlight', () => {
     expect(lights.powerAt(6,1.5,0)).toBe(1); expect(lights.powerAt(0,5,0)).toBe(1);
     lights.set('circuit',true); expect(lights.powerAt(0,1.5,0)).toBe(1); context.lightField.dispose();
   });
+  it('compiles a diffuser shared by two red chunks with one injection', () => {
+    const plan = environmentFixture('telephone'); plan.northern = { kind: 'red-zone', circuits: [] };
+    const shared = new THREE.MeshBasicMaterial({ name: 'fluorescent-diffuser' });
+    new NorthernLighting(plan).apply(shared); new NorthernLighting(plan).apply(shared);
+    const shader = { vertexShader: THREE.ShaderLib.basic.vertexShader, fragmentShader: THREE.ShaderLib.basic.fragmentShader, uniforms: {} };
+    shared.onBeforeCompile(shader as THREE.WebGLProgramParametersWithUniforms, {} as THREE.WebGLRenderer);
+    expect(shader.vertexShader.split('varying vec3 vNorthernWorld;')).toHaveLength(2);
+    expect(shader.fragmentShader.split('varying vec3 vNorthernWorld;')).toHaveLength(2);
+    expect(new NorthernLighting(plan).active).toBe(true); shared.dispose();
+  });
   it('builds a non-emissive wall lever with owned GPU resources', () => {
     const model = createEnvironmentModel('circuit-breaker','CIRCUIT'), geometry = new Set<THREE.BufferGeometry>(); let disposed = 0;
     expect(model.lever?.name).toBe('circuit-breaker-lever');

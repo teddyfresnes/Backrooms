@@ -14,6 +14,8 @@ export class NorthernLighting {
       bounds: new THREE.Vector4(c.bounds.minX, c.bounds.minZ, c.bounds.maxX, c.bounds.maxZ),
       height: new THREE.Vector3(c.floorY - .08, c.ceilingY + .08, c.mode === 'ambient' ? 0 : 1) }));
   }
+  /** Whether this chunk's materials receive local mains power or the red tint. */
+  get active(): boolean { return this.slots.length > 0 || this.tint.value.y !== 1; }
   set(id: string, on: boolean): void { const s = this.slots.find(s => s.id === id); if (s) s.height.z = on ? 1 : 0; }
   powerAt(x: number, y: number, z: number): number {
     return this.slots.some(s => s.height.z === 0 && x >= s.bounds.x && x <= s.bounds.z && z >= s.bounds.y && z <= s.bounds.w
@@ -33,6 +35,8 @@ export class NorthernLighting {
     const tint = material.userData.northernPreserveColor ? { value: new THREE.Vector3(1,1,1) } : this.tint;
     material.onBeforeCompile = (shader, renderer) => {
       before(shader, renderer);
+      // Safety for a material shared by two chunk views: inject once, never twice.
+      if (shader.vertexShader.includes('vNorthernWorld')) return;
       Object.assign(shader.uniforms, { northernOffset: this.offset, northernTint: tint,
         ...(count ? { northernBounds: { value: this.slots.map(s => s.bounds) }, northernHeight: { value: this.slots.map(s => s.height) } } : {}) });
       shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vNorthernWorld;')

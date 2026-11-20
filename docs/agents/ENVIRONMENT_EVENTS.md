@@ -3,40 +3,54 @@
 `world/EnvironmentEvents.ts` contient les données sérialisables, les probabilités
 et le registre des contraintes. `generateInfiniteChunk` l’appelle après la géométrie
 spatiale finale et avant `populateRareProps`. Les monuments historiques, dont
-`epic3`, restent exclus. Le plan spatial passe en version 21 ; les sols et leurs
-ancres de sauvegarde restent identiques.
+`epic3`, et les rangées réservées de `NorthernLayout` restent exclus. Tirages et
+IDs sont en `v2` (`environment/v2/x/z/étage`) ; le plan spatial est en version 24.
 
 ## Tirages et géométrie
 
 Une cellule régionale de 28 m représente une opportunité, indépendamment du
 nombre de petites surfaces de sol. Réglage : `ENVIRONMENT_EVENT_CONFIG`.
 
-| Événement | Probabilité de proposition |
+| Événement | Probabilité moyenne par cellule |
 |---|---:|
 | Alarme incendie | 0,15 % |
 | Néons clignotants | 0,5 % |
 | Eau peu profonde | 0,6 % |
 | Téléphone | 0,4 % |
-| Chaise solitaire | 0,3 % |
+| Chaise solitaire | 0,3 % (×4 sur les 4 cellules intérieures, 0 ailleurs) |
 | Surveillance | 0,5 % |
 | Gouttes | 10 % des zones inondées |
 
 Un seul tirage catégoriel évite plusieurs événements par cellule. L’amincissement
-par priorité compare les propositions voisines sans générer leurs plans : il
-réserve **36 m entre centres de salles en 3D**, plus la marge du déplacement des
-centres. Les altitudes viennent de `regionalDatum`, même sur les autres étages.
-Cette exclusion et la compatibilité géométrique diminuent les fréquences finales.
-Une proposition incompatible n’est jamais forcée ni remplacée par un autre type.
+de Matérn compare les propositions voisines sans générer leurs plans : **36 m
+horizontaux entre centres de zones**, plus deux fois `MAX_ROOM_DRIFT` (14 m).
+Deux zones séparées d’au moins `verticalSeparation` (9 m, deux étages) ne se
+gênent pas : sinon les étages invisibles supprimaient la plupart des tirages.
+Les altitudes viennent de `regionalDatum`. Une proposition incompatible n’est
+jamais forcée ni remplacée par un autre type. Mesure sur 6 seeds × 1 600 cellules
+d’un étage, zones narratives et monuments compris : ≈ 0,38 % des cellules portent
+un événement construit, soit environ un pour 17 chunks d’un étage.
 
-Seules les salles ouvertes, complètes dans leur propriétaire, plates, assez hautes
-et éloignées des réservations architecturales sont retenues. Les supports muraux
-utilisent une face réelle avec dégagement accessible. Les références de murs,
-salles et néons sont préfixées par `InfiniteWorld`.
+Une zone est la **pièce physique** : `eventZones` fusionne les fragments d’une même
+pièce BSP source découpée par les cellules (même altitude, joint sans mur) et
+écarte les unions non rectangulaires. Elle doit être complète dans son chunk, plate,
+ouverte, assez haute, hors features (portes exceptées), symétries et circuits.
+Alarme, néons, eau et chaise exigent en plus une pièce close (`zoneEnclosed` :
+chaque côté muré à 50 % au moins, ouverture la plus longue ≤ 4,6 m) ; sinon leur
+lumière ou leur eau traceraient une couture droite en pleine pièce. Les supports
+muraux utilisent une face réelle avec dégagement accessible. Une zone d’alarme
+d’au moins 16 m reçoit un second boîtier (`extraMounts`, ≥ 10 m du premier).
+`InfiniteWorld` préfixe salles (`roomIds`), murs, néons et supports.
 
-La chaise réserve une grande pièce BSP existante (au moins 12 m de côté et 190 m²),
-vide d’obstacles intérieurs ; mobilier générique et scènes y sont exclus. L’eau à
-3,5 cm est découpée selon les sols, murs et ouvertures. Les surfaces adjacentes ne
-créent pas de coutures sèches artificielles.
+**Salle de la chaise.** `lonelyHallCell` est consulté par `SpatialWorld` avant le
+partitionnement : une cellule intérieure acceptée pour la chaise, en district
+`maze` homogène, sans atrium, sans feature héritée ni rangée narrative, devient
+une salle vide unique de 28 × 28 m (`…/lonely-hall`). Elle est fermée comme une
+façade de district, avec une porte de 4 m au centre de chaque côté. Ses voisines
+construisent leur moitié de façade et gardent un vestibule dégagé. Plafond et
+treillis de néons sont ceux du grain du district (`bspGrainProfile`) ; ni cloison,
+masse, relief, mur liminal, socket, circuit nordique ni mobilier n’y entrent.
+L’eau à 3,5 cm est découpée selon les sols, murs et ouvertures de la zone.
 
 ## Runtime et propriété
 
@@ -55,14 +69,22 @@ des panneaux sont analytiques, sans rendu miroir ni réflexion complète du déc
 `render/EnvironmentLighting` compose des uniforms locaux aux rectangles et aux
 hauteurs réelles, en moderne comme en classique. Il ne remplace pas ceux du
 chasseur et n’ajoute aucune lumière dynamique ni shadow map. Le rouge est ajouté
-aux surfaces proches du boîtier selon l'enveloppe du véritable enregistrement de sirène.
+aux surfaces proches de chaque boîtier (un slot par boîtier, le niveau du circuit
+sur le premier seulement) selon l'enveloppe du véritable enregistrement de sirène.
+Tous les boîtiers d’une zone partagent la même phase audio et lumineuse. Le diffuseur
+des néons de la bibliothèque est partagé entre chunks : une `WorldView` dont les
+panneaux suivent un circuit (événement ou secteur nordique, `active`) en possède
+une copie. `EnvironmentLighting` et `NorthernLighting` n’injectent leur code
+qu’une fois par shader : décorer un matériau partagé depuis deux vues cassait sa
+compilation.
 
 `audio/EnvironmentAudio` utilise le contexte et le bus maître d’`AudioSystem`, des
 `PannerNode` HRTF/inverse, un compresseur et un budget de 28 voix. Les échantillons
 synthétiques sont conservés une fois par session. La voix française murmurée et
 la sirène fournie sont des Vorbis locaux déclarés dans les licences. Sonnerie
-avec hystérésis ; l'alarme conserve une seule boucle, démarre à gain nul et
-s'éteint progressivement entre 24 et 48 m, avant le déchargement du propriétaire.
+avec hystérésis ; chaque boîtier d'alarme conserve une seule boucle (un peu plus
+douce s'il y en a deux), démarre à gain nul et s'éteint progressivement entre
+24 et 48 m, avant le déchargement du propriétaire.
 Son volume dépend de l'écart au sol réel du joueur (nul à ±2,2 m), jamais du
 numéro d'étage ni de la caméra. Cinq rayons et un lissage de 120 ms évitent les
 basculements secs aux portes. Pause et volume restent communs.
@@ -78,7 +100,8 @@ Un retournement exige 115° horizontaux pendant 120 ms. Sans retournement : souf
 croissant, un pas derrière et raccrochage. Le combiné utilise la cadence d’effort
 du joueur ; aucune capture de microphone.
 
-Durant l’appel, la navigation existante se prépare. `RiftEncounter` prête le chasseur
+Durant l’appel, la navigation existante se prépare deux fois par seconde (et les
+tentatives de poursuite quatre fois par seconde), jamais à chaque image. `RiftEncounter` prête le chasseur
 uniquement en phase libre `north` ou `done`, créature cachée et chasseur dormant.
 `BackroomsHunt` choisit un sol relié et libre à 8–24 m, derrière la caméra, hors
 frustum. Il lance la poursuite existante sans créer ni remplacer une créature
@@ -88,8 +111,11 @@ Sans position valide ou si la créature est occupée, aucune apparition n’est 
 L’apparition des néons est un acteur distinct, sans physique ni IA, chargé à
 l’approche. Il réutilise le modèle et la marche `stalk`. Sa fenêtre visible est
 encadrée par deux coupures complètes. Une découverte consommée ne se rejoue pas.
-La chaise ne change qu’une fois, après une visite, à plus de 12 m de la pièce,
-pendant 1,5 s sans visibilité (frustum et plusieurs rayons). La caméra gèle à
+La chaise suit six stations déterministes (centre, puis pas de 1,6 à 3,4 m et
+rotations de 0,5 à 1,4 rad, à 6 m au moins des murs). Elle avance d’une station
+par visite suivie d’un départ : à plus de 12 m de la salle, pendant 1,5 s sans que
+sa place actuelle ni la suivante soient visibles (frustum et plusieurs rayons).
+`chairIndex` persiste ; un ancien `chairMoved` vaut la deuxième station. La caméra gèle à
 proximité ; elle ne repart qu’après éloignement, délai et absence de regard, avec
 vitesses de rotation bornées.
 
@@ -102,8 +128,12 @@ des découvertes de ce monde.
 
 ## Validation
 
-Les tests dédiés couvrent espacement, plans infinis réels et IDs, eau, deux issues
-du téléphone, servo, persistance après éviction, offsets/collisions Rapier, retours,
-remplacements de vue, 50 cycles de streaming, sons 3D/nettoyage et composition des
-shaders. Les suites du chasseur, de la faille et des sauvegardes protègent leur
-intégration. Les sondes CPU ne remplacent pas une validation visuelle WebGL.
+Les tests dédiés couvrent espacement anisotrope, fusion des fragments et pièces
+closes, salle de la chaise réelle (vide, fermée, reliée, éclairée), plans infinis
+et IDs, eau, alarmes multiples, deux issues du téléphone, servo, stations
+successives de la chaise, persistance après éviction, offsets/collisions Rapier,
+remplacements de vue, 50 cycles de streaming, sons 3D/nettoyage et shaders. Les
+suites du chasseur, de la faille et des sauvegardes protègent leur intégration.
+En jeu, `/locate alarme|neons|inondation|telephone|chaise|camera` (alias
+`evenement`) mène à un événement du voisinage chargé. Les sondes CPU ne
+remplacent pas une validation visuelle WebGL.

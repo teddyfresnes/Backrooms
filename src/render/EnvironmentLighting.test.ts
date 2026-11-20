@@ -26,6 +26,17 @@ describe('environmental GPU contracts', () => {
     expect(shader.uniforms).toHaveProperty('envBounds');
     material.dispose(); context.lightField.dispose();
   });
+  it('injects once into a material shared by two chunk views, and gives each alarm unit its red slot', () => {
+    const plan = environmentFixture('fire-alarm'), first = new EnvironmentLighting(plan), second = new EnvironmentLighting(plan);
+    const shared = new THREE.MeshBasicMaterial({ name: 'fluorescent-diffuser' });
+    first.apply(shared); second.apply(shared);
+    const shader = shaderFor(shared), declarations = (text: string) => text.split('varying vec3 vEnvironmentWorld;').length - 1;
+    expect(declarations(shader.vertexShader)).toBe(1); expect(declarations(shader.fragmentShader)).toBe(1);
+    expect(first.active).toBe(true); expect(first.slots).toHaveLength(2);
+    first.set(plan.environmentEvents![0]!.id, .5, 2);
+    expect(first.slots.map(s => [s.height.z, s.height.w])).toEqual([[.5, 2], [1, 2]]);
+    shared.dispose();
+  });
   it('keeps water highlights and contact ripples after event lighting decoration', () => {
     const plan = environmentFixture('flood'), water = new EnvironmentWater(plan.environmentEvents![0]!, plan);
     const shader = shaderFor(water.material);

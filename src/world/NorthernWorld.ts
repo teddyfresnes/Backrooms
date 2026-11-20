@@ -1,5 +1,5 @@
 import { SeededRandom } from './SeededRandom';
-import { clearEventFootprint, findEventWallMount, type WallMount } from './EnvironmentEvents';
+import { clearEventFootprint, findEventWallMount, LONELY_HALL_SUFFIX, type WallMount } from './EnvironmentEvents';
 import { isRedZoneRow, NORTHERN_LAYOUT } from './NorthernLayout';
 import { pointInRect, rectArea, rectCenter, rectDepth, rectWidth, type Rect, type Vec3Data, type WorldPlan } from './types';
 
@@ -40,7 +40,9 @@ export const populateNorthernWorld = (plan: WorldPlan, seed: string, owner: { x:
     reserveSlides(plan, owner, structure.roomId, structure.bounds, { ...structure.approach, y: structure.floorY });
     return;
   }
+  // The lonely hall is reserved for its chair; it never hosts a circuit.
   const rooms = rng.shuffle(plan.rooms.filter(r => r.access !== 'sealed' && r.access !== 'secret' && r.ceilingHeight - (r.floorY ?? 0) >= 2.6
+    && !r.id.endsWith(LONELY_HALL_SUFFIX)
     && !plan.features.some(f => 'roomId' in f && f.roomId === r.id)
     && !plan.topology?.surfaces.some(s => s.roomId === r.id && (s.profile.kind !== 'flat' || s.access !== 'open'))));
   if (before && !rng.chance(.42)) return;

@@ -11,7 +11,7 @@ import { SeededRandom } from '../world/SeededRandom';
 import { getPropAsset } from '../world/PropCatalog';
 import { pointInRect, rectCenter } from '../world/types';
 import type { StaticCollider, Vec3Data } from '../world/types';
-import type { EnvironmentEventPlan } from '../world/EnvironmentEvents';
+import type { EnvironmentEventPlan, WallMount } from '../world/EnvironmentEvents';
 import { EnvironmentStateStore, TelephoneSequence, SurveillanceBehavior, apparitionFrame, type EventState, type PhoneCue } from './EnvironmentBehavior';
 import { createEnvironmentModel, type EventModel } from './EnvironmentModels';
 import { EnvironmentWater } from './EnvironmentWater';
@@ -142,30 +142,42 @@ class EventInstance {
   private readonly local = new THREE.Vector3();
   private readonly ear = new THREE.Vector3();
   private readonly right = new THREE.Vector3();
+  private readonly unit = new THREE.Vector3();
+  /** Wall devices: every synchronized alarm unit, or the single phone/camera. */
+  private readonly mounts: WallMount[];
+  private readonly models: EventModel[] = [];
   private model?: EventModel;
   private chair?: THREE.Object3D;
   private water?: EnvironmentWater;
   private readonly phone = new TelephoneSequence();
   private readonly surveillance = new SurveillanceBehavior();
   private loop?: EnvironmentVoice;
+  private readonly alarmLoops: (EnvironmentVoice | undefined)[] = [];
   private breath?: EnvironmentVoice;
   private speech?: EnvironmentVoice;
   private flickerTime = -1;
   private time = 0;
   private lastOcclusion = 0;
-  private alarmOcclusion = .5;
+  /** Sampled occlusion of each alarm unit, starting half-muffled. */
+  private readonly alarmOcclusion: number[] = [];
   private chairAway = 0;
   private pendingChase = 0;
+  /** Navigation preparation and chase retries are throttled, not per frame. */
+  private chaseClock = 0;
   private disposed = false;
   private readonly baseHooks = new Map<THREE.Material, { before: THREE.Material['onBeforeCompile']; key: THREE.Material['customProgramCacheKey'] }>();
   private readonly bindings = new WeakMap<THREE.Material, EnvironmentLighting>();
   constructor(private readonly owner: EnvironmentRuntime, private chunk: EnvironmentChunk, parent: THREE.Group, readonly plan: EnvironmentEventPlan) {
     this.random = new SeededRandom(plan.seed); this.phase = this.random.float(0, ALARM_PERIOD);
     this.state = owner.states.read(plan.id); this.root.name = plan.id; parent.add(this.root);
-    if (plan.mount && (plan.kind === 'fire-alarm' || plan.kind === 'telephone' || plan.kind === 'surveillance')) {
-      this.model = createEnvironmentModel(plan.kind, plan.seed);
-      this.model.root.position.copy(plan.mount.position); this.model.root.rotation.y = plan.mount.yaw; this.root.add(this.model.root);
-      this.mountCollider();
+    this.mounts = plan.mount ? [plan.mount, ...(plan.kind === 'fire-alarm' ? plan.extraMounts ?? [] : [])] : [];
+    if (this.mounts.length && (plan.kind === 'fire-alarm' || plan.kind === 'telephone' || plan.kind === 'surveillance')) {
+      for (const [i, mount] of this.mounts.entries()) {
+        const model = createEnvironmentModel(plan.kind, i ? `${plan.seed}:unit-${i}` : plan.seed);
+        model.root.position.copy(mount.position); model.root.rotation.y = mount.yaw; this.root.add(model.root); this.models.push(model);
+      }
+      this.model = this.models[0];
+      this.mountColliders();
     }
     if (plan.kind === 'surveillance') { this.surveillance.yaw = this.state.cameraYaw ?? 0; this.surveillance.pitch = this.state.cameraPitch ?? 0; }
     if (plan.kind === 'flood') { this.water = new EnvironmentWater(plan, chunk.plan); this.root.add(this.water.root); }
@@ -176,7 +188,7 @@ class EventInstance {
     this.rebind(chunk);
   }
   private async loadChair(): Promise<void> {
-    const p = this.plan.chair!, index = this.state.chairMoved ? 1 : 0, position = p.positions[index]!;
+    const p = this.plan.chair!, index = this.chairIndex(), position = p.positions[index]!;
     const model = await createPropInstance({ id: this.plan.id, assetId: 'polyhaven:painted_wooden_chair_01', roomId: this.plan.roomId,
       position, rotationY: p.yaws[index]!, scale: 1, bounds: this.plan.bounds, kind: 'room', tone: .84 }, this.chunk.plan.visualBiome ?? 'yellow');
     if (this.disposed) { disposePropInstance(model); return; }
@@ -225,25 +237,31 @@ class EventInstance {
     }
   }
   private updateAlarm(): void {
-    const time = this.owner.audio.time + this.phase, pulse = this.owner.audio.alarmLevel(time);
-    const emitter = this.emitter(), listener = this.owner.host.camera.position, d = emitter.distanceTo(listener);
+    const time = this.owner.audio.time + this.phase, pulse = this.owner.audio.alarmLevel(time), listener = this.owner.host.camera.position;
     // Real local floor datum, never the chunk's story address or camera height.
     const floorDelta = this.owner.host.playerPosition().y - this.chunk.offset.y - .865 - this.plan.floorY;
-    // A continuous source starts silent; crossing a radius never restarts it.
-    this.loop ??= this.sound('alarm', this.plan.mount!.position, 0, true, time, 6);
-    if (alarmAudibility(d, floorDelta) > 0 && this.time - this.lastOcclusion > .12) {
-      this.lastOcclusion = this.time;
-      let clear = 0;
-      for (const [x,z] of [[0,0],[.45,0],[-.45,0],[0,.45],[0,-.45]]) {
-        this.ear.copy(listener); this.ear.x += x!; this.ear.z += z!;
-        if (this.owner.clearSight(this.ear, emitter, `environment-collider:${this.plan.id}`)) clear++;
+    // Every unit plays the same recording in phase with the strobes; extra units
+    // are a little quieter so standing between two never doubles the level.
+    const scale = this.mounts.length > 1 ? .85 : 1, sample = this.time - this.lastOcclusion > .12;
+    if (sample) this.lastOcclusion = this.time;
+    for (const [i, mount] of this.mounts.entries()) {
+      const emitter = this.world(mount.position, this.unit), d = emitter.distanceTo(listener);
+      // A continuous source starts silent; crossing a radius never restarts it.
+      this.alarmLoops[i] ??= this.sound('alarm', mount.position, 0, true, time, 6);
+      if (sample && alarmAudibility(d, floorDelta) > 0) {
+        let clear = 0;
+        for (const [x,z] of [[0,0],[.45,0],[-.45,0],[0,.45],[0,-.45]]) {
+          this.ear.copy(listener); this.ear.x += x!; this.ear.z += z!;
+          if (this.owner.clearSight(this.ear, emitter, `environment-collider:${this.plan.id}`)) clear++;
+        }
+        this.alarmOcclusion[i] = 1 - clear / 5;
       }
-      this.alarmOcclusion = 1 - clear / 5;
+      const occlusion = this.alarmOcclusion[i] ?? .5;
+      this.alarmLoops[i]?.setGain(scale * alarmAudibility(d, floorDelta, occlusion), this.owner.audio.time, .12);
+      this.alarmLoops[i]?.muffle(occlusion * .4, this.owner.audio.time);
+      this.models[i]?.lens?.color.setRGB(.18 + pulse * 3, .003 + pulse * .012, .001);
     }
-    this.loop?.setGain(alarmAudibility(d, floorDelta, this.alarmOcclusion), this.owner.audio.time, .12);
-    this.loop?.muffle(this.alarmOcclusion * .4, this.owner.audio.time);
     this.chunk.view.environmentLighting.set(this.plan.id, 1, pulse * 2.2);
-    this.model!.lens!.color.setRGB(.18 + pulse * 3, .003 + pulse * .012, .001);
   }
   private updateFlicker(delta: number): void {
     const a = this.plan.apparition!;
@@ -301,7 +319,7 @@ class EventInstance {
         this.speech = this.sound('warning', this.plan.mount!.position, .85); this.speech?.setPosition(this.phoneEar(), this.owner.audio.time); this.speech?.muffle(.8, this.owner.audio.time);
         this.owner.host.caption('Ne te retourne pas.');
       }
-      if (cue === 'turned') this.pendingChase = 4;
+      if (cue === 'turned') { this.pendingChase = 4; this.chaseClock = 0; }
       if (cue === 'step') {
         const camera = this.owner.host.camera, forward = this.owner.forward;
         const p = { x: camera.position.x - forward.x * 1.4, y: this.owner.host.playerPosition().y - .865, z: camera.position.z - forward.z * 1.4 };
@@ -324,7 +342,9 @@ class EventInstance {
     if (this.phone.phase !== 'idle' && this.phone.phase !== 'done') {
       if (d > 5.5 || !this.owner.host.canDiscover()) this.phoneCues(this.phone.interrupt());
       else {
-        this.owner.host.prepareChase();
+        // Navigation is readied twice a second during the call, not every frame.
+        this.chaseClock -= delta;
+        if (this.chaseClock <= 0) { this.chaseClock = .5; this.owner.host.prepareChase(); }
         this.phoneCues(this.phone.update(delta, this.owner.forward, this.owner.audio.warningDuration));
         this.breath?.setPosition(this.phoneEar(), this.owner.audio.time);
         this.speech?.setPosition(this.phoneEar(), this.owner.audio.time);
@@ -337,28 +357,47 @@ class EventInstance {
       this.model.receiver.position.y = THREE.MathUtils.damp(this.model.receiver.position.y, .145 - off * .17, 9, delta);
     }
     if (this.pendingChase > 0) {
-      this.pendingChase -= delta;
-      if (this.owner.host.startChase()) this.pendingChase = 0;
+      this.pendingChase -= delta; this.chaseClock -= delta;
+      // A failed placement (no hidden free floor yet) retries four times a second.
+      if (this.chaseClock <= 0) { this.chaseClock = .25; if (this.owner.host.startChase()) this.pendingChase = 0; }
     }
   }
+  /** Current station; a historical `chairMoved` save maps to the second one. */
+  private chairIndex(): number {
+    const count = this.plan.chair?.positions.length ?? 1, index = this.state.chairIndex ?? (this.state.chairMoved ? 1 : 0);
+    return Math.max(0, Math.min(count - 1, index));
+  }
+  /** Stations follow one another, then cycle without returning to the first. */
+  private nextChairIndex(): number {
+    const count = this.plan.chair?.positions.length ?? 1, index = this.chairIndex();
+    return count < 2 ? index : index + 1 < count ? index + 1 : 1;
+  }
   private placeChair(): void {
-    const p = this.plan.chair!, index = this.state.chairMoved ? 1 : 0, position = p.positions[index]!, yaw = p.yaws[index]!;
+    const p = this.plan.chair!, index = this.chairIndex(), position = p.positions[index]!, yaw = p.yaws[index]!;
     if (this.chair) { this.chair.position.copy(position); this.chair.position.y += .006; this.chair.rotation.y = yaw; }
     const asset = getPropAsset('polyhaven:painted_wooden_chair_01');
-    this.setCollider({ id: this.plan.id, center: { ...position, y: position.y + asset.size.y * .43 }, halfExtents: { x: asset.size.x * .4, y: asset.size.y * .43, z: asset.size.z * .4 }, kind: 'barrier', rotation: { x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) } });
+    this.setColliders([{ id: this.plan.id, center: { ...position, y: position.y + asset.size.y * .43 }, halfExtents: { x: asset.size.x * .4, y: asset.size.y * .43, z: asset.size.z * .4 }, kind: 'barrier', rotation: { x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) } }]);
   }
+  /** Each visit followed by a real departure moves the chair one station. It
+   * never moves while its current or next place is in view (frustum + rays). */
   private updateChair(delta: number): void {
-    const b = this.plan.bounds;
+    const b = this.plan.bounds, chair = this.plan.chair!;
     if (pointInRect(this.local.x, this.local.z, b) && Math.abs(this.local.y - .865 - this.plan.floorY) < .6) {
       if (!this.state.visited) { this.state.visited = true; this.save(); }
       this.chairAway = 0; return;
     }
-    if (!this.state.visited || this.state.chairMoved) return;
+    const next = this.nextChairIndex();
+    if (!this.state.visited || next === this.chairIndex()) return;
     const distance = Math.hypot(Math.max(b.minX - this.local.x, 0, this.local.x - b.maxX), Math.max(b.minZ - this.local.z, 0, this.local.z - b.maxZ),
       Math.max(this.plan.floorY - this.local.y, 0, this.local.y - this.plan.ceilingY));
-    if (distance < 12 || this.owner.visible(this.world({ ...this.plan.chair!.positions[0]!, y: this.plan.floorY + .55 }), 1, `environment-collider:${this.plan.id}`)) { this.chairAway = 0; return; }
+    const seen = (i: number) => this.owner.visible(this.world({ ...chair.positions[i]!, y: this.plan.floorY + .55 }), 1, `environment-collider:${this.plan.id}`);
+    if (distance < 12 || seen(this.chairIndex()) || seen(next)) { this.chairAway = 0; return; }
     this.chairAway += delta;
-    if (this.chairAway >= 1.5) { this.state.chairMoved = true; this.save(); this.placeChair(); }
+    if (this.chairAway >= 1.5) {
+      // A new visit is required before the following move.
+      this.state.chairIndex = next; this.state.chairMoved = true; this.state.visited = false; this.chairAway = 0;
+      this.save(); this.placeChair();
+    }
   }
   private updateSurveillance(delta: number): void {
     const mount = this.plan.mount!, point = this.emitter();
@@ -374,15 +413,16 @@ class EventInstance {
     if (!result.moving) this.stopLoop(.025);
   }
   private stopLoop(fade = .06): void { this.loop?.stop(this.owner.audio.time, fade); this.loop = undefined; }
-  private setCollider(collider: StaticCollider): void {
+  private setColliders(colliders: StaticCollider[]): void {
     const key = `environment-collider:${this.plan.id}`;
-    this.owner.host.physics.removeChunk(key); this.owner.host.physics.addChunk(key, [collider], this.chunk.offset);
+    this.owner.host.physics.removeChunk(key); this.owner.host.physics.addChunk(key, colliders, this.chunk.offset);
   }
-  private mountCollider(): void {
-    const m = this.plan.mount!, camera = this.plan.kind === 'surveillance', d = camera ? .3 : .11;
-    this.setCollider({ id: this.plan.id, center: { x: m.position.x + Math.sin(m.yaw) * d, y: m.position.y, z: m.position.z + Math.cos(m.yaw) * d },
-      halfExtents: { x: camera ? .16 : .18, y: camera ? .17 : .26, z: camera ? .32 : .11 }, kind: 'barrier',
-      rotation: { x: 0, y: Math.sin(m.yaw / 2), z: 0, w: Math.cos(m.yaw / 2) } });
+  private mountColliders(): void {
+    const camera = this.plan.kind === 'surveillance', d = camera ? .3 : .11;
+    this.setColliders(this.mounts.map((m, i) => ({ id: i ? `${this.plan.id}#${i}` : this.plan.id,
+      center: { x: m.position.x + Math.sin(m.yaw) * d, y: m.position.y, z: m.position.z + Math.cos(m.yaw) * d },
+      halfExtents: { x: camera ? .16 : .18, y: camera ? .17 : .26, z: camera ? .32 : .11 }, kind: 'barrier' as const,
+      rotation: { x: 0, y: Math.sin(m.yaw / 2), z: 0, w: Math.cos(m.yaw / 2) } })));
   }
   isPlayerInWater(): boolean { this.local.copy(this.owner.host.playerPosition()).sub(this.chunk.offset); return this.water?.contains(this.local) ?? false; }
   splash(strength: number): void {
@@ -398,7 +438,7 @@ class EventInstance {
     this.disposed = true; this.owner.releasePhone(this.plan.id); this.owner.releaseGhost(this.plan.id);
     for (const voice of this.voices) voice.stop(this.owner.audio.time, .06);
     this.voices.clear(); this.owner.host.physics.removeChunk(`environment-collider:${this.plan.id}`);
-    this.model?.dispose(); this.water?.dispose(); if (this.chair) disposePropInstance(this.chair);
+    this.models.forEach(m => m.dispose()); this.alarmLoops.length = 0; this.water?.dispose(); if (this.chair) disposePropInstance(this.chair);
     this.baseHooks.clear(); this.root.removeFromParent(); this.root.clear();
   }
 }
