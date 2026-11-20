@@ -9,6 +9,7 @@ import { applySurfaceLighting } from './SurfaceLighting';
 import * as THREE from 'three';
 import { EnvironmentLighting } from './EnvironmentLighting';
 import { NorthernLighting } from './NorthernLighting';
+import { SlidesStructureView } from './SlidesStructureView';
 import { DEFAULT_BRIGHTNESS, resolveLightingBrightness } from './LightingBrightness';
 import { applyMatteSurface } from './MatteSurface';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -1429,6 +1430,7 @@ export class WorldView {
   readonly group = new THREE.Group();
   readonly environmentLighting: EnvironmentLighting;
   readonly northernLighting: NorthernLighting;
+  private readonly slidesViews: SlidesStructureView[] = [];
   private architectureDebug?: ArchitectureDebug;
   private readonly initialReady: Promise<void>;
   private detailReady?: Promise<void>;
@@ -1559,6 +1561,10 @@ export class WorldView {
     this.fixtureSlots = plan.lights;
     if (plan.spatial) this.buildSpatialArchitecture(options.architectureData); else this.buildArchitecture();
     this.buildEpicStructures();
+    for (const feature of plan.features) if (feature.kind === 'slides-structure') {
+      const view = new SlidesStructureView(feature,plan.seed,this.lightingContext ?? null);
+      this.slidesViews.push(view);this.group.add(view.group);
+    }
     if (!this.previewOnly) this.buildWallGraffiti();
     this.buildRaisedZones();
     this.buildLowPassages();
@@ -4256,6 +4262,7 @@ export class WorldView {
   }
 
   dispose(): void {
+    this.slidesViews.forEach(v=>v.dispose());
     this.architectureDebug?.dispose();
     this.doorLayer.dispose();
     this.propLayer.dispose();

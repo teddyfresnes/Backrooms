@@ -52,6 +52,8 @@ import type {
   DoorOpenMode,
 } from '../world/types';
 import { pointInRect, rectArea, rectCenter, rectDepth, rectWidth } from '../world/types';
+import { nearestSlidesCoord } from '../world/NorthernLayout';
+import { SLIDES_APPROACH } from '../world/SlidesStructure';
 
 const ACTIVE_RADIUS = 1;
 const HALF_CHUNK_SIZE = INFINITE_CHUNK_SIZE * 0.5;
@@ -884,7 +886,7 @@ export class WorldStream {
     for (const runtime of this.chunks.values()) {
       for (const l of runtime.plan.spatial?.landmarks ?? []) {
         const aliases = l.kind === 'slides' ? ['slides', 'toboggans', 'toboggan'] : l.kind.startsWith('escalier-') ? ['escalier', l.kind] : [l.kind];
-        addTarget(runtime, l.kind, l.kind === 'slides' ? 'Approche des toboggans' : l.kind.replaceAll('-', ' '), aliases, l.position);
+        addTarget(runtime, l.kind, l.kind === 'slides' ? 'Les quatre toboggans' : l.kind.replaceAll('-', ' '), aliases, l.position);
       }
       for (const c of runtime.plan.spatial?.cells.filter(c => c.mode === 'rooms') ?? []) {
         const p = rectCenter(c.bounds); addTarget(runtime, 'grand-plateau', 'grande zone régionale', ['plateau', 'zone'], { ...p, y: c.floorY + .865 });
@@ -1208,6 +1210,10 @@ export class WorldStream {
       }
     }
 
+    const slidesCoord = nearestSlidesCoord({ x: playerPosition.x / INFINITE_CHUNK_SIZE, story: this.centerCoord.story });
+    const slidesOffset = getChunkWorldOffset(slidesCoord);
+    addWorldTarget(createChunkKey(slidesCoord), 'slides', 'Les quatre toboggans', ['slides','toboggans','toboggan','backrooms-slides'],
+      { x:slidesOffset.x+SLIDES_APPROACH.x,y:slidesOffset.y+SLIDES_APPROACH.y,z:slidesOffset.z+SLIDES_APPROACH.z });
     // Ordinary targets remain local to mounted chunks. Epics are resolved
     // analytically so /locate stays useful now that monuments are genuinely rare.
     for (const definition of EPIC_STRUCTURE_DEFINITIONS) {

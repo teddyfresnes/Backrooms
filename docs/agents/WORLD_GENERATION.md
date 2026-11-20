@@ -20,7 +20,7 @@ rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/
 
 ## Ordre du pipeline
 
-Le pipeline ordinaire (plan version 22, topologie/spatial version 2) est :
+Le pipeline ordinaire (plan version 23, topologie/spatial version 2) est :
 
 1. `RegionalPlan` choisit les districts mondiaux et leurs datums signés ;
 2. il réserve les atria sur deux à quatre adresses verticales. Les galeries
@@ -62,7 +62,11 @@ Le pipeline ordinaire (plan version 22, topologie/spatial version 2) est :
    réservations `NorthernWorld` (circuits et approche des toboggans),
    événements environnementaux, props et préfixes. Ces systèmes réservent des
    salles compatibles avant le mobilier, sans changer leurs sols ni passages.
-   Voir [le vocabulaire liminal](LIMINAL_ARCHITECTURE.md) pour
+   Les propriétaires de toboggans (`NorthernLayout`, une colonne sur quatre en
+   rangée rouge −5) passent par `SlidesWorld` : hall monumental, datum zéro et
+   ouvertures de bord communes avec `RegionalPlan`. Ce chemin ne découpe jamais
+   un chunk voisin déjà produit. Les tubes et panneaux partagent leurs triangles
+   entre rendu et Rapier (`SlidesStructure`). Voir [le vocabulaire liminal](LIMINAL_ARCHITECTURE.md) pour
    les arches, galeries partielles et nouvelles fosses.
 
 Voir [les contrats de transition](../TRANSITION_INTEGRATION.md) pour les plafonds

@@ -68,6 +68,7 @@ import { EnvironmentStateStore } from '../environment/EnvironmentBehavior';
 import { NorthernJourney } from './NorthernJourney';
 import type { NorthernProgress } from '../story/NorthernProgress';
 import { migrateNorthernSaveCoord } from '../story/NorthernSaveMigration';
+import type { SlideChoice } from '../world/SlidesStructure';
 
 export type DebugExperience = DiagnosticsSnapshot;
 
@@ -92,6 +93,8 @@ const resolveSeed = (): string => {
 };
 
 export interface GameOptions {
+  /** Future destination router; each entrance supplies a stable transition key. */
+  onSlideChoice?(choice: SlideChoice): void;
   onRequestContinue?(): void;
   onRequestNewGame?(): void;
   onRequestMainMenu?(): void;
@@ -488,6 +491,7 @@ export class Game {
         compassVisible: () => !!this.compass?.model.visible && this.inventory?.equipped?.id === COMPASS_ID && this.equipmentTransition.amount > .7,
         caption: text => this.caption?.say(text), revealCompass: () => this.inventoryHUD?.reveal(),
         checkpoint: () => { this.saveNow('autosave'); },
+        slideChoice: choice => this.options.onSlideChoice?.(choice),
       }, states, this.savedNorthern);
       this.unsubscribeNorthern = this.worldStream.addChunkObserver(this.northern);
       await this.environment.load();

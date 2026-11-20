@@ -28,9 +28,12 @@ export class NorthernLighting {
     this.decorated.add(material);
     const before = material.onBeforeCompile.bind(material), key = material.customProgramCacheKey.bind(material);
     const standard = material instanceof THREE.MeshStandardMaterial, count = this.slots.length;
+    // Authored slide enamel/signs keep their identifying colours in the red
+    // hall, while retaining the same local mains and carried-spotlight logic.
+    const tint = material.userData.northernPreserveColor ? { value: new THREE.Vector3(1,1,1) } : this.tint;
     material.onBeforeCompile = (shader, renderer) => {
       before(shader, renderer);
-      Object.assign(shader.uniforms, { northernOffset: this.offset, northernTint: this.tint,
+      Object.assign(shader.uniforms, { northernOffset: this.offset, northernTint: tint,
         ...(count ? { northernBounds: { value: this.slots.map(s => s.bounds) }, northernHeight: { value: this.slots.map(s => s.height) } } : {}) });
       shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vNorthernWorld;')
         .replace('#include <begin_vertex>', `#include <begin_vertex>

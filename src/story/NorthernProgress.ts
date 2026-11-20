@@ -6,9 +6,11 @@ export interface NorthernProgress {
   walkedRed: number;
   compassSeconds: number;
   target?: { x: number; story: number };
+  slidesLayout?: 2;
+  selectedSlide?: 'home' | 'fun' | 'death' | 'danger';
 }
 export const COMPASS_GLITCH_SECONDS = 3.2;
-export const freshNorthernProgress = (): NorthernProgress => ({ version: 1, stage: 'approach', walkedRed: 0, compassSeconds: 0 });
+export const freshNorthernProgress = (): NorthernProgress => ({ version: 1, stage: 'approach', walkedRed: 0, compassSeconds: 0, slidesLayout: 2 });
 const STAGES: NorthernStage[] = ['approach', 'red-zone', 'inspect-compass', 'compass-glitch', 'slides', 'slides-ready'];
 export const sanitizeNorthernProgress = (value: unknown): NorthernProgress | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -23,7 +25,10 @@ export const sanitizeNorthernProgress = (value: unknown): NorthernProgress | nul
     target = { x: s.target.x, story: s.target.story };
   }
   if (['compass-glitch', 'slides', 'slides-ready'].includes(s.stage!) && !target) return null;
-  return { version: 1, stage: s.stage!, walkedRed: s.walkedRed!, compassSeconds: s.compassSeconds!, ...(target ? { target } : {}) };
+  if (s.slidesLayout !== undefined && s.slidesLayout !== 2) return null;
+  if (s.selectedSlide !== undefined && !['home','fun','death','danger'].includes(s.selectedSlide)) return null;
+  return { version: 1, stage: s.stage!, walkedRed: s.walkedRed!, compassSeconds: s.compassSeconds!, ...(target ? { target } : {}),
+    ...(s.slidesLayout === 2 ? { slidesLayout: 2 } : {}), ...(s.selectedSlide ? { selectedSlide: s.selectedSlide } : {}) };
 };
 
 export interface NorthernStep {
@@ -73,7 +78,7 @@ export class NorthernProgression {
       case 'inspect-compass': return 'Regarder la boussole';
       case 'compass-glitch': return 'Observer la boussole';
       case 'slides': return 'Suivre la direction indiquée par la boussole';
-      case 'slides-ready': return 'Trouver l’accès aux toboggans';
+      case 'slides-ready': return 'Explorer les quatre entrées';
     }
   }
   get snapshot(): NorthernProgress { return { ...this.state, ...(this.state.target ? { target: { ...this.state.target } } : {}) }; }

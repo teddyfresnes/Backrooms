@@ -76,12 +76,16 @@ Le brouillard et le fond virent au sombre près de la faille (`atmosphereAt`).
 ## Progression vers la zone rouge et les toboggans
 
 `world/NorthernLayout` réserve la faille à −336 m, les rangées rouges −4/−5
-(entrée −392 m, sortie −616 m) et l'approche des toboggans en −6. Ces bandes
+(entrée −392 m, sortie −616 m) et les toboggans dans cette dernière rangée, −5. Ces bandes
 traversent tous les X et propriétaires verticaux ; aucun slot épique aléatoire
 ne les remplace. `NorthernWorld` choisit des sols ouverts du BSP final, réserve
-les salles contre le mobilier, et publie `WorldPlan.northern`. Le landmark
-`slides` est le contrat de branchement du futur générateur de toboggans ; cette
-étape prépare son approche praticable, sans produire ses tubes détaillés.
+les salles contre le mobilier, et publie `WorldPlan.northern`. `SlidesWorld`
+construit un vrai hall à quatre conduits par secteur de 448 m en X, sur chaque
+story. `nearestSlidesCoord` choisit son propriétaire analytique : la boussole
+et `/locate slides` / `/locate toboggans` trouvent donc la même structure, même
+avant son montage. Aucun toboggan n'est généré hors de la bande rouge garantie.
+`SlidesStructureView` possède les maillages et matériaux ; les enseignes et
+émaux conservent leurs couleurs distinctives dans les deux modes lumineux.
 
 `core/NorthernJourney` observe les chunks (y compris les remplacements de vue),
 possède les boîtiers/colliders et partage le bus audio et `EnvironmentStateStore`.
@@ -94,11 +98,18 @@ spotlights natifs avant le traitement ambiant pour conserver la flashlight.
 Après résolution de la faille, huit mètres vers le nord dans le rouge donnent
 la réplique et l'objectif de consultation. `NorthernProgress` persiste la suite
 `approach` → `red-zone` → `inspect-compass` → `compass-glitch` → `slides` →
-`slides-ready`. Les 3,2 s d'anomalie avancent seulement boussole réellement tenue,
+`slides-ready`. E devant une entrée permet de l'examiner, mémorise `selectedSlide`
+et émet un `SlideChoice` (IDs et clé `backrooms-slide-…`) via
+`GameOptions.onSlideChoice`. Ce routeur optionnel permet de brancher une prochaine
+expérience ; aucune destination n'est inventée dans le hall actuel.
+Les 3,2 s d'anomalie avancent seulement boussole réellement tenue,
 en jeu libre. Son cap vise l'approche du propriétaire choisi, affinée au montage
 du chunk. Une sauvegarde sans `northern` près de l'ancienne faille est translatée
 avec celle-ci par `NorthernSaveMigration` ; les reprises déjà résolues rattrapent
-la progression rouge sans rejouer la planche.
+la progression rouge sans rejouer la planche. Les checkpoints antérieurs à
+`slidesLayout: 2` qui visaient l'ancien point vide en −6 sont redirigés vers le
+vrai hall sans rejouer l'anomalie. Les anciens ancrages de sol sont résolus sur
+les sols actuels (`SURFACE_ANCHOR_VERSION = 4`).
 
 ## Traque de l'autre rive
 

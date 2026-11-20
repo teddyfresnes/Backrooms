@@ -5,7 +5,7 @@ import type { SpatialAddress } from './SpatialTypes';
 export const TOPOLOGY_VERSION = 2;
 /** Version of saved surface anchors. It rises whenever generation moves floors:
  * an older anchor is then resolved to the nearest real floor, not by its ID. */
-export const SURFACE_ANCHOR_VERSION = 3;
+export const SURFACE_ANCHOR_VERSION = 4;
 export const SURFACE_EPSILON = .002;
 export const HEIGHT_QUANTUM = .05;
 export const MIN_CLEARANCE = 2.5;

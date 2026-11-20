@@ -1,6 +1,7 @@
 import { DATUM_QUANTUM, planRegionalTransition } from './TransitionLayout';
 import { SeededRandom } from './SeededRandom';
 import { epicStructureIndexForCoord } from './EpicStructures';
+import { isSlidesStructureCoord } from './NorthernLayout';
 import { pointInRect, type Rect } from './types';
 import type { SpatialAddress } from './SpatialTypes';
 
@@ -18,6 +19,7 @@ const DATUM_LEVELS = [{ value: -2, weight: 1 }, { value: -1, weight: 2.2 }, { va
 const q = (v: number) => Math.round(v * 20) / 20;
 const randomAt = (seed: string, key: string) => new SeededRandom(`${seed}::regional-space:v${SPATIAL_VERSION}:${key}`);
 const coordForCell = (x: number, z: number): SpatialAddress => ({ x: Math.floor(x / 4), z: Math.floor(z / 4), story: 0 });
+const fixedDatumColumn = (seed: string, c: SpatialAddress): boolean => epicStructureIndexForCoord(seed,c)!==null || isSlidesStructureCoord(c);
 export const spatialCellAt = (x: number, z: number) => ({ x: Math.floor((x + 56) / 28), z: Math.floor((z + 56) / 28) });
 export const spatialCellBounds = (x: number, z: number): Rect => ({ minX: x * 28 - 56, maxX: x * 28 - 28, minZ: z * 28 - 56, maxZ: z * 28 - 28 });
 
@@ -32,11 +34,11 @@ export const regionalDatum = (seed: string, x: number, z: number): RegionalDatum
   const chunk = coordForCell(x, z);
   // The explicit compatibility collar preserves the existing monumental entrances.
   // Only cells adjacent to an epic column use that monument's fixed datum.
-  const protectedColumn = epicStructureIndexForCoord(seed, chunk) !== null ||
-    (x % 4 === 0 && epicStructureIndexForCoord(seed, { ...chunk, x: chunk.x - 1 }) !== null) ||
-    ((x % 4 + 4) % 4 === 3 && epicStructureIndexForCoord(seed, { ...chunk, x: chunk.x + 1 }) !== null) ||
-    (z % 4 === 0 && epicStructureIndexForCoord(seed, { ...chunk, z: chunk.z - 1 }) !== null) ||
-    ((z % 4 + 4) % 4 === 3 && epicStructureIndexForCoord(seed, { ...chunk, z: chunk.z + 1 }) !== null);
+  const protectedColumn = fixedDatumColumn(seed,chunk) ||
+    (x % 4 === 0 && fixedDatumColumn(seed, { ...chunk, x: chunk.x - 1 })) ||
+    ((x % 4 + 4) % 4 === 3 && fixedDatumColumn(seed, { ...chunk, x: chunk.x + 1 })) ||
+    (z % 4 === 0 && fixedDatumColumn(seed, { ...chunk, z: chunk.z - 1 })) ||
+    ((z % 4 + 4) % 4 === 3 && fixedDatumColumn(seed, { ...chunk, z: chunk.z + 1 }));
   let result: RegionalDatum = { id: 'monument-interface', y: 0 };
   if (!protectedColumn) {
     const rx = Math.floor(x / REGION_CELLS), rz = Math.floor(z / REGION_CELLS); let closest = Infinity;
@@ -127,6 +129,7 @@ export interface AtriumPlan {
 /** Canonical 2x2 planning domains choose one 1..4-cell room. Domains align
  * with chunk boundaries; its clipped BSP neighbours need no generated state. */
 export const regionalAtrium = (seed: string, x: number, z: number, story: number): AtriumPlan | undefined => {
+  if (isSlidesStructureCoord(coordForCell(x,z))) return;
   const ax = Math.floor(x / 2) * 2, az = Math.floor(z / 2) * 2;
   const rng = randomAt(seed, `atrium-room:v3:${ax}:${az}`);
   if (!rng.chance(.5)) return;

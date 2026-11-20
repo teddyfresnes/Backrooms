@@ -13,6 +13,7 @@ import {
 } from '../world/EpicStructures';
 import type { EpicStructureFeature } from '../world/types';
 import { isNorthernReservedRow } from '../world/NorthernLayout';
+import { nearestSlidesCoord } from '../world/NorthernLayout';
 import {
   getChunkWorldOffset,
   INFINITE_CHUNK_SIZE,
@@ -35,6 +36,13 @@ it('targets a working light across a chunk edge using world coordinates and the 
   ]}}]])} as unknown as WorldStream;
   expect(WorldStream.prototype.nearestWorkingLight.call(stream,56,13.5,-108)).toEqual({x:58,y:13.5,z:-108});
   expect(WorldStream.prototype.nearestWorkingLight.call(stream,0,13.5,0)).toBeNull();
+});
+
+it('locates the nearest real slide structure analytically even before any chunk is mounted',()=>{
+  const stream={initialized:true,disposed:false,seed:'SLIDES-LOCATE',chunks:new Map(),centerCoord:{x:2,z:0,story:-3}} as unknown as WorldStream;
+  const point=new Vector3(180,-15.335,0),targets=WorldStream.prototype.getLocateTargets.call(stream,point),slides=targets.find(t=>t.command==='slides');
+  expect(slides?.chunkKey).toBe('0:-5:-3');expect(slides?.aliases).toContain('toboggans');expect(slides?.position.x).toBe(0);expect(slides?.position.z).toBe(-548);expect(slides?.position.y).toBeCloseTo(-15.335);
+  expect(nearestSlidesCoord({x:270/112,story:-3})).toEqual({x:4,z:-5,story:-3});
 });
 
 it('reports switched-off circuits to the hunter and ignores their fixtures until restored', () => {

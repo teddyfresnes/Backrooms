@@ -25,7 +25,8 @@ import {
 import { populateRareProps } from './PropPlacement';
 import { populateEnvironmentEvents } from './EnvironmentEvents';
 import { populateNorthernWorld } from './NorthernWorld';
-import { isRedZoneRow } from './NorthernLayout';
+import { isRedZoneRow, isSlidesStructureCoord } from './NorthernLayout';
+import { generateSlidesWorld } from './SlidesWorld';
 import { SeededRandom } from './SeededRandom';
 import { cleanWallJunctions } from './WallJunctions';
 import type {
@@ -2128,6 +2129,7 @@ const emitBiomeBoundarySkin = (
 };
 
 const prefixFeature = (feature: WorldFeature, prefix: string): WorldFeature => {
+  if (feature.kind === 'slides-structure') return { ...feature,id:prefix+feature.id,roomId:prefix+feature.roomId,entries:feature.entries.map(e=>({...e,id:prefix+e.id})) };
   if (feature.kind === 'liminal-architecture') return { ...feature, id: prefix + feature.id, roomId: prefix + feature.roomId,
     walls: feature.walls.map(w => ({ ...w, id: prefix + w.id, openings: w.openings.map(o => ({ ...o, ...(o.destination ? { destination: { ...o.destination,
       surfaceId: `chunk-${o.destination.owner.x}:${o.destination.owner.z}:${o.destination.owner.story}/` + o.destination.surfaceId } } : {}) })) })) };
@@ -2433,7 +2435,7 @@ export const generateInfiniteChunk = (seed: string, key: ChunkKey | ChunkCoord):
   const style = { ...generateSurfaceStyle(`${seed}:spatial-column:v2:${coord.x}:${coord.z}`),
     floorPatternScale: finish.floorPatternScale, floorQuarterTurn: finish.floorQuarterTurn,
     wallPatternScale: finish.wallPatternScale, ceilingPatternScale: finish.ceilingPatternScale };
-  const plan = generateSpatialWorld(seed, coord, style, gates);
+  const plan = isSlidesStructureCoord(coord) ? generateSlidesWorld(seed,coord,style,gates) : generateSpatialWorld(seed, coord, style, gates);
   const biome = getInfiniteBiome(seed, coord), visual = getInfiniteVisualBiome(seed, coord);
   plan.visualBiome = visual;
   applyVisualBiome(plan, visual, `${seed}:spatial-palette:v2:${coord.x}:${coord.z}`);

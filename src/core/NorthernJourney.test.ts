@@ -30,6 +30,11 @@ const setup = async () => {
   return {plan,mount,physics,scene,camera,position,offset,states,storage,runtime,chunk,caption,checkpoint,setVisible:(v:boolean)=>{visible=v;},setAvailable:(v:boolean)=>{available=v;}};
 };
 describe('red-zone circuit runtime and destination hook',()=>{
+  it('migrates an old completed empty approach to the actual red-zone landmark without replaying the compass glitch',()=>{
+    const host={} as ConstructorParameters<typeof NorthernJourney>[0];
+    const runtime=new NorthernJourney(host,new EnvironmentStateStore('migration',null),{version:1,stage:'slides-ready',walkedRed:8,compassSeconds:3.2,target:{x:7,story:2}});
+    expect(runtime.snapshot).toMatchObject({stage:'slides',target:{x:8,story:2},compassSeconds:3.2,slidesLayout:2});runtime.dispose();
+  });
   it('cuts only the entered circuit, respects ray occlusion, restores once, and survives view/stream/save changes',async()=>{
     const h=await setup(), initial=h.physics.world.colliders.len();
     h.position.set(0,.865,-454); h.runtime.update(.1);
@@ -64,11 +69,11 @@ describe('red-zone circuit runtime and destination hook',()=>{
     h.setAvailable(false);for(let i=0;i<40;i++)h.runtime.update(.1); expect(h.runtime.snapshot.compassSeconds).toBe(.1);
     h.setAvailable(true);for(let i=0;i<31;i++)h.runtime.update(.1);expect(h.runtime.snapshot.stage).toBe('slides');
     const slides=environmentFixture('telephone');slides.environmentEvents=[];
-    slides.spatial={version:2,owner:{x:0,z:-6,story:0},cells:[],ceilings:[],prisms:[],dependencies:[],interfaces:[],landmarks:[],transitions:[]};
-    slides.northern={kind:'slides-approach',circuits:[],slides:{id:'slides',kind:'slides',roomId:'room',bounds:slides.rooms[0]!.bounds,position:{x:9,y:0,z:4}}};
-    h.runtime.mount({key:'0:-6:0',plan:slides,offset:new THREE.Vector3(0,0,-672),view:{northernLighting:new NorthernLighting(slides)} as WorldView});
-    const expected=new THREE.Vector3(9,0,-248).normalize();expect(h.runtime.compassDirection.distanceTo(expected)).toBeLessThan(.001);
-    h.position.set(9,.865,-668);h.runtime.update(.1);expect(h.runtime.snapshot.stage).toBe('slides-ready');
+    slides.spatial={version:2,owner:{x:0,z:-5,story:0},cells:[],ceilings:[],prisms:[],dependencies:[],interfaces:[],landmarks:[],transitions:[]};
+    slides.northern={kind:'red-zone',circuits:[],slides:{id:'slides',kind:'slides',roomId:'room',bounds:slides.rooms[0]!.bounds,position:{x:9,y:0,z:4}}};
+    h.runtime.mount({key:'0:-5:0',plan:slides,offset:new THREE.Vector3(0,0,-560),view:{northernLighting:new NorthernLighting(slides)} as WorldView});
+    const expected=new THREE.Vector3(9,0,-136).normalize();expect(h.runtime.compassDirection.distanceTo(expected)).toBeLessThan(.001);
+    h.position.set(9,.865,-556);h.runtime.update(.1);expect(h.runtime.snapshot.stage).toBe('slides-ready');
     const count=h.caption.mock.calls.length;h.runtime.update(.1);expect(h.caption.mock.calls).toHaveLength(count);
   });
 });

@@ -5,7 +5,8 @@ import { createEnvironmentModel, type EventModel } from '../environment/Environm
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import { applyZonalLighting } from '../render/ZonalLighting';
 import { NorthernProgression, type NorthernProgress } from '../story/NorthernProgress';
-import { NORTHERN_LAYOUT, redZoneEntryZ } from '../world/NorthernLayout';
+import { NORTHERN_LAYOUT, redZoneEntryZ, slidesColumnAt } from '../world/NorthernLayout';
+import type { SlideChoice, SlideEntryPlan } from '../world/SlidesStructure';
 import type { LightingCircuitPlan } from '../world/NorthernWorld';
 import { pointInRect } from '../world/types';
 import type { EnvironmentChunk, EnvironmentChunkObserver } from './WorldStream';
@@ -23,6 +24,8 @@ export interface NorthernHost {
   caption(text: string): void;
   revealCompass(): void;
   checkpoint(): void;
+  /** A later experience can consume this stable key without parsing labels. */
+  slideChoice?(choice: SlideChoice): void;
 }
 interface MountedNorth { chunk: EnvironmentChunk; circuits: Circuit[] }
 
@@ -33,9 +36,18 @@ export class NorthernJourney implements EnvironmentChunkObserver {
   private readonly chunks = new Map<string, MountedNorth>();
   private readonly heading = new THREE.Vector3(0, 0, -1);
   private readonly destination = new THREE.Vector3();
+  private readonly slidePoint = new THREE.Vector3();
+  private readonly slideDirection = new THREE.Vector3();
+  private readonly slideForward = new THREE.Vector3();
   private disposed = false;
   constructor(readonly host: NorthernHost, readonly states: EnvironmentStateStore, saved?: NorthernProgress) {
     this.progression = new NorthernProgression(saved);
+    const s = this.progression.state;
+    if (s.target) s.target.x = slidesColumnAt(s.target.x);
+    // v1 checkpoints ended at an empty approach OUTSIDE red. Resume guidance
+    // toward the actual landmark rather than treating that old point as visited.
+    if (s.slidesLayout !== 2 && s.stage === 'slides-ready') s.stage = 'slides';
+    s.slidesLayout = 2;
   }
   mount(chunk: EnvironmentChunk): void {
     if (this.disposed || !chunk.plan.northern) return;
@@ -49,7 +61,8 @@ export class NorthernJourney implements EnvironmentChunkObserver {
     const position = this.host.position(), available = this.host.available();
     for (const m of this.chunks.values()) for (const c of m.circuits) c.update(available);
     const step = this.progression.step({ delta, z: position.z, redEntryZ: redZoneEntryZ, available,
-      riftResolved: this.host.riftResolved(), compassVisible: this.host.compassVisible(), owner: this.host.owner() });
+      riftResolved: this.host.riftResolved(), compassVisible: this.host.compassVisible(),
+      owner: { x: slidesColumnAt(position.x / NORTHERN_LAYOUT.chunkSize), story: this.host.owner().story } });
     if (step.comment) { this.host.caption('Putain… la boussole vibre.'); if (!this.host.compassVisible()) this.host.revealCompass(); }
     const s = this.progression.state;
     let changed = step.changed;
@@ -58,7 +71,7 @@ export class NorthernJourney implements EnvironmentChunkObserver {
     }
     if (available && s.stage === 'slides' && this.targetPosition() && position.distanceTo(this.destination) < 4) {
       s.stage = 'slides-ready'; changed = true;
-      this.host.caption('L’aiguille s’arrête ici… Il doit y avoir un passage.');
+      this.host.caption('Quatre entrées… Qui a mis ça ici ?');
     }
     if (changed) this.host.checkpoint();
   }
@@ -72,6 +85,15 @@ export class NorthernJourney implements EnvironmentChunkObserver {
       const north = chunk.plan.northern, owner = chunk.plan.spatial?.owner;
       if (north?.slides && owner?.x === target.x && owner.story === target.story) {
         this.destination.copy(north.slides.position).add(chunk.offset); this.destination.y += .865;
+        // Once the apron is reached, keep pointing into the actual entrances,
+        // rather than pulling the player back toward an empty point behind him.
+        if (this.progression.state.stage === 'slides-ready') {
+          const f=chunk.plan.features.find(f=>f.kind==='slides-structure');
+          if(f?.kind==='slides-structure'){
+            const selected=f.entries.find(e=>e.key===this.progression.state.selectedSlide);
+            this.destination.set(selected?.position.x ?? f.approach.x,f.floorY+.865,selected?.position.z ?? f.entries[0]!.position.z).add(chunk.offset);
+          }
+        }
         return true;
       }
     }
@@ -93,15 +115,42 @@ export class NorthernJourney implements EnvironmentChunkObserver {
     }
     return text ? { text, urgent: false } : null;
   }
-  getInteraction(): { label: string; circuit: Circuit } | null {
+  getInteraction(): { label: string; circuit: Circuit } | { label: string; entry: SlideEntryPlan; structureId: string; owner: { x: number; story: number } } | null {
     if (!this.host.available()) return null;
     let best: Circuit | undefined, distance = Infinity;
     for (const m of this.chunks.values()) for (const c of m.circuits) {
       const d = c.interactionDistance(); if (d !== null && d < distance) { best = c; distance = d; }
     }
+    if (!best) for (const { chunk } of this.chunks.values()) for (const f of chunk.plan.features) {
+      if (f.kind !== 'slides-structure' || !chunk.plan.spatial) continue;
+      const player = this.host.position(), camera = this.host.camera;
+      if (Math.abs(player.y - chunk.offset.y - f.floorY - .865) > .9) continue;
+      for (const e of f.entries) {
+        if (!pointInRect(player.x-chunk.offset.x,player.z-chunk.offset.z,e.trigger)) continue;
+        this.slidePoint.copy(e.position).add(chunk.offset);this.slidePoint.z+=.8;
+        const d=this.slidePoint.distanceTo(camera.position);
+        if (this.slidePoint.distanceTo(player)>2.8 || d<.01 || d>8) continue;
+        this.slideDirection.copy(this.slidePoint).sub(camera.position).multiplyScalar(1/d);
+        if (this.slideDirection.dot(camera.getWorldDirection(this.slideForward))<.91
+          || this.host.physics.castEnvironmentRay(camera.position,this.slideDirection,Math.max(0,d-.06))) continue;
+        return {label:`Examiner ${e.label}`,entry:e,structureId:f.id,owner:chunk.plan.spatial.owner};
+      }
+    }
     return best ? { label: 'Rétablir la lumière', circuit: best } : null;
   }
-  interact(): boolean { const hit = this.getInteraction(); if (!hit) return false; hit.circuit.restore(); return true; }
+  interact(): boolean {
+    const hit = this.getInteraction(); if (!hit) return false;
+    if ('circuit' in hit) hit.circuit.restore();
+    else {
+      this.progression.state.selectedSlide=hit.entry.key;this.progression.state.stage='slides-ready';
+      this.progression.state.target={x:hit.owner.x,story:hit.owner.story};
+      const thoughts={home:'HOME… Pourquoi je n’y crois pas ?',fun:'FUN… Ouais. C’est ça.',death:'DEATH… Au moins, c’est honnête.',danger:'DANGER… Qu’est-ce qu’ils essaient de retenir ?'};
+      this.host.caption(thoughts[hit.entry.key]);
+      this.host.checkpoint();
+      this.host.slideChoice?.({structureId:hit.structureId,entryId:hit.entry.id,key:hit.entry.key,transitionKey:hit.entry.transitionKey});
+    }
+    return true;
+  }
   dispose(): void { this.disposed = true; for (const key of this.chunks.keys()) this.unmount(key); }
 }
 

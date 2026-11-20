@@ -4,6 +4,7 @@ import type { SpatialArchitecture } from './SpatialTypes';
 import type { LiminalArchitectureFeature } from './ArchitecturalOpenings';
 import type { EnvironmentEventPlan } from './EnvironmentEvents';
 import type { NorthernWorldPlan } from './NorthernWorld';
+import type { SlidesStructureFeature } from './SlidesStructure';
 
 export type RoomKind =
   | 'office'
@@ -367,6 +368,7 @@ export interface CeilingZone {
 }
 
 export type WorldFeature =
+  | SlidesStructureFeature
   | LiminalArchitectureFeature
   | LiminalPitFeature
   | GridPitFeature

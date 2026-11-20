@@ -45,7 +45,7 @@ it('preserves the environmental session across saves while accepting older saves
 
 it('round-trips the northern story and rejects a missing or invalid compass destination', () => {
   const storage = new MemoryStorage(), input = backroomsInput();
-  const northern = { version: 1 as const, stage: 'compass-glitch' as const, walkedRed: 8, compassSeconds: .7, target: { x: -48, story: -3 } };
+  const northern = { version: 1 as const, stage: 'slides-ready' as const, walkedRed: 8, compassSeconds: 3.2, target: { x: -48, story: -3 }, slidesLayout:2 as const, selectedSlide:'fun' as const };
   const result = writeGameSave(storage, { ...input, payload: { ...input.payload, northern } });
   expect(result.ok).toBe(true);
   if (!result.ok) throw new Error('Expected northern checkpoint');
