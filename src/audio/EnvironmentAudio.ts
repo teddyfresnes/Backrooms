@@ -4,6 +4,18 @@ import type { AudioOutput } from '../monster/BacteriaAudio';
 
 export type EnvironmentSound = 'alarm' | 'ring' | 'breath' | 'splash' | 'drip' | 'servo' | 'click' | 'hangup' | 'step' | 'ballast' | 'warning';
 export const ALARM_PERIOD = 2.4;
+export const ENVIRONMENT_AUDIO_URLS = {
+  warning: '/assets/audio/environment/telephone-warning.ogg',
+  alarm: '/assets/audio/environment/danger-alarm.ogg',
+} as const;
+const smooth = (value: number, from: number, to: number): number => {
+  const t = Math.max(0, Math.min(1, (value - from) / (to - from)));
+  return t * t * (3 - 2 * t);
+};
+/** Additional range and floor isolation, on top of the panner's continuous falloff. */
+export const alarmAudibility = (distance: number, floorDelta: number, occlusion = 0): number =>
+  .85 * (1 - smooth(distance, 24, 48)) * (1 - smooth(Math.abs(floorDelta), .4, 2.2))
+    * (1 - .65 * Math.max(0, Math.min(1, occlusion)));
 export const alarmPulse = (seconds: number): number => {
   const phase = ((seconds % ALARM_PERIOD) + ALARM_PERIOD) % ALARM_PERIOD;
   return [0, .35, .7].some(start => phase >= start && phase < start + .18) ? 1 : 0;
@@ -65,7 +77,7 @@ export class EnvironmentVoice {
     this.panner.positionY.setTargetAtTime(p.y, time, .025);
     this.panner.positionZ.setTargetAtTime(p.z, time, .025);
   }
-  setGain(value: number, time: number): void { if (!this.stopped) this.gain.gain.setTargetAtTime(Math.max(0, value), time, .04); }
+  setGain(value: number, time: number, smoothing = .04): void { if (!this.stopped) this.gain.gain.setTargetAtTime(Math.max(0, value), time, smoothing); }
   muffle(value: number, time: number): void { this.filter.frequency.setTargetAtTime(14000 - value * 13000, time, .15); }
   stop(time: number, fade = .06): void {
     if (this.stopped) return;
@@ -81,17 +93,39 @@ export class EnvironmentAudio {
   private readonly voices = new Set<EnvironmentVoice>();
   private bus?: DynamicsCompressorNode;
   private disposed = false;
-  private warningReady?: Promise<void>;
+  private loadReady?: Promise<void>;
+  private readonly abort = new AbortController();
+  private alarmEnvelope?: Float32Array;
   constructor(private readonly output: () => AudioOutput | null) {}
   get time(): number { return this.output()?.context.currentTime ?? 0; }
   get warningDuration(): number { return this.buffers.get('warning')?.duration ?? 2.7; }
+  alarmLevel(seconds: number): number {
+    const envelope = this.alarmEnvelope, duration = this.buffers.get('alarm')?.duration;
+    if (!envelope || !duration) return alarmPulse(seconds);
+    const phase = ((seconds % duration) + duration) % duration;
+    return envelope[Math.min(envelope.length - 1, Math.floor(phase / duration * envelope.length))]!;
+  }
   load(): Promise<void> {
-    return this.warningReady ??= (async () => {
+    return this.loadReady ??= (async () => {
       const out = this.output(); if (!out) return;
-      const response = await fetch('/assets/audio/environment/telephone-warning.ogg');
-      if (!response.ok) throw new Error('Avertissement du téléphone introuvable.');
-      const decoded = await out.context.decodeAudioData(await response.arrayBuffer());
-      if (!this.disposed) this.buffers.set('warning', decoded);
+      await Promise.all((Object.keys(ENVIRONMENT_AUDIO_URLS) as (keyof typeof ENVIRONMENT_AUDIO_URLS)[]).map(async kind => {
+        const response = await fetch(ENVIRONMENT_AUDIO_URLS[kind], { signal: this.abort.signal });
+        if (!response.ok) throw new Error(`Son environnemental introuvable : ${kind}`);
+        const decoded = await out.context.decodeAudioData(await response.arrayBuffer());
+        if (this.disposed) return;
+        this.buffers.set(kind, decoded);
+        if (kind === 'alarm') {
+          const samples = decoded.getChannelData(0), count = Math.ceil(decoded.duration * 25);
+          const envelope = new Float32Array(count); let peak = .001;
+          for (let i = 0; i < count; i++) {
+            const from = Math.floor(i * samples.length / count), to = Math.floor((i + 1) * samples.length / count);
+            let energy = 0; for (let sample = from; sample < to; sample++) energy += samples[sample]! ** 2;
+            envelope[i] = Math.sqrt(energy / Math.max(1, to - from)); peak = Math.max(peak, envelope[i]!);
+          }
+          for (let i = 0; i < count; i++) envelope[i] = envelope[i]! / peak;
+          this.alarmEnvelope = envelope;
+        }
+      }));
     })();
   }
   updateListener(position: Vec3Data, forward: Vec3Data, up: Vec3Data): void {
@@ -131,8 +165,8 @@ export class EnvironmentAudio {
   }
   dispose(): void {
     if (this.disposed) return;
-    this.disposed = true;
+    this.disposed = true; this.abort.abort();
     for (const voice of this.voices) voice.stop(this.time, 0);
-    this.voices.clear(); this.buffers.clear(); this.bus?.disconnect();
+    this.voices.clear(); this.buffers.clear(); this.alarmEnvelope = undefined; this.bus?.disconnect();
   }
 }

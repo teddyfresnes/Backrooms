@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
-import { alarmPulse, EnvironmentAudio, synthesizeEnvironmentSound } from './EnvironmentAudio';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { alarmAudibility, alarmPulse, EnvironmentAudio, synthesizeEnvironmentSound } from './EnvironmentAudio';
+afterEach(()=>vi.unstubAllGlobals());
 
 class Param { value = 0; setTargetAtTime(v: number) { this.value = v; } setValueAtTime(v: number) { this.value = v; } cancelScheduledValues() {} }
 class AudioNodeStub {
@@ -22,6 +23,27 @@ const setup = () => {
   return { context, nodes, audio: new EnvironmentAudio(() => ({ context: context as unknown as AudioContext, destination: make() as unknown as AudioNode })) };
 };
 describe('environmental spatial sound', () => {
+  it('fades smoothly before streaming range and isolates neighbouring floors',()=>{
+    const perceived=(d:number)=>alarmAudibility(d,0)*Math.min(1,6/(6+1.2*(d-6)));
+    for(let d=7;d<=48;d+=.25)expect(perceived(d)).toBeLessThan(perceived(d-.25));
+    expect(alarmAudibility(48,0)).toBe(0);
+    for(const height of [-5.4,-3.05,3.05,5.4])expect(alarmAudibility(2,height)).toBe(0);
+    expect(alarmAudibility(2,0)).toBeGreaterThan(alarmAudibility(20,0,1));
+    // No audible one-metre edge near the former owner/radius boundary.
+    expect(Math.abs(perceived(47)-perceived(48))).toBeLessThan(.002);
+  });
+  it('loads the supplied horn and follows its decoded amplitude rather than synthesising it',async()=>{
+    const {audio,context}=setup(),data=Float32Array.from({length:8000},(_,i)=>i<4000?.5:0);
+    const decoded={duration:1,getChannelData:()=>data};
+    Object.assign(context,{decodeAudioData:vi.fn(async()=>decoded)});
+    const fetch=vi.fn(async()=>({ok:true,arrayBuffer:async()=>new ArrayBuffer(1)}));vi.stubGlobal('fetch',fetch);
+    await audio.load();
+    expect(fetch.mock.calls).toHaveLength(2);
+    expect(fetch).toHaveBeenCalledWith('/assets/audio/environment/danger-alarm.ogg',expect.objectContaining({signal:expect.any(AbortSignal)}));
+    const voice=audio.play('alarm',{x:0,y:2,z:0},0,true,2.2)!;
+    expect(voice.source.buffer).toBe(decoded);expect(audio.alarmLevel(.1)).toBe(1);expect(audio.alarmLevel(.7)).toBe(0);
+    expect(audio.alarmLevel(1.1)).toBe(1);audio.dispose();
+  });
   it('produces a bounded temporal-three fire horn whose strobes match audible pulses', () => {
     const { context } = setup();
     const samples = synthesizeEnvironmentSound(context as unknown as AudioContext, 'alarm').getChannelData(0);

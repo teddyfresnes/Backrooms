@@ -387,6 +387,30 @@
       "license": "User-provided; no additional rights asserted",
       "file": "audio/bacteria/backrooms-presence.mp3",
       "changes": "Used as supplied (68.7 s stereo). Looped at runtime between 1.13 s and 67.78 s, downmixed to mono and spatialised."
+    },
+    {
+      "name": "Bacteria screamer attack",
+      "author": "Provided by the project owner; original creator terms apply",
+      "source": "Scary Screamer - Sound Effect (Free).mp3",
+      "license": "User-provided; no additional rights asserted",
+      "file": "audio/bacteria/screamer.ogg",
+      "changes": "Leading 0.12 s removed; -4 dB gain to retain decoding headroom, 3 ms attack and 200 ms tail fade; stereo Vorbis quality 5. One-shot reveal and capture layer on the shared master bus."
+    },
+    {
+      "name": "Backrooms fluorescent ambience",
+      "author": "Provided by the project owner; original creator terms apply",
+      "source": "Backrooms ambience -sound effects.mp3",
+      "license": "User-provided; no additional rights asserted",
+      "file": "audio/backrooms-ambience.ogg",
+      "changes": "Trimmed to 0.15–5.65 s, +9 dB gain, circular 180 ms crossfade; stereo Vorbis quality 4. Replaces the Level 0 fluorescent bed; original apartment corridor hum is retained."
+    },
+    {
+      "name": "Local danger alarm",
+      "author": "Provided by the project owner; original creator terms apply",
+      "source": "Danger Alarm Sound Effect.mp3",
+      "license": "User-provided; no additional rights asserted",
+      "file": "audio/environment/danger-alarm.ogg",
+      "changes": "Arithmetic stereo average to mono, trimmed to 0.55–10.15 s, -9 dB gain to retain decoding headroom, circular 60 ms crossfade; Vorbis quality 4. Spatial loop with continuous range fade and floor isolation."
     }
   ],
   "models": [

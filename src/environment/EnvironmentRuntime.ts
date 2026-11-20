@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { EnvironmentAudio, alarmPulse, ALARM_PERIOD, type EnvironmentSound, type EnvironmentVoice } from '../audio/EnvironmentAudio';
+import { EnvironmentAudio, alarmAudibility, ALARM_PERIOD, type EnvironmentSound, type EnvironmentVoice } from '../audio/EnvironmentAudio';
 import type { AudioOutput } from '../monster/BacteriaAudio';
 import { BacteriaActor } from '../monster/BacteriaActor';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
@@ -153,6 +153,7 @@ class EventInstance {
   private flickerTime = -1;
   private time = 0;
   private lastOcclusion = 0;
+  private alarmOcclusion = .5;
   private chairAway = 0;
   private pendingChase = 0;
   private disposed = false;
@@ -218,16 +219,29 @@ class EventInstance {
       case 'lonely-chair': this.updateChair(delta); break;
       case 'surveillance': this.updateSurveillance(delta); break;
     }
-    if (this.loop && this.time - this.lastOcclusion > .45) {
+    if (this.loop && this.plan.kind !== 'fire-alarm' && this.time - this.lastOcclusion > .45) {
       this.lastOcclusion = this.time;
       this.loop.muffle(this.owner.clearSight(this.owner.host.camera.position, this.emitter(), `environment-collider:${this.plan.id}`) ? 0 : .85, this.owner.audio.time);
     }
   }
   private updateAlarm(): void {
-    const time = this.owner.audio.time + this.phase, pulse = alarmPulse(time), d = this.emitter().distanceTo(this.owner.host.camera.position);
-    this.loop ??= this.sound('alarm', this.plan.mount!.position, .85, true, time, 6);
-    // Fade to inaudibility before a streamed owner can leave the audible range.
-    this.loop?.setGain(.85 * (1 - THREE.MathUtils.smoothstep(d, 95, 155)), this.owner.audio.time);
+    const time = this.owner.audio.time + this.phase, pulse = this.owner.audio.alarmLevel(time);
+    const emitter = this.emitter(), listener = this.owner.host.camera.position, d = emitter.distanceTo(listener);
+    // Real local floor datum, never the chunk's story address or camera height.
+    const floorDelta = this.owner.host.playerPosition().y - this.chunk.offset.y - .865 - this.plan.floorY;
+    // A continuous source starts silent; crossing a radius never restarts it.
+    this.loop ??= this.sound('alarm', this.plan.mount!.position, 0, true, time, 6);
+    if (alarmAudibility(d, floorDelta) > 0 && this.time - this.lastOcclusion > .12) {
+      this.lastOcclusion = this.time;
+      let clear = 0;
+      for (const [x,z] of [[0,0],[.45,0],[-.45,0],[0,.45],[0,-.45]]) {
+        this.ear.copy(listener); this.ear.x += x!; this.ear.z += z!;
+        if (this.owner.clearSight(this.ear, emitter, `environment-collider:${this.plan.id}`)) clear++;
+      }
+      this.alarmOcclusion = 1 - clear / 5;
+    }
+    this.loop?.setGain(alarmAudibility(d, floorDelta, this.alarmOcclusion), this.owner.audio.time, .12);
+    this.loop?.muffle(this.alarmOcclusion * .4, this.owner.audio.time);
     this.chunk.view.environmentLighting.set(this.plan.id, 1, pulse * 2.2);
     this.model!.lens!.color.setRGB(.18 + pulse * 3, .003 + pulse * .012, .001);
   }

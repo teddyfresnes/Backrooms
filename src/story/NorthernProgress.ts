@@ -9,7 +9,7 @@ export interface NorthernProgress {
   slidesLayout?: 2;
   selectedSlide?: 'home' | 'fun' | 'death' | 'danger';
 }
-export const COMPASS_GLITCH_SECONDS = 3.2;
+export const COMPASS_GLITCH_SECONDS = 5;
 export const freshNorthernProgress = (): NorthernProgress => ({ version: 1, stage: 'approach', walkedRed: 0, compassSeconds: 0, slidesLayout: 2 });
 const STAGES: NorthernStage[] = ['approach', 'red-zone', 'inspect-compass', 'compass-glitch', 'slides', 'slides-ready'];
 export const sanitizeNorthernProgress = (value: unknown): NorthernProgress | null => {
@@ -63,13 +63,13 @@ export class NorthernProgression {
     }
     if (s.stage === 'compass-glitch' && input.compassVisible) {
       s.compassSeconds = Math.min(COMPASS_GLITCH_SECONDS, s.compassSeconds + Math.max(0, Math.min(.1, input.delta)));
-      if (s.compassSeconds >= COMPASS_GLITCH_SECONDS) s.stage = 'slides';
+      if (s.compassSeconds >= COMPASS_GLITCH_SECONDS - 1e-8) { s.compassSeconds = COMPASS_GLITCH_SECONDS; s.stage = 'slides'; }
     }
     return { changed: before !== s.stage, comment };
   }
   get anomaly(): number {
-    if (this.state.stage !== 'compass-glitch') return 0;
-    return this.state.compassSeconds < 2.2 ? 1 : Math.max(0, 1 - (this.state.compassSeconds - 2.2));
+    // The held compass owns the 5 s / 2 s cycle for every interference source.
+    return ['compass-glitch', 'slides'].includes(this.state.stage) ? 1 : 0;
   }
   get quest(): string | null {
     switch (this.state.stage) {

@@ -102,8 +102,11 @@ la réplique et l'objectif de consultation. `NorthernProgress` persiste la suite
 et émet un `SlideChoice` (IDs et clé `backrooms-slide-…`) via
 `GameOptions.onSlideChoice`. Ce routeur optionnel permet de brancher une prochaine
 expérience ; aucune destination n'est inventée dans le hall actuel.
-Les 3,2 s d'anomalie avancent seulement boussole réellement tenue,
-en jeu libre. Son cap vise l'approche du propriétaire choisi, affinée au montage
+Les 5 s initiales avancent seulement boussole réellement tenue, en jeu libre.
+`CompassInterference` alterne ensuite 5 s de vibration et 2 s de cap verrouillé
+sans inertie, pour l'anomalie comme pour la proximité de la créature. Le cycle
+est suspendu quand la boussole est cachée ou le jeu en pause ; l'anomalie de
+progression s'arrête à l'arrivée aux entrées. Son cap vise l'approche du propriétaire choisi, affinée au montage
 du chunk. Une sauvegarde sans `northern` près de l'ancienne faille est translatée
 avec celle-ci par `NorthernSaveMigration` ; les reprises déjà résolues rattrapent
 la progression rouge sans rejouer la planche. Les checkpoints antérieurs à

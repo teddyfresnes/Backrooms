@@ -4,6 +4,7 @@ import { SeededRandom } from '../world/SeededRandom';
 const URLS = {
   tension: '/assets/audio/bacteria/tension.mp3',
   scream: '/assets/audio/bacteria/scream-loop.mp3',
+  screamer: '/assets/audio/bacteria/screamer.ogg',
   voice: '/assets/audio/bacteria/voice-lines.mp3',
 } as const;
 
@@ -38,6 +39,7 @@ export class BacteriaAudio {
   private readonly buffers: Partial<Record<BufferId, AudioBuffer>> = {};
   private scream?: SpatialVoice;
   private voice?: SpatialVoice;
+  private screamer?: SpatialVoice;
   private tension?: AudioBufferSourceNode;
   private duck = 1;
   private calm = 0;
@@ -52,7 +54,8 @@ export class BacteriaAudio {
       try {
         const response = await fetch(URLS[id]);
         if (!response.ok) return;
-        this.buffers[id] = await output.context.decodeAudioData(await response.arrayBuffer());
+        const buffer = await output.context.decodeAudioData(await response.arrayBuffer());
+        if (!this.disposed) this.buffers[id] = buffer;
       } catch {
         // A missing creature sound must never block the stairwell.
       }
@@ -119,6 +122,7 @@ export class BacteriaAudio {
     voice.filter.frequency.setValueAtTime(16000, now);
     voice.panner.pan.setValueAtTime(0, now);
     this.roarUntil = now + 0.65;
+    this.playScreamer(.9, 1.25);
   }
   private roarUntil = 0;
 
@@ -178,6 +182,26 @@ export class BacteriaAudio {
       voice.panner.pan.setValueAtTime(0, now);
     }
     if (this.scream) this.scream.source.playbackRate.setValueAtTime(0.86, now);
+    this.roarUntil = now + 2.5;
+    this.playScreamer(1.15);
+  }
+
+  /** Owner-supplied attack, separate from the quiet spatial pursuit loop. */
+  private playScreamer(level: number, duration?: number): void {
+    const output = this.output(); if (!output || this.disposed) return;
+    const now = output.context.currentTime;
+    if (this.screamer) this.fadeOut(this.screamer, now, .015);
+    const voice = this.createVoice('screamer', false, 0); if (!voice) return;
+    this.screamer = voice;
+    voice.filter.frequency.setValueAtTime(18000, now);
+    voice.panner.pan.setValueAtTime(0, now);
+    voice.gain.gain.setValueAtTime(level, now);
+    if (duration !== undefined) {
+      voice.gain.gain.setValueAtTime(level, now + duration - .15);
+      voice.gain.gain.linearRampToValueAtTime(0, now + duration);
+      voice.source.stop(now + duration);
+    }
+    voice.source.addEventListener('ended', () => { if (this.screamer === voice) this.screamer = undefined; }, { once: true });
   }
 
   private wind?: { source: AudioBufferSourceNode; filter: BiquadFilterNode; gain: GainNode };
@@ -471,7 +495,7 @@ export class BacteriaAudio {
     const output = this.output();
     const now = output?.context.currentTime ?? 0;
     this.stopPresence(fadeSeconds);
-    for (const voice of [this.scream, this.voice]) {
+    for (const voice of [this.scream, this.voice, this.screamer]) {
       if (!voice) continue;
       try {
         voice.gain.gain.cancelScheduledValues(now);
@@ -487,6 +511,7 @@ export class BacteriaAudio {
     if (fadeSeconds === 0) this.stopFallWind(0);
     this.scream = undefined;
     this.voice = undefined;
+    this.screamer = undefined;
     this.tension = undefined;
     this.duck = 1;
     this.calm = 0;

@@ -254,7 +254,7 @@ export class AudioSystem {
     ]);
     const ambiencePromise = this.ambience === 'backrooms'
       ? Promise.all([
-        this.loadBuffer('/assets/audio/fluorescent-hum-cc0.mp3'),
+        this.loadBuffer('/assets/audio/backrooms-ambience.ogg'),
         this.loadBuffer('/assets/audio/ventilation-cc0.mp3'),
       ])
       : Promise.all([

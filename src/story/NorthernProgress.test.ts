@@ -19,8 +19,10 @@ describe('red-zone story checkpoint', () => {
     expect(resumed.anomaly).toBe(1); expect(resumed.state.target).toEqual(input.owner);
     for (let i = 0; i < 90; i++) resumed.step({ ...input, z: -400 });
     expect(resumed.state.compassSeconds).toBe(.1);
-    for (let i = 0; i < 31; i++) resumed.step({ ...input, z: -400, compassVisible: true });
-    expect(resumed.state.stage).toBe('slides'); expect(resumed.anomaly).toBe(0);
+    for (let i = 0; i < 49; i++) resumed.step({ ...input, z: -400, compassVisible: true });
+    expect(resumed.state.stage).toBe('slides'); expect(resumed.anomaly).toBe(1);
+    expect(sanitizeNorthernProgress(resumed.snapshot)?.compassSeconds).toBe(5);
+    resumed.state.stage='slides-ready';expect(resumed.anomaly).toBe(0);
   });
   it('ignores cinematics/noclip and large teleports, and catches up a legacy far-bank save', () => {
     const p = new NorthernProgression(); p.step(input);

@@ -6,6 +6,22 @@ import { SeededRandom } from '../world/SeededRandom';
 const NORTH = new THREE.Vector3(0, 0, -1);
 const TWO_PI = Math.PI * 2;
 const wrap = (angle: number): number => Math.atan2(Math.sin(angle), Math.cos(angle));
+export const COMPASS_SHAKE_SECONDS = 5;
+export const COMPASS_LOCK_SECONDS = 2;
+
+/** Played time only: a readable bearing between bursts, even near the creature. */
+export class CompassInterference {
+  private elapsed = 0;
+  locked = false;
+  step(delta: number, danger: number): number {
+    if (danger <= .05) { this.elapsed = 0; this.locked = false; return 0; }
+    const period = COMPASS_SHAKE_SECONDS + COMPASS_LOCK_SECONDS;
+    this.elapsed += Math.max(0, Math.min(.1, delta));
+    if (this.elapsed >= period - 1e-8) this.elapsed = Math.max(0, this.elapsed - period);
+    this.locked = this.elapsed + 1e-8 >= COMPASS_SHAKE_SECONDS;
+    return this.locked ? 0 : THREE.MathUtils.clamp(danger, 0, 1);
+  }
+}
 
 /**
  * Damped magnetic needle. Calm, it swings and settles on north as the case
@@ -21,7 +37,11 @@ export class CompassNeedle {
   private kickTimer = 0;
 
   /** `target` is north in the case frame; `danger` is 0 (calm) .. 1 (on top of it). */
-  step(delta: number, target: number, danger: number): number {
+  step(delta: number, target: number, danger: number, locked = false): number {
+    if (locked) {
+      this.angle = target; this.velocity = 0; this.kick = 0; this.kickTimer = 0;
+      return this.angle;
+    }
     const dt = Math.min(0.05, Math.max(0, delta));
     if (dt === 0) return this.angle;
     this.time += dt;
@@ -49,6 +69,7 @@ export class Compass {
   readonly model = createCompassModel();
   private readonly needle: THREE.Object3D;
   private readonly physics = new CompassNeedle();
+  private readonly interference = new CompassInterference();
   private readonly inverse = new THREE.Quaternion();
   private readonly local = new THREE.Vector3();
   private readonly shake = new THREE.Euler();
@@ -71,8 +92,9 @@ export class Compass {
    */
   update(camera: THREE.Camera, palm: { position: THREE.Vector3; quaternion: THREE.Quaternion } | undefined, visible: boolean, danger: number, delta: number, direction: THREE.Vector3Like = NORTH): void {
     this.model.visible = visible;
-    if (!visible) return;
+    if (!visible) { if (danger <= .05) this.interference.step(0, 0); return; }
     this.time += delta;
+    danger = this.interference.step(delta, danger);
     if (palm) {
       this.model.position.copy(palm.position);
       this.model.quaternion.copy(palm.quaternion);
@@ -95,7 +117,7 @@ export class Compass {
     const flat = Math.hypot(this.local.x, this.local.z);
     // Held on edge, the needle has no meaningful north: it keeps its momentum.
     const target = flat > 0.2 ? Math.atan2(-this.local.x, -this.local.z) : this.physics.angle;
-    this.needle.rotation.y = this.physics.step(delta, target, danger);
+    this.needle.rotation.y = this.physics.step(delta, target, danger, this.interference.locked);
     this.needle.position.y = 0.0028 + (danger > 0.05 ? Math.sin(this.time * 63) * 0.00025 * danger : 0);
   }
 

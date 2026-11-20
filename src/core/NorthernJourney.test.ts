@@ -67,7 +67,7 @@ describe('red-zone circuit runtime and destination hook',()=>{
     for(let i=0;i<60;i++)h.runtime.update(.1); expect(h.runtime.snapshot.compassSeconds).toBe(0);
     h.setVisible(true);h.runtime.update(.1);expect(h.runtime.anomaly).toBe(1);
     h.setAvailable(false);for(let i=0;i<40;i++)h.runtime.update(.1); expect(h.runtime.snapshot.compassSeconds).toBe(.1);
-    h.setAvailable(true);for(let i=0;i<31;i++)h.runtime.update(.1);expect(h.runtime.snapshot.stage).toBe('slides');
+    h.setAvailable(true);for(let i=0;i<49;i++)h.runtime.update(.1);expect(h.runtime.snapshot.stage).toBe('slides');
     const slides=environmentFixture('telephone');slides.environmentEvents=[];
     slides.spatial={version:2,owner:{x:0,z:-5,story:0},cells:[],ceilings:[],prisms:[],dependencies:[],interfaces:[],landmarks:[],transitions:[]};
     slides.northern={kind:'red-zone',circuits:[],slides:{id:'slides',kind:'slides',roomId:'room',bounds:slides.rooms[0]!.bounds,position:{x:9,y:0,z:4}}};

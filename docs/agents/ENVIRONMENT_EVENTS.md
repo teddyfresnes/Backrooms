@@ -55,13 +55,17 @@ des panneaux sont analytiques, sans rendu miroir ni réflexion complète du déc
 `render/EnvironmentLighting` compose des uniforms locaux aux rectangles et aux
 hauteurs réelles, en moderne comme en classique. Il ne remplace pas ceux du
 chasseur et n’ajoute aucune lumière dynamique ni shadow map. Le rouge est ajouté
-aux surfaces proches du boîtier selon les trois impulsions de la sirène.
+aux surfaces proches du boîtier selon l'enveloppe du véritable enregistrement de sirène.
 
 `audio/EnvironmentAudio` utilise le contexte et le bus maître d’`AudioSystem`, des
 `PannerNode` HRTF/inverse, un compresseur et un budget de 28 voix. Les échantillons
-synthétiques sont conservés une fois par session. La voix française murmurée est
-un petit Vorbis local déclaré dans les licences. Sonnerie avec hystérésis ; alarme
-atténuée avant de perdre son propriétaire. Pause et volume restent communs.
+synthétiques sont conservés une fois par session. La voix française murmurée et
+la sirène fournie sont des Vorbis locaux déclarés dans les licences. Sonnerie
+avec hystérésis ; l'alarme conserve une seule boucle, démarre à gain nul et
+s'éteint progressivement entre 24 et 48 m, avant le déchargement du propriétaire.
+Son volume dépend de l'écart au sol réel du joueur (nul à ±2,2 m), jamais du
+numéro d'étage ni de la caméra. Cinq rayons et un lissage de 120 ms évitent les
+basculements secs aux portes. Pause et volume restent communs.
 Tous les nœuds audio, géométries, textures et matériaux possédés sont libérés au
 démontage, y compris les chargements de modèle terminés trop tard.
 

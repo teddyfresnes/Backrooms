@@ -29,6 +29,28 @@ const mounted = async (kind: EnvironmentEventKind) => {
   return { runtime, physics, scene, plan, camera, player, offset, states, chunk };
 };
 describe('mounted environmental encounters with Rapier', () => {
+  it('keeps one alarm loop across approaches, fades continuously and silences it on the floor below',async()=>{
+    const h=await mounted('fire-alarm');
+    const setGain=vi.fn(),muffle=vi.fn(),stop=vi.fn();
+    const voice={setGain,muffle,stop,source:{addEventListener:vi.fn()}};
+    const play=vi.spyOn(h.runtime.audio,'play').mockReturnValue(voice as never);
+    const m=h.plan.environmentEvents![0]!.mount!,emitter=new THREE.Vector3().copy(m.position).add(h.offset);
+    const levels:number[]=[];
+    for(const d of [49,48,47,46,40,30,20,10,2]) {
+      h.camera.position.copy(emitter).add(new THREE.Vector3(0,0,d));
+      h.player.copy(h.camera.position).setY(h.offset.y+.865);h.runtime.update(.1);
+      levels.push(setGain.mock.lastCall![0]);
+    }
+    expect(play).toHaveBeenCalledOnce();expect(play.mock.calls[0]![2]).toBe(0);
+    expect(levels[0]).toBe(0);expect(levels[1]).toBe(0);
+    // The 3D panner applies another ~90% attenuation at this distance.
+    expect(levels[2]!).toBeLessThan(.006);expect(levels.at(-1)!).toBeGreaterThan(levels[2]!);
+    h.player.y-=5.4;h.camera.position.y-=5.4;h.runtime.update(.1);
+    expect(setGain.mock.lastCall![0]).toBe(0);expect(play).toHaveBeenCalledOnce();
+    h.player.y+=5.4;h.camera.position.y+=5.4;h.runtime.update(.1);
+    expect(setGain.mock.lastCall![0]).toBeGreaterThan(0);expect(play).toHaveBeenCalledOnce();
+    h.runtime.unmount(h.chunk.key);expect(stop).toHaveBeenCalledOnce();
+  });
   it('allows the shared interaction through its own phone casing, but not through a wall', async () => {
     const h = await mounted('telephone'), m = h.plan.environmentEvents![0]!.mount!;
     const normal = new THREE.Vector3(Math.sin(m.yaw), 0, Math.cos(m.yaw));
