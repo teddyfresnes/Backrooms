@@ -92,6 +92,15 @@ et intérieur), en restaurant caméra et visibilité même en cas d'échec ; les
 ombres statiques sont invalidées après ces vues temporaires. Une fence GPU
 asynchrone attend la fin des transferts, sans `gl.finish()` ni readback, avec une
 limite de 15 secondes mesurée en temps réel et sans dépendre de `requestAnimationFrame`.
+En jeu, `GpuStaging` (installé par `Game` après ce warmup) prépare hors image
+tout contenu streamé avant de l'afficher : chunk monté (colliders actifs aussitôt),
+détails promus, portes et props chargés, événements, chaise et apparition. File
+unique, par tranches : textures, programmes (cible hors écran, scène de jeu pour
+les lumières, attente de liaison côté processus GPU de Firefox), puis buffers.
+Les clés de programme ne doivent pas dépendre d'une valeur propre au chunk :
+hauteur d'étage, nombre de couches régionales, d'événements ou de circuits passent
+par des uniforms et des tableaux de taille fixe, sinon chaque découverte recompile.
+`FrameHitchMonitor.begin()` n'impute pas ce travail entre images à l'image suivante.
 La progression distingue transferts, compilation et premières images. La première
 sauvegarde et sa miniature précèdent le démarrage de la boucle de jeu. Auto et
 Performance limitent les cartes secondaires à 512 pixels ; albédo, affiches et

@@ -2,7 +2,7 @@ import { restrictProfile } from './TransitionLayout';
 import { proposeLiminalPit } from './LiminalPits';
 import { buildGridPit, proposeSpatialCrawl } from './generateWorld';
 import { SeededRandom } from './SeededRandom';
-import { regionalAtrium, regionalCellId, regionalDatum } from './RegionalPlan';
+import { ADDRESS_PITCH, regionalAtrium, regionalCellId, regionalDatum } from './RegionalPlan';
 import { profilePrism, offsetProfile } from './SpatialGeometry';
 import { cutRects, findSurface, overlapRect, surfaceRange, type WalkableSurface } from './WalkableTopology';
 import { rectCenter, rectDepth, type GridPitFeature, type LiminalPitFeature, type Rect, type SqueezeViewFeature, type WallSegment, type WorldPlan } from './types';
@@ -110,6 +110,18 @@ export const installSpatialFeature = (w: WorldPlan, p: SpatialFeatureSlice, hook
       ['east', { ...enclosure, minX: enclosure.maxX, maxX: enclosure.maxX + thickness }]] as const)
       hooks.wall(`${p.id}/enclosure/${owner.story}/${name}`, b, h - .16, h + 5.24);
   } else if (p.phase === 'landing') {
+    // Line the plenum between this story's ceiling and the slab above with a
+    // plaster sleeve around every hole. Without it the fall crossed an open void
+    // showing the back of neighbouring ceilings, as if landing on them.
+    const sleeve = .14, slab = h + ADDRESS_PITCH - .16;
+    for (const [i, hole] of p.holes.entries()) {
+      const around = { minX: hole.minX - sleeve, maxX: hole.maxX + sleeve, minZ: hole.minZ - sleeve, maxZ: hole.maxZ + sleeve };
+      const roofs = spatial.ceilings.filter(s => overlapRect(s.bounds, around) && surfaceRange(s)[0] > h + 1.5).map(s => surfaceRange(s)[0]);
+      const bottom = Math.min(slab - .3, (roofs.length ? Math.min(...roofs) : h + 2.74) - .03);
+      for (const [side, b] of [['north', { ...around, maxZ: hole.minZ }], ['south', { ...around, minZ: hole.maxZ }],
+        ['west', { minX: around.minX, maxX: hole.minX, minZ: hole.minZ, maxZ: hole.maxZ }], ['east', { minX: hole.maxX, maxX: around.maxX, minZ: hole.minZ, maxZ: hole.maxZ }]] as const)
+        hooks.prism(profilePrism(`${p.id}/plenum/${owner.story}/${i}/${side}`, b, flat(bottom), flat(slab), 'plaster'));
+    }
     t.surfaces = cut(t.surfaces, p.holes, `${p.id}/arrival`); roofCut(p.holes); w.ceilingOpenings!.push(...p.holes);
     p.holes.forEach((b, i) => hooks.surface(`${p.id}/landing-${i}`, rid, b, h, h + 2.74, 'landing'));
   } else {

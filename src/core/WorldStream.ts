@@ -19,6 +19,7 @@ import type { LightingMode } from '../render/LightingMode';
 import type { BiomeMaterialSets } from '../render/MaterialLibrary';
 import { unlitZoneInfluence } from '../render/ZonalLighting';
 import { WorldView } from '../render/WorldBuilder';
+import { prepareForDisplay, revealWhenPrepared } from '../render/GpuStaging';
 import { prepareSpatialArchitecture, type SpatialArchitectureBuffers } from '../render/SpatialArchitectureBuffers';
 import type { DoorWorldInteraction, WorldInteraction } from '../render/WorldBuilder';
 import {
@@ -1504,6 +1505,8 @@ export class WorldStream {
     }
     view.restoreDoorStates(runtime.view.getDoorStates());
     if (!runtime.view.architectureOnly) await view.promoteDetails();
+    // The previous view stays on screen while the replacement's programs link.
+    await prepareForDisplay(view.group, () => !this.disposed && this.chunks.get(runtime.key) === runtime);
     if (this.disposed || this.lightingRevision !== revision || this.chunks.get(runtime.key) !== runtime) { view.dispose(); return; }
     // A slider change may have happened while this replacement awaited assets.
     view.setBrightness(this.brightness);
@@ -1555,6 +1558,9 @@ export class WorldStream {
     try {
       this.physics.addChunk(key, plan.colliders, offset);
       this.scene.add(view.group);
+      // Colliders are live at once; the picture appears once its shaders are
+      // linked off-frame (neighbours mount far away, behind the fog).
+      void revealWhenPrepared(view.group, () => this.chunks.get(key)?.view === view);
       this.characterPitsCache = null;
       this.chunks.set(key, {
         key,

@@ -97,6 +97,12 @@ export interface ProgressiveCompileOptions {
    * compiled again, doubling a load already dominated by shader links. */
   offscreen?: boolean;
   onProgramCount?(count: number): void;
+  /** Scene whose lights, fog and environment the programs are built for, when
+   * `scene` is a detached or hidden subtree staged before being shown. */
+  targetScene?: THREE.Scene;
+  /** Idle time between submitting new programs and first querying them. Firefox
+   * links in its GPU process: querying immediately would block on that link. */
+  settleMs?: number;
 }
 
 /** Without KHR_parallel_shader_compile (Firefox), compileAsync resolves at once
@@ -105,27 +111,33 @@ export interface ProgressiveCompileOptions {
 export async function compileSceneProgressively(
   renderer: CompilingRenderer, scene: THREE.Object3D, camera: THREE.Camera, options: ProgressiveCompileOptions = {},
 ): Promise<void> {
-  const { cancelled = () => false, onProgress, pause = browserTask, offscreen = true } = options;
+  const { cancelled = () => false, onProgress, pause = browserTask, offscreen = true, targetScene = scene as THREE.Scene } = options;
   const canBind = offscreen && renderer.getRenderTarget && renderer.setRenderTarget;
-  const target = canBind ? new THREE.WebGLRenderTarget(1, 1) : undefined, previous = canBind ? renderer.getRenderTarget!() : null;
-  const bind = () => { if (target) renderer.setRenderTarget!(target); };
+  const target = canBind ? new THREE.WebGLRenderTarget(1, 1) : undefined;
+  // The current target is read at every bind: during play a frame can run
+  // between two slices and leave another target bound.
+  let previous: THREE.WebGLRenderTarget | null = null;
+  const bind = () => { if (target) { previous = renderer.getRenderTarget!(); renderer.setRenderTarget!(target); } };
   const unbind = () => { if (target) renderer.setRenderTarget!(previous); };
   const before = renderer.info?.programs?.length ?? 0;
   try {
     // has() checks silently; get() logs "extension not supported" on Firefox.
     const parallel = renderer.extensions?.has?.('KHR_parallel_shader_compile');
     if (parallel || !renderer.compile || !renderer.properties) {
-      bind(); const ready = renderer.compileAsync(scene, camera); unbind();
+      bind(); const ready = renderer.compileAsync(scene, camera, targetScene); unbind();
       await ready; onProgress?.(1); return;
     }
     const representatives = new Map<string, THREE.Object3D>();
+    scene.updateMatrixWorld(true);
     scene.traverse(object => {
       const mesh = object as THREE.Mesh;
       if (!mesh.material || !(mesh.isMesh || (object as THREE.Points).isPoints || (object as THREE.Line).isLine || (object as THREE.Sprite).isSprite)) return;
       const skinned = (mesh as THREE.SkinnedMesh).isSkinnedMesh, instanced = (mesh as THREE.InstancedMesh).isInstancedMesh;
+      // A mirrored instance (negative scale) builds a flip-sided program variant.
+      const mirrored = object.matrixWorld.determinant() < 0;
       for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
         // Object traits change the program; the material alone does not.
-        const key = `${material.uuid}:${object.type}:${skinned ? 1 : 0}:${instanced ? 1 : 0}:${mesh.geometry?.morphAttributes?.position ? 1 : 0}:${mesh.geometry?.attributes.color ? 1 : 0}`;
+        const key = `${material.uuid}:${object.type}:${skinned ? 1 : 0}:${instanced ? 1 : 0}:${mesh.geometry?.morphAttributes?.position ? 1 : 0}:${mesh.geometry?.attributes.color ? 1 : 0}:${mirrored ? 1 : 0}`;
         if (!representatives.has(key)) representatives.set(key, object);
       }
     });
@@ -139,10 +151,16 @@ export async function compileSceneProgressively(
     for (let i = 0; i < objects.length; i++) {
       if (cancelled()) return;
       bind();
-      try { for (const material of renderer.compile(objects[i]!, camera, scene as THREE.Scene)) submitted.add(material); }
+      try { for (const material of renderer.compile(objects[i]!, camera, targetScene)) submitted.add(material); }
       finally { unbind(); }
       onProgress?.((i + 1) / objects.length * .2);
       if (performance.now() - sliceStart >= 12) { await pause(); sliceStart = performance.now(); }
+    }
+    // Only freshly submitted programs need time to link off the main thread.
+    if (options.settleMs && (renderer.info?.programs?.length ?? 0) > before) {
+      const until = performance.now() + options.settleMs;
+      while (performance.now() < until) { if (cancelled()) return; await pause(); }
+      sliceStart = performance.now();
     }
     // Pass 2: getUniforms() is Three's first use and waits for that one link.
     const programs = [...new Set([...submitted].map(material =>

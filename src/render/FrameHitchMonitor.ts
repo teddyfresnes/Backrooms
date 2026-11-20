@@ -43,6 +43,14 @@ export class FrameHitchMonitor {
     this.lights = lightSignature(scene);
   }
 
+  /** Snapshot at frame start: work done between frames (off-frame GPU staging)
+   * is not reported as compiled or uploaded inside the next frame. */
+  begin(): void {
+    this.programs = this.renderer.info.programs?.length ?? 0;
+    this.textures = this.renderer.info.memory.textures;
+    this.geometries = this.renderer.info.memory.geometries;
+  }
+
   check(frameStart: number, where?: THREE.Vector3): void {
     const duration = performance.now() - frameStart;
     const programs = this.renderer.info.programs ?? [];

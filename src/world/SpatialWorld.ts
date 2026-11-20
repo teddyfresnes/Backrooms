@@ -27,7 +27,7 @@ import { classifySurfaceAccess, cutRects, findSurface, overlapRect, surfaceColli
   type HeightProfile, type SurfaceConnection, type WalkableSurface } from './WalkableTopology';
 
 /** Version of ordinary regional plans, reported as the session's generator version. */
-export const SPATIAL_PLAN_VERSION = 24;
+export const SPATIAL_PLAN_VERSION = 25;
 const sides = ['north', 'east', 'south', 'west'] as const;
 type Side = typeof sides[number];
 const deltas: Record<Side, [number, number]> = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
@@ -372,16 +372,9 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
           world.features.push(feature);
           world.colliders.push({ id: feature.colliderId, kind: 'wall', center: { x, z, y: h + f.height / 2 }, halfExtents: { x: f.orientation === 'x' ? f.width / 2 : .06, y: f.height / 2, z: f.orientation === 'z' ? f.width / 2 : .06 } });
         }
-      } else {
-        // Wall-to-wall beams are anchored in the atrium facades, with their
-        // entire envelope excluded from the full stair circulation.
-        for (const sz of [-1, 1]) {
-          const beam = { ...b, minZ: p.z + sz * 8 - .12, maxZ: p.z + sz * 8 + .12 };
-          if (protectedRoutes.filter(r => rectWidth(r) < 10 && rectDepth(r) > 10).some(r => overlapRect(r, beam) && atrium?.stairs && atriumCirculation(b, h + (atrium.owner - atrium.lower) * ADDRESS_PITCH, atrium).legs.some(l => overlapRect(l.bounds, beam)))) continue;
-          addPrism(profilePrism(`${id}/fixture-beam-${sz}`, beam, flat(h + 2.74), flat(h + 2.96), 'plaster'));
-          for (const sx of [-1, 1]) { const x = p.x + sx * 8, z = p.z + sz * 8, room = roomAt(x, z); if (room && !lightBlocked(x, z)) world.lights.push({ id: `${id}/lower-light-${sx}-${sz}`, x, z, roomId: room.id, ceilingY: h + 2.74, width: 1.55, rotation: 0, intensity: 1.08, color: 0xffffe4, dead: false, unstable: false, phase: 0, level: 0 }); }
-        }
       }
+      // The open atrium floor no longer gets wall-to-wall plaster beams carrying
+      // lamps: it is lit by its entry fixtures and the galleries above.
     } else if (mode === 'gallery' && !atrium?.liminal) {
       for (const x of [b.minX + 1.5, b.maxX - 1.5]) for (const z of [b.minZ + 1.5, b.maxZ - 1.5])
         world.lights.push({ id: `${id}/high-light/${x}/${z}`, x, z, ceilingY: roofY, width: 1.55, rotation: 0, intensity: 1.08, color: 0xffffe4, dead: false, unstable: false, phase: 0, roomId, level: 0 });
@@ -514,31 +507,11 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
     && lightPanelOverlapsRect(light, { minX: w.x - (w.orientation === 'x' ? w.length : w.thickness) / 2, maxX: w.x + (w.orientation === 'x' ? w.length : w.thickness) / 2,
       minZ: w.z - (w.orientation === 'z' ? w.length : w.thickness) / 2, maxZ: w.z + (w.orientation === 'z' ? w.length : w.thickness) / 2 })));
 
-  // Only exposed gallery edges receive parapets; keep the stair entry and exit
-  // open. Subtract all same-height neighbours so bridges never get end barriers.
-  for (const s of topology.surfaces.filter(s => s.role === 'balcony' || s.role === 'bridge' || s.edges === 'guarded')) {
-    const b = s.bounds, y = surfaceRange(s)[0];
-    for (const [edgeName, axis, fixed, min, max] of [['north', 'x', b.minZ, b.minX, b.maxX], ['south', 'x', b.maxZ, b.minX, b.maxX], ['west', 'z', b.minX, b.minZ, b.maxZ], ['east', 'z', b.maxX, b.minZ, b.maxZ]] as const) {
-      if (s.openEdges?.includes(edgeName)) continue;
-      let intervals = [{ min, max }];
-      for (const other of topology.surfaces) {
-        if (s === other) continue; const r = other.bounds, lo = axis === 'x' ? r.minX : r.minZ, hi = axis === 'x' ? r.maxX : r.maxZ;
-        const near = axis === 'x' ? [r.minZ, r.maxZ] : [r.minX, r.maxX]; if (!near.some(v => Math.abs(v - fixed) < .002)) continue;
-        const along = (Math.max(lo, min) + Math.min(hi, max)) / 2;
-        if (Math.abs(surfaceY(other, axis === 'x' ? along : fixed, axis === 'x' ? fixed : along) - y) > .19) continue;
-        intervals = intervals.flatMap(g => hi <= g.min || lo >= g.max ? [g] : [{ min: g.min, max: Math.min(g.max, lo) }, { min: Math.max(g.min, hi), max: g.max }].filter(v => v.max - v.min > .04));
-      }
-      // A cell boundary is architectural, not a guard across the next room.
-      const boundary = Math.abs((fixed + 56) / 28 - Math.round((fixed + 56) / 28)) < .0001; if (boundary) continue;
-      const rail = fixed + (edgeName === 'north' || edgeName === 'west' ? .06 : -.06);
-      intervals.forEach((g, i) => wall(`${s.id}/parapet/${axis}/${fixed}/${i}`, axis === 'x'
-        ? { minX: g.min, maxX: g.max, minZ: rail - .06, maxZ: rail + .06 }
-        : { minZ: g.min, maxZ: g.max, minX: rail - .06, maxX: rail + .06 }, y, y + 1.05));
-    }
-  }
+  // Galleries, bridges and stair landings over an atrium stay open: their
+  // former waist-high wall parapets read as clumsy partitions, not railings.
 
-  // Supports and gallery parapets can bury a last ordinary fragment. Resolve
-  // those final solids before their finish, and rebuild the physical floor.
+  // Supports can bury a last ordinary fragment. Resolve those final solids
+  // before their finish, and rebuild the physical floor.
   if (cleanSpatialWallJunctions(world)) rebuildFloors();
   closeSpatialFloorContacts(world);
   spatial.prisms.push(...createSpatialBaseboards(world));

@@ -73,6 +73,7 @@ import {
   PASSAGE_HOLE_LOWER_FLOOR_Y,
 } from '../world/PassageHoleLayout';
 import { SeededRandom } from '../world/SeededRandom';
+import { gpuStagingActive, prepareForDisplay } from './GpuStaging';
 import {
   getStairCageWalls,
   getStairFloorOpening,
@@ -1434,6 +1435,7 @@ export class WorldView {
   private architectureDebug?: ArchitectureDebug;
   private readonly initialReady: Promise<void>;
   private detailReady?: Promise<void>;
+  private disposed = false;
   private previewOnly: boolean;
   get ready(): Promise<void> { return this.detailReady ?? this.initialReady; }
   get architectureOnly(): boolean { return this.previewOnly; }
@@ -1598,20 +1600,38 @@ export class WorldView {
     this.setBrightness(options.brightness ?? DEFAULT_BRIGHTNESS);
     this.environmentLighting.decorate(this.group);
     this.northernLighting.decorate(this.group);
-    this.initialReady = Promise.all([this.doorLayer.ready, this.propLayer.ready]).then(() => { this.environmentLighting.decorate(this.group); this.northernLighting.decorate(this.group); });
+    // Doors and props arrive asynchronously, after the chunk itself was staged.
+    const staged = gpuStagingActive() ? [this.doorLayer.group, this.propLayer.group] : [];
+    for (const node of staged) node.visible = false;
+    this.initialReady = Promise.all([this.doorLayer.ready, this.propLayer.ready])
+      .then(() => { this.environmentLighting.decorate(this.group); this.northernLighting.decorate(this.group); })
+      .then(() => this.revealStaged(staged));
   }
 
-  /** Keep the existing architecture and lighting when the player approaches. */
+  /** Shows late content only once its shaders, textures and buffers are ready. */
+  private async revealStaged(nodes: readonly THREE.Object3D[]): Promise<void> {
+    if (!nodes.length) return;
+    await Promise.all(nodes.map(node => prepareForDisplay(node, () => !this.disposed)));
+    if (!this.disposed) for (const node of nodes) node.visible = true;
+  }
+
+  /** Keep the existing architecture and lighting when the player approaches.
+   * Details stay hidden until prepared: no compile freeze on approach or fall. */
   promoteDetails(): Promise<void> {
     if (!this.previewOnly) return this.ready;
     this.previewOnly = false;
+    const before = new Set(this.group.children);
     this.buildWallGraffiti(); this.buildCeilingDamage();
     this.propLayer.dispose();
     this.propLayer = new WorldPropLayer(this.plan, this.lightingContext ?? null);
     this.group.add(this.propLayer.group);
+    const staged = gpuStagingActive() ? this.group.children.filter(child => !before.has(child)) : [];
+    for (const node of staged) node.visible = false;
     this.environmentLighting.decorate(this.group);
     this.northernLighting.decorate(this.group);
-    this.detailReady = Promise.all([this.initialReady, this.propLayer.ready]).then(() => { this.environmentLighting.decorate(this.group); this.northernLighting.decorate(this.group); });
+    this.detailReady = Promise.all([this.initialReady, this.propLayer.ready])
+      .then(() => { this.environmentLighting.decorate(this.group); this.northernLighting.decorate(this.group); })
+      .then(() => this.revealStaged(staged));
     return this.detailReady;
   }
 
@@ -4269,6 +4289,7 @@ export class WorldView {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.slidesViews.forEach(v=>v.dispose());
     this.architectureDebug?.dispose();
     this.doorLayer.dispose();

@@ -545,8 +545,10 @@ export const pinZonalLightingStoryHeight = (
           * step(zonalStorySampleHeight, zoneMaxY);`,
       );
   };
+  // The height is a uniform, not part of the key: chunks of every ceiling
+  // height share one program instead of compiling a new one on discovery.
   material.customProgramCacheKey = () =>
-    `${previousProgramCacheKey()}|story-sample-height-${sampleHeight.toFixed(4)}`;
+    `${previousProgramCacheKey()}|story-sample-height-v2`;
   material.needsUpdate = true;
 };
 

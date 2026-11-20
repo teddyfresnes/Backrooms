@@ -6,6 +6,7 @@ import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import type { EnvironmentChunk, EnvironmentChunkObserver } from '../core/WorldStream';
 import { createPropInstance, disposePropInstance } from '../render/WorldProps';
 import { applyZonalLighting } from '../render/ZonalLighting';
+import { gpuStagingActive, prepareForDisplay, revealWhenPrepared } from '../render/GpuStaging';
 import type { EnvironmentLighting } from '../render/EnvironmentLighting';
 import { SeededRandom } from '../world/SeededRandom';
 import { getPropAsset } from '../world/PropCatalog';
@@ -60,6 +61,8 @@ export class EnvironmentRuntime implements EnvironmentChunkObserver {
     const root = new THREE.Group(); root.name = `environment-${chunk.key}`; root.position.copy(chunk.offset); this.host.scene.add(root);
     const events = chunk.plan.environmentEvents.map(plan => new EventInstance(this, chunk, root, plan));
     this.chunks.set(chunk.key, { chunk, root, events });
+    // Devices, water and lights are linked off-frame before their first sight.
+    void revealWhenPrepared(root, () => this.chunks.get(chunk.key)?.root === root);
   }
   unmount(key: string): void {
     const mounted = this.chunks.get(key); if (!mounted) return;
@@ -116,6 +119,8 @@ export class EnvironmentRuntime implements EnvironmentChunkObserver {
     void BacteriaActor.load(this.abort.signal).then(actor => {
       if (this.disposed) { actor.dispose(); return; }
       this.ghost = actor; actor.setVisible(false); actor.setMotion('stalk'); actor.setPace(.55); this.host.scene.add(actor.root);
+      // Hidden until its reveal: link its programs now, not during the flash.
+      void prepareForDisplay(actor.root, () => !this.disposed && this.ghost === actor);
     }).catch(error => { if (!this.disposed) console.warn('Apparition Bacteria indisponible', error); });
   }
   acquireGhost(id: string): BacteriaActor | undefined {
@@ -192,7 +197,12 @@ class EventInstance {
     const model = await createPropInstance({ id: this.plan.id, assetId: 'polyhaven:painted_wooden_chair_01', roomId: this.plan.roomId,
       position, rotationY: p.yaws[index]!, scale: 1, bounds: this.plan.bounds, kind: 'room', tone: .84 }, this.chunk.plan.visualBiome ?? 'yellow');
     if (this.disposed) { disposePropInstance(model); return; }
+    // Lighting hooks first, then the final programs are prepared hidden.
+    model.visible = !gpuStagingActive();
     this.chair = model; this.root.add(model); this.placeChair(); this.rebind(this.chunk);
+    if (model.visible) return;
+    await prepareForDisplay(model, () => !this.disposed);
+    if (!this.disposed) model.visible = true;
   }
   rebind(chunk: EnvironmentChunk): void {
     this.chunk = chunk;

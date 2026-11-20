@@ -156,15 +156,21 @@ export const setRegionalLightNeighbor = (field: RegionalLightField, dx: number, 
 
 /** Extend only the zonal shader: retain its original pool/contact/tint tuning.
  * Classic materials retain their historical baked-light shader unchanged. */
+/** Upper bound of the shader's layer loop; deeper stacks are not generated. */
+export const REGIONAL_MAX_LAYERS = 16;
 export const applyRegionalLighting = (material: THREE.Material, field: RegionalLightField): void => {
   const before = material.onBeforeCompile, key = material.customProgramCacheKey.bind(material);
   material.onBeforeCompile = (shader, renderer) => {
     before.call(material, shader, renderer);
     shader.uniforms.regionalBounds = { value: field.texture };
     shader.uniforms.regionalFluorescent = { value: field.lighting };
+    // The layer count is a uniform: every multi-layer chunk shares ONE program
+    // instead of compiling a new variant per count while the player explores.
+    shader.uniforms.regionalLayers = { value: Math.min(field.layers, REGIONAL_MAX_LAYERS) };
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>
       uniform sampler2D regionalBounds;
       uniform sampler2D regionalFluorescent;
+      uniform float regionalLayers;
       // Resolve the volume at EACH texel before interpolation. Atlas rows may
       // change layer when a balcony ends: hardware filtering would mix floors.
       vec4 regionalTap(vec2 pixel, float y, out vec2 height) {
@@ -174,8 +180,9 @@ export const applyRegionalLighting = (material: THREE.Material, field: RegionalL
         float best = 1.0e20;
         vec2 selectedUv = vec2(0.0);
         float valid = 0.0;
-        for (int layer = 0; layer < ${field.layers}; layer++) {
-          vec2 uv = vec2((xy.x + 1.5) / 98.0, (xy.y + 1.5 + float(layer) * 98.0) / (98.0 * ${field.layers}.0));
+        for (int layer = 0; layer < ${REGIONAL_MAX_LAYERS}; layer++) {
+          if (float(layer) >= regionalLayers) break;
+          vec2 uv = vec2((xy.x + 1.5) / 98.0, (xy.y + 1.5 + float(layer) * 98.0) / (98.0 * regionalLayers));
           vec4 volume = texture2D(regionalBounds, uv);
           float outside = abs(y - clamp(y, volume.x, volume.y));
           float score = outside * 10000.0 + abs(y - volume.x);
@@ -217,6 +224,6 @@ export const applyRegionalLighting = (material: THREE.Material, field: RegionalL
       .replace('float wallHeight = max(0.1, zoneMaxY - 0.55);', 'float wallHeight = max(0.1, localVolume.y - localVolume.x);')
       .replace('clamp(zonalChunkPosition.y / wallHeight, 0.0, 1.0)', 'clamp((zonalChunkPosition.y - localVolume.x) / wallHeight, 0.0, 1.0)');
   };
-  material.customProgramCacheKey = () => `${key()}|regional-zonal-volumes-v2-${field.layers}`;
+  material.customProgramCacheKey = () => `${key()}|regional-zonal-volumes-v3-${field.layers === 1 ? 'single' : 'layered'}`;
   material.needsUpdate = true;
 };

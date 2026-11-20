@@ -183,7 +183,9 @@ describe('zonal fluorescent materials', () => {
     );
     expect((shader.uniforms.zonalStorySampleHeight as THREE.IUniform<number>).value)
       .toBeCloseTo(2.74);
-    expect(ceiling.customProgramCacheKey()).toContain('story-sample-height-2.7400');
+    // The height is a uniform: other ceiling heights reuse the same program.
+    expect(ceiling.customProgramCacheKey()).toContain('story-sample-height-v2');
+    expect(ceiling.customProgramCacheKey()).not.toContain('2.74');
 
     ceiling.dispose();
     created.ownedMaterials.forEach((material) => material.dispose());

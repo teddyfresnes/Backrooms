@@ -2,6 +2,7 @@ import { CharacterRuntime } from '../character/CharacterRuntime';
 import { viewmodelCommand, VIEWMODEL_COMPLETION } from '../character/ViewmodelCommand';
 import * as THREE from 'three';
 import { AudioSystem } from '../audio/AudioSystem';
+import { FallAudio } from '../audio/FallAudio';
 import { siteAudio } from '../audio/SiteAudio';
 import { describeViewDirection, resolveDiagnosticsVisibility } from './Diagnostics';
 import type { DiagnosticsSnapshot, PlayerDiagnostics, SystemDiagnostics } from './Diagnostics';
@@ -18,6 +19,7 @@ import { resolveLightingBrightness } from '../render/LightingBrightness';
 import { MaterialLibrary } from '../render/MaterialLibrary';
 import { PostFX } from '../render/PostFX';
 import { compileSceneProgressively, waitForSceneGpu } from '../render/SceneWarmup';
+import { GpuStagingQueue, releaseGpuStager, setGpuStager } from '../render/GpuStaging';
 import { FrameHitchMonitor } from '../render/FrameHitchMonitor';
 import { ExperienceUI } from '../ui/ExperienceUI';
 import type { ConsoleCompletion, ConsoleMode, ConsoleSubmitResult } from '../ui/ExperienceUI';
@@ -151,6 +153,8 @@ export class Game {
   private readonly atmosphereTargetColor = new THREE.Color();
   private readonly ui: ExperienceUI;
   private readonly audio = new AudioSystem();
+  private readonly fallAudio = new FallAudio(() => this.audio.getOutput());
+  private readonly fallListener = new THREE.Vector3();
   private readonly lookDirection = new THREE.Vector3();
   private readonly streamingVelocity = new THREE.Vector3();
   private readonly lastSafePosition = new THREE.Vector3();
@@ -171,6 +175,7 @@ export class Game {
   private character?: CharacterRuntime;
   private readonly playerCamera = this.camera.clone();
   private postFX?: PostFX;
+  private gpuStaging?: GpuStagingQueue;
   private previousTime = performance.now();
   private accumulator = 0;
   private elapsed = 0;
@@ -526,6 +531,10 @@ export class Game {
     this.syncSaveHistory();
     this.ui.setSessionStarted(true);
     this.ui.setReady();
+    // From now on, streamed content is linked and uploaded off-frame before it
+    // is shown; the initial neighbourhood was covered by the warmup above.
+    this.gpuStaging = new GpuStagingQueue(this.renderer, this.scene, this.camera, () => this.disposed);
+    setGpuStager(this.gpuStaging);
     this.renderer.setAnimationLoop(this.frame);
     // Development only: lets a capture driver teleport, aim and read mounted plans.
     if (import.meta.env.DEV) (window as unknown as { __BACKROOMS_DEV__?: Game }).__BACKROOMS_DEV__ = this;
@@ -1175,6 +1184,8 @@ export class Game {
   private readonly frame = (now: number): void => {
     if (this.disposed || this.transitionSuspended || !this.player || !this.worldStream || !this.postFX) return;
     const frameStart = performance.now();
+    // Off-frame staging between two frames must not be blamed on this one.
+    this.hitches?.begin();
     const measuredDelta = Math.max(0, (now - this.previousTime) / 1000);
     const rawDelta = Math.min(0.05, measuredDelta);
     this.previousTime = now;
@@ -1239,6 +1250,8 @@ export class Game {
       this.player.position.z,
     );
     this.audio.update(room);
+    // Rushing air follows the listener's real descent (controller, ragdoll or scripted fall).
+    this.fallAudio.update(rawDelta, this.camera.getWorldPosition(this.fallListener).y, playing && !this.player.isNoclipEnabled);
 
     // Keep simulation deltas bounded, but measure the real wall-clock frame.
     // Generation stalls must remain visible to both the HUD and quality loop.
@@ -1480,6 +1493,7 @@ export class Game {
     if (this.disposed) return;
     this.disposed = true;
     this.renderer.setAnimationLoop(null);
+    if (this.gpuStaging) { releaseGpuStager(this.gpuStaging); this.gpuStaging.dispose(); this.gpuStaging = undefined; }
     window.removeEventListener('resize', this.resize);
     window.removeEventListener('keydown', this.onConsoleHotkey);
     window.removeEventListener('pagehide', this.onPageHide);
@@ -1494,6 +1508,7 @@ export class Game {
     this.environment?.dispose();
     this.creature?.dispose();
     this.creatureAudio.dispose();
+    this.fallAudio.dispose();
     this.riftAudio.dispose();
     this.flashlight?.dispose();
     this.compass?.dispose();
