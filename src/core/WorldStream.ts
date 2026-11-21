@@ -897,7 +897,7 @@ export class WorldStream {
     for (const runtime of this.chunks.values()) {
       for (const l of runtime.plan.spatial?.landmarks ?? []) {
         const aliases = l.kind === 'slides' ? ['slides', 'toboggans', 'toboggan'] : l.kind.startsWith('escalier-') ? ['escalier', l.kind] : [l.kind];
-        addTarget(runtime, l.kind === 'slides' ? 'toboggans' : l.kind, l.kind === 'slides' ? 'Les quatre toboggans' : l.kind.replaceAll('-', ' '), aliases, l.position);
+        addTarget(runtime, l.kind === 'slides' ? 'toboggans' : l.kind, l.kind === 'slides' ? 'Les toboggans' : l.kind.replaceAll('-', ' '), aliases, l.position);
       }
       // Rare environmental events of the mounted neighbourhood, at a free standing
       // point: facing a wall device, at the far end of the flicker, beside the chair.
@@ -1231,7 +1231,7 @@ export class WorldStream {
 
     const slidesCoord = nearestSlidesCoord({ x: playerPosition.x / INFINITE_CHUNK_SIZE, story: this.centerCoord.story });
     const slidesOffset = getChunkWorldOffset(slidesCoord);
-    addWorldTarget(createChunkKey(slidesCoord), 'toboggans', 'Les quatre toboggans', ['slides','toboggans','toboggan','backrooms-slides'],
+    addWorldTarget(createChunkKey(slidesCoord), 'toboggans', 'Les toboggans', ['slides','toboggans','toboggan','backrooms-slides'],
       { x:slidesOffset.x+SLIDES_APPROACH.x,y:slidesOffset.y+SLIDES_APPROACH.y,z:slidesOffset.z+SLIDES_APPROACH.z });
     // Ordinary targets remain local to mounted chunks. Epics are resolved
     // analytically so /locate stays useful now that monuments are genuinely rare.

@@ -27,11 +27,14 @@ import { loadGameSettings, type GameSettings } from '../ui/settings';
 import { createReadableSeed } from '../world/SeededRandom';
 import { fingerprintWorld, validateWorldPlan } from '../world/generateWorld';
 import {
+  createChunkKey,
   generateInfiniteChunk,
   getChunkWorldOffset,
 } from '../world/InfiniteWorld';
+import type { SlideKey } from '../world/SlidesStructure';
 import type { DoorOpenMode, VisualBiome, WorldPlan } from '../world/types';
 import { streamChunkCoordAt, WorldStream } from './WorldStream';
+import { SlideDive, type SlideDiveRequest } from './SlideDive';
 import type { LocateTarget } from './WorldStream';
 import {
   getGameSaveSummary,
@@ -215,6 +218,7 @@ export class Game {
   private rift?: RiftEncounter;
   private environment?: EnvironmentRuntime;
   private northern?: NorthernJourney;
+  private slideDive?: SlideDive;
   private unsubscribeNorthern?: () => void;
   private readonly savedNorthern?: NorthernProgress;
   private readonly environmentPosition = new THREE.Vector3();
@@ -483,7 +487,7 @@ export class Game {
       this.environment = new EnvironmentRuntime({
         scene: this.scene, camera: this.camera, physics: this.physics,
         output: () => this.audio.getOutput(), playerPosition: () => this.physics!.getStandingPosition(this.environmentPosition),
-        canDiscover: () => !this.rift?.ownsCharacter && !this.character?.isBusy && !this.player?.isNoclipEnabled && (this.rift?.threat ?? 0) < .5,
+        canDiscover: () => !this.scriptedShot && !this.character?.isBusy && !this.player?.isNoclipEnabled && (this.rift?.threat ?? 0) < .5,
         prepareChase: () => this.rift?.prepareEnvironmentalChase(),
         startChase: () => this.rift?.startEnvironmentalChase() ?? false,
         caption: text => this.caption?.say(text),
@@ -493,12 +497,13 @@ export class Game {
         scene: this.scene, camera: this.camera, physics: this.physics, audio: this.environment.audio,
         position: () => this.physics!.getStandingPosition(this.environmentPosition),
         owner: () => this.worldStream!.supportedCoordAt(this.physics!.getStandingPosition(this.environmentPosition)),
-        available: () => !this.rift?.ownsCharacter && !this.character?.isBusy && !this.player?.isNoclipEnabled && (this.rift?.threat ?? 0) < .5,
+        available: () => !this.scriptedShot && !this.character?.isBusy && !this.player?.isNoclipEnabled && (this.rift?.threat ?? 0) < .5,
         riftResolved: () => this.rift?.snapshot.stage === 'done',
         compassVisible: () => !!this.compass?.model.visible && this.inventory?.equipped?.id === COMPASS_ID && this.equipmentTransition.amount > .7,
         caption: text => this.caption?.say(text), revealCompass: () => this.inventoryHUD?.reveal(),
         checkpoint: () => { this.saveNow('autosave', true); },
         slideChoice: choice => this.options.onSlideChoice?.(choice),
+        diveIntoSlide: request => this.startSlideDive(request),
       }, states, this.savedNorthern);
       this.unsubscribeNorthern = this.worldStream.addChunkObserver(this.northern);
       await this.environment.load();
@@ -571,9 +576,9 @@ export class Game {
     const quest = riftQuest?.urgent ? riftQuest : this.northern?.questText ?? riftQuest ?? null;
     // Urgent orders take the centre of the screen; the calm objective stays top left.
     this.storyHud?.setQuest(quest?.urgent ? quest.text : null, 'urgent');
-    this.questTracker?.update(quest && !quest.urgent ? quest.text : null, visible && !!quest && !quest.urgent && !this.rift?.ownsCharacter);
+    this.questTracker?.update(quest && !quest.urgent ? quest.text : null, visible && !!quest && !quest.urgent && !this.scriptedShot);
     this.questTracker?.tick(delta, playing, !this.settings.cameraMotion);
-    this.inventoryHUD?.update(this.inventory, delta, visible && !this.rift?.ownsCharacter, playing, '', '', !this.settings.cameraMotion);
+    this.inventoryHUD?.update(this.inventory, delta, visible && !this.scriptedShot, playing, '', '', !this.settings.cameraMotion);
   }
 
   private updateAtmosphere(delta: number): void {
@@ -686,7 +691,8 @@ export class Game {
     this.ui.setLocked(locked);
     this.player?.setInputEnabled(locked && !this.ui.isConsoleOpen);
     this.character?.setActive(locked && !this.ui.isConsoleOpen, true);
-    if (this.rift?.locksInput) this.player?.setInputEnabled(false);
+    if (this.rift?.locksInput || this.slideDive) this.player?.setInputEnabled(false);
+    if (this.slideDive) this.character?.setActive(false, true);
     void this.audio.setSuspended(!locked || document.hidden);
     this.previousTime = performance.now();
     this.accumulator = 0;
@@ -726,6 +732,56 @@ export class Game {
     void this.audio.start();
   }
 
+  /** A scripted shot owns the body and the camera: the rift or a slide dive. */
+  private get scriptedShot(): boolean { return !!this.rift?.ownsCharacter || !!this.slideDive; }
+
+  /** Choosing a slide: the dive plays, then the body arrives in the same hall
+   * a few storeys down (the Backrooms keep their joke), lying on the carpet. */
+  private startSlideDive(request: SlideDiveRequest): boolean {
+    if (!this.player || !this.physics || !this.storyHud || this.slideDive) return false;
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+    this.player.setInputEnabled(false);
+    this.character?.setActive(false, true);
+    this.ui.setInteraction(null);
+    this.slideDive = new SlideDive({
+      camera: this.camera,
+      character: () => this.character,
+      feet: () => this.physics!.getStandingPosition(new THREE.Vector3()).sub(new THREE.Vector3(0, .865, 0)),
+      baseFieldOfView: () => this.settings.fieldOfView,
+      reducedMotion: () => !this.settings.cameraMotion || reduced.matches,
+      setFade: level => this.storyHud?.setFade(level),
+      land: dive => this.landFromSlide(dive),
+    }, request);
+    return true;
+  }
+
+  private async landFromSlide(request: SlideDiveRequest): Promise<void> {
+    const player = this.player, worldStream = this.worldStream;
+    if (!player || !worldStream || this.disposed) return;
+    const drops: Record<SlideKey, number> = { 'this-way': 1, unknown: 3, exit: 1 };
+    const { entry, owner } = request;
+    const below = { x: owner.x, z: owner.z, story: owner.story - drops[entry.key] }, offset = getChunkWorldOffset(below);
+    // Thrown out of the same mouth, a couple of metres into the hall.
+    const position = { x: offset.x + entry.position.x, y: offset.y + request.floorY + .865, z: offset.z + entry.position.z + 1.8 };
+    const target: LocateTarget = { command: 'toboggans', label: 'Toboggan', aliases: [], position, distance: 0, chunkKey: createChunkKey(below) };
+    let landed: { x: number; story: number } = below;
+    if (!await worldStream.prepareLocateTarget(target).catch(() => false)) {
+      // The storey below could not be mounted: come out where the dive began.
+      position.x = request.offset.x + entry.position.x; position.y = request.offset.y + request.floorY + .865;
+      position.z = request.offset.z + entry.position.z + 1.8; landed = owner;
+    }
+    if (this.disposed || player !== this.player) return;
+    player.teleport(position);
+    worldStream.update(this.elapsed, 1 / 60, player.position);
+    this.character?.endSlideDive();
+    this.slideDive = undefined;
+    this.character?.setActive(player.isLocked && !this.ui.isConsoleOpen, true);
+    // The ordinary arrival: lying on the floor, eyes opening, free to get up.
+    if (!this.character?.collapseOnArrival()) player.setInputEnabled(player.isLocked && !this.ui.isConsoleOpen);
+    this.storyHud?.setFade(0);
+    this.northern?.completeSlide(request, landed);
+  }
+
   private createRiftEncounter(): RiftEncounter | undefined {
     if (!this.player || !this.physics || !this.storyHud || !this.balanceMeter) return undefined;
     const reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -760,7 +816,7 @@ export class Game {
 
   private canUseEquipment(): boolean {
     return !!this.player?.isLocked && !this.disposed && !document.hidden && !this.ui.isConsoleOpen && !this.ui.isPaused
-      && !this.ui.isMainMenuOpen && !this.character?.isBusy && !this.rift?.blocksEquipment;
+      && !this.ui.isMainMenuOpen && !this.character?.isBusy && !this.rift?.blocksEquipment && !this.slideDive;
   }
 
   private readonly onInventoryWheel = (event: WheelEvent): void => {
@@ -774,7 +830,7 @@ export class Game {
   private updateEquipment(delta: number): void {
     const inventory = this.inventory;
     if (!inventory || !this.flashlight || !this.compass) return;
-    const hidden = !!this.rift?.ownsCharacter;
+    const hidden = this.scriptedShot;
     const free = !hidden && !this.character?.isBusy;
     if (free) this.equipmentTransition.update(inventory.equipped?.id, delta);
     else this.equipmentTransition.hide();
@@ -792,7 +848,7 @@ export class Game {
 
   private tryInteract(mode: DoorOpenMode): void {
     if (this.rift?.handleInteract()) return;
-    if (!this.player || !this.worldStream || this.character?.isBusy || this.player.isTraversing || this.player.isNoclipEnabled) return;
+    if (!this.player || !this.worldStream || this.slideDive || this.character?.isBusy || this.player.isTraversing || this.player.isNoclipEnabled) return;
     this.player.getViewDirection(this.lookDirection);
     if (this.northern?.interact()) { this.ui.setInteraction(null); return; }
     if (this.environment?.interact()) { this.ui.setInteraction(null); return; }
@@ -830,7 +886,7 @@ export class Game {
     if (!this.storage || !this.player || !this.worldStream) return false;
     // Scripted shots, balancing and the creature cannot be saved mid-action.
     // Both banks before the reveal are stable checkpoints.
-    if (this.rift?.blocksSaving || this.environment?.blocksSaving) return false;
+    if (this.rift?.blocksSaving || this.environment?.blocksSaving || this.slideDive) return false;
     const chunk = this.worldStream.supportedCoordAt(this.lastSafePosition);
     const offset = getChunkWorldOffset(chunk);
     const look = this.player.getLookQuaternion();
@@ -911,7 +967,8 @@ export class Game {
   private setConsoleVisibility(open: boolean): void {
     this.player?.setInputEnabled(!open && !!this.player?.isLocked);
     this.character?.setActive(!open && !!this.player?.isLocked);
-    if (this.rift?.locksInput) this.player?.setInputEnabled(false);
+    if (this.rift?.locksInput || this.slideDive) this.player?.setInputEnabled(false);
+    if (this.slideDive) this.character?.setActive(false, true);
     if (open) this.ui.setInteraction(null);
   }
 
@@ -1225,8 +1282,10 @@ export class Game {
       if (this.autosaveElapsed >= AUTOSAVE_INTERVAL_SECONDS) this.saveNow('autosave', true);
       // The rift scripts the player before the rig steps, and frames the shot after it.
       this.rift?.update(rawDelta);
-      if (!this.rift?.ownsCharacter) this.character?.update(rawDelta);
+      this.slideDive?.update(rawDelta);
+      if (!this.scriptedShot) this.character?.update(rawDelta);
       this.rift?.applyCamera();
+      this.slideDive?.applyCamera();
       const partner = this.character?.getInteractionPartnerPosition();
       if (partner && (partner.distanceTo(this.player.position) > 45 || Math.abs(partner.y - this.player.position.y) > 8)) {
         this.character?.setInteractionPartner(null);
@@ -1257,10 +1316,10 @@ export class Game {
     this.updateJourneyHud(rawDelta, playing);
     // Interference: only the creature disturbs the Backrooms picture.
     this.postFX.setVhs(this.rift?.cameraDisturbance ?? 0);
-    this.staminaCue?.update(playing && !this.rift?.ownsCharacter && this.stamina.showCue, this.stamina.level, this.stamina.exhausted);
+    this.staminaCue?.update(playing && !this.scriptedShot && this.stamina.showCue, this.stamina.level, this.stamina.exhausted);
     this.player.getViewDirection(this.lookDirection);
     const interaction = !playing || this.character?.isBusy || this.player.isTraversing || this.player.isNoclipEnabled
-      || this.rift?.ownsCharacter
+      || this.scriptedShot
       ? null
       : this.northern?.getInteraction() ?? this.environment?.getInteraction() ?? this.worldStream.getInteraction(this.player.position, this.lookDirection);
     this.ui.setInteraction(interaction?.label ?? null);
@@ -1522,6 +1581,7 @@ export class Game {
     this.renderer.domElement.removeEventListener('wheel', this.onInventoryWheel);
     // The rift releases its scripted pose, plank collider and shot before the rig goes.
     this.rift?.dispose();
+    this.slideDive = undefined;
     this.unsubscribeNorthern?.();
     this.northern?.dispose();
     this.worldStream?.setEnvironmentObserver();

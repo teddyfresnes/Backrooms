@@ -31,6 +31,13 @@ describe('red-zone story checkpoint', () => {
     const b = new NorthernProgression(); b.step(input); b.step({ ...input, z: -408 });
     expect(b.state.walkedRed).toBe(0); expect(b.state.stage).toBe('red-zone');
   });
+  it('keeps a slide taken, forgets a choice of the former four-mouth hall and rejects an unknown one', () => {
+    const base = { version: 1, stage: 'slides-ready', walkedRed: 8, compassSeconds: 5, target: { x: 4, story: -3 }, slidesLayout: 2 };
+    expect(sanitizeNorthernProgress({ ...base, selectedSlide: 'exit' })?.selectedSlide).toBe('exit');
+    const legacy = sanitizeNorthernProgress({ ...base, selectedSlide: 'danger' });
+    expect(legacy).toEqual(base);
+    expect(sanitizeNorthernProgress({ ...base, selectedSlide: 'nowhere' })).toBeNull();
+  });
   it('rejects corrupt checkpoints and migrates legacy plank addresses exactly once', () => {
     expect(sanitizeNorthernProgress({ version: 1, stage: 'slides', walkedRed: 8, compassSeconds: 3.2 })).toBeNull();
     expect(sanitizeNorthernProgress({ version: 1, stage: 'approach', walkedRed: NaN, compassSeconds: 0 })).toBeNull();

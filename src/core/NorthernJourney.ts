@@ -6,7 +6,8 @@ import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import { applyZonalLighting } from '../render/ZonalLighting';
 import { NorthernProgression, type NorthernProgress } from '../story/NorthernProgress';
 import { NORTHERN_LAYOUT, redZoneEntryZ, slidesColumnAt } from '../world/NorthernLayout';
-import type { SlideChoice, SlideEntryPlan } from '../world/SlidesStructure';
+import type { SlideChoice, SlideEntryPlan, SlideKey } from '../world/SlidesStructure';
+import type { SlideDiveRequest } from './SlideDive';
 import type { LightingCircuitPlan } from '../world/NorthernWorld';
 import { pointInRect } from '../world/types';
 import type { EnvironmentChunk, EnvironmentChunkObserver } from './WorldStream';
@@ -26,6 +27,8 @@ export interface NorthernHost {
   checkpoint(): void;
   /** A later experience can consume this stable key without parsing labels. */
   slideChoice?(choice: SlideChoice): void;
+  /** Plays the dive into a slide; false when it cannot (the choice then applies here). */
+  diveIntoSlide?(request: SlideDiveRequest): boolean;
 }
 interface MountedNorth { chunk: EnvironmentChunk; circuits: Circuit[] }
 
@@ -71,7 +74,7 @@ export class NorthernJourney implements EnvironmentChunkObserver {
     }
     if (available && s.stage === 'slides' && this.targetPosition() && position.distanceTo(this.destination) < 4) {
       s.stage = 'slides-ready'; changed = true;
-      this.host.caption('Quatre entrées… Qui a mis ça ici ?');
+      this.host.caption('Trois toboggans… Qui a mis ça ici ?');
     }
     if (changed) this.host.checkpoint();
   }
@@ -115,7 +118,7 @@ export class NorthernJourney implements EnvironmentChunkObserver {
     }
     return text ? { text, urgent: false } : null;
   }
-  getInteraction(): { label: string; circuit: Circuit } | { label: string; entry: SlideEntryPlan; structureId: string; owner: { x: number; story: number } } | null {
+  getInteraction(): { label: string; circuit: Circuit } | { label: string; entry: SlideEntryPlan; structureId: string; owner: { x: number; z: number; story: number }; offset: THREE.Vector3; floorY: number } | null {
     if (!this.host.available()) return null;
     let best: Circuit | undefined, distance = Infinity;
     for (const m of this.chunks.values()) for (const c of m.circuits) {
@@ -127,13 +130,13 @@ export class NorthernJourney implements EnvironmentChunkObserver {
       if (Math.abs(player.y - chunk.offset.y - f.floorY - .865) > .9) continue;
       for (const e of f.entries) {
         if (!pointInRect(player.x-chunk.offset.x,player.z-chunk.offset.z,e.trigger)) continue;
-        this.slidePoint.copy(e.position).add(chunk.offset);this.slidePoint.z+=.8;
+        this.slidePoint.copy(e.position).add(chunk.offset);this.slidePoint.z+=.12; // the lip itself
         const d=this.slidePoint.distanceTo(camera.position);
         if (this.slidePoint.distanceTo(player)>2.8 || d<.01 || d>8) continue;
         this.slideDirection.copy(this.slidePoint).sub(camera.position).multiplyScalar(1/d);
         if (this.slideDirection.dot(camera.getWorldDirection(this.slideForward))<.91
           || this.host.physics.castEnvironmentRay(camera.position,this.slideDirection,Math.max(0,d-.06))) continue;
-        return {label:`Examiner ${e.label}`,entry:e,structureId:f.id,owner:chunk.plan.spatial.owner};
+        return {label:`Sauter dans « ${e.label} »`,entry:e,structureId:f.id,owner:chunk.plan.spatial.owner,offset:chunk.offset,floorY:f.floorY};
       }
     }
     return best ? { label: 'Rétablir la lumière', circuit: best } : null;
@@ -142,14 +145,25 @@ export class NorthernJourney implements EnvironmentChunkObserver {
     const hit = this.getInteraction(); if (!hit) return false;
     if ('circuit' in hit) hit.circuit.restore();
     else {
-      this.progression.state.selectedSlide=hit.entry.key;this.progression.state.stage='slides-ready';
-      this.progression.state.target={x:hit.owner.x,story:hit.owner.story};
-      const thoughts={home:'HOME… Pourquoi je n’y crois pas ?',fun:'FUN… Ouais. C’est ça.',death:'DEATH… Au moins, c’est honnête.',danger:'DANGER… Qu’est-ce qu’ils essaient de retenir ?'};
-      this.host.caption(thoughts[hit.entry.key]);
-      this.host.checkpoint();
-      this.host.slideChoice?.({structureId:hit.structureId,entryId:hit.entry.id,key:hit.entry.key,transitionKey:hit.entry.transitionKey});
+      const request: SlideDiveRequest = { entry: hit.entry, structureId: hit.structureId, owner: { ...hit.owner }, offset: hit.offset.clone(), floorY: hit.floorY };
+      // The host plays the dive and calls `completeSlide` where the body lands.
+      if (!this.host.diveIntoSlide?.(request)) this.completeSlide(request, hit.owner);
     }
     return true;
+  }
+  /** Persist the slide taken at the owner it led to, then hand the stable key
+   * to an optional next experience. */
+  completeSlide(request: SlideDiveRequest, landed: { x: number; story: number }): void {
+    const s = this.progression.state, key = request.entry.key;
+    s.selectedSlide = key; s.stage = 'slides-ready'; s.target = { x: landed.x, story: landed.story };
+    const thoughts: Record<SlideKey, string> = {
+      'this-way': 'Par là, qu’ils disaient… C’est la même salle.',
+      unknown: 'Combien d’étages… ? Et toujours cette salle.',
+      exit: 'EXIT. Très drôle.',
+    };
+    this.host.caption(thoughts[key]);
+    this.host.checkpoint();
+    this.host.slideChoice?.({ structureId: request.structureId, entryId: request.entry.id, key, transitionKey: request.entry.transitionKey });
   }
   dispose(): void { this.disposed = true; for (const key of this.chunks.keys()) this.unmount(key); }
 }

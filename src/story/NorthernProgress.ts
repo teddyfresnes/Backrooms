@@ -1,3 +1,5 @@
+import { SLIDE_KEYS, type SlideKey } from '../world/SlidesStructure';
+
 /** Sparse story checkpoint; never stores the history of streamed circuits. */
 export type NorthernStage = 'approach' | 'red-zone' | 'inspect-compass' | 'compass-glitch' | 'slides' | 'slides-ready';
 export interface NorthernProgress {
@@ -7,7 +9,8 @@ export interface NorthernProgress {
   compassSeconds: number;
   target?: { x: number; story: number };
   slidesLayout?: 2;
-  selectedSlide?: 'home' | 'fun' | 'death' | 'danger';
+  /** The last slide taken. Choices of the former four-mouth hall are forgotten. */
+  selectedSlide?: SlideKey;
 }
 export const COMPASS_GLITCH_SECONDS = 5;
 export const freshNorthernProgress = (): NorthernProgress => ({ version: 1, stage: 'approach', walkedRed: 0, compassSeconds: 0, slidesLayout: 2 });
@@ -26,9 +29,11 @@ export const sanitizeNorthernProgress = (value: unknown): NorthernProgress | nul
   }
   if (['compass-glitch', 'slides', 'slides-ready'].includes(s.stage!) && !target) return null;
   if (s.slidesLayout !== undefined && s.slidesLayout !== 2) return null;
-  if (s.selectedSlide !== undefined && !['home','fun','death','danger'].includes(s.selectedSlide)) return null;
+  const LEGACY_SLIDES: unknown[] = ['home', 'fun', 'death', 'danger'];
+  if (s.selectedSlide !== undefined && !SLIDE_KEYS.includes(s.selectedSlide) && !LEGACY_SLIDES.includes(s.selectedSlide)) return null;
+  const selectedSlide = SLIDE_KEYS.includes(s.selectedSlide as SlideKey) ? s.selectedSlide : undefined;
   return { version: 1, stage: s.stage!, walkedRed: s.walkedRed!, compassSeconds: s.compassSeconds!, ...(target ? { target } : {}),
-    ...(s.slidesLayout === 2 ? { slidesLayout: 2 } : {}), ...(s.selectedSlide ? { selectedSlide: s.selectedSlide } : {}) };
+    ...(s.slidesLayout === 2 ? { slidesLayout: 2 } : {}), ...(selectedSlide ? { selectedSlide } : {}) };
 };
 
 export interface NorthernStep {
@@ -78,7 +83,7 @@ export class NorthernProgression {
       case 'inspect-compass': return 'Regarder la boussole';
       case 'compass-glitch': return 'Observer la boussole';
       case 'slides': return 'Suivre la direction indiquée par la boussole';
-      case 'slides-ready': return 'Explorer les quatre entrées';
+      case 'slides-ready': return 'Choisir un toboggan';
     }
   }
   get snapshot(): NorthernProgress { return { ...this.state, ...(this.state.target ? { target: { ...this.state.target } } : {}) }; }

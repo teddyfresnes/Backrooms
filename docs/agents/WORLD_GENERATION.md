@@ -66,10 +66,11 @@ Le pipeline ordinaire (plan version 27, topologie/spatial version 2) est :
    événements environnementaux, props et préfixes. Ces systèmes réservent des
    salles compatibles avant le mobilier, sans changer leurs sols ni passages.
    Les propriétaires de toboggans (`NorthernLayout`, une colonne sur quatre en
-   rangée rouge −5) passent par `SlidesWorld` : hall monumental, datum zéro et
-   ouvertures de bord communes avec `RegionalPlan`. Ce chemin ne découpe jamais
-   un chunk voisin déjà produit. Les tubes et panneaux partagent leurs triangles
-   entre rendu et Rapier (`SlidesStructure`). Voir [le vocabulaire liminal](LIMINAL_ARCHITECTURE.md) pour
+   rangée rouge −5) passent par `SlidesWorld` : niveau jaune ordinaire (seule
+   exception rouge de la bande), datum zéro et ouvertures de bord communes avec
+   `RegionalPlan`. Ce chemin ne découpe jamais un chunk voisin déjà produit. Le
+   mur des toboggans est un seul solide Rapier ; les tubes, rendus derrière lui
+   le long de `slidePath`, ne sont parcourus que par la plongée scriptée. Voir [le vocabulaire liminal](LIMINAL_ARCHITECTURE.md) pour
    les arches, galeries partielles et nouvelles fosses.
 
 Voir [les contrats de transition](../TRANSITION_INTEGRATION.md) pour les plafonds

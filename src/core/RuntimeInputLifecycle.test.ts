@@ -39,7 +39,7 @@ import { ApartmentQuest } from '../story/ApartmentQuest';
 const games: RussianStairwellGame[]=[];
 it('completes locate arguments through the actual input and executes the French target and its aliases', async () => {
   const game=Object.create(Game.prototype) as Record<string, any>;
-  const target={command:'toboggans',label:'Les quatre toboggans',aliases:['slides','toboggan','backrooms-slides'],distance:548,chunkKey:'0:-5:0',position:{x:0,y:.865,z:-548}};
+  const target={command:'toboggans',label:'Les toboggans',aliases:['slides','toboggan','backrooms-slides'],distance:548,chunkKey:'0:-5:0',position:{x:0,y:.865,z:-548}};
   const prepareLocateTarget=vi.fn(async()=>true),teleport=vi.fn(),showConsoleMessage=vi.fn();
   Object.assign(game,{worldStream:{getLocateTargets:()=>[target],prepareLocateTarget,update:vi.fn()},player:{position:new THREE.Vector3(),teleport},
     locateRequestId:0,disposed:false,elapsed:0,updateDebugState:vi.fn()});

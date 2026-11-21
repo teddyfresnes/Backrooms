@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SeatedCharacterPose, type ComputerPoseSample, type ComputerPoseFrame } from './SeatedCharacterPose';
+import { SlideDivePose, type SlideDiveFrame, type SlideDiveSample } from './SlideDivePose';
 import { CooperativeWork, mapWithConcurrency } from '../core/CooperativeWork';
 import { GaitTransition, sampleGaitPhase, alignGaitPhase, createSlideSprintRecoveryClip } from './LocomotionBlend';
 import { createCrouchLocomotionClips, CROUCH_LOCOMOTION_IDS, CROUCH_GAIT_REFERENCE_SPEED } from './CrouchLocomotion';
@@ -1312,6 +1313,31 @@ export class CharacterRuntime {
     this.heldAim.set(Math.sin(yaw+headYaw),-.035,Math.cos(yaw+headYaw)).multiplyScalar(12).add(frame.eye);
     this.applyHeldItemPose(0, this.heldAim);
     return frame;
+  }
+  private divePose?: SlideDivePose;
+  /** Head-first dive into a slide, seen from outside. The gameplay rig is not
+   * stepped meanwhile; `endSlideDive` hands the body back in first person. */
+  beginSlideDive(): boolean {
+    if (!this.ready || !this.character || this.isBusy || this.computerPose || this.divePose) return false;
+    const idle = this.animations.get('idle')?.clip, walk = this.animations.get('walking')?.clip, jump = this.animations.get('running-jump')?.clip;
+    if (!idle || !walk || !jump) return false;
+    this.firstPersonObstaclePose.reset(); this.resetCombatState(true);
+    this.divePose = new SlideDivePose(this.character, this.avatarAnchor, idle, walk, jump);
+    this.viewMode = 'third-person'; this.headMaskWarmup.value = 0;
+    this.avatarAnchor.visible = true; this.firstPersonAvatarAnchor.visible = false;
+    return true;
+  }
+  sampleSlideDive(sample: SlideDiveSample): SlideDiveFrame | null {
+    if (!this.divePose) return null;
+    this.avatarAnchor.visible = true; this.firstPersonAvatarAnchor.visible = false;
+    return this.divePose.sample(sample);
+  }
+  endSlideDive(): void {
+    if (!this.divePose) return;
+    this.divePose.dispose(); this.divePose = undefined;
+    this.avatarAnchor.quaternion.identity();
+    this.viewMode = 'first-person';
+    this.playAnimation('idle', true, 1, false, true); this.updateAvatarTransform(0, true); this.applyViewMode(true); this.presentCamera();
   }
   setExternalCameraPresentation(active: boolean): void {
     if (active) { this.avatarAnchor.visible = false; this.firstPersonAvatarAnchor.visible = false; return; }

@@ -1571,7 +1571,9 @@ export class WorldView {
     if (plan.spatial) this.buildSpatialArchitecture(options.architectureData); else this.buildArchitecture();
     this.buildEpicStructures();
     for (const feature of plan.features) if (feature.kind === 'slides-structure') {
-      const view = new SlidesStructureView(feature,plan.seed,this.lightingContext ?? null);
+      const owner = plan.spatial?.owner ?? { x: 0, z: 0, story: 0 };
+      const view = new SlidesStructureView(feature,plan.seed,this.lightingContext ?? null,{ material: this.materials.wall,
+        origin: { x: owner.x * 112, y: owner.story * 5.4, z: owner.z * 112 }, scale: this.surfaceStyle.wallPatternScale });
       this.slidesViews.push(view);this.group.add(view.group);
     }
     if (!this.previewOnly) this.buildWallGraffiti();

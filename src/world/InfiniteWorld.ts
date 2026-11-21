@@ -376,6 +376,8 @@ export const getInfiniteVisualBiome = (
   const coord = resolveCoord(key);
   const macroX = Math.floor(coord.x / 2);
   const macroZ = Math.floor(coord.z / 2);
+  // The slides hall ends the red rows: an ordinary lit yellow level.
+  if (isSlidesStructureCoord(coord)) return 'yellow';
   if (isRedZoneRow(coord.z)) return 'red';
   if (macroX === 0 && macroZ === 0) return 'yellow';
   const roll = new SeededRandom(

@@ -15,7 +15,7 @@ export interface LightingCircuitPlan {
 export interface NorthernWorldPlan {
   kind: 'approach' | 'red-zone' | 'slides-approach';
   circuits: LightingCircuitPlan[];
-  /** Walkable destination of the authored four-slide structure. */
+  /** Walkable destination of the authored three-slide structure. */
   slides?: { id: string; kind: 'slides'; roomId: string; bounds: Rect; position: Vec3Data };
 }
 const inset = (b: Rect, n: number): Rect => ({ minX: b.minX+n, maxX: b.maxX-n, minZ: b.minZ+n, maxZ: b.maxZ-n });
@@ -37,6 +37,8 @@ export const populateNorthernWorld = (plan: WorldPlan, seed: string, owner: { x:
   plan.unlitZones = [];
   const structure = plan.features.find(f => f.kind === 'slides-structure');
   if (red && structure?.kind === 'slides-structure') {
+    // Out of the red: no tint, no circuit, ordinary fluorescent light.
+    plan.northern.kind = 'slides-approach';
     reserveSlides(plan, owner, structure.roomId, structure.bounds, { ...structure.approach, y: structure.floorY });
     return;
   }

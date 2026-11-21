@@ -14,14 +14,14 @@ describe('guaranteed red-zone slides and small lighting circuits', () => {
     for(const z of[-100,-6,-4,-3,0,10])expect(isSlidesStructureCoord({x:0,z})).toBe(false);
     expect(nearestSlidesCoord({x:1.6,story:0}).x).toBe(0);expect(nearestSlidesCoord({x:2.4,story:0}).x).toBe(4);
   });
-  it('generates exactly four labelled entrances with prefixed IDs and walkable compass/locate approaches',()=>{
+  it('generates exactly three labelled tube slides in an ordinary yellow hall, with prefixed IDs and walkable compass/locate approaches',()=>{
     for(const seed of['SLIDES-ONE','SLIDES-TWO'])for(const x of[-4,0,8])for(const story of[-2,1]){
       const owner={x,z:-5,story},p=generateInfiniteChunk(seed,owner),f=p.features.find(f=>f.kind==='slides-structure');
       expect(f?.kind).toBe('slides-structure');if(f?.kind!=='slides-structure')throw new Error('Missing landmark');
-      expect(p.visualBiome).toBe('red');expect(f.entries.map(e=>e.label)).toEqual(['HOME','FUN :)','DEATH','DANGER']);
-      expect(new Set(f.entries.map(e=>e.color)).size).toBe(4);expect(f.id).toBe(p.northern!.slides!.id);
+      expect(p.visualBiome).toBe('yellow');expect(p.northern?.kind).toBe('slides-approach');expect(f.entries.map(e=>e.label)).toEqual(['THIS WAY','???','EXIT :)']);
+      expect(new Set(f.entries.map(e=>e.color)).size).toBe(3);expect(p.lights.every(l=>l.color===0xffffe4)).toBe(true);expect(f.id).toBe(p.northern!.slides!.id);
       expect(f.entries.every(e=>e.id.startsWith(`chunk-${x}:-5:${story}/`))).toBe(true);
-      expect(new Set(f.entries.map(e=>e.transitionKey)).size).toBe(4);
+      expect(new Set(f.entries.map(e=>e.transitionKey)).size).toBe(3);
       const s=findSurface(p,{...f.approach,referenceY:0,maxAbove:.01,maxBelow:.01});expect(s?.access).toBe('open');expect(surfaceY(s!,0,12)).toBe(0);
       expect(p.spatial!.landmarks.find(l=>l.kind==='slides')?.position).toEqual(f.approach);
       expect(p.propPlacements?.some(p=>p.roomId===f.roomId)).toBe(false);

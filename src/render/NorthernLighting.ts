@@ -40,9 +40,7 @@ export class NorthernLighting {
     this.decorated.add(material);
     const before = material.onBeforeCompile.bind(material), key = material.customProgramCacheKey.bind(material);
     const standard = material instanceof THREE.MeshStandardMaterial;
-    // Authored slide enamel/signs keep their identifying colours in the red
-    // hall, while retaining the same local mains and carried-spotlight logic.
-    const tint = material.userData.northernPreserveColor ? { value: new THREE.Vector3(1,1,1) } : this.tint;
+    const tint = this.tint;
     material.onBeforeCompile = (shader, renderer) => {
       before(shader, renderer);
       // Safety for a material shared by two chunk views: inject once, never twice.

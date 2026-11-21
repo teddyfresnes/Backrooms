@@ -1,6 +1,6 @@
 import { surfaceRange, validateTopology } from './WalkableTopology';
 import { describe, expect, it } from 'vitest';
-import { isRedZoneRow } from './NorthernLayout';
+import { isRedZoneRow, isSlidesStructureCoord } from './NorthernLayout';
 import {
   INFINITE_CHUNK_SIZE,
   INFINITE_STORY_PITCH,
@@ -643,7 +643,7 @@ describe('legacy monument and migration chunk contracts', () => {
         }));
         const biomes = members.map((coord) => getInfiniteVisualBiome(biomeSeed, coord));
         if (members.some(c => isRedZoneRow(c.z))) {
-          for (const c of members.filter(c => isRedZoneRow(c.z))) expect(getInfiniteVisualBiome(biomeSeed, c)).toBe('red');
+          for (const c of members.filter(c => isRedZoneRow(c.z))) expect(getInfiniteVisualBiome(biomeSeed, c)).toBe(isSlidesStructureCoord(c) ? 'yellow' : 'red');
           continue;
         }
         expect(new Set(biomes).size).toBe(1);

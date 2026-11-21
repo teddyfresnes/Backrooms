@@ -80,12 +80,15 @@ Le brouillard et le fond virent au sombre près de la faille (`atmosphereAt`).
 traversent tous les X et propriétaires verticaux ; aucun slot épique aléatoire
 ne les remplace. `NorthernWorld` choisit des sols ouverts du BSP final, réserve
 les salles contre le mobilier, et publie `WorldPlan.northern`. `SlidesWorld`
-construit un vrai hall à quatre conduits par secteur de 448 m en X, sur chaque
-story. `nearestSlidesCoord` choisit son propriétaire analytique : la boussole
+construit, par secteur de 448 m en X et sur chaque story, un niveau jaune
+ordinaire (`slides-approach` : ni teinte rouge ni circuit) dont le hall porte
+trois toboggans à tube dans son mur nord : « THIS WAY » bleu, « ??? » jaune,
+« EXIT :) » vert. `nearestSlidesCoord` choisit son propriétaire analytique : la boussole
 et `/locate slides` / `/locate toboggans` trouvent donc la même structure, même
 avant son montage. Aucun toboggan n'est généré hors de la bande rouge garantie.
-`SlidesStructureView` possède les maillages et matériaux ; les enseignes et
-émaux conservent leurs couleurs distinctives dans les deux modes lumineux.
+`SlidesStructureView` perce ce mur dans le papier peint du chunk (UV monde),
+rend les tubes en plastique qui s'assombrissent dans le virage et les tags au
+marqueur ; il ne libère jamais ce papier peint emprunté.
 
 `core/NorthernJourney` observe les chunks (y compris les remplacements de vue),
 possède les boîtiers/colliders et partage le bus audio et `EnvironmentStateStore`.
@@ -98,10 +101,15 @@ spotlights natifs avant le traitement ambiant pour conserver la flashlight.
 Après résolution de la faille, huit mètres vers le nord dans le rouge donnent
 la réplique et l'objectif de consultation. `NorthernProgress` persiste la suite
 `approach` → `red-zone` → `inspect-compass` → `compass-glitch` → `slides` →
-`slides-ready`. E devant une entrée permet de l'examiner, mémorise `selectedSlide`
-et émet un `SlideChoice` (IDs et clé `backrooms-slide-…`) via
-`GameOptions.onSlideChoice`. Ce routeur optionnel permet de brancher une prochaine
-expérience ; aucune destination n'est inventée dans le hall actuel.
+`slides-ready`. E devant une bouche (« Sauter dans … ») lance `core/SlideDive`,
+que `Game` pilote comme un plan de la faille (`scriptedShot` : pas de rig, de
+sauvegarde ni d'équipement) : marche jusqu'à la bouche et plongeon tête la
+première (`SlideDivePose`, vue externe), glissade dans le vrai tube, noir. Le
+corps arrive dans le même hall une story plus bas (trois pour « ??? »), couché
+(`collapseOnArrival`). `NorthernJourney.completeSlide` mémorise alors
+`selectedSlide` et la cible, puis émet un `SlideChoice` (clé `backrooms-slide-…`)
+via `GameOptions.onSlideChoice`, routeur optionnel d'une prochaine expérience.
+Un choix de l'ancien hall à quatre entrées est oublié au chargement.
 Les 5 s initiales avancent seulement boussole réellement tenue, en jeu libre.
 `CompassInterference` alterne ensuite 5 s de vibration et 2 s de cap verrouillé
 sans inertie, pour l'anomalie comme pour la proximité de la créature. Le cycle
