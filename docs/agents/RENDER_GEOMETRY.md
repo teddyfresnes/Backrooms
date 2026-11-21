@@ -2,9 +2,10 @@
 
 `WorldView` dans `src/render/WorldBuilder.ts` consomme un plan local :
 
-- géométries statiques fusionnées par matériau ;
-- faces de plafond en dalles, chants verticaux exposés en plâtre, y compris
-  autour des cages et sur les solides de plafond bas ;
+- géométries statiques fusionnées en un seul lot (un draw call) par matériau ;
+- faces de plafond en dalles ; chants verticaux exposés et décrochés de plafond
+  en papier peint, dans le prolongement des murs (le plâtre blanc lisait comme
+  des cloisons parasites), y compris autour des cages et des plafonds bas ;
 - gaines profondes doublées de moquette à l’intérieur, mais enclos des étages
   traversés rendus avec le papier peint ordinaire pour rester architecturaux ;
 - volumes monumentaux dérivés de `EpicStructureFeature`; leurs rangées de
@@ -70,7 +71,7 @@ Chercher la méthode `build…` correspondant à la feature. Ne pas lire tout
 la soustraction de rectangles.
 
 Les plafonds BSP bas gardent leurs vraies hauteurs. `CeilingEnvelope` ferme
-leurs chants exposés jusqu'au toit haut voisin, avec un solide en plâtre et son
+leurs chants exposés jusqu'au toit haut voisin, avec un solide en papier peint et son
 collider. Les retours s'arrêtent sur les murs existants ; ils ne remplissent ni
 les puits ni les passages hérités. Leurs bandes verticales ne se recouvrent pas.
 Les coins colinéaires des polygones découpés et les extrémités de wedges à

@@ -51,7 +51,10 @@ le cache CPU borné. Le montage réutilise leurs buffers sans clipping, calcul d
 normales ou bake 2D inutilisé sur le thread du jeu. Une nouvelle géométrie GPU
 reste détenue par chaque vue ; sa destruction ne détruit pas les tableaux CPU.
 `WorldStream.mountChunk()` crée les matériaux zonaux puis applique l’offset monde
-au groupe Three.js, au contexte shader et au lot de colliders. Le démontage doit
+au groupe Three.js, au contexte shader et au lot de colliders. Les solides en
+maillage non tournés y sont fusionnés en un collider par type (`mergeMeshes`) :
+mêmes triangles, mais le coût Rapier par collider dominait le montage. Ils ne
+sont plus adressables par id ; les portes, en boîtes, le restent. Le démontage doit
 retirer les ressources visuelles et physiques, dont les deux textures de lumière
 régionale. `buildSpatialArchitecture` consomme uniquement les surfaces/prismes
 communs et écrit directement les buffers par matériau, sans géométrie GPU

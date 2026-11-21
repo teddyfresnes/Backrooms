@@ -61,7 +61,10 @@ avant de rendre les commandes. Aucun tick Rapier ne traverse ce collider fermé.
 automatiques, communes aux deux expériences. Une seule autosave représente la
 session courante et remplace la précédente. Elle est écrite à l’entrée d’un
 niveau, toutes les 30 secondes jouées, au masquage ou à la fermeture de la page,
-et avant un retour confirmé au menu principal. Les
+et avant un retour confirmé au menu principal. En jeu (niveau, 30 s, progrès),
+l’aperçu est encodé hors du thread principal puis écrit ; les sauvegardes de
+cycle de vie et manuelles restent synchrones. L’encodeur WebP est préchauffé au
+chargement (sa première utilisation coûtait ~130 ms). Les
 snapshots Backrooms stockent le seed et une position locale à son chunk ; les
 snapshots russes gardent aussi l’état de la porte, de son verrou et de
 l’éclairage de l’appartement. Les anciens états de porte sans champ `locked`

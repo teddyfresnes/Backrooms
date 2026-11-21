@@ -27,7 +27,7 @@ import { classifySurfaceAccess, cutRects, findSurface, overlapRect, surfaceColli
   type HeightProfile, type SurfaceConnection, type WalkableSurface } from './WalkableTopology';
 
 /** Version of ordinary regional plans, reported as the session's generator version. */
-export const SPATIAL_PLAN_VERSION = 25;
+export const SPATIAL_PLAN_VERSION = 26;
 const sides = ['north', 'east', 'south', 'west'] as const;
 type Side = typeof sides[number];
 const deltas: Record<Side, [number, number]> = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
@@ -259,18 +259,18 @@ export const generateSpatialWorld = (seed: string, owner: SpatialAddress, style?
         topology.surfaces.push(...geometry.surfaces); spatial.ceilings.push(...geometry.ceilings);
         // The flight is a podium on the lower side and a trench on the upper
         // one. Walls bear on the lowest floor of their half and fill its story
-        // band; an open trench edge gets a parapet instead of showing the void.
+        // band. A trench is always lined by two full walls, like a stairwell
+        // sunk into the floor: waist-high parapets read as stray partitions.
         const base = Math.min(h, t.landing.y) - .16, sunken = t.landing.y < h - .001;
         for (const [name, bounds] of [['run', t.run], ['landing', t.landing.bounds]] as const) {
           if (rectWidth(bounds) < .005 || rectDepth(bounds) < .005) continue;
           for (const sign of [-1, 1] as const) {
-            const walled = t.enclosure === 'chamber' || t.enclosure === 'wall' && t.wallSide === sign;
-            if (!walled && !sunken) continue;
-            const alongX = t.axis === 'x', width = walled ? t.wallThickness : .2;
-            // Walls and parapets stand outside the passage, which keeps its full width.
+            if (!sunken && t.enclosure !== 'chamber' && !(t.enclosure === 'wall' && t.wallSide === sign)) continue;
+            const alongX = t.axis === 'x', width = t.wallThickness;
+            // Walls stand outside the passage, which keeps its full width.
             const lo = sign < 0 ? (alongX ? bounds.minZ : bounds.minX) - width : alongX ? bounds.maxZ : bounds.maxX;
             const sideBounds = alongX ? { ...bounds, minZ: lo, maxZ: lo + width } : { ...bounds, minX: lo, maxX: lo + width };
-            addPrism(profilePrism(`${t.id}/${name}/${walled ? 'side' : 'parapet'}-${sign}/0`, sideBounds, flat(base), flat(walled ? base + ADDRESS_PITCH : h + 1.05)));
+            addPrism(profilePrism(`${t.id}/${name}/side-${sign}/0`, sideBounds, flat(base), flat(base + ADDRESS_PITCH)));
           }
         }
         // One level fixture per half hangs over its approach: the pair frames

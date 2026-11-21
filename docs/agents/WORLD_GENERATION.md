@@ -20,7 +20,7 @@ rg -n "export const generateInfiniteChunk|prefixPlanIds|emitBoundary" src/world/
 
 ## Ordre du pipeline
 
-Le pipeline ordinaire (plan version 25, topologie/spatial version 2) est :
+Le pipeline ordinaire (plan version 26, topologie/spatial version 2) est :
 
 1. `RegionalPlan` choisit les districts mondiaux et leurs datums signés ;
 2. il réserve les atria sur deux à quatre adresses verticales. Les galeries
@@ -80,7 +80,7 @@ et leurs chutes dirigées. Les parois des galeries classiques descendent aussi
 jusqu’au vrai bas ; les ouvertures sont soustraites en volume. Galeries,
 passerelles et paliers d’atrium n’ont plus de parapets en mur, et le fond d’atrium
 n’a plus de poutres porte-lampes. Sous un trou hérité, l’étage d’arrivée gaine le
-plénum (plafond → dalle supérieure) d’un manchon en plâtre autour de chaque trou.
+plénum (plafond → dalle supérieure) d’un manchon en papier peint autour de chaque trou.
 
 La génération ne lit jamais un voisin déjà produit. Les interfaces viennent des
 mêmes cellules mondiales des deux côtés. Le pas d’adresse 5,4 m est une translation

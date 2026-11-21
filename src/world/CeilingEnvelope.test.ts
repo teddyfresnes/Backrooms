@@ -22,15 +22,15 @@ it('closes low ceiling edges into the adjacent high roof, with the same mesh and
     for(const prism of returns) {
       const axis=(i:number)=>prism.vertices.filter((_,j)=>j%3===i),xs=axis(0),ys=axis(1),zs=axis(2);
       const lo={x:Math.min(...xs),y:Math.min(...ys),z:Math.min(...zs)},hi={x:Math.max(...xs),y:Math.max(...ys),z:Math.max(...zs)};
-      expect(prism.material).toBe('plaster');expect(hi.y-lo.y).toBeGreaterThan(.001);
+      expect(prism.material).toBe('wall');expect(hi.y-lo.y).toBeGreaterThan(.001);
       const center={x:(lo.x+hi.x)/2,y:(lo.y+hi.y)/2,z:(lo.z+hi.z)/2},thinX=hi.x-lo.x<hi.z-lo.z;
       // Rapier owns the same solid: its hull is met on the face of the return.
       const face={...center,...(thinX?{x:lo.x}:{z:lo.z})};
       expect(physics.world.intersectionWithShape(face,{x:0,y:0,z:0,w:1},new RAPIER.Ball(.025),undefined,undefined,undefined,undefined,physics.isEnvironmentCollider),prism.id).not.toBeNull();
-      // And a horizontal ray through its 12 cm meets a plaster face on at least one side.
+      // And a horizontal ray through its 12 cm meets a wallpaper face on at least one side.
       for(const sign of [-1,1]) {
         const origin=new THREE.Vector3(center.x-(thinX?sign:0),center.y,center.z-(thinX?0:sign)),direction=new THREE.Vector3(thinX?sign:0,0,thinX?0:sign);
-        const hit=new THREE.Raycaster(origin,direction,0,2).intersectObjects(meshes).find(h=>h.object.name==='regional-plaster-structures'
+        const hit=new THREE.Raycaster(origin,direction,0,2).intersectObjects(meshes).find(h=>h.object.name==='regional-walls'
           &&h.point.x>=lo.x-.002&&h.point.x<=hi.x+.002&&h.point.z>=lo.z-.002&&h.point.z<=hi.z+.002);
         if(hit){visible++;break;}
       }

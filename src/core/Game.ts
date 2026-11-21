@@ -41,7 +41,7 @@ import {
   type GameSaveKind,
   type GameSaveStorage,
 } from './SaveHistory';
-import { captureGameSavePreview } from './SavePreview';
+import { captureGameSavePreview, drawGameSavePreview, encodeGameSavePreview, warmGameSavePreviewEncoder } from './SavePreview';
 import { prepareOriginPlan } from './PrepareOriginPlan';
 import { yieldToBrowser } from './CooperativeWork';
 import { COMPASS_ID, FLASHLIGHT_ID, InventoryState, freshInventory, type InventoryProgress } from '../apartment/InventoryState';
@@ -181,6 +181,7 @@ export class Game {
   private elapsed = 0;
   private playableSeconds = 0;
   private autosaveElapsed = 0;
+  private saveSequence = 0;
   private activeStory = 0;
   private pendingAutosaveStory?: number;
   private fps = 60;
@@ -275,6 +276,7 @@ export class Game {
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = false;
+    warmGameSavePreviewEncoder(this.renderer.domElement);
     this.renderer.debug.checkShaderErrors = true;
     // The composer performs several renderer calls. Reset once per presented
     // frame so debug draw/triangle counts cover the whole pipeline.
@@ -495,7 +497,7 @@ export class Game {
         riftResolved: () => this.rift?.snapshot.stage === 'done',
         compassVisible: () => !!this.compass?.model.visible && this.inventory?.equipped?.id === COMPASS_ID && this.equipmentTransition.amount > .7,
         caption: text => this.caption?.say(text), revealCompass: () => this.inventoryHUD?.reveal(),
-        checkpoint: () => { this.saveNow('autosave'); },
+        checkpoint: () => { this.saveNow('autosave', true); },
         slideChoice: choice => this.options.onSlideChoice?.(choice),
       }, states, this.savedNorthern);
       this.unsubscribeNorthern = this.worldStream.addChunkObserver(this.northern);
@@ -748,7 +750,7 @@ export class Game {
         if (text === RIFT_LINES.items) this.inventoryHUD?.reveal();
       },
       captionBusy: () => !!this.caption?.isActive,
-      onProgress: () => { this.saveNow('autosave'); },
+      onProgress: () => { this.saveNow('autosave', true); },
       darknessAt: (x, y, z) => this.worldStream?.darknessAt(x, y, z) ?? 0,
       worldRevision: () => this.worldRevision,
       creatureEnvironment: new CharacterEnvironment(this.physics),
@@ -821,7 +823,10 @@ export class Game {
     window.location.assign(url.toString());
   }
 
-  private saveNow(kind: GameSaveKind): boolean {
+  /** `inPlay` autosaves (periodic, level change, progress) capture their state
+   * and picture now but encode the preview off the main thread, then write.
+   * Lifecycle and manual saves stay synchronous: the page may be closing. */
+  private saveNow(kind: GameSaveKind, inPlay = false): boolean {
     if (!this.storage || !this.player || !this.worldStream) return false;
     // Scripted shots, balancing and the creature cannot be saved mid-action.
     // Both banks before the reveal are stable checkpoints.
@@ -830,19 +835,20 @@ export class Game {
     const offset = getChunkWorldOffset(chunk);
     const look = this.player.getLookQuaternion();
     this.postFX?.render(0);
-    const previewImage = captureGameSavePreview(this.renderer.domElement);
-    const result = writeGameSave(this.storage, {
+    const sequence = ++this.saveSequence;
+    const surface = this.worldStream.surfaceAnchorAt(this.lastSafePosition);
+    // The state is captured now; a deferred save only adds its picture later.
+    const input = {
       experienceId: 'backrooms',
       kind,
       levelId: `backrooms-${chunk.story}`,
       levelLabel: `Niveau ${chunk.story} · Backrooms`,
       playTimeSeconds: this.playableSeconds,
-      ...(previewImage ? { previewImage } : {}),
       payload: {
         seed: this.seed,
         environmentSession: this.environmentSession,
         chunk,
-        ...(this.worldStream.surfaceAnchorAt(this.lastSafePosition) ? { surface: this.worldStream.surfaceAnchorAt(this.lastSafePosition) } : {}),
+        ...(surface ? { surface } : {}),
         localPosition: {
           x: this.lastSafePosition.x - offset.x,
           y: this.lastSafePosition.y - offset.y,
@@ -853,9 +859,23 @@ export class Game {
         ...(this.rift ? { rift: this.rift.snapshot } : {}),
         ...(this.northern ? { northern: this.northern.snapshot } : {}),
       },
+    } satisfies Parameters<typeof writeGameSave>[1];
+    const save = (previewImage: string | undefined): boolean => this.writeSave({ ...input, ...(previewImage ? { previewImage } : {}) });
+    if (!inPlay) return save(captureGameSavePreview(this.renderer.domElement));
+    const preview = drawGameSavePreview(this.renderer.domElement);
+    if (kind === 'autosave') this.autosaveElapsed = 0;
+    void (preview ? encodeGameSavePreview(preview) : Promise.resolve(undefined)).then(image => {
+      // A later save, or leaving the game, supersedes this one.
+      if (!this.disposed && sequence === this.saveSequence) save(image);
     });
+    return true;
+  }
+
+  private writeSave(input: Parameters<typeof writeGameSave>[1]): boolean {
+    if (!this.storage) return false;
+    const result = writeGameSave(this.storage, input);
     if (result.ok) {
-      if (kind === 'autosave') this.autosaveElapsed = 0;
+      if (input.kind === 'autosave') this.autosaveElapsed = 0;
       this.syncSaveHistory();
     }
     return result.ok;
@@ -880,7 +900,7 @@ export class Game {
       || safeCoord.z !== center.z
     ) return;
     this.pendingAutosaveStory = undefined;
-    this.saveNow('autosave');
+    this.saveNow('autosave', true);
   }
 
   private async toggleFullscreen(): Promise<void> {
@@ -1202,7 +1222,7 @@ export class Game {
     if (playing) {
       this.playableSeconds += rawDelta;
       this.autosaveElapsed += rawDelta;
-      if (this.autosaveElapsed >= AUTOSAVE_INTERVAL_SECONDS) this.saveNow('autosave');
+      if (this.autosaveElapsed >= AUTOSAVE_INTERVAL_SECONDS) this.saveNow('autosave', true);
       // The rift scripts the player before the rig steps, and frames the shot after it.
       this.rift?.update(rawDelta);
       if (!this.rift?.ownsCharacter) this.character?.update(rawDelta);

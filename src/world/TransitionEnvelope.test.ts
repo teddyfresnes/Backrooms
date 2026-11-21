@@ -49,7 +49,7 @@ it('keeps every half between its own floor slab and the next one', () => {
 });
 
 it('materializes the three roofs, the three enclosures and solid flights in real chunks', () => {
-  const roofs = new Set<string>(), enclosures = new Set<string>(); let flights = 0, parapets = 0;
+  const roofs = new Set<string>(), enclosures = new Set<string>(); let flights = 0, trenches = 0;
   for (let n = 0; n < 24; n++) {
     const w = generateInfiniteChunk(`REGIONAL-AUDIT-${n}`, { x: 0, z: 0, story: 0 });
     for (const t of w.spatial!.transitions!) {
@@ -72,12 +72,13 @@ it('materializes the three roofs, the three enclosures and solid flights in real
       const guards = w.spatial!.prisms.filter(p => p.id.startsWith(`${t.id}/`) && p.id.includes('/parapet-'));
       const parts = rectWidth(t.landing.bounds) > .005 && rectDepth(t.landing.bounds) > .005 ? 2 : 1;
       const walled = t.enclosure === 'chamber' ? 2 : t.enclosure === 'wall' ? 1 : 0, sunken = t.landing.y < cell.floorY - .001;
-      expect(sides).toHaveLength(walled * parts); expect(guards).toHaveLength(sunken ? (2 - walled) * parts : 0); parapets += guards.length;
+      // A trench is lined by two full walls; no waist-high parapet remains.
+      expect(sides).toHaveLength((sunken ? 2 : walled) * parts); expect(guards).toHaveLength(0); trenches += Number(sunken && walled < 2);
+      if (t.enclosure !== 'chamber') expect(t.roofPolicy).toBe('room');
       for (const p of sides) {
         const ys = p.vertices.filter((_, j) => j % 3 === 1);
         expect(Math.min(...ys)).toBeCloseTo(base, 9); expect(Math.max(...ys)).toBeCloseTo(base + 5.4, 9);
       }
-      for (const p of guards) expect(Math.max(...p.vertices.filter((_, j) => j % 3 === 1))).toBeCloseTo(cell.floorY + 1.05, 9);
       // Nothing is cut through: a flight needs no other vertical owner.
       expect(w.spatial!.dependencies.some(d => d.reason === 'stairs' && d.bounds.minX <= t.bounds.minX && d.bounds.maxX >= t.bounds.maxX
         && d.bounds.minZ <= t.bounds.minZ && d.bounds.maxZ >= t.bounds.maxZ)).toBe(false);
@@ -86,7 +87,7 @@ it('materializes the three roofs, the three enclosures and solid flights in real
       expect(other).toBeDefined(); expect([other.enclosure, other.wallSide, other.roofPolicy, other.bounds]).toEqual([t.enclosure, t.wallSide, t.roofPolicy, t.bounds]);
     }
   }
-  expect(flights).toBeGreaterThan(20); expect(parapets).toBeGreaterThan(0);
+  expect(flights).toBeGreaterThan(20); expect(trenches).toBeGreaterThan(0);
   expect([...roofs].sort()).toEqual(['flight', 'room', 'upper-slab']); expect([...enclosures].sort()).toEqual(['chamber', 'open', 'wall']);
 }, 120000);
 

@@ -27,7 +27,7 @@ export const ownedProfilePrisms = (id: string, bounds: Rect, bottom: HeightProfi
     const lo = clip(bottom, true), hi = clip(top, false), gaps = [[b.minX, b.minZ], [b.minX, b.maxZ], [b.maxX, b.minZ], [b.maxX, b.maxZ]]
       .map(([px, pz]) => profileY(b, hi, px!, pz!) - profileY(b, lo, px!, pz!));
     if (Math.max(...gaps) <= EPS || Math.min(...gaps) < -EPS) continue;
-    result.push(profilePrism(`${id}/${ix}-${iz}`, b, lo, hi, 'plaster'));
+    result.push(profilePrism(`${id}/${ix}-${iz}`, b, lo, hi, 'wall'));
   }
   return result;
 };

@@ -56,7 +56,9 @@ export const planRegionalTransition = (seed: string, gx: number, gz: number, _st
     { value: 'open' as const, weight: .4 }, { value: 'wall' as const, weight: .25 }, { value: 'chamber' as const, weight: .35 }]);
   const roofPolicy = tall ? 'flight' as const : enclosure === 'chamber'
     ? rng.fork('roof').weighted([{ value: 'flight' as const, weight: .45 }, { value: 'room' as const, weight: .3 }, { value: 'upper-slab' as const, weight: .25 }])
-    : rng.fork('roof').weighted([{ value: 'room' as const, weight: .55 }, { value: 'upper-slab' as const, weight: .45 }]);
+    // An unenclosed flight keeps the room's own ceiling: a tall well over an
+    // open podium only hung deep bulkheads in the middle of the room.
+    : 'room' as const;
   const wallSide = rng.fork('wall-side').chance(.5) ? -1 as const : 1 as const;
   const sign = reverse ? -1 : 1;
   const last = edge - sign * seamDepth, first = last - sign * runLength, core = first - sign * approachDepth;

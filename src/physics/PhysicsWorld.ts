@@ -174,7 +174,11 @@ export class PhysicsWorld {
     return y;
   }
 
-  addChunk(key: string, colliders: readonly StaticCollider[], offset: Vec3Data): void {
+  /** `mergeMeshes` fuses the unrotated triangle-mesh solids of each kind into
+   * one mesh: the same triangles, but one collider instead of hundreds, which
+   * made Rapier's per-collider setup the main cost of mounting a chunk. Those
+   * solids are then no longer addressable by id; cuboids (doors) always are. */
+  addChunk(key: string, colliders: readonly StaticCollider[], offset: Vec3Data, options: { mergeMeshes?: boolean } = {}): void {
     if (!key) throw new Error('Physics chunk keys cannot be empty.');
     if (this.chunkBodies.has(key)) throw new Error(`Physics chunk already exists: ${key}`);
     this.assertFiniteVector(offset, `offset for chunk ${key}`);
@@ -182,12 +186,25 @@ export class PhysicsWorld {
       RAPIER.RigidBodyDesc.fixed().setTranslation(offset.x, offset.y, offset.z),
     );
     try {
-      const indexedColliders = new Map<string, RAPIER.Collider>();
+      const indexedColliders = new Map<string, RAPIER.Collider>(), seen = new Set<string>();
+      const merged = new Map<StaticCollider['kind'], { vertices: number[]; indices: number[] }>();
       for (const collider of colliders) {
-        if (indexedColliders.has(collider.id)) throw new Error(`Duplicate collider id in chunk ${key}: ${collider.id}`);
+        if (seen.has(collider.id)) throw new Error(`Duplicate collider id in chunk ${key}: ${collider.id}`);
+        seen.add(collider.id);
+        if (options.mergeMeshes && collider.vertices && collider.indices && !collider.rotation) {
+          const mesh = merged.get(collider.kind) ?? { vertices: [], indices: [] }, base = mesh.vertices.length / 3, { x, y, z } = collider.center;
+          for (let i = 0; i < collider.vertices.length; i += 3) mesh.vertices.push(collider.vertices[i]! + x, collider.vertices[i + 1]! + y, collider.vertices[i + 2]! + z);
+          for (const index of collider.indices) mesh.indices.push(index + base);
+          merged.set(collider.kind, mesh);
+          continue;
+        }
         const created = addStaticCollider(this.world, body, collider);
         indexedColliders.set(collider.id, created);
         this.environmentKinds.set(created.handle, collider.kind);
+      }
+      for (const [kind, mesh] of merged) {
+        const created = addStaticCollider(this.world, body, { id: `${key}/merged-${kind}`, kind, center: { x: 0, y: 0, z: 0 }, halfExtents: { x: 0, y: 0, z: 0 }, ...mesh });
+        this.environmentKinds.set(created.handle, kind);
       }
       this.chunkBodies.set(key, body);
       this.environmentBodies.add(body.handle);

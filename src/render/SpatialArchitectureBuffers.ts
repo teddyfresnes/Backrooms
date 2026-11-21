@@ -24,31 +24,55 @@ export const prepareSpatialArchitecture = (plan: WorldPlan): SpatialArchitecture
     ...ceilings.map(source => ({ source, vertices: slabVertices(source) })),
     ...spatial.prisms.map(source => ({ source, vertices: source.vertices, openFaces: source.openFaces })),
   ]);
-  const batches: SpatialArchitectureBuffers = [];
-  const add = (name: string, material: ArchitectureBatch['material'], geometry: THREE.BufferGeometry) => {
-    if (geometry.getAttribute('position').count) {
-      geometry.computeBoundingBox(); geometry.computeBoundingSphere();
-      batches.push({ name, material, position: geometry.getAttribute('position').array as Float32Array,
-        normal: geometry.getAttribute('normal').array as Float32Array, uv: geometry.getAttribute('uv').array as Float32Array,
-        color: geometry.getAttribute('color').array as Float32Array, min: geometry.boundingBox!.min.toArray(), max: geometry.boundingBox!.max.toArray(),
-        sphere: [...geometry.boundingSphere!.center.toArray(), geometry.boundingSphere!.radius] });
-    }
-    geometry.dispose();
+  // One batch, hence one draw call, per material: every part shares the same
+  // world-space UVs, so merging changes no pixel.
+  const parts = new Map<ArchitectureBatch['material'], THREE.BufferGeometry[]>();
+  const add = (material: ArchitectureBatch['material'], geometry: THREE.BufferGeometry) => {
+    if (geometry.getAttribute('position').count) parts.set(material, [...parts.get(material) ?? [], geometry]); else geometry.dispose();
   };
-  add('regional-carpet-floors', 'floor', createWalkableBatch(floors, 'top', style?.floorPatternScale ?? 1, style?.floorQuarterTurn ?? false, origin, true, exposure));
-  add('regional-floor-undersides', 'ceiling', createWalkableBatch(floors, 'underside', ceilingScale, false, origin, true, exposure));
-  add('regional-floor-chants', 'wall', createWalkableBatch(floors, 'sides', wallScale, false, origin, true, exposure));
-  for (const face of ['top', 'underside'] as const)
-    add(`regional-ceilings-${face}`, 'ceiling', createWalkableBatch(ceilings, face, ceilingScale, false, origin, true, exposure));
-  add('regional-ceilings-sides', 'plaster', createWalkableBatch(ceilings, 'sides', wallScale, false, origin, true, exposure));
+  add('floor', createWalkableBatch(floors, 'top', style?.floorPatternScale ?? 1, style?.floorQuarterTurn ?? false, origin, true, exposure));
+  add('ceiling', createWalkableBatch(floors, 'underside', ceilingScale, false, origin, true, exposure));
+  add('wall', createWalkableBatch(floors, 'sides', wallScale, false, origin, true, exposure));
+  for (const face of ['top', 'underside'] as const) add('ceiling', createWalkableBatch(ceilings, face, ceilingScale, false, origin, true, exposure));
+  // Vertical steps between ceilings continue the wallpaper of the walls below
+  // them: white plaster bands read as stray partitions.
+  add('wall', createWalkableBatch(ceilings, 'sides', wallScale, false, origin, true, exposure));
   for (const material of ['wall', 'plaster', 'ceiling', 'baseboard'] as const) {
     const prisms = spatial.prisms.filter(p => p.material === material);
     if (!prisms.length) continue;
-    add(`regional-${material}-structures`, material, createSpatialPrismBatch(prisms, material === 'ceiling' ? ceilingScale : wallScale, origin, exposure,
+    add(material, createSpatialPrismBatch(prisms, material === 'ceiling' ? ceilingScale : wallScale, origin, exposure,
       material === 'ceiling' ? 'horizontal' : 'all'));
-    if (material === 'ceiling') add('regional-ceiling-structure-sides', 'plaster', createSpatialPrismBatch(prisms, wallScale, origin, exposure, 'sides'));
+    if (material === 'ceiling') add('wall', createSpatialPrismBatch(prisms, wallScale, origin, exposure, 'sides'));
+  }
+  const batches: SpatialArchitectureBuffers = [];
+  for (const [material, geometries] of parts) {
+    const merged = concatenate(geometries);
+    merged.computeBoundingBox(); merged.computeBoundingSphere();
+    batches.push({ name: ARCHITECTURE_BATCH_NAMES[material], material, position: merged.getAttribute('position').array as Float32Array,
+      normal: merged.getAttribute('normal').array as Float32Array, uv: merged.getAttribute('uv').array as Float32Array,
+      color: merged.getAttribute('color').array as Float32Array, min: merged.boundingBox!.min.toArray(), max: merged.boundingBox!.max.toArray(),
+      sphere: [...merged.boundingSphere!.center.toArray(), merged.boundingSphere!.radius] });
+    merged.dispose();
   }
   return batches;
+};
+
+export const ARCHITECTURE_BATCH_NAMES: Record<ArchitectureBatch['material'], string> = {
+  floor: 'regional-carpet-floors', wall: 'regional-walls', plaster: 'regional-plaster-structures',
+  ceiling: 'regional-ceilings', baseboard: 'regional-baseboards',
+};
+
+/** Non-indexed triangle soups with identical attribute layouts. */
+const concatenate = (geometries: THREE.BufferGeometry[]): THREE.BufferGeometry => {
+  if (geometries.length === 1) return geometries[0]!;
+  const merged = new THREE.BufferGeometry();
+  for (const [name, size] of [['position', 3], ['normal', 3], ['uv', 2], ['color', 3]] as const) {
+    const arrays = geometries.map(g => g.getAttribute(name).array as Float32Array), out = new Float32Array(arrays.reduce((n, a) => n + a.length, 0));
+    let offset = 0; for (const a of arrays) { out.set(a, offset); offset += a.length; }
+    merged.setAttribute(name, new THREE.BufferAttribute(out, size));
+  }
+  geometries.forEach(g => g.dispose());
+  return merged;
 };
 
 /** No copy, clipping, normals or first-frame bounds computation on mount. GPU

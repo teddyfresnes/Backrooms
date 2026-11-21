@@ -1556,7 +1556,7 @@ export class WorldStream {
     view.setArchitectureDebug(this.architectureDebugMode);
     view.setWorldOffset(offset);
     try {
-      this.physics.addChunk(key, plan.colliders, offset);
+      this.physics.addChunk(key, plan.colliders, offset, { mergeMeshes: true });
       this.scene.add(view.group);
       // Colliders are live at once; the picture appears once its shaders are
       // linked off-frame (neighbours mount far away, behind the fog).

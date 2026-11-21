@@ -111,7 +111,7 @@ export const installSpatialFeature = (w: WorldPlan, p: SpatialFeatureSlice, hook
       hooks.wall(`${p.id}/enclosure/${owner.story}/${name}`, b, h - .16, h + 5.24);
   } else if (p.phase === 'landing') {
     // Line the plenum between this story's ceiling and the slab above with a
-    // plaster sleeve around every hole. Without it the fall crossed an open void
+    // wallpaper sleeve around every hole. Without it the fall crossed an open void
     // showing the back of neighbouring ceilings, as if landing on them.
     const sleeve = .14, slab = h + ADDRESS_PITCH - .16;
     for (const [i, hole] of p.holes.entries()) {
@@ -120,7 +120,7 @@ export const installSpatialFeature = (w: WorldPlan, p: SpatialFeatureSlice, hook
       const bottom = Math.min(slab - .3, (roofs.length ? Math.min(...roofs) : h + 2.74) - .03);
       for (const [side, b] of [['north', { ...around, maxZ: hole.minZ }], ['south', { ...around, minZ: hole.maxZ }],
         ['west', { minX: around.minX, maxX: hole.minX, minZ: hole.minZ, maxZ: hole.maxZ }], ['east', { minX: hole.maxX, maxX: around.maxX, minZ: hole.minZ, maxZ: hole.maxZ }]] as const)
-        hooks.prism(profilePrism(`${p.id}/plenum/${owner.story}/${i}/${side}`, b, flat(bottom), flat(slab), 'plaster'));
+        hooks.prism(profilePrism(`${p.id}/plenum/${owner.story}/${i}/${side}`, b, flat(bottom), flat(slab), 'wall'));
     }
     t.surfaces = cut(t.surfaces, p.holes, `${p.id}/arrival`); roofCut(p.holes); w.ceilingOpenings!.push(...p.holes);
     p.holes.forEach((b, i) => hooks.surface(`${p.id}/landing-${i}`, rid, b, h, h + 2.74, 'landing'));

@@ -23,12 +23,13 @@ porte sur le sol le plus bas de sa moitié : podium côté bas, fond de tranché
 côté haut. Aucun giron ne flotte, aucun flanc ne montre le vide.
 
 - Enceinte `chamber` / `wall` : murs pleins hors de l'emprise, sur toute la
-  bande d'étage de leur moitié. Côté ouvert d'une tranchée : parapet de 1,05 m
-  pris sur 20 cm d'emprise. Un dénivelé total de plus de 1,8 m est toujours
-  encloisonné.
-- Toit `room` : un seul plafond plat à la hauteur du district haut.
-- Toit `upper-slab` : un puits plat sous la dalle suivante du district bas
-  (5,21 m). La dalle n'est pas percée et aucun autre étage n'est requis.
+  bande d'étage de leur moitié. Une tranchée (moitié haute) est toujours bordée
+  de deux murs pleins, comme une cage encaissée : plus de parapet à mi-hauteur.
+  Un dénivelé total de plus de 1,8 m est toujours encloisonné.
+- Toit `room` : un seul plafond plat à la hauteur du district haut ; seul toit
+  d'une enceinte `open` ou `wall`.
+- Toit `upper-slab` (enceinte `chamber` seulement) : un puits plat sous la dalle
+  suivante du district bas (5,21 m). La dalle n'est pas percée.
 - Toit `flight` : toit parallèle à la volée, toujours encloisonné, extrémités
   plates au-dessus de l'approche et du palier.
 
@@ -41,7 +42,7 @@ propriétaire.
 ## Décrochements et reliefs
 
 `CeilingEnvelope` raccorde les chants des plafonds bas au plafond haut réellement
-adjacent, sur un même datum. Un solide en plâtre ferme le décroché, avec les
+adjacent, sur un même datum. Un solide en papier peint ferme le décroché, avec les
 mêmes sommets pour Three et Rapier. Les murs existants sont soustraits et les
 bandes par propriétaire ne se chevauchent pas. Les puits, passages hérités,
 atria et frontières entre datums gardent leur contrat propre.
