@@ -26,9 +26,8 @@ export const transitionSurfaces = (t: TransitionLayout, story: number) => {
   // Suspended tiles: the approach is a plain slab, so no solid support leaks into them.
   const tile = (id: string, bounds: Rect, profile: HeightProfile): WalkableSurface => ({ ...approach, id, bounds, profile,
     ceilingProfile: undefined, thickness: .03, role: 'floor', access: 'sealed' });
-  if (t.roofPolicy === 'flight') {
-    for (const sf of [approach, ...(landing ? [landing] : [])]) ceilings.push(tile(`${sf.id}/ceiling`, sf.bounds, offsetProfile(sf.ceilingProfile!, .03)));
-    ceilings.push(tile(`${t.id}/roof`, t.run, offsetProfile(t.roof, .03 / surfaceNormal({ ...route[0]!, bounds: t.run, profile: t.roof }).y)));
-  } else ceilings.push(tile(`${t.id}/roof`, t.bounds, offsetProfile(t.roof, .03)));
+  // The roof follows the flight and is flat over the approach and the landing.
+  for (const sf of [approach, ...(landing ? [landing] : [])]) ceilings.push(tile(`${sf.id}/ceiling`, sf.bounds, offsetProfile(sf.ceilingProfile!, .03)));
+  ceilings.push(tile(`${t.id}/roof`, t.run, offsetProfile(t.roof, .03 / surfaceNormal({ ...route[0]!, bounds: t.run, profile: t.roof }).y)));
   return { surfaces, ceilings, route };
 };

@@ -158,8 +158,8 @@ le dégagement raycasté dans la géométrie finale et les coins des diffuseurs.
 `CeilingEnvelope.test.ts` reproduit le plafond de `LATE-OFFICE-1950` avec
 raycasts Three et contacts Rapier, vérifie les bandes et la portée des reliefs.
 `TransitionEnvelope.test.ts` protège la couture commune des deux moitiés, la
-bande d'étage, les trois toits et le dégagement sous les quatre coins des
-diffuseurs. `StairComfort.test.ts` borne pente, giron et contremarche de toutes
+bande d'étage, le toit parallèle à la volée (jamais de bandeau profond autour
+de l'escalier) et le dégagement sous les quatre coins des diffuseurs. `StairComfort.test.ts` borne pente, giron et contremarche de toutes
 les familles sur plusieurs seeds et fait gravir de vraies liaisons à la capsule
 Rapier, en marche et en course, dans les deux sens.
 `FluorescentFixture.test.ts` vérifie la neutralité HDR et le débit lumineux CPU,

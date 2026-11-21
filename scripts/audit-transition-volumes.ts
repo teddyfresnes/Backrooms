@@ -16,7 +16,7 @@ const errors:unknown[]=[],examples:Record<string,unknown>={},records:unknown[]=[
 const material=new THREE.MeshBasicMaterial();
 try {
   for(const [corpus,total]of [['ORDINARY',count],['HOLDOUT',Math.ceil(count/2)]]as const){
-    const policies:Record<string,number>={},enclosures:Record<string,number>={};
+    const enclosures:Record<string,number>={};
     let worlds=0,flights=0,probes=0,lamps=0,returns=0,bspArea=0,floorArea=0,maxBatches=0,triangles=0,minClearance=Infinity;
     for(let i=0;i<total;i++){
       const seed=`VOLUME-${corpus}-${i}`,coord={x:i%3-1,z:Math.floor(i/3)%3-1,story:i%5-2};
@@ -37,10 +37,10 @@ try {
         returns+=plan.spatial.prisms.filter(p=>p.id.includes('/ceiling-return-')).length;
         if(new Set(plan.colliders.map(c=>c.id)).size!==plan.colliders.length)errors.push({seed,reason:'duplicate collider IDs'});
         for(const t of plan.spatial.transitions??[]){
-          flights++;policies[t.roofPolicy]=(policies[t.roofPolicy]??0)+1;enclosures[t.enclosure]=(enclosures[t.enclosure]??0)+1;
+          flights++;enclosures[t.enclosure]=(enclosures[t.enclosure]??0)+1;
           links.set(t.linkId,(links.get(t.linkId)??0)+1);
           const p=rectCenter(t.run);
-          examples[t.roofPolicy]??={seed,coord,id:t.id,position:{x:p.x+offset.x,z:p.z+offset.z,y:surfaceY({bounds:t.run,profile:t.profile}as never,p.x,p.z)+offset.y+.865}};
+          examples[t.enclosure]??={seed,coord,id:t.id,position:{x:p.x+offset.x,z:p.z+offset.z,y:surfaceY({bounds:t.run,profile:t.profile}as never,p.x,p.z)+offset.y+.865}};
           if(!plan.spatial.ceilings.some(s=>s.id===t.id+'/roof'))errors.push({seed,id:t.id,reason:'missing transition roof'});
           const route=plan.topology!.surfaces.filter(s=>s.id===t.id||s.id.startsWith(t.id+'/step-'));
           for(const sf of route.filter((_,j,a)=>j===0||j===a.length-1||j===Math.floor(a.length/2))){
@@ -68,7 +68,7 @@ try {
       }finally{physics.dispose();meshes.forEach(m=>m.geometry.dispose());}
       if(i%16===15)writeFileSync(out+'.progress',`${corpus} ${i+1}/${total}\n`);
     }
-    records.push({corpus,worlds,flights,policies,enclosures,probes,fixtureCorners:lamps,returns,bspArea,floorArea,bspShare:bspArea/floorArea,maxBatches,triangles,minClearance});
+    records.push({corpus,worlds,flights,enclosures,probes,fixtureCorners:lamps,returns,bspArea,floorArea,bspShare:bspArea/floorArea,maxBatches,triangles,minClearance});
   }
 }finally{material.dispose();}
 writeFileSync(out,JSON.stringify({records,examples,errors,limits:'Actual Three Float32 worker buffers and Rapier colliders, mounted from real owners. CPU geometry audit; no WebGL image, GPU time or FPS.'},null,2));

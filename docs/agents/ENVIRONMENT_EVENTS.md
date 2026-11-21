@@ -4,7 +4,7 @@
 et le registre des contraintes. `generateInfiniteChunk` l’appelle après la géométrie
 spatiale finale et avant `populateRareProps`. Les monuments historiques, dont
 `epic3`, et les rangées réservées de `NorthernLayout` restent exclus. Tirages et
-IDs sont en `v2` (`environment/v2/x/z/étage`) ; le plan spatial est en version 26.
+IDs sont en `v2` (`environment/v2/x/z/étage`) ; le plan spatial est en version 27.
 
 ## Tirages et géométrie
 

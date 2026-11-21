@@ -16,7 +16,7 @@ pour une demi-montée d'au plus 0,9 m. L'emprise est ancrée sur la couture :
 palier facultatif de 1,6 m par moitié, volée, approche de 2,2 m. Largeurs
 4 / 4,8 / 5,6 m. Les centres restent espacés d'au moins 49 m, avec au plus une
 transition par cellule. Les deux moitiés partagent `linkId`, finition,
-enceinte, toit et datum médian, tirés d'un même flux par paire de cellules.
+enceinte et datum médian, tirés d'un même flux par paire de cellules.
 
 Marches, rampe et palier sont une seule masse pleine (`support: 'solid'`) qui
 porte sur le sol le plus bas de sa moitié : podium côté bas, fond de tranchée
@@ -26,12 +26,13 @@ côté haut. Aucun giron ne flotte, aucun flanc ne montre le vide.
   bande d'étage de leur moitié. Une tranchée (moitié haute) est toujours bordée
   de deux murs pleins, comme une cage encaissée : plus de parapet à mi-hauteur.
   Un dénivelé total de plus de 1,8 m est toujours encloisonné.
-- Toit `room` : un seul plafond plat à la hauteur du district haut ; seul toit
-  d'une enceinte `open` ou `wall`.
-- Toit `upper-slab` (enceinte `chamber` seulement) : un puits plat sous la dalle
-  suivante du district bas (5,21 m). La dalle n'est pas percée.
-- Toit `flight` : toit parallèle à la volée, toujours encloisonné, extrémités
-  plates au-dessus de l'approche et du palier.
+- Toit : toujours parallèle à la volée, à 3,05 m au-dessus des marches, avec des
+  extrémités plates au-dessus de l'approche et du palier. Il part du plafond
+  ordinaire du district sur chaque approche et atteint le datum médian à la
+  couture : une moitié basse n'a jamais de puits plat à la hauteur du district
+  haut (jusqu'à 2 m de bandeau en papier peint autour de l'escalier). Le retour
+  d'un toit ouvert ne dépasse que la montée de sa moitié (0,9 m) et l'écart
+  avec le plafond de la pièce voisine.
 
 `CeilingEnvelope` ferme les décrochements entre ces plafonds et ceux des pièces
 voisines. Le dégagement minimum reste 2,74 m. Le luminaire d'un toit incliné
