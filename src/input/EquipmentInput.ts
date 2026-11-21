@@ -27,6 +27,6 @@ export class EquipmentInput {
   };
   private mouse=():void=>{this.pointer=true;if(this.pending>=0)this.cancelled=true;};
   private mouseUp=(event:MouseEvent):void=>{this.pointer=event.buttons!==0;};
-  private reset=():void=>{this.pending=-1;this.pointer=false;};
+  reset=():void=>{this.pending=-1;this.cancelled=false;this.pointer=false;};
   dispose():void{window.removeEventListener('keydown',this.down,true);window.removeEventListener('keyup',this.up,true);window.removeEventListener('mousedown',this.mouse,true);window.removeEventListener('mouseup',this.mouseUp,true);window.removeEventListener('blur',this.reset);document.removeEventListener('visibilitychange',this.reset);}
 }

@@ -63,8 +63,6 @@ export const CLOSET = {
   /** What the hidden player looks at through the crack. */
   // The crack opens on the east jamb: from inside, only a 18°–41° cone sees out.
   peekTarget: { x: -1.95, y: APARTMENT_FLOOR_Y + 1.5, z: -1.45 } as Vec3Data,
-  /** Where the player stands once out of the closet, facing the entry. */
-  exitPosition: { x: -2.66, y: APARTMENT_FLOOR_Y + 0.865, z: -1.42 } as Vec3Data,
   /** Crack left open while hiding, so the entry can be watched. */
   peekAngle: 0.6,
   interactDistance: 2.8,
@@ -78,7 +76,6 @@ export const WARDROBE = {
   frontPosition: { x: -7.93, y: APARTMENT_FLOOR_Y, z: -4.45 } as Vec3Data,
   /** Inside, at head height: what it sniffs at. */
   hideEye: { x: -7.93, y: APARTMENT_FLOOR_Y + 1.31, z: -5.65 } as Vec3Data,
-  exitPosition: { x: -7.93, y: APARTMENT_FLOOR_Y + 0.9, z: -4.85 } as Vec3Data,
 } as const;
 
 export type HideSpotId = 'wardrobe' | 'closet' | 'bathroom';
@@ -88,8 +85,6 @@ export interface HideSpotLayout {
   readonly frontPosition: Vec3Data;
   /** The hidden player's head: what it sniffs at. */
   readonly hideEye: Vec3Data;
-  /** Player capsule centre just outside, for checkpoint restarts. */
-  readonly exitPosition: Vec3Data;
   /** Free floor points between the entry and the front (door → front). */
   readonly approach: readonly Vec3Data[];
   /** Free floor points from the front to the television stand. */
@@ -109,7 +104,6 @@ export const HIDE_SPOTS: Readonly<Record<HideSpotId, HideSpotLayout>> = {
   closet: {
     frontPosition: CLOSET.frontPosition,
     hideEye: { x: -2.63, y: APARTMENT_FLOOR_Y + 1.31, z: -0.16 },
-    exitPosition: CLOSET.exitPosition,
     approach: [],
     toTelevision: [floor(-3.4, -2.75), floor(-6.3, -3.3), floor(-7.9, -2.2)],
   },
@@ -117,7 +111,6 @@ export const HIDE_SPOTS: Readonly<Record<HideSpotId, HideSpotLayout>> = {
   bathroom: {
     frontPosition: floor(-4.05, -3.3),
     hideEye: { x: -3.9, y: APARTMENT_FLOOR_Y + 1.31, z: -4.6 },
-    exitPosition: { x: -4.05, y: APARTMENT_FLOOR_Y + 0.9, z: -3.5 },
     approach: [floor(-3.4, -2.9)],
     toTelevision: [floor(-4.6, -3.1), floor(-6.3, -3.3), floor(-7.9, -2.2)],
   },

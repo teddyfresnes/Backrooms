@@ -66,11 +66,22 @@ export class StoryHud {
     this.hintKey.textContent = key;
     this.hintText.textContent = text;
     this.hint.classList.toggle('is-urgent', urgent);
+    this.setHintWarning(null);
     this.hint.hidden = false;
     this.hintRemaining = seconds;
   }
 
-  hideHint(): void { this.hintRemaining = 0; this.hint.hidden = true; this.setHold(null); }
+  hideHint(): void {
+    this.hintRemaining = 0;
+    this.hint.hidden = true;
+    this.setHold(null);
+    this.setHintWarning(null);
+  }
+
+  setHintWarning(warning: 'flicker' | 'danger' | null): void {
+    this.hint.classList.toggle('is-flickering', warning === 'flicker');
+    this.hint.classList.toggle('is-danger', warning === 'danger');
+  }
 
   /** Fill of a hold-to-act prompt (0..1), or null to hide the bar. */
   setHold(progress: number | null): void {
@@ -93,6 +104,15 @@ export class StoryHud {
   }
 
   setPlaying(playing: boolean): void { this.root.classList.toggle('is-paused', !playing); }
+
+  reset(): void {
+    this.hideHint();
+    this.setQuest(null);
+    this.showDeath(false);
+    this.setFade(0);
+    this.flashLevel = 0;
+    this.flash.style.opacity = '0';
+  }
 
   update(delta: number): void {
     const dt = Math.max(0, Math.min(0.1, delta));

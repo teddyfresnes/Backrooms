@@ -72,6 +72,11 @@ de Chloé). `GiftParcel`, à côté du paillasson du dernier palier (collider
 `giftOpened` est optionnel ; les anciennes sauvegardes déjà rentrées le valent. `arrivalState` et le flag
 sonore sont indépendants. Les anciens snapshots mail/home/done sans flag sont
 considérés comme déjà avertis ; les anciennes sauvegardes sans objectif le contournent.
+La console reste accessible pendant la poursuite. `/skip intro` reprend dans le
+hall avec l'objectif courrier actif. `/skip level0` utilise l'arrivée au sol
+de la chute et conserve l'inventaire courant. Pendant la fuite, les sept sources
+de la cage éclairent les marches et les virages à puissance réduite, avec un
+repère chaud à la sortie du hall. Le retour en cachette éteint cet éclairage.
 
 `ApartmentQuest` et `QuestTracker` affichent un seul objectif global en haut à
 gauche, y compris au-dessus du bureau. Le parcours est courrier → entrée réelle →

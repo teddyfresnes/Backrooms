@@ -32,7 +32,10 @@ it('uses a separate immediate supplied screamer for reveals and capture, immune 
   const capture=sources.at(-1)!;expect(capture).not.toBe(reveal);expect(capture.loop).toBe(false);
   const owned=nodes.slice(-4),gain=owned.find(n=>n.gain.value===1.15)!;
   expect(gain).toBeDefined();audio.updateSpatial(100,1,1);expect(gain.gain.value).toBe(1.15);
-  audio.stopAll();expect(capture.stop).toHaveBeenCalled();
+  audio.startVoice();const voice=sources.at(-1)!;
+  audio.stopVoice(.4);expect(voice.stop).toHaveBeenLastCalledWith(12.42);
+  audio.stopAll();expect(capture.stop).toHaveBeenLastCalledWith(12);
+  expect(voice.stop).toHaveBeenLastCalledWith(12);
   capture.end();expect(owned.every(n=>n.disconnect.mock.calls.length===1)).toBe(true);
   audio.dispose();
 });

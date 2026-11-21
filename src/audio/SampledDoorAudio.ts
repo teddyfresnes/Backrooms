@@ -5,6 +5,11 @@ import type { Vec3Data } from '../world/types';
 
 export type NeighborDoorSound='knock'|'bell'|'slam';
 const URLS:Record<NeighborDoorSound,string>={knock:'/assets/audio/interactions/knock-wood.ogg',bell:'/assets/audio/interactions/apartment-bell.ogg',slam:'/assets/audio/interactions/door-close.mp3'};
+const SCRIPTED_KNOCK_ID = 'scripted-door-knocks';
+const SCRIPTED_KNOCK_RATE = .82;
+// The recording already contains three separate impacts. Keep its original spacing.
+export const SCRIPTED_KNOCK_ONSETS = [.067, .273, .508].map(time => time / SCRIPTED_KNOCK_RATE);
+export const SCRIPTED_KNOCK_SECONDS = .768 / SCRIPTED_KNOCK_RATE;
 export class SampledDoorAudio {
   private bus?:SpatialAudioBus;
   private readonly buffers=new Map<NeighborDoorSound,AudioBuffer>();
@@ -26,7 +31,7 @@ export class SampledDoorAudio {
     if(prior&&kind!=='slam'&&now-prior.at<(kind==='bell'?.4:.18))return buffer.duration;
     if(prior)this.release(doorId);
     // Spatial tails may span several doors, but the active node budget is fixed.
-    if(this.sources.size>=6)this.release(this.sources.keys().next().value!);
+    if(this.sources.size>=6)this.release([...this.sources.keys()].find(id => id !== SCRIPTED_KNOCK_ID)!);
     const chain=doorAudioChain(bus,position,kind==='slam'?.24:kind==='bell'?.2:.42,kind==='bell');
     const source=bus.context.createBufferSource();source.buffer=buffer;
     const rate=kind==='knock'?[.99,1.01,1][this.cursor++%3]!:1;
@@ -34,17 +39,24 @@ export class SampledDoorAudio {
     source.onended=()=>{if(this.sources.get(doorId)?.source===source)this.sources.delete(doorId);source.disconnect();chain.dispose();};
     source.start();return buffer.duration/rate;
   }
-  /** A scripted blow on a door: never throttled, with its own rate and level. */
-  playScripted(kind:NeighborDoorSound,position:Readonly<Vec3Data>,id:string,rate:number,level:number):void{
-    const bus=this.bus,buffer=this.buffers.get(kind);
-    if(!bus||!buffer||this.disposed||bus.context.state!=='running')return;
-    if(this.sources.has(id))this.release(id);
+  /** The three heavy scripted knocks share one voice, even across triggers. */
+  playKnocks(position: Readonly<Vec3Data>): void {
+    const bus=this.bus,buffer=this.buffers.get('knock'),id=SCRIPTED_KNOCK_ID;
+    if(!bus||!buffer||this.disposed||bus.context.state!=='running'||this.sources.has(id))return;
     if(this.sources.size>=6)this.release(this.sources.keys().next().value!);
-    const chain=doorAudioChain(bus,position,level,false,{refDistance:2.5,maxDistance:30,rolloff:.8});
-    const source=bus.context.createBufferSource();source.buffer=buffer;source.playbackRate.value=rate;
+    const spatial = doorAudioChain(bus,position,2.6,false,{refDistance:2.5,maxDistance:30,rolloff:.8});
+    const bass = bus.context.createBiquadFilter();
+    bass.type = 'lowshelf'; bass.frequency.value = 320; bass.gain.value = 6;
+    bass.connect(spatial.input);
+    const chain = { ...spatial, input: bass, dispose: () => { bass.disconnect(); spatial.dispose(); } };
+    const source=bus.context.createBufferSource();source.buffer=buffer;source.playbackRate.value=SCRIPTED_KNOCK_RATE;
     source.connect(chain.input);this.sources.set(id,{source,chain,at:bus.context.currentTime});
     source.onended=()=>{if(this.sources.get(id)?.source===source)this.sources.delete(id);source.disconnect();chain.dispose();};
     source.start();
+  }
+  stopKnocks(): void { this.release(SCRIPTED_KNOCK_ID); }
+  stopNeighborSounds(): void {
+    for (const id of this.sources.keys()) if (id !== SCRIPTED_KNOCK_ID) this.release(id);
   }
   private release(id:string):void{
     const active=this.sources.get(id);if(!active)return;this.sources.delete(id);active.source.onended=null;

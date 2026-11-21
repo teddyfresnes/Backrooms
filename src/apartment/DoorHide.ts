@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import { matchesControlAction, formatKeyLabel, type ControlBindings } from '../input/ControlBindings';
-import { HOLD_OPEN_SHARE, HOLD_STEP_SHARE } from './ClosetHide';
+import { HIDE_STANDING_EYE_HEIGHT, HOLD_OPEN_SHARE, HOLD_STEP_SHARE } from './ClosetHide';
 
 export interface DoorHideHost {
   position(): THREE.Vector3;
-  pose(position: THREE.Vector3, confined: boolean): void;
+  pose(position: THREE.Vector3, confined: boolean): boolean | void;
   presentation(active: boolean): void;
   active(active: boolean): void;
   playing(): boolean;
@@ -83,6 +83,7 @@ export class DoorHide {
   }
 
   get isActive(): boolean { return this.phase !== 'idle'; }
+  get isSettled(): boolean { return this.phase === 'hidden' || this.phase === 'held-exit'; }
   get isTargeted(): boolean { return !this.isActive && this.targeted(); }
   get doorProgress(): number { return this.progress; }
   get debugState() { return { phase: this.phase, progress: this.progress }; }
@@ -93,6 +94,31 @@ export class DoorHide {
     this.exitLocked = false; this.progress = 0; this.syncDoor(); this.host.pose(this.layout.outside, false); this.finish();
   }
   enterNow(): void { if (this.isActive) return; this.targetedOverride = true; this.interact(); this.targetedOverride = false; }
+  resetHidden(): void {
+    if (!this.isActive) this.saved.copy(this.camera);
+    this.from.copy(this.layout.outside);
+    this.saved.position.copy(this.from).y += HIDE_STANDING_EYE_HEIGHT;
+    this.saved.quaternion.setFromEuler(new THREE.Euler(0, this.outwardYaw, 0, 'YXZ'));
+    this.yaw = this.pitch = 0;
+    this.progress = this.held = 0;
+    this.change('hidden');
+    this.exitRequested = false;
+    this.exitLocked = true;
+    this.host.active(true);
+    this.host.presentation(true);
+    this.host.pose(this.layout.inside, true);
+    this.syncDoor();
+    this.hiddenView();
+    this.ui.setInteraction(null);
+  }
+  breakOpen(): void {
+    if (!this.isActive) return;
+    this.exitLocked = true;
+    this.exitRequested = false;
+    this.change('hidden');
+    this.progress = 1;
+    this.syncDoor();
+  }
   holdExit(progress: number): void {
     if (!['hidden', 'hiding', 'held-exit'].includes(this.phase)) return;
     if (this.phase !== 'held-exit') this.change('held-exit');
@@ -133,19 +159,22 @@ export class DoorHide {
       case 'hiding': this.progress = Math.max(0, this.progress - dt * 3); this.hiddenView(); if (this.progress === 0) this.change(this.exitRequested ? 'opening-exit' : 'hidden'); break;
       case 'hidden': this.hiddenView(); if (!this.exitLocked) this.ui.setInteraction(`${formatKeyLabel(this.host.bindings().interact)} · Sortir`); break;
       case 'opening-exit': this.hiddenView(); this.progress = Math.min(1, this.progress + dt * EXIT_OPEN_RATE); if (this.progress === 1) this.change('exiting'); break;
-      case 'exiting': this.move(inside, outside, Math.min(1, this.phaseTime / EXIT_STEP_SECONDS), 'out'); if (this.phaseTime >= EXIT_STEP_SECONDS) { this.host.pose(outside, false); this.change('closing'); } break;
+      case 'exiting':
+        this.move(inside, outside, Math.min(1, this.phaseTime / EXIT_STEP_SECONDS), 'out');
+        if (this.phaseTime >= EXIT_STEP_SECONDS && this.host.pose(outside, false) !== false) this.change('closing');
+        break;
       case 'held-exit': {
         const step = clamp01((this.held - HOLD_OPEN_SHARE) / HOLD_STEP_SHARE);
         this.progress = Math.max(this.progress, clamp01(this.held / HOLD_OPEN_SHARE));
         if (step > 0) this.move(inside, outside, step, 'out'); else this.hiddenView();
-        if (this.held >= 1) { this.host.pose(outside, false); this.change('closing'); }
+        if (this.held >= 1 && this.host.pose(outside, false) !== false) this.change('closing');
         break;
       }
       case 'burst': {
         this.progress = Math.min(1, this.progress + dt * 9);
         const t = clamp01((this.phaseTime - .08) / .32);
         if (t > 0) this.move(inside, outside, t, 'out'); else this.hiddenView();
-        if (this.phaseTime >= .4) { this.host.pose(outside, false); this.syncDoor(); this.finish(); return; }
+        if (this.phaseTime >= .4 && this.host.pose(outside, false) !== false) { this.syncDoor(); this.finish(); return; }
         break;
       }
       case 'closing': this.progress = Math.max(0, this.progress - dt * EXIT_CLOSE_RATE); if (this.progress === 0) this.finish(); break;

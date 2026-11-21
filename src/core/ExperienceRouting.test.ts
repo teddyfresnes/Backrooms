@@ -7,7 +7,7 @@ const loadNodeFs = async () => {
 };
 
 describe('experience routing', () => {
-  it('enters the procedural Backrooms only through the scripted escape fall', async () => {
+  it('shares the scripted arrival in the Backrooms between the escape fall and the skip', async () => {
     const { readFile } = await loadNodeFs();
     const [main, stairwell] = await Promise.all([
       readFile(new URL('../main.ts', import.meta.url), 'utf8'),
@@ -18,12 +18,14 @@ describe('experience routing', () => {
     // The fall hands the carried torch and compass down to the Backrooms.
     expect(stairwell.match(/this\.callbacks\.onEnterBackrooms\(this\.inventory\.snapshot\(\)\)/g)).toHaveLength(1);
     expect(stairwell).toContain('onEscaped: () => this.escapeToBackrooms()');
+    expect(stairwell).toContain("if (destination === 'level0') this.escapeToBackrooms()");
     expect(stairwell.indexOf("this.saveNow('autosave');", stairwell.indexOf('this.initialized = true')))
       .toBeLessThan(stairwell.indexOf('this.renderer.setAnimationLoop(this.frame)'));
     expect(main).toContain("await import('./core/Game')");
     expect(main).toContain("import { OpeningIntro } from './ui/OpeningIntro'");
     expect(main).toContain('onEnterBackrooms: (inventory) => queueMicrotask');
     expect(main).toContain("{ kind: 'new', inventory }");
+    expect(main).toContain("onReturnToMail: () => queueMicrotask(() => void startStairwell({ kind: 'mail' }))");
   });
 
   it('prebundles shared Three.js helpers before switching dynamic experiences', async () => {
@@ -101,7 +103,7 @@ describe('experience routing', () => {
     expect(main).toContain('loading.setProgress(progress, phase)');
     expect(main).toContain('game.initialize((progress, phase) => boot.setProgress');
     expect(main).toContain('showBootError(error, () => void startStairwell(launch))');
-    expect(main).toContain('showBootError(error, () => void startBackrooms(launch, autosaveOnReady, menuBackground))');
+    expect(main).toContain('showBootError(error, () => void startBackrooms(launch, autosaveOnReady, menuBackground, fadeIn))');
   });
 
   it('keeps the Backrooms identity and separates continue from save browsing', async () => {

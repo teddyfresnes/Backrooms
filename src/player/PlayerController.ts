@@ -859,8 +859,27 @@ export class PlayerController {
     this.resetTransientMovement();
   }
   setScriptedPose(destination: Vec3Data, confined: boolean, shape?: {halfHeight:number;radius:number}): void {
+    this.physics.setScriptedPlayerPose(destination, confined, shape);
+    this.syncScriptedPose();
+  }
+
+  /** Hand a confined script back to locomotion on clear, supported floor. */
+  restoreStandingPose(destination: Vec3Data): boolean {
+    const standing = this.physics.findStandingRecoveryPosition(destination, undefined, true)
+      ?? this.physics.findStandingRecoveryPosition(this.lastSafePosition, undefined, true);
+    if (!standing) return false;
+    this.physics.restoreStandingPlayerPose(standing);
+    this.crouchRequested = false;
+    this.crouching = false;
+    this.syncScriptedPose();
+    this.verticalVelocity = 0;
+    this.anchorSafePosition(this.position);
+    return true;
+  }
+
+  private syncScriptedPose(): void {
+    this.physics.getPosition(this.position);
     this.externalMotion.set(0, 0, 0); this.resetTransientMovement(); this.motionBlend = 0;
-    this.physics.setScriptedPlayerPose(destination, confined, shape); this.physics.getPosition(this.position);
     this.previousPosition.copy(this.position); this.renderedPosition.copy(this.position);
     this.renderUpdate(0, 1);
   }

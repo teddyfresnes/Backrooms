@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import RAPIER from '@dimforge/rapier3d';
 import type { PhysicsWorld } from '../physics/PhysicsWorld';
 import type { ImportedApartmentEnvironment } from './ImportedApartmentEnvironment';
-import { matchesControlAction, formatKeyLabel, type ControlBindings } from '../input/ControlBindings';
+import type { DoorHideHost } from './DoorHide';
+import { matchesControlAction, formatKeyLabel } from '../input/ControlBindings';
 const INSIDE=new THREE.Vector3(-7.9265,9.44,-5.65),EYE=new THREE.Vector3(-7.9265,9.95,-5.65),OUTSIDE=new THREE.Vector3(-7.9265,9.54,-4.85);
 interface Leaf {object:THREE.Object3D;pivot:THREE.Group;parent:THREE.Object3D;matrix:THREE.Matrix4;auto:boolean;key:string;sign:number}
 /** Leaving is slow and careful: the door eases open, a long step out, then it is pushed shut. */
@@ -10,6 +10,7 @@ const EXIT_OPEN_RATE=1.2,EXIT_STEP_SECONDS=1.25,EXIT_CLOSE_RATE=1.6;
 type Phase='idle'|'opening'|'aligning'|'entering'|'hiding'|'hidden'|'opening-exit'|'exiting'|'closing'|'held-exit'|'burst';
 /** Hold-driven exit: the first 40 % eases the leaf open, the next 50 % is the step out. */
 export const HOLD_OPEN_SHARE=.4,HOLD_STEP_SHARE=.5;
+export const HIDE_STANDING_EYE_HEIGHT = .73;
 const clamp01=(v:number)=>Math.max(0,Math.min(1,v));
 /** Scripted motion through the actual hollow furniture; all leaves keep physical colliders. */
 export class ClosetHide {
@@ -31,9 +32,7 @@ export class ClosetHide {
   exitLocked=false;
   private disposed=false;
   constructor(private readonly apartment:ImportedApartmentEnvironment,private readonly physics:PhysicsWorld,
-    private readonly camera:THREE.PerspectiveCamera,private readonly ui:{setInteraction(label:string|null):void},private readonly host:{
-      position():THREE.Vector3;pose(position:THREE.Vector3,confined:boolean):void;presentation(active:boolean):void;active(active:boolean):void;playing():boolean;bindings():ControlBindings;sound?(kind:'open'|'close'):void;
-    },doorProgress=0){
+    private readonly camera:THREE.PerspectiveCamera,private readonly ui:{setInteraction(label:string|null):void},private readonly host:DoorHideHost,doorProgress=0){
     this.progress=THREE.MathUtils.clamp(doorProgress,0,1);
     const hinges=[new THREE.Vector3(-8.2146,8.7716,-5.3383),new THREE.Vector3(-7.6437,8.7716,-5.3334)];
     apartment.wardrobeDoors.forEach((object,i)=>{
@@ -46,6 +45,7 @@ export class ClosetHide {
     this.syncDoors();window.addEventListener('keydown',this.onKey,true);document.addEventListener('mousemove',this.onMouse,true);
   }
   get isActive():boolean{return this.phase!=='idle';}
+  get isSettled(): boolean { return this.phase === 'hidden' || this.phase === 'held-exit'; }
   /** Looking at the wardrobe from close enough to hide in it. */
   get isTargeted():boolean{return !this.isActive&&this.targeted();}
   /** Ask the hidden player out (scripted scenes). */
@@ -53,6 +53,31 @@ export class ClosetHide {
   /** Out at once, doors shut: a scripted scene restarts elsewhere. */
   forceFinish():void{if(!this.isActive)return;this.exitLocked=false;this.progress=0;this.syncDoors();this.host.pose(OUTSIDE,false);this.finish();}
   get doorProgress():number{return this.progress;}
+  resetHidden(): void {
+    if (!this.isActive) this.saved.copy(this.camera);
+    this.saved.position.copy(OUTSIDE).y += HIDE_STANDING_EYE_HEIGHT;
+    this.saved.quaternion.setFromEuler(new THREE.Euler(0, Math.PI, 0));
+    this.exit.copy(OUTSIDE);
+    this.yaw = this.pitch = 0;
+    this.progress = this.held = 0;
+    this.change('hidden');
+    this.exitRequested = false;
+    this.exitLocked = true;
+    this.host.active(true);
+    this.host.presentation(true);
+    this.host.pose(INSIDE, true);
+    this.syncDoors();
+    this.hiddenView();
+    this.ui.setInteraction(null);
+  }
+  breakOpen(): void {
+    if (!this.isActive) return;
+    this.exitLocked = true;
+    this.exitRequested = false;
+    this.change('hidden');
+    this.progress = 1;
+    this.syncDoors();
+  }
   /** Drives the careful exit from a held key (0..1): the animation IS the hold. */
   holdExit(progress:number):void{
     if(!['hidden','hiding','held-exit'].includes(this.phase))return;
@@ -101,12 +126,12 @@ export class ClosetHide {
       case 'hiding':this.progress=Math.max(0,this.progress-dt*3.6);this.hiddenView();if(this.progress===0)this.change(this.exitRequested?'opening-exit':'hidden');break;
       case 'hidden':this.hiddenView();if(!this.exitLocked)this.ui.setInteraction(`${formatKeyLabel(this.host.bindings().interact)} · Sortir du placard`);break;
       case 'opening-exit':this.hiddenView();this.progress=Math.min(1,this.progress+dt*EXIT_OPEN_RATE);if(this.progress===1)this.change('exiting');break;
-      case 'exiting':this.move(INSIDE,OUTSIDE,Math.min(1,this.phaseTime/EXIT_STEP_SECONDS));if(this.phaseTime>=EXIT_STEP_SECONDS){this.host.pose(OUTSIDE,false);this.change('closing');}break;
+      case 'exiting':this.move(INSIDE,OUTSIDE,Math.min(1,this.phaseTime/EXIT_STEP_SECONDS));if(this.phaseTime>=EXIT_STEP_SECONDS&&this.host.pose(OUTSIDE,false)!==false)this.change('closing');break;
       case 'held-exit':{const step=clamp01((this.held-HOLD_OPEN_SHARE)/HOLD_STEP_SHARE);this.progress=Math.max(this.progress,clamp01(this.held/HOLD_OPEN_SHARE));
         if(step>0)this.move(INSIDE,OUTSIDE,step);else this.hiddenView();
-        if(this.held>=1){this.host.pose(OUTSIDE,false);this.change('closing');}break;}
+        if(this.held>=1&&this.host.pose(OUTSIDE,false)!==false)this.change('closing');break;}
       case 'burst':{this.progress=Math.min(1,this.progress+dt*9);const t=clamp01((this.phaseTime-.08)/.32);if(t>0)this.move(INSIDE,OUTSIDE,t);else this.hiddenView();
-        if(this.phaseTime>=.4){this.host.pose(OUTSIDE,false);this.syncDoors();this.finish();return;}break;}
+        if(this.phaseTime>=.4&&this.host.pose(OUTSIDE,false)!==false){this.syncDoors();this.finish();return;}break;}
       case 'closing':this.progress=Math.max(0,this.progress-dt*EXIT_CLOSE_RATE);this.camera.fov=THREE.MathUtils.lerp(this.saved.fov,62,this.progress);this.camera.updateProjectionMatrix();if(this.progress===0)this.finish();break;
     }this.syncDoors();
   }

@@ -148,6 +148,21 @@ describe('stairwell surfaces and complete procedural scene budget', () => {
     pool.setPowered(true); expect(pool.lights.every(light => light.intensity > 0)).toBe(true);
   });
 
+  it('guides the chase with softer pools on the stairs and a warm light at the exit until retry', () => {
+    const pool = new StairwellLightPool(STAIRWELL_LIGHTING_PROFILES.modern);
+    const positions = pool.lights.map(light => light.position.toArray());
+    const powered = pool.lights.map(light => light.intensity);
+    pool.setPowered(false);
+    pool.setChaseLighting(true);
+    expect(pool.lights[0]!.position.z).toBeLessThan(-5);
+    expect(pool.lights[0]!.color.getHex()).toBe(0xffe3a0);
+    expect(pool.lights.every((light, index) => light.intensity > 0 && light.intensity < powered[index]!)).toBe(true);
+    expect(pool.lights.slice(1).every((light, index) => light.position.y < positions[index + 1]![1]!)).toBe(true);
+    pool.setChaseLighting(false);
+    expect(pool.lights.map(light => light.position.toArray())).toEqual(positions);
+    expect(pool.lights.every(light => light.intensity === 0)).toBe(true);
+  });
+
   it('keeps irradiance at all seven landings invariant while the observer crosses floor thresholds', () => {
     const env = create();
     const points = Array.from({ length: STAIRWELL_LEVEL_COUNT }, (_, i) => new THREE.Vector3(0, floorY(i) + .01, -2.35));

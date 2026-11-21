@@ -177,6 +177,7 @@ export class AudioSystem {
     'outdoor-grass': 2,
   };
   private readonly transientOffsets = new WeakMap<AudioBuffer, number>();
+  private readonly recordedSources = new Set<AudioBufferSourceNode>();
   private bodyFall?: AudioBuffer;
   private boneCrack?: AudioBuffer;
   private doorOpen?: AudioBuffer;
@@ -436,7 +437,9 @@ export class AudioSystem {
     gain.gain.setValueAtTime(0.0001, now);
     gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, gainValue), now + 0.006);
     source.connect(filter).connect(body).connect(gain).connect(this.master);
+    this.recordedSources.add(source);
     source.addEventListener('ended', () => {
+      this.recordedSources.delete(source);
       source.disconnect();
       filter.disconnect();
       body.disconnect();
@@ -452,6 +455,14 @@ export class AudioSystem {
     );
     gain.gain.exponentialRampToValueAtTime(0.0001, now + audibleDuration);
     source.start(now, offset, duration);
+  }
+
+  stopRecordedEffects(): void {
+    for (const source of this.recordedSources) {
+      source.disconnect();
+      try { source.stop(); } catch { /* already stopped */ }
+    }
+    this.recordedSources.clear();
   }
 
   footstep(surface: AudioSurface, strength: number): void {
@@ -717,6 +728,7 @@ export class AudioSystem {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.stopRecordedEffects();
     this.stopSprint(0.01);
     this.loopSources.forEach((source) => {
       try {

@@ -62,22 +62,18 @@ les voix, les sauvegardes et les responsabilités de ces modules.
 Après la coupure, `LongCorridor` (couloir Level 0 avec néons à niveau par lampe,
 sans lumière Three.js) remplace la cage. À 20 m, `CorridorStory` déclenche la
 réaction ; la vague part toujours de la lampe 0, à la porte de l'appartement.
-`BacteriaEncounter` enchaîne ensuite : révélation lointaine (de dos, tête puis
-corps qui se retournent), charge accélérée, siège de la porte (délai entier tant
-que le joueur cherche ; intrusion dès le prochain tick si le joueur est caché
-derrière la porte fermée, sans attendre la fin de la charge), cachette (armoire,
-placard d'entrée ou salle de bain : `HIDE_SPOTS`, le monstre renifle devant celle
-utilisée). TV allumée : le monstre la porte et se calme (sa voix seule ; le cri ne
-joue qu'en poursuite), sortie discrète en maintenant E (`SNEAK_HOLD_SECONDS`) :
-le maintien pilote l'animation, le relâcher fait jaillir le joueur et le monstre
-charge. E reste libre en cachette (`requestHiddenExit`, écouté directement car les
-entrées du joueur sont coupées) : avant l'intrusion on ressort, monstre dans
-l'appartement avant l'invite on meurt. Repéré sur le
-palier, un bref plan regarde la créature puis l'escalier ; dans la cage elle
-suit en élastique (`followSpeed`, `ESCAPE_FOLLOW_GAP`), avec une vitesse minimale
-supérieure à la marche ; les touches de déplacement maintenues pendant le plan
-vers l'escalier reprennent à sa fin. Dehors en poursuite
-directe ; la chute se déclenche à 14 m de la porte dans toute direction, bien
+`BacteriaEncounter` enchaîne révélation lointaine, charge et siège de la porte.
+La créature frappe trois fois avant d'entrer si le joueur se cache pendant le
+siège. Une fois dans l'appartement, elle inspecte la cachette utilisée (`HIDE_SPOTS`).
+La télévision s'allume au besoin et l'attire. Maintenir E pilote la sortie
+discrète. Relâcher fait jaillir le joueur et déclenche une attaque. Les réactions
+au regard, à l'attente dans l'appartement et à l'attente en cachette suivent le
+temps joué de la rencontre. La sortie avant l'intrusion reste possible.
+Sur le palier, un bref plan regarde la créature puis l'escalier. Dans la cage, elle
+suit le joueur en élastique (`followSpeed`, `ESCAPE_FOLLOW_GAP`). Dès la troisième
+mort dans cette poursuite, sa vitesse baisse de 10 % jusqu'à la chute. Les touches
+de déplacement maintenues pendant le plan vers l'escalier reprennent à sa fin.
+Dehors, la poursuite devient directe. La chute se déclenche à 14 m de la porte dans toute direction, bien
 avant les limites invisibles (±40 m). Arrivé dans les Backrooms par la chute
 (`arrivedByFall`), aucun PNJ n'apparaît (ni après un chargement). `collapseOnArrival` prépare une vraie
 pose couchée et la caméra au sol avant la première image ; les yeux s'ouvrent
@@ -95,12 +91,14 @@ trébuche et traverse le sol (phase `escaped`) : longue chute dans le noir vers
 `BackroomsBelow` (labyrinthe non éclairé, hors brouillard, centré sous la chute),
 vent de chute, teinte jaune dans les derniers instants, fondu au noir
 (`StoryHud.setFade`) puis écran de chargement en fondu (`is-arriving`).
-TV éteinte : le placard est arraché. Les timings sont couverts par
-`BacteriaLayout.test.ts` et la machine à états par `BacteriaEncounter.test.ts`.
-Aucune sauvegarde pendant la rencontre ; une mort avant la cachette ramène à
-l'entrée du couloir (décor et collisions remontés ensemble, même si la cage était
-déjà revenue pendant le leurre), après elle au placard. `bacteriaSurvived` (anciennes
-sauvegardes) rouvre directement la porte du hall.
+`BacteriaLayout.test.ts` et `BacteriaEncounter.test.ts` couvrent les timings et la
+machine à états. Les sauvegardes sont suspendues pendant la rencontre. Une mort
+avant le point de reprise ramène à l'entrée du couloir avec ses collisions. Une
+mort après ce point replace le joueur directement dans sa cachette fermée.
+`bacteriaSurvived` (anciennes sauvegardes) rouvre directement la porte du hall.
+`/skip level0` utilise la même sortie que la chute, avec l'inventaire courant et
+la pose d'arrivée au sol. `/skip intro` charge un nouveau hall au courrier.
+Le runtime suspend sa boucle et coupe ses effets avant de lancer ces transitions.
 
 Dans le garde-robe, la géométrie et les poses inverses du squelette restent dans
 les coordonnées locales de `CharacterRoot`. Après un morph ou une calibration,

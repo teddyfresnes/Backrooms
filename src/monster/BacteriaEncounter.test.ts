@@ -62,21 +62,29 @@ function setup(options: { tvOn?: boolean; selfSwitchingTv?: boolean } = {}) {
     getViewDirection: (out: THREE.Vector3) => out.set(-1, 0, 0),
   };
   const eyeCamera = new THREE.PerspectiveCamera();
-  const door = { secured: false, breached: false, isSecured() { return this.secured; }, jolt: () => undefined, breach() { this.breached = true; this.secured = false; }, repair() { this.breached = false; } };
+  const door = {
+    secured: false, breached: false, jolts: 0,
+    isSecured() { return this.secured; }, jolt() { this.jolts += 1; },
+    breach() { this.breached = true; this.secured = false; }, repair() { this.breached = false; },
+  };
   // The bedroom wardrobe: aimed at when the player stands in front of it.
   const wardrobe = { aimed: true, inside: false, exits: 0, held: 0, bursts: 0, spot: 'wardrobe' as HideSpotId };
   scene.updateMatrixWorld(true);
   const events: string[] = [];
-  let lampLit = false, revealReady = true, sprint = false, tv = options.tvOn ?? true;
-  const hint: { text: string | null; hold: number | null } = { text: null, hold: null };
+  let lampLit = false, revealReady = true, sprint = false, tv = options.tvOn ?? true, clearSight = true;
+  const hint: { text: string | null; hold: number | null; warning: string | null } = { text: null, hold: null, warning: null };
   const host: BacteriaEncounterHost = {
     scene, renderCamera: new THREE.PerspectiveCamera(), eyeCamera,
     player: player as never,
     door: door as never,
     hideSpot: {
       canHide: () => wardrobe.aimed && !wardrobe.inside,
+      isActive: () => wardrobe.inside,
+      isSettled: () => wardrobe.inside,
       current: () => wardrobe.spot,
       hide: () => { wardrobe.inside = true; },
+      resetHidden: () => { wardrobe.inside = true; wardrobe.held = 0; },
+      breakOpen: () => { events.push('open-hiding-door'); },
       holdExit: (progress: number) => { wardrobe.held = progress; },
       burstOut: () => { wardrobe.inside = false; wardrobe.bursts += 1; player.setInputEnabled(true); },
       release: () => { wardrobe.inside = false; wardrobe.exits += 1; player.setInputEnabled(true); },
@@ -84,7 +92,9 @@ function setup(options: { tvOn?: boolean; selfSwitchingTv?: boolean } = {}) {
     },
     audio: { impact: (kind: string) => events.push(`impact:${kind}`), door: () => undefined, strike: () => events.push('strike') } as never,
     hud: {
-      hideHint: () => { hint.text = null; }, showHint: (_key: string, text: string) => { hint.text = text; },
+      hideHint: () => { hint.text = hint.warning = null; }, showHint: (_key: string, text: string) => { hint.text = text; },
+      setHintWarning: (warning: string | null) => { hint.warning = warning; },
+      reset: () => { hint.text = hint.hold = hint.warning = null; },
       pulseFlash: () => undefined, showDeath: (visible: boolean, detail?: string) => { if (visible) events.push(`death:${detail}`); },
       setQuest: () => undefined, setHold: (value: number | null) => { hint.hold = value; },
     } as never,
@@ -98,6 +108,9 @@ function setup(options: { tvOn?: boolean; selfSwitchingTv?: boolean } = {}) {
     canStartReveal: () => revealReady,
     isRevealLampLit: () => lampLit,
     isTelevisionOn: () => tv,
+    hasClearSight: () => clearSight,
+    playDoorKnocks: () => events.push('three-knocks'),
+    stopDoorKnocks: () => undefined,
     ...(options.selfSwitchingTv ? { turnTelevisionOn: () => { tv = true; events.push('tv-on'); } } : {}),
     onReveal: () => events.push('reveal'),
     onBreach: () => events.push('breach'),
@@ -110,12 +123,15 @@ function setup(options: { tvOn?: boolean; selfSwitchingTv?: boolean } = {}) {
   const { actor, state } = fakeActor();
   const { audio, calls } = fakeAudio();
   const encounter = new BacteriaEncounter(host, actor, audio);
+  const tick = (delta: number, each?: () => void) => {
+    eyeCamera.position.copy(position).setY(position.y + 0.73);
+    each?.();
+    eyeCamera.updateMatrixWorld(true);
+    encounter.update(delta);
+  };
   const step = (seconds: number, each?: () => void) => {
     for (let t = 0; t < seconds; t += DT) {
-      eyeCamera.position.copy(position).setY(position.y + 0.73);
-      eyeCamera.updateMatrixWorld(true);
-      each?.();
-      encounter.update(DT);
+      tick(DT, each);
     }
   };
   const quest = () => encounter.questText?.text ?? null;
@@ -129,11 +145,12 @@ function setup(options: { tvOn?: boolean; selfSwitchingTv?: boolean } = {}) {
     return elapsed;
   };
   return {
-    encounter, player, door, events, state, calls, hint, step, until, quest, actor, wardrobe, camera: host.renderCamera,
+    encounter, player, door, events, state, calls, hint, step, tick, until, quest, actor, wardrobe, camera: host.renderCamera, eyeCamera,
     setLampLit: (value: boolean) => { lampLit = value; },
     setRevealReady: (value: boolean) => { revealReady = value; },
     setSprint: (value: boolean) => { sprint = value; },
     setTv: (value: boolean) => { tv = value; },
+    setClearSight: (value: boolean) => { clearSight = value; },
   };
 }
 
@@ -164,6 +181,19 @@ function playToHiding(world: ReturnType<typeof setup>): void {
   world.step(0.2);
   expect(world.encounter.interact(new THREE.Vector3(-2.3, threshold.y + PLAYER_CENTER_HEIGHT, -1.8), new THREE.Vector3(-1, 0, 0))).toBe(true);
   expect(world.encounter.isHidden).toBe(true);
+}
+
+function leaveSilently(world: ReturnType<typeof setup>): void {
+  world.until(() => /maintenir/.test(world.quest() ?? ''), 40);
+  world.setSprint(true);
+  world.until(() => !world.encounter.isHidden, SNEAK_HOLD_SECONDS + 1);
+  world.setSprint(false);
+}
+
+function reachStairs(world: ReturnType<typeof setup>): void {
+  leaveSilently(world);
+  world.player.position.set(threshold.x + 0.5, threshold.y + PLAYER_CENTER_HEIGHT, threshold.z);
+  world.until(() => world.state.motion === 'run', SPOTTED_TIMELINE.release + 0.5);
 }
 
 describe('BacteriaEncounter', () => {
@@ -376,9 +406,38 @@ describe('other hiding places', () => {
     world.until(()=>world.state.motion==='bang',15);
     world.step(DOOR_BANG_SECONDS*.5);
     expect(world.door.breached).toBe(false);
+    expect(world.door.jolts).toBe(3);
+    expect(world.events.filter(event => event === 'three-knocks')).toHaveLength(1);
     expect(world.encounter.interact(new THREE.Vector3(-2.3,threshold.y+PLAYER_CENTER_HEIGHT,-1.8),new THREE.Vector3(-1,0,0))).toBe(true);
     world.step(DT*2);
     expect(world.door.breached).toBe(true);
+  });
+
+  it.each(['wardrobe', 'closet', 'bathroom'] as const)('waits one more second at the %s door after seeing the player hide', spot => {
+    const world = setup();
+    world.wardrobe.spot = spot;
+    playToHiding(world);
+    world.encounter.requestHiddenExit();
+    world.door.secured = false;
+    world.until(() => world.events.includes('breach'), 12);
+    expect(world.encounter.interact(world.player.position, new THREE.Vector3())).toBe(true);
+    world.until(() => world.state.motion === 'idle', 4);
+    world.step(.94);
+    expect(world.events).not.toContain('open-hiding-door');
+    world.step(.1);
+    expect(world.events).toContain('open-hiding-door');
+    expect(world.calls.filter(call => call === 'jumpscare')).toHaveLength(1);
+  });
+
+  it('moves clear of the hiding door within half a second when the television distracts it', () => {
+    const world = setup();
+    playToHiding(world);
+    world.until(() => world.events.includes('stairwell'), 30);
+    const front = new THREE.Vector3().copy(HIDE_SPOTS.wardrobe.frontPosition);
+    expect(world.actor.root.position.distanceTo(front)).toBeLessThan(.15);
+    world.step(.5);
+    expect(world.actor.root.position.distanceTo(front)).toBeGreaterThan(1);
+    expect(world.events).not.toContain('open-hiding-door');
   });
   it('sniffs in front of the bathroom when the player hid there', () => {
     const world = setup({ tvOn: true });
@@ -448,5 +507,107 @@ describe('other hiding places', () => {
     world.encounter.applyCamera();expect(world.camera.position.y).toBeLessThan(startY-1.2);
     for(let i=0;i<52&&!world.events.includes('escaped');i++)world.encounter.update(.1);
     expect(world.events).toContain('escaped');
+  });
+});
+
+describe('played-time reactions', () => {
+  it('requires more than three continuous seconds of direct, unobstructed aim before turning and attacking', () => {
+    const world = setup();
+    playToHiding(world);
+    leaveSilently(world);
+    const aim = () => world.eyeCamera.lookAt(world.actor.root.position.clone().add(new THREE.Vector3(0, 1.3, 0)));
+    world.step(2.9, aim);
+    world.tick(DT, () => world.eyeCamera.lookAt(world.eyeCamera.position.clone().addScalar(10)));
+    world.step(2.9, aim);
+    world.setClearSight(false);
+    world.step(.15, aim);
+    world.setClearSight(true);
+    for (let i = 0; i < 180; i++) world.tick(DT, aim);
+    expect(world.state.motion).toBe('carry');
+    world.tick(DT, aim);
+    expect(world.state.motion).toBe('idle');
+    expect(world.calls).not.toContain('jumpscare');
+    world.until(() => world.events.includes('death:Il a croisé ton regard.'), 5);
+  });
+
+  it('attacks after fifteen seconds in the flat and excludes time in a hiding place', () => {
+    const world = setup();
+    playToHiding(world);
+    world.step(32);
+    expect(world.calls).not.toContain('jumpscare');
+    leaveSilently(world);
+    world.step(14.6);
+    expect(world.state.motion).toBe('carry');
+    world.step(.5);
+    expect(world.state.motion).not.toBe('carry');
+    world.until(() => world.events.includes('death:Tu es resté trop longtemps dans l’appartement.'), 5);
+  });
+
+  it('flickers the hint at sixty seconds, goes red, seals the door and waits in silence before one attack', () => {
+    const world = setup();
+    playToHiding(world);
+    world.step(55);
+    for (let i = 0; i < 49; i++) world.tick(.1);
+    expect(world.hint.warning).toBeNull();
+    world.tick(.15);
+    expect(world.hint.warning).toBe('flicker');
+    expect(world.hint.text).toContain('Maintenir');
+    world.step(.6);
+    expect(world.hint.warning).toBe('danger');
+    world.step(.32);
+    expect(world.hint.text).toBeNull();
+    expect(world.calls).toContain('stopAll');
+    expect(world.encounter.requestHiddenExit()).toBe(true);
+    world.setSprint(true);
+    world.step(3.25);
+    expect(world.wardrobe.inside).toBe(true);
+    expect(world.events).not.toContain('open-hiding-door');
+    world.step(.3);
+    expect(world.events.filter(event => event === 'open-hiding-door')).toHaveLength(1);
+    expect(world.calls.filter(call => call === 'jumpscare')).toHaveLength(1);
+    world.setSprint(false);
+    world.until(() => world.events.includes('retry:closet'), 6);
+    world.step(58);
+    expect(world.hint.warning).toBeNull();
+    expect(world.calls.filter(call => call === 'jumpscare')).toHaveLength(1);
+  });
+
+  it('cancels the hiding clock when the player leaves before a minute or the scene is suspended', () => {
+    const left = setup();
+    playToHiding(left);
+    left.step(56);
+    leaveSilently(left);
+    left.step(5);
+    expect(left.hint.text).toBeNull();
+    expect(left.events).not.toContain('open-hiding-door');
+    expect(left.calls).not.toContain('jumpscare');
+
+    const skipped = setup();
+    playToHiding(skipped);
+    skipped.until(() => skipped.calls.includes('stopAll'), 62);
+    skipped.encounter.suspend();
+    const sounds = skipped.calls.length;
+    skipped.step(65);
+    expect(skipped.encounter.isActive).toBe(false);
+    expect(skipped.events).not.toContain('open-hiding-door');
+    expect(skipped.calls).toHaveLength(sounds);
+  });
+
+  it('reduces stairwell pursuit speed by ten percent from the fourth attempt and keeps it on the fifth', () => {
+    const world = setup();
+    playToHiding(world);
+    const path = new ChasePath(createEscapeWaypoints());
+    const sample = path.sample(7, new THREE.Vector3());
+    const advances = [];
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      reachStairs(world);
+      world.player.position.copy(sample).y += PLAYER_CENTER_HEIGHT;
+      world.tick(DT);
+      advances.push(path.project(world.actor.root.position));
+      world.until(() => world.events.filter(event => event === 'retry:closet').length === attempt, 9);
+    }
+    expect(advances[0]).toBeGreaterThan(0);
+    for (const advance of advances.slice(1, 3)) expect(advance).toBeCloseTo(advances[0]!, 5);
+    for (const advance of advances.slice(3)) expect(advance).toBeCloseTo(advances[0]! * .9, 5);
   });
 });

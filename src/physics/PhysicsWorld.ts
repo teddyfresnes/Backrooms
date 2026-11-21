@@ -684,6 +684,12 @@ export class PhysicsWorld {
     this.playerBody.setTranslation(position, true); this.playerBody.setNextKinematicTranslation(position);
     this.world.propagateModifiedBodyPositionsToColliders(); this.syncPosition();
   }
+  restoreStandingPlayerPose(position: Vec3Data): void {
+    this.crouched = false;
+    this.scriptedCapsuleKey = '';
+    this.setPlayerColliderEnabled(true);
+    this.setScriptedPlayerPose(position, false);
+  }
   setPlayerColliderEnabled(enabled: boolean): void { this.playerCollider.setEnabled(enabled); }
   getStandingPosition(target = new THREE.Vector3()): THREE.Vector3 {
     target.copy(this.position);

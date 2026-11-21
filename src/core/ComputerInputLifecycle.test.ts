@@ -100,22 +100,22 @@ it('allows an older post-outage save outside the apartment to reopen the door an
   const probe=Object.create(RussianStairwellGame.prototype),corridorStory=new CorridorStory();corridorStory.activate();Object.assign(probe,{quest:{devices:{outageTriggered:true}},corridorStory,inventory:new InventoryState(),player:{position:new THREE.Vector3(-1,9.535,-2.7)},apartment:{doorCenter:new THREE.Vector3(-2,9.8,-2.7)},exitReminderArmed:true,storyCaption:{say:vi.fn()}});
   expect(probe.allowEntranceOpening()).toBe(true);probe.player.position.x=-2.8;expect(probe.allowEntranceOpening()).toBe(false);expect(probe.storyCaption.say).toHaveBeenCalledOnce();
 });
-it('unlocks the TV-table torch only after the fuse attempt, then plays exactly three immediate dry knocks',()=>{
+it('unlocks the TV-table torch only after the fuse attempt, then plays one recording of three knocks',()=>{
   const game=Object.create(RussianStairwellGame.prototype),corridorStory=new CorridorStory(),inventory=new InventoryState();corridorStory.activate();
   const knock=vi.fn(),deep=vi.fn(),jolt=vi.fn(),save=vi.fn();
   Object.assign(game,{quest:{devices:{outageTriggered:true}},corridorStory,inventory,player:{position:new THREE.Vector3(-3,9.5,-2.7)},
     apartment:{doorCenter:new THREE.Vector3(-2,9.8,-2.7),floorY:8.67},door:{closeSilently:vi.fn(),jolt},
     flashlight:{isTargeted:()=>true},camera:new THREE.PerspectiveCamera(),inventoryHUD:{reveal:vi.fn()},ui:{setInteraction:vi.fn()},
-    deviceAudio:{fixtureClick:vi.fn(),deepKnock:deep},doorAudio:{playScripted:knock},storyCaption:{say:vi.fn()},saveNow:save});
+    deviceAudio:{fixtureClick:vi.fn(),deepKnock:deep},doorAudio:{playKnocks:knock},storyCaption:{say:vi.fn()},saveNow:save});
   expect(game.fuseAvailable()).toBe(true);expect(game.pickupFlashlight()).toBe(false);expect(inventory.hasLamp).toBe(false);
   game.onFuseTripped();expect(game.fuseAvailable()).toBe(false);expect(game.flashlightAvailable()).toBe(true);
   for(let t=0;t<5;t+=.05)game.updateDoorKnocks(.05);expect(knock).not.toHaveBeenCalled();
   expect(game.pickupFlashlight()).toBe(true);expect(inventory.hasLamp).toBe(true);
   game.updateDoorKnocks(.05);expect(knock).toHaveBeenCalledOnce();
   for(let t=0;t<1.2;t+=.05)game.updateDoorKnocks(.05);
-  expect(knock).toHaveBeenCalledTimes(3);expect(deep).not.toHaveBeenCalled();expect(jolt).not.toHaveBeenCalled();
+  expect(knock).toHaveBeenCalledOnce();expect(deep).not.toHaveBeenCalled();expect(jolt).not.toHaveBeenCalled();
   expect(corridorStory.knockDone).toBe(true);expect(game.needsFuseScene()).toBe(false);expect(game.allowEntranceOpening()).toBe(true);
-  game.startDoorKnocks();game.updateDoorKnocks(2);expect(knock).toHaveBeenCalledTimes(3);
+  game.startDoorKnocks();game.updateDoorKnocks(2);expect(knock).toHaveBeenCalledOnce();
 });
 it('mounts the replacement only once and preserves the outage history when restoring apartment lights',()=>{
   const probe=Object.create(RussianStairwellGame.prototype),activate=vi.fn(),removeChunk=vi.fn(),setPower=vi.fn(),setOldPower=vi.fn();

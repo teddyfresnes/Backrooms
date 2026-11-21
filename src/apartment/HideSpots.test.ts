@@ -4,7 +4,9 @@ import { HideSpots, type HidingPlace } from './HideSpots';
 const place = (): HidingPlace & { active: boolean } => ({
   active: false, exitLocked: false, isTargeted: false, doorProgress: 0,
   get isActive() { return this.active; },
+  get isSettled() { return this.active; },
   interact() { return true; }, enterNow() { this.active = true; }, requestExit() { this.exitLocked = false; },
+  resetHidden() { this.active = true; this.exitLocked = true; }, breakOpen() {},
   forceFinish() { this.active = false; }, holdExit() {}, burstOut() {}, update() {}, dispose() {},
 });
 

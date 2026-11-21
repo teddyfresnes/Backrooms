@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { StairwellLightingProfile } from './StairwellEnvironment';
 import { DEFAULT_BRIGHTNESS, resolveLightingBrightness } from '../render/LightingBrightness';
-import { floorY, midLandingY, STAIRWELL_FLIGHT_COUNT, STAIRWELL_LEVEL_COUNT, STAIRWELL_ROOF_Y, STAIRWELL_FLOOR_FINISH_THICKNESS } from './layout';
+import { floorY, midLandingY, STAIRWELL_BOUNDS, STAIRWELL_FLIGHT_COUNT, STAIRWELL_LEVEL_COUNT, STAIRWELL_ROOF_Y, STAIRWELL_FLOOR_FINISH_THICKNESS } from './layout';
 
 /** One stationary, shadowless source per authored fixture in this finite cage.
  * A fixed count of seven avoids both observer-dependent dark floors and shader
@@ -11,8 +11,7 @@ export class StairwellLightPool {
   private readonly sources: Array<{ kind: 'main' | 'wall'; position: THREE.Vector3 }> = [];
   private gain = resolveLightingBrightness(DEFAULT_BRIGHTNESS).relativeGain;
   private power = 1;
-  /** Ground-floor source borrowed by the escape: a yellow spill from the open hall door. */
-  private escape: { intensity: number; position: THREE.Vector3 } | null = null;
+  private chaseLighting = false;
 
   constructor(private profile: StairwellLightingProfile) {
     for (let level = 0; level < STAIRWELL_LEVEL_COUNT; level++) {
@@ -52,31 +51,34 @@ export class StairwellLightPool {
     this.applyProfile();
   }
 
-  /** Moves the ground-floor source to the hall door and tints it (null restores it). */
-  setEscapeLight(intensity: number | null, position?: THREE.Vector3Like): void {
-    if (intensity === null) this.escape = null;
-    else {
-      this.escape ??= { intensity, position: new THREE.Vector3() };
-      this.escape.intensity = intensity;
-      if (position) this.escape.position.set(position.x, position.y, position.z);
-    }
+  /** Borrow the existing sources to outline treads, turns and the open hall door during the chase. */
+  setChaseLighting(active: boolean): void {
+    if (active === this.chaseLighting) return;
+    this.chaseLighting = active;
     this.applyProfile();
   }
 
   private applyProfile(): void {
     this.lights.forEach((light, index) => {
-      if (index === 0 && this.escape) {
+      if (index === 0 && this.chaseLighting) {
         light.color.setHex(0xffe3a0);
-        light.intensity = this.escape.intensity * this.gain;
+        light.intensity = 1.85 * this.gain;
         light.distance = 8.5;
-        light.position.copy(this.escape.position);
+        light.position.set(0, 1.6, STAIRWELL_BOUNDS.minZ + 1.15);
         return;
       }
-      if (index === 0) light.position.copy(this.sources[0]!.position);
       const source = this.sources[index]!;
-      light.color.setHex(source.kind === 'main' ? this.profile.mainColor : this.profile.wallColor);
-      light.intensity = (source.kind === 'main' ? this.profile.mainIntensity : this.profile.wallIntensity) * this.gain * this.power;
-      light.distance = source.kind === 'main' ? this.profile.mainDistance : this.profile.wallDistance;
+      const main = source.kind === 'main';
+      light.position.copy(source.position);
+      if (this.chaseLighting) {
+        // Light the turns and nosings from closer to the walking surface.
+        light.position.y = main ? floorY(index) + 1.55 : source.position.y - 0.45;
+        light.position.z = main ? -1.65 : 1.9;
+      }
+      const guidance = this.chaseLighting ? (main ? 0.85 : 0.95) : 0;
+      light.color.setHex(guidance > this.power ? 0xb8c7dc : main ? this.profile.mainColor : this.profile.wallColor);
+      light.intensity = (main ? this.profile.mainIntensity : this.profile.wallIntensity) * this.gain * Math.max(this.power, guidance);
+      light.distance = this.chaseLighting ? 6.5 : main ? this.profile.mainDistance : this.profile.wallDistance;
     });
   }
 }

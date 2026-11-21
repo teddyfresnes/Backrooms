@@ -11,6 +11,7 @@ import { ApartmentFixtures, SINK } from './ApartmentFixtures';
 import { ClosetHide } from './ClosetHide';
 import { freshFixtures } from './ApartmentInteractionState';
 import { defaultControlBindings } from '../input/ControlBindings';
+import { PlayerController } from '../player/PlayerController';
 const cleanup:(()=>void)[]=[];
 const domModule:string='happy-dom';let dom:any;
 beforeAll(async()=>{const {Window}=await import(/* @vite-ignore */ domModule);dom=new Window();vi.stubGlobal('window',dom);vi.stubGlobal('document',dom.document);vi.stubGlobal('KeyboardEvent',dom.KeyboardEvent);});
@@ -93,4 +94,51 @@ it('opens both actual closet leaves, traverses the real clear gap, pauses, and a
   for(let i=0;i<110;i++){closet.update(1/60,true);f.physics.stepDynamics(1/60);}expect(closet.debugState.phase).toBe('hidden');expect(f.camera.position.distanceTo(new THREE.Vector3(-7.9265,9.95,-5.65))).toBeLessThan(.001);
   const before=closet.debugState;closet.update(1,false);expect(closet.debugState).toEqual(before);const escape=new KeyboardEvent('keydown',{code:'Escape',cancelable:true});window.dispatchEvent(escape);expect(escape.defaultPrevented).toBe(false);
   closet.interact();for(let i=0;i<200;i++){closet.update(1/60,true);f.physics.stepDynamics(1/60);}expect(closet.isActive).toBe(false);expect(active).toBe(false);expect(position.z).toBeGreaterThan(-5.1);expect(steps).toHaveBeenCalledTimes(310);expect(overlaps).toEqual([]);
+});
+
+it('puts the player back on the real apartment floor after repeated wardrobe checkpoint exits', async () => {
+  const f = await fixture();
+  const canvas = document.createElement('canvas');
+  const noop = () => {};
+  const player = new PlayerController(new THREE.PerspectiveCamera(), canvas, f.physics, {
+    onLockChange: noop, onFootstep: noop, onInteract: noop, onLand: noop, onSafePosition: noop, onFallReset: noop,
+  });
+  cleanup.push(() => player.dispose());
+  player.lock();
+  player.teleport({ x: -7.9265, y: 9.54, z: -4.85 });
+  const closet = new ClosetHide(f.environment, f.physics, f.camera, f.ui, {
+    position: () => player.position,
+    pose: (p, confined) => {
+      if (confined) player.setScriptedPose(p, true);
+      else expect(player.restoreStandingPose(p)).toBe(true);
+    },
+    presentation: noop, active: active => player.setInputEnabled(!active), playing: () => true, bindings: defaultControlBindings,
+  });
+  cleanup.push(() => closet.dispose());
+  const dt = 1 / 60;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    player.queueExternalMotion({ x: .4, y: -1, z: .3 });
+    f.physics.setCrouched(true);
+    closet.resetHidden();
+    closet.breakOpen();
+    expect(closet.doorProgress).toBe(1);
+    closet.resetHidden();
+    expect(closet.exitLocked).toBe(true);
+    expect(closet.doorProgress).toBe(0);
+    closet.holdExit(1);
+    for (let i = 0; i < 45; i++) { closet.update(dt, true); f.physics.stepDynamics(dt); }
+    expect(closet.isActive).toBe(false);
+    expect(f.physics.isCrouched).toBe(false);
+    expect(f.physics.canStandAt(player.position)).toBe(true);
+    expect(f.physics.hasFloorBelow(player.position)).toBe(true);
+    expect(player.getDebugState().velocity).toEqual({x:0,y:0,z:0});
+    const start = player.position.clone();
+    for (let i = 0; i < 25; i++) {
+      player.queueExternalMotion({ x: 0, y: 0, z: .025 });
+      player.fixedUpdate(dt);
+    }
+    expect(player.position.z).toBeGreaterThan(start.z + .4);
+    expect(player.position.y).toBeCloseTo(start.y, 1);
+    expect(player.getDebugState().grounded).toBe(true);
+  }
 });

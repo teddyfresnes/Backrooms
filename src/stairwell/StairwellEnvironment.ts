@@ -1898,9 +1898,12 @@ diffuseColor.rgb *= mix(1.0, 0.96, windowRain.z);`,
     this.exterior.visible = false;
   }
 
-  /** Yellow spill from the open hall door during the escape (null = off). */
-  setEscapeGlow(intensity: number | null, position?: THREE.Vector3Like): void {
-    this.localLighting.setEscapeLight(intensity, position);
+  setChaseLighting(active: boolean): void {
+    this.localLighting.setChaseLighting(active);
+    // A little reflected light keeps the dark terrazzo readable between sources.
+    const floorBounce = active ? 0x171e26 : 0x000000;
+    this.materials.stairTerrazzo.emissive.setHex(floorBounce);
+    this.materials.landingTerrazzo.emissive.setHex(floorBounce);
   }
 
   /** Scripted mains power of the cage fixtures: light sources and their tubes dim together. */

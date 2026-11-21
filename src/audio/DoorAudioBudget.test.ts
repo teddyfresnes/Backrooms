@@ -10,7 +10,7 @@ function busFixture(){
  const active=new Set<unknown>(),nodes:any[]=[],sources:any[]=[],param=()=>({value:0});let maximum=0;
  const node=()=>{const n={connect:vi.fn(function(this:unknown){return this;}),disconnect:vi.fn()};nodes.push(n);return n;};
  const context={state:'running',currentTime:0,sampleRate:8000,createBuffer:(_channels:number,size:number)=>({getChannelData:()=>new Float32Array(size)}),
-  createGain:()=>({...node(),gain:param()}),createBiquadFilter:()=>({...node(),frequency:param(),Q:param()}),
+  createGain:()=>({...node(),gain:param()}),createBiquadFilter:()=>({...node(),frequency:param(),Q:param(),gain:param()}),
   createPanner:()=>({...node(),positionX:param(),positionY:param(),positionZ:param()}),
   createBufferSource:()=>{const s:any={...node(),playbackRate:param(),onended:null,start:vi.fn(()=>{active.add(s);maximum=Math.max(maximum,active.size);}),stop:vi.fn(()=>{active.delete(s);s.onended?.();})};sources.push(s);return s;}};
  return {context,active,nodes,sources,get maximum(){return maximum;},bus:{context,destination:node()} as unknown as SpatialAudioBus};
@@ -24,6 +24,20 @@ it('regulates repeated knocks/bells, retriggers audible requests and caps all ac
  expect(f.maximum).toBeLessThanOrEqual(6);sound.stop();expect(f.active.size).toBe(0);
  const count=f.sources.length;f.context.state='suspended';sound.play('bell',p,'same');expect(f.sources).toHaveLength(count);
  sound.dispose();expect(f.sources.every(s=>s.disconnect.mock.calls.length>0)).toBe(true);
+});
+it('plays the three-hit recording once at a lower pitch and stops it immediately on scene exit', async () => {
+ const f=busFixture(),sound=new SampledDoorAudio();await sound.prepare(f.bus);
+ const p={x:1,y:1.5,z:0};
+ sound.playKnocks(p);sound.playKnocks(p);
+ const scripted=f.sources[0]!;
+ expect(f.sources).toHaveLength(1);
+ expect(scripted.start).toHaveBeenCalledOnce();
+ expect(scripted.playbackRate.value).toBeLessThan(.9);
+ for(let i=0;i<8;i++)sound.play('bell',p,`neighbor-${i}`);
+ sound.stopNeighborSounds();expect(f.active).toEqual(new Set([scripted]));
+ sound.stopKnocks();expect(f.active.size).toBe(0);
+ expect(scripted.stop).toHaveBeenCalledOnce();
+ sound.dispose();
 });
 it('uses the master spatial bus for tiny keypad transients and leaves no scheduled or active sound after stop',()=>{
  const f=busFixture(),sound=new KeypadAudio(f.bus),p={x:.3,y:1.4,z:-6};

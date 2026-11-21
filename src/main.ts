@@ -184,6 +184,7 @@ async function startStairwell(launch: RussianStairwellLaunch): Promise<void> {
 
     const stairwell = new RussianStairwellGame(app, launch, {
       onRequestNewGame: () => queueMicrotask(() => void startStairwell({ kind: 'new' })),
+      onReturnToMail: () => queueMicrotask(() => void startStairwell({ kind: 'mail' })),
       onRequestMainMenu: () => queueMicrotask(() => void startInitialExperience()),
       onRequestLoadGame: loadFromHistory,
       // Finish the current input/frame stack before disposing the stairwell
@@ -294,7 +295,7 @@ async function startBackrooms(
     game?.dispose();
     if (id !== transitionId) return;
     boot.element.remove();
-    showBootError(error, () => void startBackrooms(launch, autosaveOnReady, menuBackground));
+    showBootError(error, () => void startBackrooms(launch, autosaveOnReady, menuBackground, fadeIn));
     console.error(error);
   } finally {
     if (activePreparationAbort === preparation) activePreparationAbort = undefined;

@@ -3,11 +3,14 @@ import type { HideSpotId } from '../monster/BacteriaLayout';
 /** What the game, the save and the Bacteria hunt need from one hiding place. */
 export interface HidingPlace {
   readonly isActive: boolean;
+  readonly isSettled: boolean;
   readonly isTargeted: boolean;
   readonly doorProgress: number;
   exitLocked: boolean;
   interact(): boolean;
   enterNow(): void;
+  resetHidden(): void;
+  breakOpen(): void;
   requestExit(): void;
   forceFinish(): void;
   holdExit(progress: number): void;
@@ -29,6 +32,7 @@ export class HideSpots {
   private get active(): [HideSpotId, HidingPlace] | undefined { return this.entries.find(([, place]) => place.isActive); }
 
   get isActive(): boolean { return !!this.active; }
+  get isSettled(): boolean { return this.active?.[1].isSettled ?? false; }
   get isTargeted(): boolean { return !!this.targetedId; }
   /** The spot aimed at right now, if any. */
   get targetedId(): HideSpotId | null { return this.entries.find(([, place]) => place.isTargeted)?.[0] ?? null; }
@@ -58,6 +62,13 @@ export class HideSpots {
     this.last = this.places[id] ? id : 'wardrobe';
     place.enterNow();
   }
+  resetHidden(id: HideSpotId): void {
+    const active = this.active;
+    if (active && active[0] !== id) active[1].forceFinish();
+    this.last = this.places[id] ? id : 'wardrobe';
+    this.places[this.last]!.resetHidden();
+  }
+  breakOpen(): void { this.active?.[1].breakOpen(); }
   requestExit(): void { this.active?.[1].requestExit(); }
   forceFinish(): void { this.active?.[1].forceFinish(); }
   holdExit(progress: number): void { this.active?.[1].holdExit(progress); }

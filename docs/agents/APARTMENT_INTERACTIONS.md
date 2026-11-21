@@ -46,8 +46,10 @@ Après la coupure, `FuseBox` est près de l'interrupteur d'entrée ; le joueur r
 figé jusqu'au dernier levier relevé (`locksMovement`). Le réarmement échoue et
 rend disponible la lampe sur le meuble TV, près de l'écran et des échecs.
 `CorridorStory.fuseTried/knockDone` (optionnels, déduits pour les anciennes
-sauvegardes) bloquent la sortie jusqu'à sa prise puis à trois coups secs sur la
-porte, sans quatrième coup ni effet de caméra. La coupure ferme silencieusement
+sauvegardes) bloquent la sortie jusqu'à sa prise puis à trois coups graves et
+espacés sur la porte. `SampledDoorAudio` lit une fois l'enregistrement des trois
+impacts. Le siège de la porte réutilise le même son et cale ses secousses sur
+les impacts. La coupure ferme silencieusement
 la vraie porte. Une ancienne sauvegarde ayant déjà la lampe lance les coups
 après le réarmement, ou les reprend s'ils restaient à jouer.
 Boussole et lampe en main :
@@ -138,12 +140,16 @@ La cage reste fixe. La lampe utilise son ampoule, son réflecteur intérieur et
 son interrupteur propres, avec un état indépendant et une extinction imposée
 pendant la panne ; ses matériaux restent indépendants de ceux du plafonnier.
 
-Pendant la chasse, la sortie silencieuse se maintient sur interagir (E), pas sur
-sprint ; relâcher trop tôt fait jaillir le joueur. Si la TV est éteinte, elle
-s'allume seule derrière la créature (`turnTelevisionOn`) au lieu d'une mort
-« silence ». Entrer dans une cachette réinitialise son verrou : un verrou laissé
-sur une autre cachette empêchait E d'en sortir. Les cachettes jouent les vrais
-sons de porte (ouverture, fermeture) ; TV et radio ajoutent le clic enregistré.
+Pendant la chasse, maintenir interagir (E) pilote la sortie silencieuse et
+relâcher trop tôt fait jaillir le joueur. Une cachette forcée attend une seconde
+devant la porte avant de l'ouvrir. Si la TV attire la créature, elle s'éloigne
+rapidement du battant. Après 60 s dans la même cachette, l'invite clignote, vire
+au rouge puis disparaît. La sortie est verrouillée pour 3,5 s de silence avant
+le jumpscare. Quitter la cachette au préalable remet son compteur à zéro.
+Le regard doit rester direct et dégagé plus de 3 s pour attirer l'attaque.
+L'attente hors cachette se cumule jusqu'à 15 s dans l'appartement par tentative.
+Le point de reprise referme la porte. À la sortie, `PlayerController` recherche
+un appui dégagé dans Rapier avant de rendre la capsule debout et les commandes.
 Le panneau dépoli de la porte de salle de bain (`polySurface45`, exporté hors de
 `bathroom_door`) est rattaché au même pivot que le vantail.
 

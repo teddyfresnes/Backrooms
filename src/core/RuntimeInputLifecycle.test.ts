@@ -102,7 +102,8 @@ beforeEach(()=>{
 afterEach(()=>{for(const game of games.splice(0))game.dispose();document.body.replaceChildren();vi.restoreAllMocks();vi.unstubAllGlobals();});
 function fixture() {
   const app=document.createElement('div');document.body.append(app);
-  const runtime=new RussianStairwellGame(app,{kind:'new'},{onRequestNewGame(){},onRequestMainMenu(){},onRequestLoadGame(){},onEnterBackrooms(){}},{deferEntry:true});
+  const returnToMail=vi.fn(),enterBackrooms=vi.fn();
+  const runtime=new RussianStairwellGame(app,{kind:'new'},{onRequestNewGame(){},onReturnToMail:returnToMail,onRequestMainMenu(){},onRequestLoadGame(){},onEnterBackrooms:enterBackrooms},{deferEntry:true});
   games.push(runtime);
   // Private fields are intentionally exposed only to this integration fixture.
   const game=runtime as unknown as Record<string, any>;
@@ -113,7 +114,7 @@ function fixture() {
     move:(delta:THREE.Vector3)=>{const moved=new THREE.Vector3(delta.x,0,delta.z);position.add(moved);return {position:position.clone(),grounded:true,moved};}};
   const listener={setPosition:vi.fn(),setOrientation:vi.fn()};
   const audio={spatialBus:{context:{listener}},start:async()=>{},setSuspended:async()=>{},
-    setInteriorMix(){},updateInteriorGain(){},getOutput:()=>null,dispose(){}};
+    setInteriorMix(){},updateInteriorGain(){},stopRecordedEffects:vi.fn(),getOutput:()=>null,dispose(){}};
   const canvas=game.renderer.domElement as HTMLCanvasElement;
   const request=vi.fn(async()=>{});canvas.requestPointerLock=request;
   const player=new PlayerController(game.playerCamera,canvas,physics as unknown as PhysicsWorld,{
@@ -131,8 +132,59 @@ function fixture() {
   const key=(type:string)=>window.dispatchEvent(new KeyboardEvent(type,{key:'i',code:'KeyI',bubbles:true}));
   const aim=()=>{for(const x of [100,140]){const event=new MouseEvent('mousemove',{bubbles:true,clientX:x,clientY:100});Object.defineProperties(event,{movementX:{value:40},movementY:{value:15}});canvas.dispatchEvent(event);}};
   const capture=()=>{Object.defineProperty(document,'pointerLockElement',{configurable:true,writable:true,value:canvas});document.dispatchEvent(new Event('pointerlockchange'));};
-  return {app,game,player,canvas,request,listener,step,key,aim,capture};
+  return {app,game,player,canvas,request,listener,step,key,aim,capture,returnToMail,enterBackrooms};
 }
+
+it.each(['level0', 'intro'])('runs /skip %s through the live console during the chase and suspends the old runtime', destination => {
+  const {app,game,player,step,returnToMail,enterBackrooms}=fixture();
+  game.enterAfterIntro();
+  game.inventory.acquireLamp();
+  game.inventory.acquireCompass();
+  const inventory=game.inventory.snapshot();
+  const update=vi.fn(),suspend=vi.fn();
+  game.encounter={isActive:true,locksInput:true,update,suspend,dispose(){}};
+  game.closet={isActive:true,exitLocked:true,dispose(){}};
+  game.doorKnocks={time:0};
+  window.dispatchEvent(new KeyboardEvent('keydown',{key:'/',code:'Slash',bubbles:true,cancelable:true}));
+  expect(game.ui.isConsoleOpen).toBe(true);
+  expect(player.isInputEnabled).toBe(false);
+  const input=app.querySelector<HTMLInputElement>('[data-ui="console-input"]')!;
+  input.value=`/skip ${destination}`;
+  input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true,cancelable:true}));
+  expect(game.ui.isConsoleOpen).toBe(false);
+  expect(player.isInputEnabled).toBe(false);
+  expect(suspend).toHaveBeenCalledOnce();
+  expect(game.audio.stopRecordedEffects).toHaveBeenCalledOnce();
+  expect(game.doorKnocks).toBeNull();
+  for(let i=0;i<240;i++)step();
+  expect(update).not.toHaveBeenCalled();
+  if(destination==='level0') {
+    expect(enterBackrooms).toHaveBeenCalledExactlyOnceWith(inventory);
+    expect(returnToMail).not.toHaveBeenCalled();
+  } else {
+    expect(returnToMail).toHaveBeenCalledOnce();
+    expect(enterBackrooms).not.toHaveBeenCalled();
+  }
+});
+
+it('enables F and the mouse wheel after each exit from the checkpoint while the encounter stays active', () => {
+  const {game,canvas}=fixture();
+  game.enterAfterIntro();
+  game.inventory.acquireLamp();game.inventory.acquireCompass();
+  const encounter=game.encounter={isActive:true,locksInput:true,dispose(){}};
+  const closet=game.closet={isActive:true,dispose(){}};
+  const f=(type:string)=>window.dispatchEvent(new KeyboardEvent(type,{key:'f',code:'KeyF',bubbles:true}));
+  for(let attempt=0;attempt<4;attempt++){
+    closet.isActive=true;encounter.locksInput=true;
+    const dark=game.inventory.state.lampOn;
+    f('keydown');f('keyup');expect(game.inventory.state.lampOn).toBe(dark);
+    closet.isActive=false;encounter.locksInput=false;
+    f('keydown');f('keyup');expect(game.inventory.state.lampOn).toBe(!dark);
+    const selected=game.inventory.state.selected;
+    canvas.dispatchEvent(new WheelEvent('wheel',{deltaY:100,cancelable:true}));
+    expect(game.inventory.state.selected).not.toBe(selected);
+  }
+});
 it('keeps playing on blur with a recapture prompt, pauses on Escape, freezes uncaptured look, and resumes configured controls across repeated games',()=>{
   for(let run=0;run<3;run++){
     const {app,game,player,canvas,request,listener,step,key,aim,capture}=fixture();

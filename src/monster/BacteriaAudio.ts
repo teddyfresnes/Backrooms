@@ -41,6 +41,7 @@ export class BacteriaAudio {
   private voice?: SpatialVoice;
   private screamer?: SpatialVoice;
   private tension?: AudioBufferSourceNode;
+  private readonly fadingVoices = new Set<SpatialVoice>();
   private duck = 1;
   private calm = 0;
   private disposed = false;
@@ -72,7 +73,10 @@ export class BacteriaAudio {
     source.buffer = buffer;
     gain.gain.value = 1.05;
     source.connect(gain).connect(output.destination);
-    source.addEventListener('ended', () => { source.disconnect(); gain.disconnect(); }, { once: true });
+    source.addEventListener('ended', () => {
+      if (this.tension === source) this.tension = undefined;
+      source.disconnect(); gain.disconnect();
+    }, { once: true });
     source.start();
     this.tension = source;
   }
@@ -97,15 +101,7 @@ export class BacteriaAudio {
     const voice = this.voice;
     if (!voice || !output) return;
     this.voice = undefined;
-    const now = output.context.currentTime;
-    try {
-      voice.gain.gain.cancelScheduledValues(now);
-      voice.gain.gain.setValueAtTime(Math.max(0.0001, voice.gain.gain.value), now);
-      voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(0.02, fadeSeconds));
-      voice.source.stop(now + Math.max(0.03, fadeSeconds + 0.02));
-    } catch {
-      // Already stopped.
-    }
+    this.fadeOut(voice, output.context.currentTime, fadeSeconds);
   }
 
   /** A short, unfiltered blast of the scream (it has seen you), then back to its spatial level. */
@@ -482,9 +478,18 @@ export class BacteriaAudio {
   private fadeOut(voice: SpatialVoice, now: number, fadeSeconds: number): void {
     try {
       voice.gain.gain.cancelScheduledValues(now);
+      if (fadeSeconds === 0) {
+        voice.gain.gain.setValueAtTime(0, now);
+        voice.source.stop(now);
+        return;
+      }
       voice.gain.gain.setValueAtTime(Math.max(0.0001, voice.gain.gain.value), now);
       voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(0.02, fadeSeconds));
       voice.source.stop(now + Math.max(0.03, fadeSeconds + 0.02));
+      if (!this.fadingVoices.has(voice)) {
+        this.fadingVoices.add(voice);
+        voice.source.addEventListener('ended', () => this.fadingVoices.delete(voice), { once: true });
+      }
     } catch {
       // Already stopped.
     }
@@ -495,16 +500,10 @@ export class BacteriaAudio {
     const output = this.output();
     const now = output?.context.currentTime ?? 0;
     this.stopPresence(fadeSeconds);
-    for (const voice of [this.scream, this.voice, this.screamer]) {
-      if (!voice) continue;
-      try {
-        voice.gain.gain.cancelScheduledValues(now);
-        voice.gain.gain.setValueAtTime(Math.max(0.0001, voice.gain.gain.value), now);
-        voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.max(0.02, fadeSeconds));
-        voice.source.stop(now + Math.max(0.03, fadeSeconds + 0.02));
-      } catch {
-        // Already stopped.
-      }
+    for (const voice of [this.scream, this.voice, this.screamer]) if (voice) this.fadeOut(voice, now, fadeSeconds);
+    if (fadeSeconds === 0) {
+      for (const voice of this.fadingVoices) this.fadeOut(voice, now, 0);
+      this.fadingVoices.clear();
     }
     try { this.tension?.stop(now + Math.max(0, fadeSeconds)); } catch { /* ended */ }
     // A fade of the creature's voice leaves the fall wind alone; a hard cut does not.

@@ -78,6 +78,17 @@
 
 .story-hint.is-urgent kbd { border-color: #ff5a4a; color: #ff7a6c; }
 
+.story-hint.is-flickering { animation: story-hint-flicker 180ms steps(1, end) infinite; }
+.story-hint.is-danger {
+  border-color: #ff5a4a;
+  background: rgba(50, 5, 3, 0.9);
+  color: #ff7a6c;
+  animation: none;
+}
+.story-hint.is-danger kbd { border-color: #ff5a4a; color: inherit; }
+.story-hint.is-danger .story-hint-hold { background: #ff5a4a; }
+.story-hud.is-paused .story-hint { animation-play-state: paused; }
+
 /* Hold-to-act: a thin bar along the bottom edge fills while the key is held. */
 .story-hint { overflow: hidden; }
 .story-hint-hold {
@@ -133,12 +144,14 @@
 
 @keyframes story-quest-in { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
 @keyframes story-hint-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes story-hint-flicker { 50% { opacity: 0.2; } }
 @keyframes story-urgent { 50% { opacity: 0.55; } }
 @keyframes story-death-in { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
 
 @media (prefers-reduced-motion: reduce) {
   .story-quest.is-new,
   .story-hint,
+  .story-hint.is-flickering,
   .story-hint.is-urgent,
   .story-quest[data-tone='urgent'] p { animation: none; }
 }
